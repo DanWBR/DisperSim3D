@@ -90,8 +90,8 @@ namespace DisperSim3D.Dialogs
             bottomPanel.Controls.Add(btnPreset16, 1, 0);
             bottomPanel.Controls.Add(chkGenerate, 2, 0);
             bottomPanel.Controls.Add(new Label(), 3, 0);
-            bottomPanel.Controls.Add(btnOK, 4, 0);
-            bottomPanel.Controls.Add(btnCancel, 5, 0);
+            bottomPanel.Controls.Add(btnCancel, 4, 0);
+            bottomPanel.Controls.Add(btnOK, 5, 0);
 
             this.AcceptButton = btnOK;
             this.CancelButton = btnCancel;

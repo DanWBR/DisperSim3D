@@ -33,7 +33,7 @@ namespace TestApp
             {
                 VesselPressurePa = 1000000,
                 VesselTemperatureK = 293.15,
-                OrificeDiameterM = 0.01,
+                OrificeDiameterM = 0.025,
                 VesselVolumeM3 = 10,
                 GasGamma = 1.4,
                 GasMolarMassKgMol = 0.01604

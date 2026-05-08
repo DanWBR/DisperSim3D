@@ -171,8 +171,8 @@ namespace DisperSim3D.Dialogs
                 SelectedIndex = Math.Max(0, lstScenarios.SelectedIndex);
             };
             bottomButtons.Controls.Add(new Label(), 0, 0);
-            bottomButtons.Controls.Add(btnOK, 1, 0);
-            bottomButtons.Controls.Add(btnCancel, 2, 0);
+            bottomButtons.Controls.Add(btnCancel, 1, 0);
+            bottomButtons.Controls.Add(btnOK, 2, 0);
 
             this.AcceptButton = btnOK;
             this.CancelButton = btnCancel;
@@ -241,8 +241,8 @@ namespace DisperSim3D.Dialogs
                 var btnC = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
                 var btnOk = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
                 btnPanel.Controls.Add(new Label(), 0, 0);
-                btnPanel.Controls.Add(btnOk, 1, 0);
-                btnPanel.Controls.Add(btnC, 2, 0);
+                btnPanel.Controls.Add(btnC, 1, 0);
+                btnPanel.Controls.Add(btnOk, 2, 0);
                 layout.Controls.Add(btnPanel, 0, 3);
 
                 dlg.Controls.Add(layout);

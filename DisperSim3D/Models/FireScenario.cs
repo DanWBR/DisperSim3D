@@ -35,9 +35,9 @@ namespace DisperSim3D.Models
         public double MassFlowRateKgS { get; set; } = 1.0;
 
         /// <summary>
-        /// Gets or sets the orifice diameter in meters for jet fire calculations. Default is 0.02 m.
+        /// Gets or sets the orifice diameter in meters for jet fire calculations. Default is 0.025 m.
         /// </summary>
-        public double OrificeDiameterM { get; set; } = 0.02;
+        public double OrificeDiameterM { get; set; } = 0.025;
 
         /// <summary>
         /// Gets or sets the heat of combustion of the fuel in joules per kilogram. Default is 50 MJ/kg.

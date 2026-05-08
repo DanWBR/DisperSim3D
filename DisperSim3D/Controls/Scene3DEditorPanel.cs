@@ -209,6 +209,7 @@ namespace DisperSim3D.Controls
                 new ToolStripSeparator(),
                 new ToolStripMenuItem("Properties Panel", Img("table.png"), (s, e) => ShowDockPanel(_propertiesDock, DockState.DockRight)),
                 new ToolStripMenuItem("Add Item Panel", Img("add.png"), (s, e) => ToggleAddItemPanel(true)),
+                new ToolStripMenuItem("Simulation Manager", Img("table.png"), (s, e) => DoShowSimulationManager()),
                 new ToolStripMenuItem("CFD Simulations", Img("control_play_blue.png"), (s, e) => ToggleCfdSimPanel(true)),
                 new ToolStripMenuItem("Monitors", Img("icons8-ecg.png"), (s, e) => ToggleMonitorPanel(true))
             });

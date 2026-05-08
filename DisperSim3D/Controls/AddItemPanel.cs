@@ -408,7 +408,7 @@ namespace DisperSim3D.Controls
                     table.Controls.Add(holeSec, 0, row++);
 
                     AddLabel(table, row, "Diameter:");
-                    _txtHPOrifice = new TextBox { Dock = DockStyle.Fill, Text = "50" };
+                    _txtHPOrifice = new TextBox { Dock = DockStyle.Fill, Text = "25" };
                     _txtHPOrifice.TextChanged += (s, e) => UpdateHPCalc();
                     table.Controls.Add(MakeUnitPanel(_txtHPOrifice, "mm"), 1, row++);
 
@@ -749,7 +749,7 @@ namespace DisperSim3D.Controls
                 case AddItemType.HighPressureGasLeak:
                     double pressureBarG = ParseDouble(_txtHPPressure, 10);
                     double tempC = ParseDouble(_txtHPTemperature, 10);
-                    double orificeMm = ParseDouble(_txtHPOrifice, 50);
+                    double orificeMm = ParseDouble(_txtHPOrifice, 25);
                     var hpParams = new HighPressureLeakParams
                     {
                         VesselPressurePa = (pressureBarG + 1.01325) * 1e5,

@@ -99,8 +99,8 @@ namespace DisperSim3D.Dialogs
             var btnOK = new Button { Text = "OK", DialogResult = DialogResult.OK, AutoSize = true };
             btnOK.Click += BtnOK_Click;
             buttons.Controls.Add(new Label(), 0, 0);
-            buttons.Controls.Add(btnOK, 1, 0);
-            buttons.Controls.Add(btnCancel, 2, 0);
+            buttons.Controls.Add(btnCancel, 1, 0);
+            buttons.Controls.Add(btnOK, 2, 0);
 
             this.AcceptButton = btnOK;
             this.CancelButton = btnCancel;

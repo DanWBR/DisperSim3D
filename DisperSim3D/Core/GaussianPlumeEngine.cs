@@ -27,8 +27,8 @@ namespace DisperSim3D.Core
 
             double windDirRad = meteo.WindDirectionDeg * Math.PI / 180.0;
             var windDir3D = new Vector3D(
-                Math.Sin(windDirRad),
-                Math.Cos(windDirRad),
+                -Math.Sin(windDirRad),
+                -Math.Cos(windDirRad),
                 0);
 
             foreach (var src in scenario.Sources)
@@ -58,12 +58,16 @@ namespace DisperSim3D.Core
                 double dotRW = releaseDir.X * windDir3D.X + releaseDir.Y * windDir3D.Y;
                 bool hasDifferentDirection = dotRW < 0.99;
 
-                // Momentum-based bending length: how far the jet travels before wind dominates
                 double bendLength = 0;
                 if (hasDifferentDirection)
                 {
                     if (exitVel > 0 && effDiam > 0)
-                        bendLength = Math.Max(exitVel / windSpeed, 1.0) * effDiam * 5.0;
+                    {
+                        double r = exitVel / windSpeed;
+                        bendLength = r * r * effDiam * (Math.PI / 4.0);
+                        bendLength = Math.Max(bendLength, effDiam * 10.0);
+                        bendLength = Math.Min(bendLength, scenario.DomainSizeM * 0.8);
+                    }
                     else
                         bendLength = scenario.DomainSizeM * 0.15;
                 }

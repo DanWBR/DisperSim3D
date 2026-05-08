@@ -64,7 +64,7 @@ namespace DisperSim3D.Dialogs
             nudTemperature.ValueChanged += (s, e) => UpdateCalc();
             AddRow(table, row++, "Vessel Temperature (K):", nudTemperature);
 
-            nudOrifice = MakeNud(0.001m, 0.5m, 0.01m, 3);
+            nudOrifice = MakeNud(0.001m, 0.5m, 0.025m, 3);
             nudOrifice.ValueChanged += (s, e) => UpdateCalc();
             AddRow(table, row++, "Orifice Diameter (m):", nudOrifice);
 
@@ -109,8 +109,8 @@ namespace DisperSim3D.Dialogs
                 };
             };
             buttons.Controls.Add(new Label(), 0, 0);
-            buttons.Controls.Add(btnOK, 1, 0);
-            buttons.Controls.Add(btnCancel, 2, 0);
+            buttons.Controls.Add(btnCancel, 1, 0);
+            buttons.Controls.Add(btnOK, 2, 0);
             this.AcceptButton = btnOK;
             this.CancelButton = btnCancel;
 

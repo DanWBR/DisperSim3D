@@ -126,8 +126,8 @@ namespace DisperSim3D.Dialogs
             buttons.Controls.Add(btnAdd, 0, 0);
             buttons.Controls.Add(btnRemove, 1, 0);
             buttons.Controls.Add(new Label(), 2, 0);
-            buttons.Controls.Add(btnOK, 3, 0);
-            buttons.Controls.Add(btnCancel, 4, 0);
+            buttons.Controls.Add(btnCancel, 3, 0);
+            buttons.Controls.Add(btnOK, 4, 0);
 
             this.AcceptButton = btnOK;
             this.CancelButton = btnCancel;

@@ -62,7 +62,7 @@ namespace DisperSim3D.Dialogs
             nudMassFlow = MakeNud(0.001m, 1000m, 1.0m, 3);
             AddRow(table, row++, "Mass Flow (kg/s):", nudMassFlow);
 
-            nudOrifice = MakeNud(0.001m, 1.0m, 0.02m, 3);
+            nudOrifice = MakeNud(0.001m, 1.0m, 0.025m, 3);
             AddRow(table, row++, "Orifice Dia (m):", nudOrifice);
 
             nudHeatCombustion = MakeNud(1e6m, 100e6m, 50e6m, 0);
@@ -114,8 +114,8 @@ namespace DisperSim3D.Dialogs
                 };
             };
             buttons.Controls.Add(new Label(), 0, 0);
-            buttons.Controls.Add(btnOK, 1, 0);
-            buttons.Controls.Add(btnCancel, 2, 0);
+            buttons.Controls.Add(btnCancel, 1, 0);
+            buttons.Controls.Add(btnOK, 2, 0);
             this.AcceptButton = btnOK;
             this.CancelButton = btnCancel;
 

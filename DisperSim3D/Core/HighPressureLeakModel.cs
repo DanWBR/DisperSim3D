@@ -14,7 +14,7 @@ namespace DisperSim3D.Core
         public double VesselTemperatureK { get; set; } = 293.15;
 
         /// <summary>Gets or sets the orifice diameter in meters.</summary>
-        public double OrificeDiameterM { get; set; } = 0.01;
+        public double OrificeDiameterM { get; set; } = 0.025;
 
         /// <summary>Gets or sets the vessel volume in cubic meters.</summary>
         public double VesselVolumeM3 { get; set; } = 10.0;

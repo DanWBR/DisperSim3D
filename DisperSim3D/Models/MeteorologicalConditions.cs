@@ -57,8 +57,9 @@ namespace DisperSim3D.Models
         public bool IsUrbanTerrain { get; set; }
 
         /// <summary>
-        /// Gets the horizontal wind velocity vector at the reference measurement height,
-        /// computed from <see cref="WindSpeed"/> and <see cref="WindDirectionDeg"/>.
+        /// Gets the horizontal wind transport velocity vector at the reference measurement height.
+        /// WindDirectionDeg follows meteorological convention (direction wind comes FROM),
+        /// so the transport vector points in the opposite direction (where wind blows TO).
         /// </summary>
         public Vector3D WindVector
         {
@@ -66,8 +67,8 @@ namespace DisperSim3D.Models
             {
                 var radians = WindDirectionDeg * Math.PI / 180.0;
                 return new Vector3D(
-                    WindSpeed * Math.Sin(radians),
-                    WindSpeed * Math.Cos(radians),
+                    -WindSpeed * Math.Sin(radians),
+                    -WindSpeed * Math.Cos(radians),
                     0);
             }
         }
