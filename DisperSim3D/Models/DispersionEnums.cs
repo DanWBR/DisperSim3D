@@ -95,6 +95,11 @@ namespace DisperSim3D.Models
         /// <summary>
         /// Simulation is solving the CFD (Computational Fluid Dynamics) phase.
         /// </summary>
-        SolvingCfd
+        SolvingCfd,
+
+        /// <summary>
+        /// A steady-state solution has been computed and is being displayed.
+        /// </summary>
+        SteadyStateComplete
     }
 }

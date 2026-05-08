@@ -17,7 +17,7 @@ namespace DisperSim3D.Core
         /// <param name="engine">Dispersion engine used to compute concentrations.</param>
         /// <param name="currentTimeS">Current simulation time in seconds.</param>
         public static void EvaluateStep(
-            List<GasDetector3D> detectors, GaussianPuffEngine engine, double currentTimeS)
+            List<GasDetector3D> detectors, IConcentrationField engine, double currentTimeS)
         {
             foreach (var det in detectors)
             {

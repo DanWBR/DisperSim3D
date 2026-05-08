@@ -13,13 +13,13 @@ using DisperSim3D.Core;
 namespace DisperSim3D.Controls
 {
     /// <summary>
-    /// WinForms UserControl que hospeda o editor 3D de flowsheets
+    /// Main 3D scene editor UserControl hosted via ElementHost.
     /// </summary>
-    public partial class FlowsheetEditor3DControl : UserControl
+    public partial class Scene3DEditorControl : UserControl
     {
         #region Fields
 
-        private Scene3D _flowsheet;
+        private Scene3D _scene;
         private readonly ModelLoader _modelLoader;
 
         private HelixViewport3D _viewport;
@@ -40,6 +40,7 @@ namespace DisperSim3D.Controls
         private bool _isDraggingDecoration;
 
         private GaussianPuffEngine _dispersionEngine;
+        private IConcentrationField _steadyStateEngine;
         private DispersionRenderer _dispersionRenderer;
         private System.Windows.Threading.DispatcherTimer _animationTimer;
         private DispersionSimulationState _dispersionState = DispersionSimulationState.Stopped;
@@ -75,15 +76,15 @@ namespace DisperSim3D.Controls
         #region Properties
 
         /// <summary>
-        /// O flowsheet 3D atual
+        /// The current 3D scene.
         /// </summary>
         [Browsable(false)]
-        public Scene3D Flowsheet
+        public Scene3D Scene
         {
-            get => _flowsheet;
+            get => _scene;
             set
             {
-                _flowsheet = value;
+                _scene = value;
                 UpdateViewport();
             }
         }
@@ -140,9 +141,9 @@ namespace DisperSim3D.Controls
             set
             {
                 _gridSpacing = value;
-                if (_flowsheet != null)
+                if (_scene != null)
                 {
-                    _flowsheet.GridSpacing = value;
+                    _scene.GridSpacing = value;
                 }
             }
         }
@@ -192,19 +193,19 @@ namespace DisperSim3D.Controls
 
         #region Constructor
 
-        public FlowsheetEditor3DControl()
+        public Scene3DEditorControl()
         {
             InitializeComponent();
 
             // Inicializar componentes
-            _flowsheet = new Scene3D();
+            _scene = new Scene3D();
             _modelLoader = new ModelLoader();
 
             // Criar viewport WPF
             InitializeWpfViewport();
 
             // Configurar eventos
-            this.Resize += FlowsheetEditor3DControl_Resize;
+            this.Resize += Scene3DEditorControl_Resize;
         }
 
         #endregion
@@ -278,15 +279,21 @@ namespace DisperSim3D.Controls
 
 
         /// <summary>
-        /// Limpa o flowsheet inteiro
+        /// Clears the entire scene.
         /// </summary>
         /// <summary>
         /// Starts the dispersion simulation animation
         /// </summary>
         public void StartDispersion()
         {
-            var scenario = _flowsheet.DispersionScenario;
+            var scenario = _scene.DispersionScenario;
             if (scenario == null || scenario.Sources.Count == 0) return;
+
+            if (scenario.SolverType == CfdSolverType.GaussianPlume)
+            {
+                StartSteadyStateDispersion();
+                return;
+            }
 
             _cfdPlaybackActive = false;
             _dispersionEngine = new GaussianPuffEngine();
@@ -294,7 +301,7 @@ namespace DisperSim3D.Controls
 
             _dispersionRenderer = new DispersionRenderer();
             _dispersionRenderer.Initialize(scenario);
-            _dispersionRenderer.ComputeOccupancyGrid(_flowsheet);
+            _dispersionRenderer.ComputeOccupancyGrid(_scene);
 
             _hpLeakProfiles.Clear();
             foreach (var src in scenario.Sources)
@@ -307,8 +314,8 @@ namespace DisperSim3D.Controls
                 }
             }
 
-            if (_flowsheet.GasDetectors.Count > 0)
-                DetectorEvaluator.Reset(_flowsheet.GasDetectors);
+            if (_scene.GasDetectors.Count > 0)
+                DetectorEvaluator.Reset(_scene.GasDetectors);
 
             _frameCount = 0;
             _dispersionState = DispersionSimulationState.Running;
@@ -335,6 +342,71 @@ namespace DisperSim3D.Controls
                 _dispersionEngine.Reset();
 
             RemoveDispersionVisuals();
+            _steadyStateEngine = null;
+        }
+
+        /// <summary>
+        /// Computes and displays the steady-state Gaussian plume concentration field.
+        /// Renders isosurfaces and contour planes in a single pass with no animation.
+        /// </summary>
+        public void StartSteadyStateDispersion()
+        {
+            var scenario = _scene.DispersionScenario;
+            if (scenario == null || scenario.Sources.Count == 0) return;
+
+            StopDispersion();
+
+            var plume = new GaussianPlumeEngine();
+            plume.Initialize(scenario);
+            _steadyStateEngine = plume;
+
+            _dispersionRenderer = new DispersionRenderer();
+            _dispersionRenderer.Initialize(scenario);
+            _dispersionRenderer.ComputeOccupancyGrid(_scene);
+
+            RemoveDispersionVisuals();
+
+            // Always sample the scalar field so contour planes and max-concentration work
+            _isosurfaceVisual = _dispersionRenderer.GenerateIsosurfaces(
+                _steadyStateEngine, scenario.Thresholds);
+            if (((System.Windows.Media.Media3D.Model3DGroup)_isosurfaceVisual.Content).Children.Count > 0)
+            {
+                _isosurfaceVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                    new Visual3DTag("DispersionIsosurface", "iso"));
+                _viewport.Children.Add(_isosurfaceVisual);
+            }
+
+            if (scenario.ContourPlanes.Count > 0)
+            {
+                double maxC = _dispersionRenderer.GetMaxConcentration();
+                double dom = _dispersionRenderer.DomainSize;
+                foreach (var cp in scenario.ContourPlanes)
+                {
+                    if (!cp.Visible) continue;
+                    var cpVisual = _dispersionRenderer.GenerateContourPlane(
+                        _steadyStateEngine, cp, -dom, dom, maxC);
+                    cpVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("ContourPlane", "contour"));
+                    _viewport.Children.Add(cpVisual);
+                }
+            }
+
+            if (_scene.GasDetectors.Count > 0)
+            {
+                DetectorEvaluator.Reset(_scene.GasDetectors);
+                DetectorEvaluator.EvaluateStep(
+                    _scene.GasDetectors, _steadyStateEngine, 0);
+            }
+
+            foreach (var monitor in _scene.MonitorPoints)
+            {
+                if (!monitor.Visible) continue;
+                double c = _steadyStateEngine.EvaluateConcentration(
+                    monitor.Position.X, monitor.Position.Y, monitor.Position.Z);
+                monitor.TimeSeries.Add(new MonitorSample { TimeS = 0, Concentration = c });
+            }
+
+            _dispersionState = DispersionSimulationState.SteadyStateComplete;
         }
 
         /// <summary>
@@ -360,6 +432,66 @@ namespace DisperSim3D.Controls
                 _dispersionState = DispersionSimulationState.Running;
                 if (_animationTimer != null)
                     _animationTimer.Start();
+            }
+        }
+
+        /// <summary>
+        /// Rewinds the dispersion to the beginning and restarts playback.
+        /// </summary>
+        public void RewindDispersion()
+        {
+            if (_cfdPlaybackActive && _cfdResult != null && _cfdResult.TimeSteps.Count > 0)
+            {
+                _cfdPlaybackIndex = 0;
+                _cfdPlaybackTimeS = _cfdResult.TimeSteps[0];
+                _dispersionState = DispersionSimulationState.Running;
+                _frameCount = 0;
+                if (_animationTimer != null)
+                    _animationTimer.Start();
+                return;
+            }
+
+            if (_dispersionEngine != null)
+            {
+                var scenario = _scene.DispersionScenario;
+                _dispersionEngine.Reset();
+                _dispersionEngine.Initialize(scenario);
+                _frameCount = 0;
+                _dispersionState = DispersionSimulationState.Running;
+                if (_animationTimer != null)
+                    _animationTimer.Start();
+            }
+        }
+
+        /// <summary>
+        /// Seeks CFD playback to a fractional position (0.0 to 1.0).
+        /// </summary>
+        public void SeekCfdPlayback(double fraction)
+        {
+            if (!_cfdPlaybackActive || _cfdResult == null || _cfdResult.TimeSteps.Count == 0) return;
+
+            double firstTime = _cfdResult.TimeSteps[0];
+            double lastTime = _cfdResult.TimeSteps[_cfdResult.TimeSteps.Count - 1];
+            double targetTime = firstTime + fraction * (lastTime - firstTime);
+
+            _cfdPlaybackTimeS = targetTime;
+            _cfdPlaybackIndex = 0;
+            while (_cfdPlaybackIndex < _cfdResult.TimeSteps.Count - 1 &&
+                   _cfdResult.TimeSteps[_cfdPlaybackIndex + 1] <= targetTime)
+                _cfdPlaybackIndex++;
+        }
+
+        /// <summary>
+        /// Gets the total simulation duration in seconds.
+        /// </summary>
+        public double SimulationTotalDurationS
+        {
+            get
+            {
+                if (_cfdPlaybackActive && _cfdResult != null && _cfdResult.TimeSteps.Count > 0)
+                    return _cfdResult.TimeSteps[_cfdResult.TimeSteps.Count - 1];
+                var sc = _scene?.DispersionScenario;
+                return sc != null ? sc.SimulationDurationS : 0;
             }
         }
 
@@ -402,7 +534,7 @@ namespace DisperSim3D.Controls
 
         public void StartCfdSolve(CfdConfiguration config)
         {
-            var scenario = _flowsheet.DispersionScenario;
+            var scenario = _scene.DispersionScenario;
             if (scenario == null) return;
 
             if (config == null)
@@ -440,13 +572,17 @@ namespace DisperSim3D.Controls
                 {
                     _dispersionState = DispersionSimulationState.Stopped;
 
-                    string baseName = string.IsNullOrEmpty(scenario.Name) ? "CFD Run" : scenario.Name;
+                    bool isSteady = scenario.SolverType == CfdSolverType.ScalarTransportFoamSteady
+                                 || scenario.SolverType == CfdSolverType.ScalarSimpleFoam;
+                    string solverLabel = isSteady ? "CFD Steady" : "CFD (OpenFOAM)";
+                    string baseName = string.IsNullOrEmpty(scenario.Name) ? solverLabel : scenario.Name;
                     var entry = new CfdSimulationEntry
                     {
-                        Name = baseName + " #" + (_flowsheet.CfdSimulations.Count + 1),
+                        Name = baseName + " #" + (_scene.CfdSimulations.Count + 1),
                         ScenarioName = scenario.Name,
+                        SolverType = solverLabel,
                         CasePath = _cfdRunner.CasePath,
-                        DurationS = scenario.SimulationDurationS,
+                        DurationS = isSteady ? 0 : scenario.SimulationDurationS,
                         TimeStepCount = result.TimeSteps.Count,
                         GridNx = result.GridNx,
                         GridNy = result.GridNy,
@@ -468,7 +604,7 @@ namespace DisperSim3D.Controls
                         Fraction = 1.0
                     });
 
-                    _flowsheet.CfdSimulations.Add(entry);
+                    _scene.CfdSimulations.Add(entry);
                     CfdSolveCompleted?.Invoke(this, entry);
                 }));
             };
@@ -482,12 +618,16 @@ namespace DisperSim3D.Controls
                 }));
             };
 
-            _cfdRunner.RunAsync(scenario, config);
+            if (scenario.SolverType == CfdSolverType.ScalarTransportFoamSteady ||
+                scenario.SolverType == CfdSolverType.ScalarSimpleFoam)
+                _cfdRunner.RunSteadyAsync(scenario, config, scenario.SolverType);
+            else
+                _cfdRunner.RunAsync(scenario, config);
         }
 
         public void RunGaussianPuffAsync()
         {
-            var scenario = _flowsheet.DispersionScenario;
+            var scenario = _scene.DispersionScenario;
             if (scenario == null || scenario.Sources.Count == 0) return;
 
             _dispersionState = DispersionSimulationState.SolvingCfd;
@@ -510,7 +650,7 @@ namespace DisperSim3D.Controls
             var obstacles = new List<Models.BoundingBox>();
             if (useWindField)
             {
-                foreach (var deco in _flowsheet.Decorations)
+                foreach (var deco in _scene.Decorations)
                     if (deco.BoundingBox != null) obstacles.Add(deco.BoundingBox);
             }
 
@@ -660,7 +800,7 @@ namespace DisperSim3D.Controls
                 var entry = new CfdSimulationEntry
                 {
                     Name = (string.IsNullOrEmpty(scenario.Name) ? "Gaussian Puff" : scenario.Name)
-                           + " #" + (_flowsheet.CfdSimulations.Count + 1),
+                           + " #" + (_scene.CfdSimulations.Count + 1),
                     ScenarioName = scenario.Name,
                     SolverType = "Gaussian Puff",
                     CasePath = result.CaseDir,
@@ -678,7 +818,7 @@ namespace DisperSim3D.Controls
                     Fraction = 1.0
                 });
 
-                _flowsheet.CfdSimulations.Add(entry);
+                _scene.CfdSimulations.Add(entry);
                 CfdSolveCompleted?.Invoke(this, entry);
             };
 
@@ -694,7 +834,7 @@ namespace DisperSim3D.Controls
         {
             if (_cfdResult == null || !_cfdResult.IsLoaded || _cfdResult.TimeSteps.Count == 0) return;
 
-            var scenario = _flowsheet.DispersionScenario;
+            var scenario = _scene.DispersionScenario;
             _dispersionRenderer = new DispersionRenderer();
             _dispersionRenderer.Initialize(scenario);
             _dispersionRenderer.SetDomainBounds(
@@ -895,12 +1035,12 @@ namespace DisperSim3D.Controls
 
         public double GroundLevel
         {
-            get => _flowsheet.CurrentWorkPlane?.Elevation ?? 0;
+            get => _scene.CurrentWorkPlane?.Elevation ?? 0;
             set
             {
-                if (_flowsheet.CurrentWorkPlane != null)
+                if (_scene.CurrentWorkPlane != null)
                 {
-                    _flowsheet.CurrentWorkPlane.Elevation = value;
+                    _scene.CurrentWorkPlane.Elevation = value;
                     UpdateGroundPlane();
                     UpdateGridElevation();
                 }
@@ -930,7 +1070,7 @@ namespace DisperSim3D.Controls
                 LookDirection = cam.LookDirection,
                 UpDirection = cam.UpDirection
             };
-            _flowsheet.CameraPresets.Add(preset);
+            _scene.CameraPresets.Add(preset);
             return preset;
         }
 
@@ -959,9 +1099,9 @@ namespace DisperSim3D.Controls
         /// </summary>
         public ReleaseSource3D AddReleaseSource(Point3D position, ReleaseSource3D template = null)
         {
-            if (_flowsheet.DispersionScenario == null)
+            if (_scene.DispersionScenario == null)
             {
-                _flowsheet.DispersionScenario = new DispersionScenario();
+                _scene.DispersionScenario = new DispersionScenario();
             }
 
             var source = new ReleaseSource3D
@@ -974,7 +1114,7 @@ namespace DisperSim3D.Controls
                 PuffIntervalS = template?.PuffIntervalS ?? 1.0,
                 ReleaseHeightOffset = template?.ReleaseHeightOffset ?? 2.0
             };
-            _flowsheet.DispersionScenario.Sources.Add(source);
+            _scene.DispersionScenario.Sources.Add(source);
             UpdateViewport();
             return source;
         }
@@ -984,16 +1124,16 @@ namespace DisperSim3D.Controls
             var monitor = new MonitorPoint3D
             {
                 Position = _snapToGrid ? position.SnapToGrid(_gridSpacing) : position,
-                Name = template?.Name ?? "Monitor" + (_flowsheet.MonitorPoints.Count + 1)
+                Name = template?.Name ?? "Monitor" + (_scene.MonitorPoints.Count + 1)
             };
-            _flowsheet.MonitorPoints.Add(monitor);
+            _scene.MonitorPoints.Add(monitor);
             UpdateViewport();
             return monitor;
         }
 
         public void RemoveMonitorPoint(MonitorPoint3D monitor)
         {
-            _flowsheet.MonitorPoints.Remove(monitor);
+            _scene.MonitorPoints.Remove(monitor);
             UpdateViewport();
         }
 
@@ -1002,7 +1142,7 @@ namespace DisperSim3D.Controls
             var inv = System.Globalization.CultureInfo.InvariantCulture;
             var sb = new System.Text.StringBuilder();
 
-            var monitors = _flowsheet.MonitorPoints;
+            var monitors = _scene.MonitorPoints;
             if (monitors.Count == 0) return;
 
             sb.Append("Time(s)");
@@ -1043,7 +1183,7 @@ namespace DisperSim3D.Controls
             if (_dispersionEngine == null)
                 return;
 
-            var scenario = _flowsheet.DispersionScenario;
+            var scenario = _scene.DispersionScenario;
             double newTime = _dispersionEngine.CurrentTimeS + scenario.TimeStepS * _animationSpeedFactor;
 
             bool isLastStep = newTime >= scenario.SimulationDurationS;
@@ -1083,7 +1223,7 @@ namespace DisperSim3D.Controls
             _dispersionEngine.StepTo(newTime);
             _frameCount++;
 
-            foreach (var monitor in _flowsheet.MonitorPoints)
+            foreach (var monitor in _scene.MonitorPoints)
             {
                 if (!monitor.Visible) continue;
                 double c = 0;
@@ -1140,10 +1280,10 @@ namespace DisperSim3D.Controls
 
             MonitorDataUpdated?.Invoke(this, EventArgs.Empty);
 
-            if (_flowsheet.GasDetectors.Count > 0)
+            if (_scene.GasDetectors.Count > 0)
             {
                 DetectorEvaluator.EvaluateStep(
-                    _flowsheet.GasDetectors, _dispersionEngine, _dispersionEngine.CurrentTimeS);
+                    _scene.GasDetectors, _dispersionEngine, _dispersionEngine.CurrentTimeS);
             }
 
             RemoveDispersionVisuals();
@@ -1209,10 +1349,10 @@ namespace DisperSim3D.Controls
             }
 
             // Fire visuals every 4th frame
-            if (_frameCount % 4 == 0 && _flowsheet.FireScenario != null && _flowsheet.FireScenario.Sources.Count > 0)
+            if (_frameCount % 4 == 0 && _scene.FireScenario != null && _scene.FireScenario.Sources.Count > 0)
             {
                 var windVec = scenario.Meteo.WindVector;
-                foreach (var fire in _flowsheet.FireScenario.Sources)
+                foreach (var fire in _scene.FireScenario.Sources)
                 {
                     var flameVisual = FireRenderer.GenerateFlameVisual(fire, windVec);
                     flameVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
@@ -1220,7 +1360,7 @@ namespace DisperSim3D.Controls
                     _viewport.Children.Add(flameVisual);
 
                     var radVisual = FireRenderer.GenerateRadiationContours(
-                        fire, _flowsheet.FireScenario.RadiationContourLevels);
+                        fire, _scene.FireScenario.RadiationContourLevels);
                     radVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
                         new Visual3DTag("FireVisual", "rad_" + fire.Id));
                     _viewport.Children.Add(radVisual);
@@ -1235,7 +1375,7 @@ namespace DisperSim3D.Controls
         {
             if (_cfdResult == null || !_cfdResult.IsLoaded) return;
 
-            var scenario = _flowsheet.DispersionScenario;
+            var scenario = _scene.DispersionScenario;
             _frameCount++;
 
             double totalDuration = _cfdResult.TimeSteps[_cfdResult.TimeSteps.Count - 1]
@@ -1271,7 +1411,7 @@ namespace DisperSim3D.Controls
                 _cfdResult.DomainYMin, _cfdResult.DomainYMax, _cfdResult.DomainZMax);
 
             // Sample monitors
-            foreach (var mon in _flowsheet.MonitorPoints)
+            foreach (var mon in _scene.MonitorPoints)
             {
                 double c = _cfdConcentrationField.EvaluateConcentration(
                     mon.Position.X, mon.Position.Y, mon.Position.Z);
@@ -1477,10 +1617,10 @@ namespace DisperSim3D.Controls
             return mesh;
         }
 
-        public void ClearFlowsheet()
+        public void ClearScene()
         {
             StopDispersion();
-            _flowsheet.Clear();
+            _scene.Clear();
             UpdateViewport();
         }
 
@@ -1534,7 +1674,7 @@ namespace DisperSim3D.Controls
             };
             decoration.UpdateBoundingBox();
 
-            _flowsheet.Decorations.Add(decoration);
+            _scene.Decorations.Add(decoration);
             UpdateViewport();
             SelectedDecoration = decoration;
             return decoration;
@@ -1564,7 +1704,7 @@ namespace DisperSim3D.Controls
             };
             decoration.UpdateBoundingBox();
 
-            _flowsheet.Decorations.Add(decoration);
+            _scene.Decorations.Add(decoration);
             UpdateViewport();
             SelectedDecoration = decoration;
             return decoration;
@@ -1582,7 +1722,7 @@ namespace DisperSim3D.Controls
         {
             if (_selectedDecoration == null) return;
 
-            _flowsheet.Decorations.Remove(_selectedDecoration);
+            _scene.Decorations.Remove(_selectedDecoration);
             SelectedDecoration = null;
             UpdateViewport();
         }
@@ -1602,7 +1742,7 @@ namespace DisperSim3D.Controls
 
 
         /// <summary>
-        /// Saves the flowsheet to an XML file
+        /// Saves the scene to an XML file.
         /// </summary>
         public void SaveToFile(string filePath)
         {
@@ -1611,15 +1751,15 @@ namespace DisperSim3D.Controls
             var doc = new System.Xml.Linq.XDocument(
                 new System.Xml.Linq.XElement("Scene3D",
                     new System.Xml.Linq.XAttribute("Version", "1"),
-                    new System.Xml.Linq.XAttribute("Name", _flowsheet.Name ?? ""),
-                    new System.Xml.Linq.XAttribute("Description", _flowsheet.Description ?? ""),
+                    new System.Xml.Linq.XAttribute("Name", _scene.Name ?? ""),
+                    new System.Xml.Linq.XAttribute("Description", _scene.Description ?? ""),
 
                     new System.Xml.Linq.XElement("GridSettings",
-                        new System.Xml.Linq.XAttribute("Spacing", _flowsheet.GridSpacing.ToString(inv)),
-                        new System.Xml.Linq.XAttribute("SnapToGrid", _flowsheet.SnapToGrid)),
+                        new System.Xml.Linq.XAttribute("Spacing", _scene.GridSpacing.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("SnapToGrid", _scene.SnapToGrid)),
 
                     new System.Xml.Linq.XElement("WorkPlanes",
-                        _flowsheet.WorkPlanes.Select(wp =>
+                        _scene.WorkPlanes.Select(wp =>
                             new System.Xml.Linq.XElement("WorkPlane",
                                 new System.Xml.Linq.XAttribute("Name", wp.Name ?? ""),
                                 new System.Xml.Linq.XAttribute("Elevation", wp.Elevation.ToString(inv)),
@@ -1628,11 +1768,11 @@ namespace DisperSim3D.Controls
                                 new System.Xml.Linq.XAttribute("GridSpacing", wp.GridSpacing.ToString(inv))))),
 
                     new System.Xml.Linq.XElement("CurrentWorkPlane",
-                        new System.Xml.Linq.XAttribute("Name", _flowsheet.CurrentWorkPlane != null
-                            ? _flowsheet.CurrentWorkPlane.Name ?? "" : "")),
+                        new System.Xml.Linq.XAttribute("Name", _scene.CurrentWorkPlane != null
+                            ? _scene.CurrentWorkPlane.Name ?? "" : "")),
 
                     new System.Xml.Linq.XElement("Decorations",
-                        _flowsheet.Decorations.Select(d =>
+                        _scene.Decorations.Select(d =>
                             new System.Xml.Linq.XElement("Decoration",
                                 new System.Xml.Linq.XAttribute("Id", d.Id),
                                 new System.Xml.Linq.XAttribute("Name", d.Name ?? ""),
@@ -1661,11 +1801,11 @@ namespace DisperSim3D.Controls
 
         private System.Xml.Linq.XElement SerializeDispersionScenarios(System.Globalization.CultureInfo inv)
         {
-            if (_flowsheet.DispersionScenarios.Count == 0) return null;
+            if (_scene.DispersionScenarios.Count == 0) return null;
 
             return new System.Xml.Linq.XElement("DispersionScenarios",
-                new System.Xml.Linq.XAttribute("ActiveIndex", _flowsheet.ActiveScenarioIndex.ToString(inv)),
-                _flowsheet.DispersionScenarios.Select(sc => SerializeSingleScenario(sc, inv)));
+                new System.Xml.Linq.XAttribute("ActiveIndex", _scene.ActiveScenarioIndex.ToString(inv)),
+                _scene.DispersionScenarios.Select(sc => SerializeSingleScenario(sc, inv)));
         }
 
         private System.Xml.Linq.XElement SerializeSingleScenario(DispersionScenario sc, System.Globalization.CultureInfo inv)
@@ -1676,6 +1816,7 @@ namespace DisperSim3D.Controls
                 new System.Xml.Linq.XAttribute("TimeStep", sc.TimeStepS.ToString(inv)),
                 new System.Xml.Linq.XAttribute("DomainSize", sc.DomainSizeM.ToString(inv)),
                 new System.Xml.Linq.XAttribute("GridRes", sc.GridResolution.ToString(inv)),
+                new System.Xml.Linq.XAttribute("SolverType", sc.SolverType.ToString()),
 
                 new System.Xml.Linq.XElement("Meteo",
                     new System.Xml.Linq.XAttribute("WindSpeed", sc.Meteo.WindSpeed.ToString(inv)),
@@ -1788,6 +1929,14 @@ namespace DisperSim3D.Controls
             sc.TimeStepS = double.Parse((string)dEl.Attribute("TimeStep") ?? "0.5", inv);
             sc.DomainSizeM = double.Parse((string)dEl.Attribute("DomainSize") ?? "200", inv);
             sc.GridResolution = int.Parse((string)dEl.Attribute("GridRes") ?? "80", inv);
+
+            var solverTypeStr = (string)dEl.Attribute("SolverType");
+            if (!string.IsNullOrEmpty(solverTypeStr))
+            {
+                CfdSolverType parsed;
+                if (Enum.TryParse(solverTypeStr, out parsed))
+                    sc.SolverType = parsed;
+            }
 
             var meteoEl = dEl.Element("Meteo");
             if (meteoEl != null)
@@ -1946,10 +2095,10 @@ namespace DisperSim3D.Controls
 
         private System.Xml.Linq.XElement SerializeMonitorPoints(System.Globalization.CultureInfo inv)
         {
-            if (_flowsheet.MonitorPoints.Count == 0) return null;
+            if (_scene.MonitorPoints.Count == 0) return null;
 
             return new System.Xml.Linq.XElement("MonitorPoints",
-                _flowsheet.MonitorPoints.Select(m =>
+                _scene.MonitorPoints.Select(m =>
                     new System.Xml.Linq.XElement("Monitor",
                         new System.Xml.Linq.XAttribute("Id", m.Id),
                         new System.Xml.Linq.XAttribute("Name", m.Name ?? ""),
@@ -1981,7 +2130,7 @@ namespace DisperSim3D.Controls
 
         private System.Xml.Linq.XElement SerializeWindRose(System.Globalization.CultureInfo inv)
         {
-            var wr = _flowsheet.WindRose;
+            var wr = _scene.WindRose;
             if (wr == null || wr.Bins.Count == 0) return null;
 
             return new System.Xml.Linq.XElement("WindRose",
@@ -2020,7 +2169,7 @@ namespace DisperSim3D.Controls
 
         private System.Xml.Linq.XElement SerializeFireScenario(System.Globalization.CultureInfo inv)
         {
-            var fs = _flowsheet.FireScenario;
+            var fs = _scene.FireScenario;
             if (fs == null || fs.Sources.Count == 0) return null;
 
             return new System.Xml.Linq.XElement("FireScenario",
@@ -2096,10 +2245,10 @@ namespace DisperSim3D.Controls
 
         private System.Xml.Linq.XElement SerializeGasDetectors(System.Globalization.CultureInfo inv)
         {
-            if (_flowsheet.GasDetectors.Count == 0) return null;
+            if (_scene.GasDetectors.Count == 0) return null;
 
             return new System.Xml.Linq.XElement("GasDetectors",
-                _flowsheet.GasDetectors.Select(d =>
+                _scene.GasDetectors.Select(d =>
                     new System.Xml.Linq.XElement("Detector",
                         new System.Xml.Linq.XAttribute("Id", d.Id),
                         new System.Xml.Linq.XAttribute("Name", d.Name ?? ""),
@@ -2132,7 +2281,7 @@ namespace DisperSim3D.Controls
         }
 
         /// <summary>
-        /// Loads the flowsheet from an XML file
+        /// Loads a scene from an XML file.
         /// </summary>
         public void LoadFromFile(string filePath)
         {
@@ -2147,7 +2296,7 @@ namespace DisperSim3D.Controls
                 if (root == null || (root.Name.LocalName != "Scene3D" && root.Name.LocalName != "Flowsheet3D")) return;
 
                 var fs = new Scene3D();
-                fs.Name = (string)root.Attribute("Name") ?? "New Flowsheet";
+                fs.Name = (string)root.Attribute("Name") ?? "New Scene";
                 fs.Description = (string)root.Attribute("Description") ?? "";
 
                 var gridEl = root.Element("GridSettings");
@@ -2235,7 +2384,7 @@ namespace DisperSim3D.Controls
                 DeserializeFireScenario(root, inv, fs);
                 DeserializeGasDetectors(root, inv, fs);
 
-                _flowsheet = fs;
+                _scene = fs;
                 _snapToGrid = fs.SnapToGrid;
                 _gridSpacing = fs.GridSpacing;
                 SelectedDecoration = null;
@@ -2243,7 +2392,7 @@ namespace DisperSim3D.Controls
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("Failed to load flowsheet: " + ex.Message);
+                System.Diagnostics.Debug.WriteLine("Failed to load scene: " + ex.Message);
             }
         }
 
@@ -2322,7 +2471,7 @@ namespace DisperSim3D.Controls
 
                     if (hitTag != null && hitTag.Category == "Decoration")
                     {
-                        var hitDeco = _flowsheet.FindDecoration(hitTag.Id);
+                        var hitDeco = _scene.FindDecoration(hitTag.Id);
                         SelectedDecoration = hitDeco;
                         SelectedSource = null;
 
@@ -2374,7 +2523,7 @@ namespace DisperSim3D.Controls
                     if (firePoint != null && PendingFireTemplate != null)
                     {
                         PendingFireTemplate.Position = firePoint.Value;
-                        _flowsheet.FireScenario.Sources.Add(PendingFireTemplate);
+                        _scene.FireScenario.Sources.Add(PendingFireTemplate);
                         PendingFireTemplate = null;
                         CurrentEditMode = EditMode.Select;
                         UpdateViewport();
@@ -2386,7 +2535,7 @@ namespace DisperSim3D.Controls
                     if (detPoint != null && PendingDetectorTemplate != null)
                     {
                         PendingDetectorTemplate.Position = detPoint.Value;
-                        _flowsheet.GasDetectors.Add(PendingDetectorTemplate);
+                        _scene.GasDetectors.Add(PendingDetectorTemplate);
                         PendingDetectorTemplate = null;
                         CurrentEditMode = EditMode.Select;
                         UpdateViewport();
@@ -2478,7 +2627,7 @@ namespace DisperSim3D.Controls
             }
         }
 
-        private void FlowsheetEditor3DControl_Resize(object sender, EventArgs e)
+        private void Scene3DEditorControl_Resize(object sender, EventArgs e)
         {
             _wpfHost?.Invalidate();
         }
@@ -2547,7 +2696,7 @@ namespace DisperSim3D.Controls
         {
             var tag = PerformTagHitTest(screenPosition);
             if (tag != null && tag.Category == "Decoration")
-                return _flowsheet.FindDecoration(tag.Id);
+                return _scene.FindDecoration(tag.Id);
             return null;
         }
 
@@ -2590,7 +2739,7 @@ namespace DisperSim3D.Controls
         {
             var ray = _viewport.Viewport.Point2DtoRay3D(screenPosition);
 
-            var plane = _flowsheet.CurrentWorkPlane;
+            var plane = _scene.CurrentWorkPlane;
             if (plane == null) return null;
 
             var planeOrigin = new Point3D(0, 0, plane.Elevation);
@@ -2702,7 +2851,7 @@ namespace DisperSim3D.Controls
 
             if (!_showGroundPlane) return;
 
-            double elev = _flowsheet?.CurrentWorkPlane?.Elevation ?? 0;
+            double elev = _scene?.CurrentWorkPlane?.Elevation ?? 0;
             double half = _groundSize * 0.5;
 
             var mesh = new System.Windows.Media.Media3D.MeshGeometry3D();
@@ -2755,8 +2904,8 @@ namespace DisperSim3D.Controls
 
         private void UpdateGridElevation()
         {
-            if (_gridVisual == null || _flowsheet?.CurrentWorkPlane == null) return;
-            double elev = _flowsheet.CurrentWorkPlane.Elevation;
+            if (_gridVisual == null || _scene?.CurrentWorkPlane == null) return;
+            double elev = _scene.CurrentWorkPlane.Elevation;
             _gridVisual.Transform = new System.Windows.Media.Media3D.TranslateTransform3D(0, 0, elev);
         }
 
@@ -2773,7 +2922,7 @@ namespace DisperSim3D.Controls
                 _viewport.Children.Remove(model);
             }
 
-            foreach (var deco in _flowsheet.Decorations)
+            foreach (var deco in _scene.Decorations)
             {
                 if (deco.Model3D != null)
                 {
@@ -2806,9 +2955,9 @@ namespace DisperSim3D.Controls
                 _viewport.Children.Remove(model);
             }
 
-            if (_flowsheet.DispersionScenario != null)
+            if (_scene.DispersionScenario != null)
             {
-                foreach (var source in _flowsheet.DispersionScenario.Sources)
+                foreach (var source in _scene.DispersionScenario.Sources)
                 {
                     var pos = source.EffectivePosition;
                     var dir = source.ReleaseDirection;
@@ -2913,9 +3062,9 @@ namespace DisperSim3D.Controls
             foreach (var wr in existingWindRose)
                 _viewport.Children.Remove(wr);
 
-            if (_flowsheet.WindRose != null && _flowsheet.WindRose.ShowIn3D && _flowsheet.WindRose.Bins.Count > 0)
+            if (_scene.WindRose != null && _scene.WindRose.ShowIn3D && _scene.WindRose.Bins.Count > 0)
             {
-                var wrVisual = Core.WindRoseRenderer.Generate(_flowsheet.WindRose);
+                var wrVisual = Core.WindRoseRenderer.Generate(_scene.WindRose);
                 wrVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
                     new Visual3DTag("WindRose", "windrose"));
                 _viewport.Children.Add(wrVisual);
@@ -2932,7 +3081,7 @@ namespace DisperSim3D.Controls
                 _viewport.Children.Remove(model);
             }
 
-            foreach (var monitor in _flowsheet.MonitorPoints)
+            foreach (var monitor in _scene.MonitorPoints)
             {
                 if (!monitor.Visible) continue;
 
@@ -2979,9 +3128,9 @@ namespace DisperSim3D.Controls
                 .ToList();
             foreach (var f in existingFires) _viewport.Children.Remove(f);
 
-            if (_flowsheet.FireScenario != null)
+            if (_scene.FireScenario != null)
             {
-                foreach (var fire in _flowsheet.FireScenario.Sources)
+                foreach (var fire in _scene.FireScenario.Sources)
                 {
                     var coneMesh = new System.Windows.Media.Media3D.MeshGeometry3D();
                     int segs = 8;
@@ -3026,7 +3175,7 @@ namespace DisperSim3D.Controls
                 .ToList();
             foreach (var d in existingDetectors) _viewport.Children.Remove(d);
 
-            foreach (var det in _flowsheet.GasDetectors)
+            foreach (var det in _scene.GasDetectors)
             {
                 if (!det.Visible) continue;
 
@@ -3064,8 +3213,8 @@ namespace DisperSim3D.Controls
 
         private ReleaseSource3D FindSourceById(string id)
         {
-            if (_flowsheet.DispersionScenario == null || id == null) return null;
-            foreach (var src in _flowsheet.DispersionScenario.Sources)
+            if (_scene.DispersionScenario == null || id == null) return null;
+            foreach (var src in _scene.DispersionScenario.Sources)
                 if (src.Id == id) return src;
             return null;
         }

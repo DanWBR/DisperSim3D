@@ -231,30 +231,52 @@ namespace DisperSim3D.Controls
                 }
             };
 
-            var solverCombo = new ToolStripComboBox("Solver") { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200, ToolTipText = "Solver type" };
-            solverCombo.Items.AddRange(new object[] { "Gaussian Puff", "CFD (OpenFOAM)" });
+            var solverCombo = new ToolStripComboBox("Solver") { DropDownStyle = ComboBoxStyle.DropDownList, Width = 260, ToolTipText = "Solver type" };
+            solverCombo.Items.AddRange(new object[] {
+                "Gaussian Puff (Transient)",
+                "Gaussian Plume (Steady-State)",
+                "CFD Transient (scalarTransportFoam)",
+                "CFD Steady (scalarTransportFoam)",
+                "CFD Steady (simpleFoam + scalar)"
+            });
             solverCombo.SelectedIndex = 0;
             solverCombo.SelectedIndexChanged += (s, e) =>
             {
                 var sc = _editor.Flowsheet.DispersionScenario;
                 if (sc != null)
-                    sc.SolverType = solverCombo.SelectedIndex == 0
-                        ? CfdSolverType.GaussianPuff
-                        : CfdSolverType.ScalarTransportFoam;
+                {
+                    switch (solverCombo.SelectedIndex)
+                    {
+                        case 0: sc.SolverType = CfdSolverType.GaussianPuff; break;
+                        case 1: sc.SolverType = CfdSolverType.GaussianPlume; break;
+                        case 2: sc.SolverType = CfdSolverType.ScalarTransportFoam; break;
+                        case 3: sc.SolverType = CfdSolverType.ScalarTransportFoamSteady; break;
+                        case 4: sc.SolverType = CfdSolverType.ScalarSimpleFoam; break;
+                    }
+                }
             };
 
-            _btnRun = new ToolStripButton("Run", Img("control_play_blue.png")) { ToolTipText = "Run CFD / Gaussian Puff simulation" };
+            _btnRun = new ToolStripButton("Run", Img("control_play_blue.png")) { ToolTipText = "Run dispersion simulation" };
             _btnRun.Click += (s, e) =>
             {
                 var sc = _editor.Flowsheet.DispersionScenario;
                 if (sc == null || sc.Sources.Count == 0) return;
-                if (sc.SolverType == CfdSolverType.ScalarTransportFoam)
+                if (sc.SolverType == CfdSolverType.ScalarTransportFoam ||
+                    sc.SolverType == CfdSolverType.ScalarTransportFoamSteady ||
+                    sc.SolverType == CfdSolverType.ScalarSimpleFoam)
                 {
                     if (sc.CfdConfig == null)
                         sc.CfdConfig = AppSettings.Instance.CreateCfdConfig();
                     _cfdSimPanel.ShowSolveProgress();
                     ShowDockPanel(_cfdSimDock, DockState.DockBottom);
                     _editor.StartCfdSolve(sc.CfdConfig);
+                }
+                else if (sc.SolverType == CfdSolverType.GaussianPlume)
+                {
+                    _editor.StartSteadyStateDispersion();
+                    _cfdSimPanel.ShowPlaybackControls("Gaussian Plume (Steady-State)", false);
+                    _cfdSimPanelUserVisible = true;
+                    ShowDockPanel(_cfdSimDock, DockState.DockBottom);
                 }
                 else
                 {
@@ -417,10 +439,16 @@ namespace DisperSim3D.Controls
             _cfdSimPanel.PlayRequested += (s, entry) =>
             {
                 if (!_editor.LoadCfdSimulation(entry))
+                {
                     MessageBox.Show("Could not load results from:\n" + entry.CasePath,
                         "Load Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
                 else
+                {
+                    string simType = entry.SolverType ?? "OpenFOAM";
+                    _cfdSimPanel.ShowPlaybackControls(simType, true);
                     UpdatePlaybackButtons();
+                }
             };
             _cfdSimPanel.DeleteRequested += (s, entry) =>
             {
@@ -460,10 +488,46 @@ namespace DisperSim3D.Controls
             {
                 _cfdSimPanel.AddEntry(entry);
                 if (entry.HasResults)
+                {
                     _cfdSimPanel.HideSolveProgress();
+                    string simType = entry.SolverType ?? "OpenFOAM";
+                    bool isDynamic = entry.TimeStepCount > 1;
+                    _cfdSimPanel.ShowPlaybackControls(simType, isDynamic);
+                }
                 _cfdSimPanelUserVisible = true;
                 ShowDockPanel(_cfdSimDock, DockState.DockBottom);
                 UpdatePlaybackButtons();
+            };
+
+            _cfdSimPanel.PlayPauseClicked += (s, ev) =>
+            {
+                var ds = _editor.DispersionState;
+                if (ds == DispersionSimulationState.Running)
+                    _editor.PauseDispersion();
+                else if (ds == DispersionSimulationState.Paused)
+                    _editor.ResumeDispersion();
+                else if (ds == DispersionSimulationState.Stopped &&
+                         _editor.CfdResult != null && _editor.CfdResult.IsLoaded)
+                    _editor.StartCfdPlayback();
+                UpdatePlaybackButtons();
+            };
+            _cfdSimPanel.StopPlaybackClicked += (s, ev) =>
+            {
+                _editor.CfdRunner?.Cancel();
+                _editor.CancelGaussianPuff();
+                _editor.StopDispersion();
+                _cfdSimPanel.HidePlaybackControls();
+                UpdatePlaybackButtons();
+                _dispersionTimeLabel.Text = "";
+            };
+            _cfdSimPanel.RewindClicked += (s, ev) =>
+            {
+                _editor.RewindDispersion();
+                UpdatePlaybackButtons();
+            };
+            _cfdSimPanel.SeekRequested += (s, fraction) =>
+            {
+                _editor.SeekCfdPlayback(fraction);
             };
 
             // --- Viewport dock panel ---
@@ -1024,7 +1088,7 @@ namespace DisperSim3D.Controls
                 ShowDockPanel(_cfdSimDock, DockState.DockBottom);
                 _dispersionTimeLabel.Text = "CFD solving...";
             }
-            else if (isRunning)
+            else if (isRunning || isPaused)
             {
                 _cfdSimPanel.HideSolveProgress();
                 if (_dispersionStatusTimer == null)
@@ -1036,9 +1100,11 @@ namespace DisperSim3D.Controls
                         if (ds == DispersionSimulationState.Running ||
                             ds == DispersionSimulationState.Paused)
                         {
-                            var sc = _editor.Flowsheet.DispersionScenario;
-                            _dispersionTimeLabel.Text = string.Format("T = {0:F1} s / {1:F0} s",
-                                _editor.DispersionTimeS, sc != null ? sc.SimulationDurationS : 0);
+                            double currentT = _editor.DispersionTimeS;
+                            double totalT = _editor.SimulationTotalDurationS;
+                            _dispersionTimeLabel.Text = string.Format("T = {0:F1} s / {1:F0} s", currentT, totalT);
+                            _cfdSimPanel.UpdatePlaybackState(
+                                ds == DispersionSimulationState.Running, currentT, totalT);
                         }
                         else
                         {
@@ -1051,6 +1117,7 @@ namespace DisperSim3D.Controls
             else if (isStopped)
             {
                 _cfdSimPanel.HideSolveProgress();
+                _cfdSimPanel.HidePlaybackControls();
                 if (!_cfdSimPanelUserVisible)
                     _cfdSimDock.DockState = DockState.Hidden;
                 _dispersionTimeLabel.Text = "";

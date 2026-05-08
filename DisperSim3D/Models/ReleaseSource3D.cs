@@ -25,7 +25,7 @@ namespace DisperSim3D.Models
         public Point3D Position { get; set; }
 
         /// <summary>
-        /// Gets or sets the identifier of the flowsheet unit operation this source is attached to, if any.
+        /// Gets or sets the identifier of the unit operation this source is attached to, if any.
         /// </summary>
         public string AttachedUnitId { get; set; }
 

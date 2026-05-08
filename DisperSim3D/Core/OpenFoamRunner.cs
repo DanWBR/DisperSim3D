@@ -203,6 +203,186 @@ namespace DisperSim3D.Core
         }
 
         /// <summary>
+        /// Runs a steady-state scalar transport simulation asynchronously.
+        /// Supports both scalarTransportFoam (with steadyState ddtSchemes) and simpleFoam (with scalar).
+        /// </summary>
+        public void RunSteadyAsync(DispersionScenario scenario, CfdConfiguration config, CfdSolverType solverType)
+        {
+            if (IsRunning) return;
+            if (!_env.IsAvailable)
+            {
+                Failed?.Invoke(this, _env.StatusMessage);
+                return;
+            }
+
+            _nProcs = config.NumberOfProcessors > 1 ? config.NumberOfProcessors : 1;
+            int nx = scenario.GridResolution;
+            int ny = scenario.GridResolution;
+            int nz = scenario.GridResolution / 2;
+            if (nz < 1) nz = 1;
+            double domain = scenario.DomainSizeM;
+
+            string solverName = solverType == CfdSolverType.ScalarSimpleFoam
+                ? "simpleFoam" : "scalarTransportFoam";
+
+            _worker = new BackgroundWorker { WorkerSupportsCancellation = true };
+            _worker.DoWork += (s, e) =>
+            {
+                try
+                {
+                    ReportProgress(0, "Generating steady-state case...", "");
+                    _casePath = solverType == CfdSolverType.ScalarSimpleFoam
+                        ? OpenFoamCaseGenerator.GenerateSteadyStateSIMPLE(scenario, config)
+                        : OpenFoamCaseGenerator.GenerateSteadyState(scenario, config);
+
+                    if (_worker.CancellationPending) { e.Cancel = true; return; }
+
+                    ReportProgress(0.02, "Running blockMesh...", "");
+                    RunStep("blockMesh");
+                    if (_worker.CancellationPending) { e.Cancel = true; return; }
+
+                    if (scenario.Sources.Count > 0)
+                    {
+                        ReportProgress(0.05, "Running topoSet...", "");
+                        RunStep("topoSet");
+                        if (_worker.CancellationPending) { e.Cancel = true; return; }
+
+                        bool hasJet = false;
+                        foreach (var src in scenario.Sources)
+                            if (src.ComputedExitVelocity > 0) { hasJet = true; break; }
+                        if (hasJet)
+                        {
+                            ReportProgress(0.07, "Running setFields (jet velocity)...", "");
+                            RunStep("setFields");
+                            if (_worker.CancellationPending) { e.Cancel = true; return; }
+                        }
+                    }
+
+                    bool useParallel = _nProcs > 1 && _env.CanRunParallel;
+                    if (useParallel)
+                    {
+                        ReportProgress(0.08, "Running decomposePar...", "");
+                        RunStep("decomposePar");
+                        if (_worker.CancellationPending) { e.Cancel = true; return; }
+
+                        string mpiCmd = _env.BuildMpiCommand(_nProcs, solverName + " -parallel");
+                        ReportProgress(0.1, string.Format("Running {0} steady-state ({1} CPUs)...", solverName, _nProcs), "");
+                        RunSteadySolverAsync(mpiCmd);
+                        if (_worker.CancellationPending) { e.Cancel = true; return; }
+
+                        ReportProgress(0.93, "Running reconstructPar...", "");
+                        RunStep("reconstructPar");
+                        if (_worker.CancellationPending) { e.Cancel = true; return; }
+                    }
+                    else
+                    {
+                        ReportProgress(0.1, string.Format("Running {0} steady-state...", solverName), "");
+                        RunSteadySolverAsync(solverName);
+                        if (_worker.CancellationPending) { e.Cancel = true; return; }
+                    }
+
+                    ReportProgress(0.95, "Reading results...", "");
+                    var result = OpenFoamResultReader.ReadResults(_casePath, nx, ny, nz, domain,
+                        (frac, msg) => ReportProgress(0.95 + frac * 0.04, msg, ""));
+
+                    e.Result = result;
+                }
+                catch (Exception ex)
+                {
+                    e.Result = ex;
+                }
+            };
+
+            _worker.RunWorkerCompleted += (s, e) =>
+            {
+                if (e.Cancelled)
+                {
+                    Failed?.Invoke(this, "Cancelled by user");
+                }
+                else if (e.Result is Exception ex)
+                {
+                    Failed?.Invoke(this, ex.Message);
+                }
+                else if (e.Result is OpenFoamResult result)
+                {
+                    ReportProgress(1.0, "Complete", "", isComplete: true);
+                    Completed?.Invoke(this, result);
+                }
+                else
+                {
+                    Failed?.Invoke(this, "Unknown error");
+                }
+            };
+
+            _worker.RunWorkerAsync();
+        }
+
+        private void RunSteadySolverAsync(string command)
+        {
+            _currentProcess = _env.StartCommand(_casePath, command);
+            var timeRegex = new Regex(@"^Time\s*=\s*([\d.eE+-]+)", RegexOptions.Compiled);
+            var residualRegex = new Regex(@"Solving for (\w+).*Final residual\s*=\s*([\d.eE+-]+)", RegexOptions.Compiled);
+            var convergenceRegex = new Regex(@"(SIMPLE|PIMPLE).*solution converged", RegexOptions.Compiled);
+
+            var stderrBuilder = new System.Text.StringBuilder();
+            _currentProcess.ErrorDataReceived += (s2, ev) =>
+            {
+                if (ev.Data != null) stderrBuilder.AppendLine(ev.Data);
+            };
+            _currentProcess.BeginErrorReadLine();
+
+            int maxIter = 1000;
+            string lastResidual = "";
+
+            while (!_currentProcess.StandardOutput.EndOfStream)
+            {
+                string line = _currentProcess.StandardOutput.ReadLine();
+                if (line == null) continue;
+
+                var timeMatch = timeRegex.Match(line);
+                if (timeMatch.Success)
+                {
+                    double t;
+                    if (double.TryParse(timeMatch.Groups[1].Value, NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out t))
+                    {
+                        double frac = 0.1 + 0.85 * Math.Min(1.0, t / maxIter);
+                        string step = string.Format("Steady-state iteration {0}", (int)t);
+                        if (!string.IsNullOrEmpty(lastResidual))
+                            step += "  res=" + lastResidual;
+                        ReportProgress(frac, step, line);
+                    }
+                }
+                else
+                {
+                    var resMatch = residualRegex.Match(line);
+                    if (resMatch.Success)
+                    {
+                        lastResidual = resMatch.Groups[2].Value;
+                        ReportProgress(-1, null, line);
+                    }
+
+                    if (convergenceRegex.IsMatch(line))
+                        ReportProgress(-1, null, "Converged! " + line);
+                }
+
+                if (_worker.CancellationPending)
+                {
+                    try { _currentProcess.Kill(); } catch { }
+                    return;
+                }
+            }
+
+            _currentProcess.WaitForExit(600000);
+            if (_currentProcess.ExitCode != 0)
+            {
+                string err = stderrBuilder.ToString().Trim();
+                throw new Exception(command + " failed (exit " + _currentProcess.ExitCode + "): " + err);
+            }
+            _currentProcess = null;
+        }
+
+        /// <summary>
         /// Runs a steady-state wind field simulation (simpleFoam) synchronously and returns the computed wind field.
         /// Executes blockMesh, optional topoSet/setFields for obstacles, optional parallel decomposition,
         /// simpleFoam, optional reconstruction, and velocity field reading.

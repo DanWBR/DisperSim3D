@@ -642,15 +642,15 @@ namespace DisperSim3D.Core
         /// <summary>
         /// Marks grid cells that are occupied by obstacle bounding boxes in the scene.
         /// </summary>
-        /// <param name="flowsheet">The 3D scene containing decorations with bounding boxes.</param>
-        public void ComputeOccupancyGrid(Scene3D flowsheet)
+        /// <param name="scene">The 3D scene containing decorations with bounding boxes.</param>
+        public void ComputeOccupancyGrid(Scene3D scene)
         {
             int nz = _gridRes / 2 > 0 ? _gridRes / 2 : 1;
             _occupancyGrid = new bool[_gridRes, _gridRes, nz];
 
             var boxes = new List<BoundingBox>();
 
-            foreach (var deco in flowsheet.Decorations)
+            foreach (var deco in scene.Decorations)
             {
                 if (deco.BoundingBox != null)
                     boxes.Add(deco.BoundingBox);

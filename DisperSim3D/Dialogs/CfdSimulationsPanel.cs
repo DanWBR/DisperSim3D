@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
@@ -19,12 +19,27 @@ namespace DisperSim3D.Dialogs
         private Timer _elapsedTimer;
         private double _lastFraction;
 
+        private Panel _playbackSection;
+        private Button _btnPlayPause;
+        private Button _btnStopPlayback;
+        private Button _btnRewind;
+        private TrackBar _timeTrackBar;
+        private Label _lblPlaybackTime;
+        private Label _lblSimType;
+        private bool _isTrackBarDragging;
+        private bool _isPlaying;
+
         private DataGridView _grid;
 
         public event EventHandler CancelSolveRequested;
         public event EventHandler<CfdSimulationEntry> PlayRequested;
         public event EventHandler<CfdSimulationEntry> DeleteRequested;
         public event EventHandler<CfdSimulationEntry> OpenFolderRequested;
+
+        public event EventHandler PlayPauseClicked;
+        public event EventHandler StopPlaybackClicked;
+        public event EventHandler RewindClicked;
+        public event EventHandler<double> SeekRequested;
 
         public CfdSimulationsPanel()
         {
@@ -45,6 +60,16 @@ namespace DisperSim3D.Dialogs
                 Padding = new Padding((int)(4 * dpi))
             };
             BuildProgressSection(dpi);
+
+            _playbackSection = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = (int)(90 * dpi),
+                Visible = false,
+                Padding = new Padding((int)(6 * dpi)),
+                BackColor = Color.FromArgb(245, 245, 248)
+            };
+            BuildPlaybackSection(dpi);
 
             _grid = new DataGridView
             {
@@ -112,7 +137,116 @@ namespace DisperSim3D.Dialogs
             _grid.CellContentClick += Grid_CellContentClick;
 
             this.Controls.Add(_grid);
+            this.Controls.Add(_playbackSection);
             this.Controls.Add(_progressSection);
+        }
+
+        private void BuildPlaybackSection(float dpi)
+        {
+            var topRow = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = (int)(28 * dpi)
+            };
+
+            _lblSimType = new Label
+            {
+                Text = "",
+                AutoSize = true,
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(60, 60, 60),
+                Location = new Point(0, (int)(4 * dpi))
+            };
+            topRow.Controls.Add(_lblSimType);
+
+            var buttonPanel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                Height = (int)(34 * dpi),
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                AutoSize = false,
+                Padding = new Padding(0)
+            };
+
+            int btnSize = (int)(28 * dpi);
+
+            _btnRewind = new Button
+            {
+                Text = "⏮",
+                Size = new Size(btnSize, btnSize),
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI Symbol", 11f),
+                Margin = new Padding(0, 0, (int)(2 * dpi), 0)
+            };
+            _btnRewind.FlatAppearance.BorderSize = 1;
+            _btnRewind.FlatAppearance.BorderColor = Color.FromArgb(180, 180, 180);
+            _btnRewind.Click += (s, e) => RewindClicked?.Invoke(this, EventArgs.Empty);
+
+            _btnPlayPause = new Button
+            {
+                Text = "▶",
+                Size = new Size(btnSize, btnSize),
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI Symbol", 11f),
+                Margin = new Padding(0, 0, (int)(2 * dpi), 0)
+            };
+            _btnPlayPause.FlatAppearance.BorderSize = 1;
+            _btnPlayPause.FlatAppearance.BorderColor = Color.FromArgb(180, 180, 180);
+            _btnPlayPause.Click += (s, e) => PlayPauseClicked?.Invoke(this, EventArgs.Empty);
+
+            _btnStopPlayback = new Button
+            {
+                Text = "⏹",
+                Size = new Size(btnSize, btnSize),
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI Symbol", 11f),
+                Margin = new Padding(0, 0, (int)(8 * dpi), 0)
+            };
+            _btnStopPlayback.FlatAppearance.BorderSize = 1;
+            _btnStopPlayback.FlatAppearance.BorderColor = Color.FromArgb(180, 180, 180);
+            _btnStopPlayback.Click += (s, e) => StopPlaybackClicked?.Invoke(this, EventArgs.Empty);
+
+            _lblPlaybackTime = new Label
+            {
+                Text = "0.0 / 0.0 s",
+                AutoSize = true,
+                Font = new Font("Consolas", 9f),
+                ForeColor = Color.FromArgb(40, 40, 40),
+                Margin = new Padding(0, (int)(5 * dpi), 0, 0)
+            };
+
+            buttonPanel.Controls.AddRange(new Control[] {
+                _btnRewind, _btnPlayPause, _btnStopPlayback, _lblPlaybackTime
+            });
+
+            _timeTrackBar = new TrackBar
+            {
+                Dock = DockStyle.Top,
+                Minimum = 0,
+                Maximum = 1000,
+                Value = 0,
+                TickFrequency = 100,
+                SmallChange = 10,
+                LargeChange = 100,
+                Height = (int)(30 * dpi)
+            };
+            _timeTrackBar.MouseDown += (s, e) => _isTrackBarDragging = true;
+            _timeTrackBar.MouseUp += (s, e) =>
+            {
+                _isTrackBarDragging = false;
+                double fraction = _timeTrackBar.Value / 1000.0;
+                SeekRequested?.Invoke(this, fraction);
+            };
+            _timeTrackBar.KeyUp += (s, e) =>
+            {
+                double fraction = _timeTrackBar.Value / 1000.0;
+                SeekRequested?.Invoke(this, fraction);
+            };
+
+            _playbackSection.Controls.Add(_timeTrackBar);
+            _playbackSection.Controls.Add(buttonPanel);
+            _playbackSection.Controls.Add(topRow);
         }
 
         private void BuildProgressSection(float dpi)
@@ -263,6 +397,49 @@ namespace DisperSim3D.Dialogs
                 _lblElapsed.Text = string.Format("Completed in {0}", FormatTimeSpan(elapsed));
                 _lblStep.ForeColor = Color.DarkGreen;
                 _btnCancelSolve.Enabled = false;
+            }
+        }
+
+        public void ShowPlaybackControls(string simulationType, bool isDynamic)
+        {
+            _lblSimType.Text = simulationType;
+            _playbackSection.Visible = true;
+
+            _btnPlayPause.Enabled = isDynamic;
+            _btnStopPlayback.Enabled = isDynamic;
+            _btnRewind.Enabled = isDynamic;
+            _timeTrackBar.Enabled = isDynamic;
+            _timeTrackBar.Value = 0;
+
+            if (!isDynamic)
+            {
+                _lblPlaybackTime.Text = "Steady-state";
+                _btnPlayPause.Text = "▶";
+            }
+            else
+            {
+                _lblPlaybackTime.Text = "0.0 / 0.0 s";
+                _btnPlayPause.Text = "▶";
+            }
+            _isPlaying = false;
+        }
+
+        public void HidePlaybackControls()
+        {
+            _playbackSection.Visible = false;
+            _isPlaying = false;
+        }
+
+        public void UpdatePlaybackState(bool playing, double currentTimeS, double totalTimeS)
+        {
+            _isPlaying = playing;
+            _btnPlayPause.Text = playing ? "⏸" : "▶";
+            _lblPlaybackTime.Text = string.Format("{0:F1} / {1:F1} s", currentTimeS, totalTimeS);
+
+            if (!_isTrackBarDragging && totalTimeS > 0)
+            {
+                int pos = (int)(currentTimeS / totalTimeS * 1000);
+                _timeTrackBar.Value = Math.Max(0, Math.Min(1000, pos));
             }
         }
 

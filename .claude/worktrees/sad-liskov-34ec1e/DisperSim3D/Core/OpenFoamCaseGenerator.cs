@@ -100,6 +100,198 @@ namespace DisperSim3D.Core
             return caseDir;
         }
 
+        /// <summary>
+        /// Generates an OpenFOAM case for steady-state scalar transport using scalarTransportFoam
+        /// with steadyState ddtSchemes. The solver iterates pseudo-time steps until the scalar field converges.
+        /// </summary>
+        public static string GenerateSteadyState(DispersionScenario scenario, CfdConfiguration config)
+        {
+            string caseDir = Path.Combine(config.WorkingDirectory, "ss_case_" + scenario.Id);
+            if (Directory.Exists(caseDir))
+                Directory.Delete(caseDir, true);
+
+            Directory.CreateDirectory(Path.Combine(caseDir, "0"));
+            Directory.CreateDirectory(Path.Combine(caseDir, "constant"));
+            Directory.CreateDirectory(Path.Combine(caseDir, "system"));
+
+            double domain = scenario.DomainSizeM;
+            double xMin = -domain, xMax = domain;
+            double yMin = -domain, yMax = domain;
+            double zMax = domain;
+
+            int nx = scenario.GridResolution;
+            int ny = scenario.GridResolution;
+            int nz = scenario.GridResolution / 2;
+            if (nz < 1) nz = 1;
+
+            int maxIter = 500;
+            var wind = scenario.Meteo.WindVector;
+
+            WriteSteadyControlDict(caseDir, maxIter, "scalarTransportFoam");
+            WriteSteadyFvSchemes(caseDir, config);
+            WriteSteadyFvSolution(caseDir, config);
+            WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
+            WriteTransportProperties(caseDir, config.DiffusivityM2PerS);
+            WriteUField(caseDir, wind.X, wind.Y, wind.Z);
+            WriteTField(caseDir);
+
+            double cellSize = Math.Max((xMax - xMin) / nx, (yMax - yMin) / ny);
+            WriteFvOptions(caseDir, scenario.Sources, xMin, xMax, yMin, yMax, zMax, cellSize, nx, ny, nz);
+            WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
+            WriteSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
+
+            if (config.NumberOfProcessors > 1)
+                WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
+
+            return caseDir;
+        }
+
+        /// <summary>
+        /// Generates an OpenFOAM case for steady-state scalar transport using a SIMPLE-based approach.
+        /// Uses simpleFoam for the flow field coupled with a scalar transport equation solved via
+        /// the fvOptions scalar source mechanism.
+        /// </summary>
+        public static string GenerateSteadyStateSIMPLE(DispersionScenario scenario, CfdConfiguration config)
+        {
+            string caseDir = Path.Combine(config.WorkingDirectory, "simple_case_" + scenario.Id);
+            if (Directory.Exists(caseDir))
+                Directory.Delete(caseDir, true);
+
+            Directory.CreateDirectory(Path.Combine(caseDir, "0"));
+            Directory.CreateDirectory(Path.Combine(caseDir, "constant"));
+            Directory.CreateDirectory(Path.Combine(caseDir, "system"));
+
+            double domain = scenario.DomainSizeM;
+            double xMin = -domain, xMax = domain;
+            double yMin = -domain, yMax = domain;
+            double zMax = domain;
+
+            int nx = scenario.GridResolution;
+            int ny = scenario.GridResolution;
+            int nz = scenario.GridResolution / 2;
+            if (nz < 1) nz = 1;
+
+            int maxIter = 1000;
+            var wind = scenario.Meteo.WindVector;
+
+            WriteSteadyControlDict(caseDir, maxIter, "simpleFoam");
+            WriteSimpleFoamScalarFvSchemes(caseDir, config);
+            WriteSimpleFoamScalarFvSolution(caseDir, config);
+            WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
+            WriteSimpleFoamScalarTransportProperties(caseDir, config.DiffusivityM2PerS);
+            WriteUField(caseDir, wind.X, wind.Y, wind.Z);
+            WritePField(caseDir);
+            WriteTField(caseDir);
+
+            double cellSize = Math.Max((xMax - xMin) / nx, (yMax - yMin) / ny);
+            WriteFvOptions(caseDir, scenario.Sources, xMin, xMax, yMin, yMax, zMax, cellSize, nx, ny, nz);
+            WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
+            WriteSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
+
+            if (config.NumberOfProcessors > 1)
+                WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
+
+            return caseDir;
+        }
+
+        private static void WriteSteadyControlDict(string caseDir, int maxIter, string application)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "controlDict"));
+            sb.AppendFormat(Inv, "application     {0};\n\n", application);
+            sb.Append("startFrom       startTime;\nstartTime       0;\n\n");
+            sb.AppendFormat(Inv, "stopAt          endTime;\nendTime         {0};\n\n", maxIter);
+            sb.Append("deltaT          1;\n\n");
+            sb.AppendFormat(Inv, "writeControl    timeStep;\nwriteInterval   {0};\n\n", maxIter);
+            sb.Append("purgeWrite      2;\n\n");
+            sb.Append("writeFormat     ascii;\nwritePrecision  8;\nwriteCompression off;\n\n");
+            sb.Append("timeFormat      general;\ntimePrecision   6;\n\nrunTimeModifiable true;\n");
+            WriteFile(Path.Combine(caseDir, "system", "controlDict"), sb.ToString());
+        }
+
+        private static void WriteSteadyFvSchemes(string caseDir, CfdConfiguration config)
+        {
+            string scheme = config.NumericalScheme ?? "linearUpwind";
+            string divEntry = scheme == "linearUpwind"
+                ? "Gauss linearUpwind grad(T)"
+                : "Gauss " + scheme;
+
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "fvSchemes"));
+            sb.Append("ddtSchemes\n{\n    default         steadyState;\n}\n\n");
+            sb.Append("gradSchemes\n{\n    default         Gauss linear;\n}\n\n");
+            sb.AppendFormat("divSchemes\n{{\n    default         none;\n    div(phi,T)      {0};\n}}\n\n", divEntry);
+            sb.Append("laplacianSchemes\n{\n    default         Gauss linear corrected;\n}\n\n");
+            sb.Append("interpolationSchemes\n{\n    default         linear;\n}\n\n");
+            sb.Append("snGradSchemes\n{\n    default         corrected;\n}\n");
+            WriteFile(Path.Combine(caseDir, "system", "fvSchemes"), sb.ToString());
+        }
+
+        private static void WriteSteadyFvSolution(string caseDir, CfdConfiguration config)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "fvSolution"));
+            sb.Append("solvers\n{\n    T\n    {\n        solver          PBiCGStab;\n");
+            sb.AppendFormat(Inv, "        preconditioner  DILU;\n        tolerance       {0};\n        relTol          0.01;\n    }}\n}}\n\n",
+                config.SolverTolerance);
+            sb.Append("SIMPLE\n{\n    nNonOrthogonalCorrectors 0;\n\n");
+            sb.Append("    residualControl\n    {\n        T               1e-6;\n    }\n}\n\n");
+            sb.Append("relaxationFactors\n{\n    equations\n    {\n        T               0.7;\n    }\n}\n");
+            WriteFile(Path.Combine(caseDir, "system", "fvSolution"), sb.ToString());
+        }
+
+        private static void WriteSimpleFoamScalarFvSchemes(string caseDir, CfdConfiguration config)
+        {
+            string scheme = config.NumericalScheme ?? "linearUpwind";
+            string divT = scheme == "linearUpwind"
+                ? "bounded Gauss linearUpwind grad(T)"
+                : "bounded Gauss " + scheme;
+
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "fvSchemes"));
+            sb.Append("ddtSchemes\n{\n    default         steadyState;\n}\n\n");
+            sb.Append("gradSchemes\n{\n    default         Gauss linear;\n");
+            sb.Append("    grad(p)         Gauss linear;\n");
+            sb.Append("    grad(U)         cellLimited Gauss linear 1;\n}\n\n");
+            sb.Append("divSchemes\n{\n    default         none;\n");
+            sb.Append("    div(phi,U)      bounded Gauss linearUpwind grad(U);\n");
+            sb.AppendFormat("    div(phi,T)      {0};\n", divT);
+            sb.Append("    div((nuEff*dev2(T(grad(U))))) Gauss linear;\n}\n\n");
+            sb.Append("laplacianSchemes\n{\n    default         Gauss linear corrected;\n}\n\n");
+            sb.Append("interpolationSchemes\n{\n    default         linear;\n}\n\n");
+            sb.Append("snGradSchemes\n{\n    default         corrected;\n}\n\n");
+            sb.Append("wallDist\n{\n    method meshWave;\n}\n");
+            WriteFile(Path.Combine(caseDir, "system", "fvSchemes"), sb.ToString());
+        }
+
+        private static void WriteSimpleFoamScalarFvSolution(string caseDir, CfdConfiguration config)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "fvSolution"));
+            sb.Append("solvers\n{\n");
+            sb.Append("    p\n    {\n        solver          GAMG;\n        tolerance       1e-06;\n        relTol          0.1;\n        smoother        GaussSeidel;\n    }\n");
+            sb.Append("    U\n    {\n        solver          PBiCGStab;\n        preconditioner  DILU;\n        tolerance       1e-06;\n        relTol          0.1;\n    }\n");
+            sb.Append("    T\n    {\n        solver          PBiCGStab;\n        preconditioner  DILU;\n");
+            sb.AppendFormat(Inv, "        tolerance       {0};\n        relTol          0.01;\n    }}\n", config.SolverTolerance);
+            sb.Append("}\n\n");
+            sb.Append("SIMPLE\n{\n    nNonOrthogonalCorrectors 0;\n    consistent      yes;\n\n");
+            sb.Append("    residualControl\n    {\n        p               1e-4;\n        U               1e-4;\n        T               1e-6;\n    }\n}\n\n");
+            sb.Append("relaxationFactors\n{\n");
+            sb.Append("    fields\n    {\n        p               0.3;\n    }\n");
+            sb.Append("    equations\n    {\n        U               0.7;\n        T               0.7;\n    }\n}\n");
+            WriteFile(Path.Combine(caseDir, "system", "fvSolution"), sb.ToString());
+        }
+
+        private static void WriteSimpleFoamScalarTransportProperties(string caseDir, double diffusivity)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "transportProperties"));
+            sb.Append("transportModel  Newtonian;\n");
+            sb.AppendFormat(Inv, "nu              1.5e-05;\n");
+            sb.AppendFormat(Inv, "DT              {0};\n", diffusivity);
+            WriteFile(Path.Combine(caseDir, "constant", "transportProperties"), sb.ToString());
+        }
+
         private static double[] EstimatePlumeBounds(DispersionScenario scenario, double marginFactor)
         {
             var engine = new GaussianPuffEngine();

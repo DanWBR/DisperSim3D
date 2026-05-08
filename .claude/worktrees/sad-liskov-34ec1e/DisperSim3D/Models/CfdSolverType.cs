@@ -7,8 +7,14 @@
     {
         /// <summary>Analytical Gaussian puff model for fast approximate dispersion calculations.</summary>
         GaussianPuff,
-        /// <summary>OpenFOAM scalarTransportFoam solver for full 3D scalar transport on a mesh.</summary>
-        ScalarTransportFoam
+        /// <summary>Steady-state Gaussian plume model for continuous releases in uniform wind.</summary>
+        GaussianPlume,
+        /// <summary>OpenFOAM scalarTransportFoam solver for full 3D transient scalar transport on a mesh.</summary>
+        ScalarTransportFoam,
+        /// <summary>OpenFOAM steady-state scalar transport using pseudo-transient iteration to convergence.</summary>
+        ScalarTransportFoamSteady,
+        /// <summary>OpenFOAM scalarSimpleFoam solver for SIMPLE-based steady-state scalar transport.</summary>
+        ScalarSimpleFoam
     }
 
     /// <summary>

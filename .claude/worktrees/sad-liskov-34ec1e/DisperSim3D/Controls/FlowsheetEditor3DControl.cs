@@ -40,6 +40,7 @@ namespace DisperSim3D.Controls
         private bool _isDraggingDecoration;
 
         private GaussianPuffEngine _dispersionEngine;
+        private IConcentrationField _steadyStateEngine;
         private DispersionRenderer _dispersionRenderer;
         private System.Windows.Threading.DispatcherTimer _animationTimer;
         private DispersionSimulationState _dispersionState = DispersionSimulationState.Stopped;
@@ -288,6 +289,12 @@ namespace DisperSim3D.Controls
             var scenario = _flowsheet.DispersionScenario;
             if (scenario == null || scenario.Sources.Count == 0) return;
 
+            if (scenario.SolverType == CfdSolverType.GaussianPlume)
+            {
+                StartSteadyStateDispersion();
+                return;
+            }
+
             _cfdPlaybackActive = false;
             _dispersionEngine = new GaussianPuffEngine();
             _dispersionEngine.Initialize(scenario);
@@ -335,6 +342,70 @@ namespace DisperSim3D.Controls
                 _dispersionEngine.Reset();
 
             RemoveDispersionVisuals();
+            _steadyStateEngine = null;
+        }
+
+        /// <summary>
+        /// Computes and displays the steady-state Gaussian plume concentration field.
+        /// Renders isosurfaces and contour planes in a single pass with no animation.
+        /// </summary>
+        public void StartSteadyStateDispersion()
+        {
+            var scenario = _flowsheet.DispersionScenario;
+            if (scenario == null || scenario.Sources.Count == 0) return;
+
+            StopDispersion();
+
+            var plume = new GaussianPlumeEngine();
+            plume.Initialize(scenario);
+            _steadyStateEngine = plume;
+
+            _dispersionRenderer = new DispersionRenderer();
+            _dispersionRenderer.Initialize(scenario);
+            _dispersionRenderer.ComputeOccupancyGrid(_flowsheet);
+
+            RemoveDispersionVisuals();
+
+            if (scenario.Thresholds.Count > 0)
+            {
+                _isosurfaceVisual = _dispersionRenderer.GenerateIsosurfaces(
+                    _steadyStateEngine, scenario.Thresholds);
+                _isosurfaceVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                    new Visual3DTag("DispersionIsosurface", "iso"));
+                _viewport.Children.Add(_isosurfaceVisual);
+            }
+
+            if (scenario.ContourPlanes.Count > 0)
+            {
+                double maxC = _dispersionRenderer.GetMaxConcentration();
+                double dom = _dispersionRenderer.DomainSize;
+                foreach (var cp in scenario.ContourPlanes)
+                {
+                    if (!cp.Visible) continue;
+                    var cpVisual = _dispersionRenderer.GenerateContourPlane(
+                        _steadyStateEngine, cp, -dom, dom, maxC);
+                    cpVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("ContourPlane", "contour"));
+                    _viewport.Children.Add(cpVisual);
+                }
+            }
+
+            if (_flowsheet.GasDetectors.Count > 0)
+            {
+                DetectorEvaluator.Reset(_flowsheet.GasDetectors);
+                DetectorEvaluator.EvaluateStep(
+                    _flowsheet.GasDetectors, _steadyStateEngine, 0);
+            }
+
+            foreach (var monitor in _flowsheet.MonitorPoints)
+            {
+                if (!monitor.Visible) continue;
+                double c = _steadyStateEngine.EvaluateConcentration(
+                    monitor.Position.X, monitor.Position.Y, monitor.Position.Z);
+                monitor.TimeSeries.Add(new MonitorSample { TimeS = 0, Concentration = c });
+            }
+
+            _dispersionState = DispersionSimulationState.Running;
         }
 
         /// <summary>
@@ -360,6 +431,66 @@ namespace DisperSim3D.Controls
                 _dispersionState = DispersionSimulationState.Running;
                 if (_animationTimer != null)
                     _animationTimer.Start();
+            }
+        }
+
+        /// <summary>
+        /// Rewinds the dispersion to the beginning and restarts playback.
+        /// </summary>
+        public void RewindDispersion()
+        {
+            if (_cfdPlaybackActive && _cfdResult != null && _cfdResult.TimeSteps.Count > 0)
+            {
+                _cfdPlaybackIndex = 0;
+                _cfdPlaybackTimeS = _cfdResult.TimeSteps[0];
+                _dispersionState = DispersionSimulationState.Running;
+                _frameCount = 0;
+                if (_animationTimer != null)
+                    _animationTimer.Start();
+                return;
+            }
+
+            if (_dispersionEngine != null)
+            {
+                var scenario = _flowsheet.DispersionScenario;
+                _dispersionEngine.Reset();
+                _dispersionEngine.Initialize(scenario);
+                _frameCount = 0;
+                _dispersionState = DispersionSimulationState.Running;
+                if (_animationTimer != null)
+                    _animationTimer.Start();
+            }
+        }
+
+        /// <summary>
+        /// Seeks CFD playback to a fractional position (0.0 to 1.0).
+        /// </summary>
+        public void SeekCfdPlayback(double fraction)
+        {
+            if (!_cfdPlaybackActive || _cfdResult == null || _cfdResult.TimeSteps.Count == 0) return;
+
+            double firstTime = _cfdResult.TimeSteps[0];
+            double lastTime = _cfdResult.TimeSteps[_cfdResult.TimeSteps.Count - 1];
+            double targetTime = firstTime + fraction * (lastTime - firstTime);
+
+            _cfdPlaybackTimeS = targetTime;
+            _cfdPlaybackIndex = 0;
+            while (_cfdPlaybackIndex < _cfdResult.TimeSteps.Count - 1 &&
+                   _cfdResult.TimeSteps[_cfdPlaybackIndex + 1] <= targetTime)
+                _cfdPlaybackIndex++;
+        }
+
+        /// <summary>
+        /// Gets the total simulation duration in seconds.
+        /// </summary>
+        public double SimulationTotalDurationS
+        {
+            get
+            {
+                if (_cfdPlaybackActive && _cfdResult != null && _cfdResult.TimeSteps.Count > 0)
+                    return _cfdResult.TimeSteps[_cfdResult.TimeSteps.Count - 1];
+                var sc = _flowsheet?.DispersionScenario;
+                return sc != null ? sc.SimulationDurationS : 0;
             }
         }
 
@@ -440,13 +571,17 @@ namespace DisperSim3D.Controls
                 {
                     _dispersionState = DispersionSimulationState.Stopped;
 
-                    string baseName = string.IsNullOrEmpty(scenario.Name) ? "CFD Run" : scenario.Name;
+                    bool isSteady = scenario.SolverType == CfdSolverType.ScalarTransportFoamSteady
+                                 || scenario.SolverType == CfdSolverType.ScalarSimpleFoam;
+                    string solverLabel = isSteady ? "CFD Steady" : "CFD (OpenFOAM)";
+                    string baseName = string.IsNullOrEmpty(scenario.Name) ? solverLabel : scenario.Name;
                     var entry = new CfdSimulationEntry
                     {
                         Name = baseName + " #" + (_flowsheet.CfdSimulations.Count + 1),
                         ScenarioName = scenario.Name,
+                        SolverType = solverLabel,
                         CasePath = _cfdRunner.CasePath,
-                        DurationS = scenario.SimulationDurationS,
+                        DurationS = isSteady ? 0 : scenario.SimulationDurationS,
                         TimeStepCount = result.TimeSteps.Count,
                         GridNx = result.GridNx,
                         GridNy = result.GridNy,
@@ -482,7 +617,11 @@ namespace DisperSim3D.Controls
                 }));
             };
 
-            _cfdRunner.RunAsync(scenario, config);
+            if (scenario.SolverType == CfdSolverType.ScalarTransportFoamSteady ||
+                scenario.SolverType == CfdSolverType.ScalarSimpleFoam)
+                _cfdRunner.RunSteadyAsync(scenario, config, scenario.SolverType);
+            else
+                _cfdRunner.RunAsync(scenario, config);
         }
 
         public void RunGaussianPuffAsync()

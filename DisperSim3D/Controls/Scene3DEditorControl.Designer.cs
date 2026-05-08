@@ -1,6 +1,6 @@
 ﻿namespace DisperSim3D.Controls
 {
-    partial class FlowsheetEditor3DControl
+    partial class Scene3DEditorControl
     {
         /// <summary> 
         /// Required designer variable.
@@ -29,13 +29,13 @@
         private void InitializeComponent()
         {
             this.SuspendLayout();
-            // 
-            // FlowsheetEditor3DControl
-            // 
+            //
+            // Scene3DEditorControl
+            //
             this.AutoScaleDimensions = new System.Drawing.SizeF(96F, 96F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
             this.BackColor = System.Drawing.Color.White;
-            this.Name = "FlowsheetEditor3DControl";
+            this.Name = "Scene3DEditorControl";
             this.Size = new System.Drawing.Size(800, 600);
             this.ResumeLayout(false);
         }

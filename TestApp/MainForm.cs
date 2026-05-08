@@ -5,7 +5,7 @@ namespace TestApp
 {
     public partial class MainForm : Form
     {
-        private FlowsheetEditorPanel _panel;
+        private Scene3DEditorPanel _panel;
 
         public MainForm()
         {
@@ -17,7 +17,7 @@ namespace TestApp
             this.AutoScaleDimensions = new System.Drawing.SizeF(96F, 96F);
             this.AutoScaleMode = AutoScaleMode.Dpi;
 
-            _panel = new FlowsheetEditorPanel { Dock = DockStyle.Fill };
+            _panel = new Scene3DEditorPanel { Dock = DockStyle.Fill };
             this.Controls.Add(_panel);
 
             this.KeyPreview = true;
