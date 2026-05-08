@@ -89,7 +89,7 @@ namespace DisperSim3D.Core
                 };
 
                 if (bendLength > 0)
-                    ComputeTrajectory(sd, scenario.DomainSizeM * 2.5);
+                    ComputeTrajectory(ref sd, scenario.DomainSizeM * 2.5);
 
                 _sources.Add(sd);
             }
@@ -184,7 +184,7 @@ namespace DisperSim3D.Core
             return Math.Max(c, 0);
         }
 
-        private void ComputeTrajectory(SourceData src, double maxDist)
+        private void ComputeTrajectory(ref SourceData src, double maxDist)
         {
             double ds = maxDist / TrajectoryPoints;
             src.Trajectory = new TrajectoryPoint[TrajectoryPoints];

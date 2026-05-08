@@ -437,7 +437,7 @@ namespace DisperSim3D.Controls
                 foreach (var path in result.Trajectories)
                 {
                     if (path.Count < 2) continue;
-                    var lines = new LinesVisual3D { Color = System.Windows.Media.Colors.Cyan, Thickness = 4 };
+                    var lines = new LinesVisual3D { Color = System.Windows.Media.Colors.Cyan, Thickness = 3 };
                     for (int ti = 0; ti < path.Count - 1; ti++)
                     {
                         lines.Points.Add(path[ti]);
@@ -585,7 +585,7 @@ namespace DisperSim3D.Controls
                 foreach (var path in data.Trajectories)
                 {
                     if (path.Count < 2) continue;
-                    var lines = new LinesVisual3D { Color = System.Windows.Media.Colors.Cyan, Thickness = 4 };
+                    var lines = new LinesVisual3D { Color = System.Windows.Media.Colors.Cyan, Thickness = 3 };
                     for (int ti = 0; ti < path.Count - 1; ti++)
                     {
                         lines.Points.Add(path[ti]);
