@@ -16,6 +16,15 @@ namespace DisperSim3D.Core
     {
         private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
+        private static double ComputeTurbulentDiffusivity(DispersionScenario scenario)
+        {
+            double xRef = Math.Max(scenario.DomainSizeM * 0.5, 50.0);
+            double windSpeed = Math.Max(scenario.Meteo.WindSpeed, 0.5);
+            var sigma = PasquillGiffordCoefficients.ComputeSigma(xRef, scenario.Meteo.StabilityClass);
+            double Ky = sigma.sigmaY * sigma.sigmaY * windSpeed / (2.0 * xRef);
+            return Math.Max(Ky, 1e-5);
+        }
+
         /// <summary>
         /// Generates a complete OpenFOAM case directory for a scalar transport (dispersion) simulation.
         /// Creates the 0, constant, and system directories with all required dictionaries and field files.
@@ -83,16 +92,21 @@ namespace DisperSim3D.Core
                 dt = Math.Min(dt, maxDt);
             }
 
+            double effectiveDT = Math.Max(config.DiffusivityM2PerS, ComputeTurbulentDiffusivity(scenario));
+            double diffDt = cellSize * cellSize / (6.0 * effectiveDT);
+            dt = Math.Min(dt, diffDt);
+
             WriteControlDict(caseDir, scenario.SimulationDurationS, dt, writeInterval, config);
             WriteFvSchemes(caseDir, config);
             WriteFvSolution(caseDir, config);
             WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
-            WriteTransportProperties(caseDir, config.DiffusivityM2PerS);
+            WriteTransportProperties(caseDir, effectiveDT);
             WriteUField(caseDir, wind.X, wind.Y, wind.Z);
             WriteTField(caseDir);
             WriteFvOptions(caseDir, scenario.Sources, xMin, xMax, yMin, yMax, zMax, cellSize, nx, ny, nz);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
             WriteSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
+            WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
 
             if (config.NumberOfProcessors > 1)
                 WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
@@ -127,18 +141,20 @@ namespace DisperSim3D.Core
             int maxIter = 500;
             var wind = scenario.Meteo.WindVector;
 
+            double cellSize = Math.Max((xMax - xMin) / nx, (yMax - yMin) / ny);
+            double effectiveDT = Math.Max(config.DiffusivityM2PerS, ComputeTurbulentDiffusivity(scenario));
+
             WriteSteadyControlDict(caseDir, maxIter, "scalarTransportFoam");
             WriteSteadyFvSchemes(caseDir, config);
             WriteSteadyFvSolution(caseDir, config);
             WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
-            WriteTransportProperties(caseDir, config.DiffusivityM2PerS);
+            WriteTransportProperties(caseDir, effectiveDT);
             WriteUField(caseDir, wind.X, wind.Y, wind.Z);
             WriteTField(caseDir);
-
-            double cellSize = Math.Max((xMax - xMin) / nx, (yMax - yMin) / ny);
             WriteFvOptions(caseDir, scenario.Sources, xMin, xMax, yMin, yMax, zMax, cellSize, nx, ny, nz);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
             WriteSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
+            WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
 
             if (config.NumberOfProcessors > 1)
                 WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
@@ -173,20 +189,21 @@ namespace DisperSim3D.Core
 
             int maxIter = 1000;
             var wind = scenario.Meteo.WindVector;
+            double cellSize = Math.Max((xMax - xMin) / nx, (yMax - yMin) / ny);
+            double effectiveDT = Math.Max(config.DiffusivityM2PerS, ComputeTurbulentDiffusivity(scenario));
 
             WriteSteadyControlDict(caseDir, maxIter, "simpleFoam");
             WriteSimpleFoamScalarFvSchemes(caseDir, config);
             WriteSimpleFoamScalarFvSolution(caseDir, config);
             WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
-            WriteSimpleFoamScalarTransportProperties(caseDir, config.DiffusivityM2PerS);
+            WriteSimpleFoamScalarTransportProperties(caseDir, effectiveDT);
             WriteUField(caseDir, wind.X, wind.Y, wind.Z);
             WritePField(caseDir);
             WriteTField(caseDir);
-
-            double cellSize = Math.Max((xMax - xMin) / nx, (yMax - yMin) / ny);
             WriteFvOptions(caseDir, scenario.Sources, xMin, xMax, yMin, yMax, zMax, cellSize, nx, ny, nz);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
             WriteSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
+            WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
 
             if (config.NumberOfProcessors > 1)
                 WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
@@ -378,6 +395,9 @@ namespace DisperSim3D.Core
 
             if (obstacles != null && obstacles.Count > 0)
                 WriteWindObstacles(caseDir, obstacles);
+
+            double windCellSize = Math.Max((xMax - xMin) / nx, (yMax - yMin) / ny);
+            WriteRefinementDicts(caseDir, scenario.Sources, windCellSize, obstacles);
 
             if (config.NumberOfProcessors > 1)
                 WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
@@ -661,8 +681,7 @@ namespace DisperSim3D.Core
             {
                 var src = sources[s];
                 var pos = src.EffectivePosition;
-                double cellVolume = cellSize * cellSize * cellSize;
-                double injectionRate = src.ReleaseRateKgPerS / cellVolume;
+                double injectionRate = src.ReleaseRateKgPerS;
 
                 sb.AppendFormat(Inv, "source_{0}\n{{\n", s);
                 sb.Append("    type            scalarSemiImplicitSource;\n    active          true;\n\n");
@@ -697,20 +716,32 @@ namespace DisperSim3D.Core
                 if (v <= 0) continue;
 
                 var jet = src.ExitVelocityVector;
-                double ux = wind.X + jet.X;
-                double uy = wind.Y + jet.Y;
-                double uz = wind.Z + jet.Z;
-
                 var pos = src.EffectivePosition;
-                double half = cellSize * 1.5;
+                var dir = src.ReleaseDirection;
+                double half = cellSize * 0.55;
 
-                sb.Append("    boxToCell\n    {\n");
-                sb.AppendFormat(Inv, "        box ({0} {1} {2}) ({3} {4} {5});\n",
-                    pos.X - half, pos.Y - half, Math.Max(0, pos.Z - half),
-                    pos.X + half, pos.Y + half, pos.Z + half);
-                sb.Append("        fieldValues\n        (\n");
-                sb.AppendFormat(Inv, "            volVectorFieldValue U ({0} {1} {2})\n", ux, uy, uz);
-                sb.Append("        );\n    }\n\n");
+                int nSegments = 5;
+                double segLen = cellSize;
+                double windMag = Math.Sqrt(wind.X * wind.X + wind.Y * wind.Y + wind.Z * wind.Z);
+                for (int i = 0; i < nSegments; i++)
+                {
+                    double frac = 1.0 - (double)i / nSegments;
+                    double ux = wind.X + jet.X * frac;
+                    double uy = wind.Y + jet.Y * frac;
+                    double uz = wind.Z + jet.Z * frac;
+
+                    double cx = pos.X + dir.X * (i + 0.5) * segLen;
+                    double cy = pos.Y + dir.Y * (i + 0.5) * segLen;
+                    double cz = pos.Z + dir.Z * (i + 0.5) * segLen;
+
+                    sb.Append("    boxToCell\n    {\n");
+                    sb.AppendFormat(Inv, "        box ({0} {1} {2}) ({3} {4} {5});\n",
+                        cx - half, cy - half, Math.Max(0, cz - half),
+                        cx + half, cy + half, cz + half);
+                    sb.Append("        fieldValues\n        (\n");
+                    sb.AppendFormat(Inv, "            volVectorFieldValue U ({0} {1} {2})\n", ux, uy, uz);
+                    sb.Append("        );\n    }\n\n");
+                }
             }
 
             sb.Append(");\n");
@@ -735,7 +766,7 @@ namespace DisperSim3D.Core
             for (int s = 0; s < sources.Count; s++)
             {
                 var pos = sources[s].EffectivePosition;
-                double half = cellSize * 1.5;
+                double half = cellSize * 0.55;
 
                 sb.AppendFormat(Inv, "    {{\n        name    sourceZone_{0};\n        type    cellSet;\n        action  new;\n", s);
                 sb.AppendFormat(Inv, "        source  boxToCell;\n        sourceInfo\n        {{\n");
@@ -747,6 +778,73 @@ namespace DisperSim3D.Core
 
             sb.Append(");\n");
             WriteFile(Path.Combine(caseDir, "system", "topoSetDict"), sb.ToString());
+        }
+
+        private static void WriteRefinementDicts(string caseDir, List<ReleaseSource3D> sources,
+            double cellSize, List<Models.BoundingBox> obstacles)
+        {
+            double coarseRadius = cellSize * 8;
+            double fineRadius = cellSize * 3;
+
+            for (int level = 0; level < 2; level++)
+            {
+                double radius = level == 0 ? coarseRadius : fineRadius;
+                string dictName = string.Format("topoSetDict_refine{0}", level);
+
+                var sb = new StringBuilder();
+                sb.Append(FoamHeader("dictionary", dictName));
+                sb.Append("actions\n(\n");
+
+                sb.Append("    {\n        name    refineZone;\n        type    cellSet;\n        action  new;\n");
+                sb.Append("        source  boxToCell;\n        sourceInfo\n        {\n");
+
+                if (sources.Count > 0)
+                {
+                    var pos = sources[0].EffectivePosition;
+                    sb.AppendFormat(Inv, "            box ({0} {1} {2}) ({3} {4} {5});\n",
+                        pos.X - radius, pos.Y - radius, Math.Max(0, pos.Z - radius),
+                        pos.X + radius, pos.Y + radius, pos.Z + radius);
+                }
+
+                sb.Append("        }\n    }\n\n");
+
+                for (int s = 1; s < sources.Count; s++)
+                {
+                    var pos = sources[s].EffectivePosition;
+                    sb.Append("    {\n        name    refineZone;\n        type    cellSet;\n        action  add;\n");
+                    sb.Append("        source  boxToCell;\n        sourceInfo\n        {\n");
+                    sb.AppendFormat(Inv, "            box ({0} {1} {2}) ({3} {4} {5});\n",
+                        pos.X - radius, pos.Y - radius, Math.Max(0, pos.Z - radius),
+                        pos.X + radius, pos.Y + radius, pos.Z + radius);
+                    sb.Append("        }\n    }\n\n");
+                }
+
+                if (obstacles != null)
+                {
+                    double margin = radius * 0.5;
+                    foreach (var box in obstacles)
+                    {
+                        sb.Append("    {\n        name    refineZone;\n        type    cellSet;\n        action  add;\n");
+                        sb.Append("        source  boxToCell;\n        sourceInfo\n        {\n");
+                        sb.AppendFormat(Inv, "            box ({0} {1} {2}) ({3} {4} {5});\n",
+                            box.Min.X - margin, box.Min.Y - margin, Math.Max(0, box.Min.Z - margin),
+                            box.Max.X + margin, box.Max.Y + margin, box.Max.Z + margin);
+                        sb.Append("        }\n    }\n\n");
+                    }
+                }
+
+                sb.Append(");\n");
+                WriteFile(Path.Combine(caseDir, "system", dictName), sb.ToString());
+            }
+
+            var rmSb = new StringBuilder();
+            rmSb.Append(FoamHeader("dictionary", "refineMeshDict"));
+            rmSb.Append("set             refineZone;\n\n");
+            rmSb.Append("coordinateSystem global;\n\n");
+            rmSb.Append("directions\n(\n    tan1\n    tan2\n    normal\n);\n\n");
+            rmSb.Append("useHexTopology  true;\n\n");
+            rmSb.Append("geometricCut    false;\n");
+            WriteFile(Path.Combine(caseDir, "system", "refineMeshDict"), rmSb.ToString());
         }
     }
 }

@@ -507,9 +507,9 @@ namespace DisperSim3D.Core
             job.Runner = runner;
             runner.ProgressUpdated += (s, p) =>
             {
-                job.Progress = p.Fraction;
-                job.StatusText = p.Step;
-                job.LastLogLine = p.LogLine;
+                if (p.Fraction >= 0) job.Progress = p.Fraction;
+                if (p.Step != null) job.StatusText = p.Step;
+                if (p.LogLine != null) job.LastLogLine = p.LogLine;
                 JobProgressUpdated?.Invoke(this, (job, p));
             };
             runner.Completed += (s, result) =>

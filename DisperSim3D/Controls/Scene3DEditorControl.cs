@@ -61,6 +61,7 @@ namespace DisperSim3D.Controls
 
         private GridLinesVisual3D _gridVisual;
         private System.Windows.Media.Media3D.ModelVisual3D _groundPlaneVisual;
+        private readonly List<Visual3D> _compassVisuals = new List<Visual3D>();
         private bool _showGroundPlane = true;
         private double _groundSize = 200;
 
@@ -3420,6 +3421,64 @@ namespace DisperSim3D.Controls
             _groundPlaneVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
                 new Visual3DTag("GroundPlane", "ground"));
             _viewport.Children.Add(_groundPlaneVisual);
+
+            UpdateCompassLabels(elev, half);
+        }
+
+        private void UpdateCompassLabels(double elev, double half)
+        {
+            foreach (var v in _compassVisuals)
+                _viewport.Children.Remove(v);
+            _compassVisuals.Clear();
+
+            if (!_showGroundPlane) return;
+
+            double arrowLen = half * 0.08;
+            double arrowDiam = arrowLen * 0.15;
+            double offset = half + arrowLen * 0.5;
+            double textOffset = half + arrowLen * 1.8;
+
+            var directions = new[]
+            {
+                ("N", new Vector3D(0, 1, 0), new Point3D(0, offset, elev), new Point3D(0, textOffset, elev),
+                    System.Windows.Media.Color.FromRgb(220, 60, 60)),
+                ("S", new Vector3D(0, -1, 0), new Point3D(0, -offset, elev), new Point3D(0, -textOffset, elev),
+                    System.Windows.Media.Color.FromRgb(180, 180, 180)),
+                ("E", new Vector3D(1, 0, 0), new Point3D(offset, 0, elev), new Point3D(textOffset, 0, elev),
+                    System.Windows.Media.Color.FromRgb(180, 180, 180)),
+                ("W", new Vector3D(-1, 0, 0), new Point3D(-offset, 0, elev), new Point3D(-textOffset, 0, elev),
+                    System.Windows.Media.Color.FromRgb(180, 180, 180))
+            };
+
+            foreach (var (label, dir, arrowPos, textPos, color) in directions)
+            {
+                var arrow = new ArrowVisual3D
+                {
+                    Point1 = arrowPos,
+                    Point2 = arrowPos + dir * arrowLen,
+                    Diameter = arrowDiam,
+                    HeadLength = arrowDiam * 3,
+                    Fill = new System.Windows.Media.SolidColorBrush(color)
+                };
+                arrow.SetValue(System.Windows.FrameworkElement.TagProperty,
+                    new Visual3DTag("CompassArrow", "compass"));
+                _compassVisuals.Add(arrow);
+                _viewport.Children.Add(arrow);
+
+                var text = new BillboardTextVisual3D
+                {
+                    Text = label,
+                    Position = textPos,
+                    FontSize = 14,
+                    FontWeight = System.Windows.FontWeights.Bold,
+                    Foreground = new System.Windows.Media.SolidColorBrush(color),
+                    Background = System.Windows.Media.Brushes.Transparent
+                };
+                text.SetValue(System.Windows.FrameworkElement.TagProperty,
+                    new Visual3DTag("CompassLabel", "compass"));
+                _compassVisuals.Add(text);
+                _viewport.Children.Add(text);
+            }
         }
 
         private void UpdateGridElevation()

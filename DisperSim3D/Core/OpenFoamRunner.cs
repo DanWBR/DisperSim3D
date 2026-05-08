@@ -127,6 +127,21 @@ namespace DisperSim3D.Core
                     RunStep("blockMesh");
                     if (_worker.CancellationPending) { e.Cancel = true; return; }
 
+                    if (System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "refineMeshDict")))
+                    {
+                        for (int rl = 0; rl < 2; rl++)
+                        {
+                            string dictFile = "system/topoSetDict_refine" + rl;
+                            if (!System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "topoSetDict_refine" + rl)))
+                                break;
+                            ReportProgress(0.03 + rl * 0.01, "Refining mesh (level " + (rl + 1) + ")...", "");
+                            RunStep("topoSet -dict " + dictFile);
+                            if (_worker.CancellationPending) { e.Cancel = true; return; }
+                            RunStep("refineMesh -dict system/refineMeshDict -overwrite");
+                            if (_worker.CancellationPending) { e.Cancel = true; return; }
+                        }
+                    }
+
                     if (scenario.Sources.Count > 0)
                     {
                         ReportProgress(0.05, "Running topoSet...", "");
@@ -242,6 +257,21 @@ namespace DisperSim3D.Core
                     ReportProgress(0.02, "Running blockMesh...", "");
                     RunStep("blockMesh");
                     if (_worker.CancellationPending) { e.Cancel = true; return; }
+
+                    if (System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "refineMeshDict")))
+                    {
+                        for (int rl = 0; rl < 2; rl++)
+                        {
+                            string dictFile = "system/topoSetDict_refine" + rl;
+                            if (!System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "topoSetDict_refine" + rl)))
+                                break;
+                            ReportProgress(0.03 + rl * 0.01, "Refining mesh (level " + (rl + 1) + ")...", "");
+                            RunStep("topoSet -dict " + dictFile);
+                            if (_worker.CancellationPending) { e.Cancel = true; return; }
+                            RunStep("refineMesh -dict system/refineMeshDict -overwrite");
+                            if (_worker.CancellationPending) { e.Cancel = true; return; }
+                        }
+                    }
 
                     if (scenario.Sources.Count > 0)
                     {
@@ -410,6 +440,19 @@ namespace DisperSim3D.Core
 
             progress?.Invoke(0.0, "Wind field: blockMesh...");
             RunStep("blockMesh");
+
+            if (System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "refineMeshDict")))
+            {
+                for (int rl = 0; rl < 2; rl++)
+                {
+                    string dictFile = "system/topoSetDict_refine" + rl;
+                    if (!System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "topoSetDict_refine" + rl)))
+                        break;
+                    progress?.Invoke(0.03 + rl * 0.02, "Wind field: refining mesh (level " + (rl + 1) + ")...");
+                    RunStep("topoSet -dict " + dictFile);
+                    RunStep("refineMesh -dict system/refineMeshDict -overwrite");
+                }
+            }
 
             if (hasObstacles)
             {
