@@ -78,6 +78,8 @@ namespace DisperSim3D.Core
         /// </summary>
         public string CasePath => _casePath;
 
+        public Process CurrentProcess => _currentProcess;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="OpenFoamRunner"/> class.
         /// </summary>

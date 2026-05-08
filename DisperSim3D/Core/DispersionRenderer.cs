@@ -41,17 +41,16 @@ namespace DisperSim3D.Core
         /// <param name="engine">Concentration field to sample.</param>
         /// <param name="thresholds">List of concentration thresholds with colors and opacities.</param>
         /// <returns>A <see cref="ModelVisual3D"/> containing the isosurface meshes.</returns>
-        public ModelVisual3D GenerateIsosurfaces(
+        public Model3DGroup ComputeIsosurfaces(
             IConcentrationField engine, List<DispersionThreshold> thresholds)
         {
             SampleScalarField(engine);
 
-            var visual = new ModelVisual3D();
             var group = new Model3DGroup();
 
             var sorted = thresholds
                 .Where(t => t.Visible)
-                .OrderBy(t => t.ConcentrationValue)
+                .OrderByDescending(t => t.ConcentrationValue)
                 .ToList();
 
             foreach (var threshold in sorted)
@@ -75,7 +74,15 @@ namespace DisperSim3D.Core
                 group.Children.Add(model);
             }
 
-            visual.Content = group;
+            group.Freeze();
+            return group;
+        }
+
+        public ModelVisual3D GenerateIsosurfaces(
+            IConcentrationField engine, List<DispersionThreshold> thresholds)
+        {
+            var group = ComputeIsosurfaces(engine, thresholds);
+            var visual = new ModelVisual3D { Content = group };
             return visual;
         }
 
@@ -84,13 +91,12 @@ namespace DisperSim3D.Core
         /// </summary>
         /// <param name="engine">The Gaussian puff engine providing active puff data.</param>
         /// <returns>A <see cref="ModelVisual3D"/> containing the particle cloud.</returns>
-        public ModelVisual3D GenerateParticleCloud(GaussianPuffEngine engine)
+        public Model3DGroup ComputeParticleCloud(GaussianPuffEngine engine)
         {
-            var visual = new ModelVisual3D();
             var group = new Model3DGroup();
 
             var puffs = engine.ActivePuffs;
-            if (puffs.Count == 0) return visual;
+            if (puffs.Count == 0) { group.Freeze(); return group; }
 
             var windVector = new Vector3D(0, 0, 0);
             int particlesPerPuff = Math.Max(5, 100 / Math.Max(1, puffs.Count));
@@ -154,7 +160,14 @@ namespace DisperSim3D.Core
                 }
             }
 
-            visual.Content = group;
+            group.Freeze();
+            return group;
+        }
+
+        public ModelVisual3D GenerateParticleCloud(GaussianPuffEngine engine)
+        {
+            var group = ComputeParticleCloud(engine);
+            var visual = new ModelVisual3D { Content = group };
             return visual;
         }
 
@@ -199,12 +212,12 @@ namespace DisperSim3D.Core
         /// <param name="domainMax">Maximum domain coordinate.</param>
         /// <param name="maxConcentration">Maximum concentration value for normalization.</param>
         /// <returns>A <see cref="ModelVisual3D"/> containing the textured contour plane.</returns>
-        public ModelVisual3D GenerateContourPlane(
+        public Model3DGroup ComputeContourPlane(
             IConcentrationField engine, ContourPlaneConfig config,
             double domainMin, double domainMax, double maxConcentration)
         {
-            var visual = new ModelVisual3D();
-            if (!config.Visible || maxConcentration < 1e-20) return visual;
+            var group = new Model3DGroup();
+            if (!config.Visible || maxConcentration < 1e-20) { group.Freeze(); return group; }
 
             int resolution = 80;
             double step = (domainMax - domainMin) / resolution;
@@ -288,7 +301,17 @@ namespace DisperSim3D.Core
             var mat = new DiffuseMaterial(brush);
 
             var geom = new GeometryModel3D { Geometry = mesh, Material = mat, BackMaterial = mat };
-            visual.Content = geom;
+            group.Children.Add(geom);
+            group.Freeze();
+            return group;
+        }
+
+        public ModelVisual3D GenerateContourPlane(
+            IConcentrationField engine, ContourPlaneConfig config,
+            double domainMin, double domainMax, double maxConcentration)
+        {
+            var group = ComputeContourPlane(engine, config, domainMin, domainMax, maxConcentration);
+            var visual = new ModelVisual3D { Content = group };
             return visual;
         }
 
@@ -324,15 +347,13 @@ namespace DisperSim3D.Core
         /// </summary>
         /// <param name="thresholds">Optional user-defined thresholds to render in addition to the built-in layers.</param>
         /// <returns>A <see cref="ModelVisual3D"/> containing the cloud geometry.</returns>
-        public ModelVisual3D GenerateCloudVisual(List<DispersionThreshold> thresholds)
+        public Model3DGroup ComputeCloudVisual(List<DispersionThreshold> thresholds)
         {
-            var visual = new ModelVisual3D();
-            if (_scalarField == null) return visual;
+            var group = new Model3DGroup();
+            if (_scalarField == null) { group.Freeze(); return group; }
 
             double maxC = GetMaxConcentration();
-            if (maxC < 1e-20) return visual;
-
-            var group = new Model3DGroup();
+            if (maxC < 1e-20) { group.Freeze(); return group; }
 
             if (thresholds != null && thresholds.Count > 0)
             {
@@ -367,7 +388,14 @@ namespace DisperSim3D.Core
                 group.Children.Add(MakeCloudGeometry(mesh, color, opacities[i]));
             }
 
-            visual.Content = group;
+            group.Freeze();
+            return group;
+        }
+
+        public ModelVisual3D GenerateCloudVisual(List<DispersionThreshold> thresholds)
+        {
+            var group = ComputeCloudVisual(thresholds);
+            var visual = new ModelVisual3D { Content = group };
             return visual;
         }
 
@@ -400,14 +428,13 @@ namespace DisperSim3D.Core
         /// </summary>
         /// <param name="thresholds">List of visible thresholds with concentration values, colors, and opacities.</param>
         /// <returns>A <see cref="ModelVisual3D"/> containing the isosurface meshes.</returns>
-        public ModelVisual3D GenerateIsosurfacesDirect(List<DispersionThreshold> thresholds)
+        public Model3DGroup ComputeIsosurfacesDirect(List<DispersionThreshold> thresholds)
         {
-            var visual = new ModelVisual3D();
             var group = new Model3DGroup();
 
             var sorted = thresholds
                 .Where(t => t.Visible)
-                .OrderBy(t => t.ConcentrationValue)
+                .OrderByDescending(t => t.ConcentrationValue)
                 .ToList();
 
             foreach (var threshold in sorted)
@@ -439,7 +466,14 @@ namespace DisperSim3D.Core
                 group.Children.Add(model);
             }
 
-            visual.Content = group;
+            group.Freeze();
+            return group;
+        }
+
+        public ModelVisual3D GenerateIsosurfacesDirect(List<DispersionThreshold> thresholds)
+        {
+            var group = ComputeIsosurfacesDirect(thresholds);
+            var visual = new ModelVisual3D { Content = group };
             return visual;
         }
 
@@ -475,18 +509,16 @@ namespace DisperSim3D.Core
         /// <param name="arrowCount">Number of arrows per axis (default 8).</param>
         /// <param name="planeZ">Z height of the arrow plane (default 2.0).</param>
         /// <returns>A <see cref="ModelVisual3D"/> containing the vector field arrows.</returns>
-        public ModelVisual3D GenerateVectorField(
+        public Model3DGroup ComputeVectorField(
             IConcentrationField engine, Vector3D windVector, double maxConcentration,
             int arrowCount = 8, double planeZ = 2.0)
         {
-            var visual = new ModelVisual3D();
-            if (windVector.Length < 0.01 || maxConcentration < 1e-20) return visual;
+            var group = new Model3DGroup();
+            if (windVector.Length < 0.01 || maxConcentration < 1e-20) { group.Freeze(); return group; }
 
             var dir = windVector;
             dir.Normalize();
             double step = (_domainSize * 2.0) / arrowCount;
-
-            var group = new Model3DGroup();
 
             for (int i = 0; i < arrowCount; i++)
             {
@@ -518,7 +550,16 @@ namespace DisperSim3D.Core
                 }
             }
 
-            visual.Content = group;
+            group.Freeze();
+            return group;
+        }
+
+        public ModelVisual3D GenerateVectorField(
+            IConcentrationField engine, Vector3D windVector, double maxConcentration,
+            int arrowCount = 8, double planeZ = 2.0)
+        {
+            var group = ComputeVectorField(engine, windVector, maxConcentration, arrowCount, planeZ);
+            var visual = new ModelVisual3D { Content = group };
             return visual;
         }
 
@@ -801,10 +842,10 @@ namespace DisperSim3D.Core
         /// <param name="maxConcentration">Maximum concentration for normalizing particle appearance.</param>
         /// <param name="maxParticles">Maximum number of particles to generate (default 2000).</param>
         /// <returns>A <see cref="ModelVisual3D"/> containing the CFD particle cloud.</returns>
-        public ModelVisual3D GenerateCfdParticleCloud(double maxConcentration, int maxParticles = 2000)
+        public Model3DGroup ComputeCfdParticleCloud(double maxConcentration, int maxParticles = 2000)
         {
-            var visual = new ModelVisual3D();
-            if (_scalarField == null || maxConcentration < 1e-20) return visual;
+            var group0 = new Model3DGroup();
+            if (_scalarField == null || maxConcentration < 1e-20) { group0.Freeze(); return group0; }
 
             int nx = _scalarField.GetLength(0);
             int ny = _scalarField.GetLength(1);
@@ -822,9 +863,9 @@ namespace DisperSim3D.Core
                             candidates.Add(Tuple.Create(c, i, j, k));
                     }
 
-            if (candidates.Count == 0) return visual;
+            if (candidates.Count == 0) { group0.Freeze(); return group0; }
 
-            var group = new Model3DGroup();
+            var group = group0;
             var sphereMesh = CreateLowPolySphere(0.5, 4, 4);
             double halfCell = _cellSize * 0.5;
 
@@ -870,7 +911,14 @@ namespace DisperSim3D.Core
                 }
             }
 
-            visual.Content = group;
+            group.Freeze();
+            return group;
+        }
+
+        public ModelVisual3D GenerateCfdParticleCloud(double maxConcentration, int maxParticles = 2000)
+        {
+            var group = ComputeCfdParticleCloud(maxConcentration, maxParticles);
+            var visual = new ModelVisual3D { Content = group };
             return visual;
         }
 

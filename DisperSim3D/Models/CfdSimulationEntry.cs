@@ -46,6 +46,9 @@ namespace DisperSim3D.Models
         /// <summary>Gets or sets the solver type used for this simulation (e.g., "OpenFOAM").</summary>
         public string SolverType { get; set; }
 
+        [System.Xml.Serialization.XmlIgnore]
+        public object Tag { get; set; }
+
         /// <summary>
         /// Initializes a new instance of the <see cref="CfdSimulationEntry"/> class with a generated ID and current timestamp.
         /// </summary>

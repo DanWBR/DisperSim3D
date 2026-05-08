@@ -9,7 +9,7 @@ namespace DisperSim3D.Dialogs
     {
         private ProgressBar _progressBar;
         private Label _lblStep;
-        private TextBox _txtLog;
+        private Label _lblLastLogLine;
         private Button _btnCancel;
         private Button _btnOpenFolder;
 
@@ -73,19 +73,16 @@ namespace DisperSim3D.Dialogs
             };
             contentPanel.Controls.Add(_progressBar, 0, row++);
 
-            contentPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            _txtLog = new TextBox
+            contentPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            _lblLastLogLine = new Label
             {
+                Text = "",
                 Dock = DockStyle.Fill,
-                Multiline = true,
-                ReadOnly = true,
-                ScrollBars = ScrollBars.Vertical,
-                Font = new Font("Consolas", 8f),
-                BackColor = Color.FromArgb(30, 30, 35),
-                ForeColor = Color.LightGreen,
-                WordWrap = false
+                AutoSize = true,
+                ForeColor = Color.Gray,
+                Font = new Font("Consolas", 8f)
             };
-            contentPanel.Controls.Add(_txtLog, 0, row++);
+            contentPanel.Controls.Add(_lblLastLogLine, 0, row++);
 
             contentPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             var btnPanel = new TableLayoutPanel
@@ -125,9 +122,7 @@ namespace DisperSim3D.Dialogs
 
             if (!string.IsNullOrEmpty(progress.LogLine))
             {
-                _txtLog.AppendText(progress.LogLine + Environment.NewLine);
-                if (_txtLog.TextLength > 50000)
-                    _txtLog.Text = _txtLog.Text.Substring(_txtLog.TextLength - 30000);
+                _lblLastLogLine.Text = progress.LogLine;
             }
 
             if (progress.IsError)
@@ -144,7 +139,7 @@ namespace DisperSim3D.Dialogs
             _lblStep.Text = "Idle";
             _lblStep.ForeColor = SystemColors.ControlText;
             _progressBar.Value = 0;
-            _txtLog.Clear();
+            _lblLastLogLine.Text = "";
             _btnCancel.Enabled = true;
         }
     }

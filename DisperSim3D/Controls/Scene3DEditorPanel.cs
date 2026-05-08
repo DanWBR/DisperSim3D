@@ -39,6 +39,7 @@ namespace DisperSim3D.Controls
         private bool _addItemPanelVisible;
         private bool _dispersionToolsVisible = true;
         private CfdSimulationsPanel _cfdSimPanel;
+        private SimulationManagerDockPanel _simManagerDock;
         private ToolStripMenuItem _miSelectMode;
         private ToolStripMenuItem _miSnap, _miGround, _miVectors;
         private string _resPath;
@@ -178,6 +179,7 @@ namespace DisperSim3D.Controls
                 new ToolStripMenuItem("Thresholds...", Img("icons8-slider.png"), (s, e) => DoThresholds()),
                 new ToolStripSeparator(),
                 new ToolStripMenuItem("CFD Settings...", Img("cog.png"), (s, e) => DoCfdSettings()),
+                new ToolStripMenuItem("Simulation Manager...", Img("table.png"), (s, e) => DoShowSimulationManager()),
                 new ToolStripSeparator(),
                 new ToolStripMenuItem("Exceedance Curves...", Img("icons8-combo_chart.png"), (s, e) => DoExceedanceCurves()),
                 new ToolStripMenuItem("Detector Results...", Img("icons8-scatter_plot.png"), (s, e) => DoShowDetectorResults()),
@@ -222,7 +224,7 @@ namespace DisperSim3D.Controls
                 Padding = new Padding((int)(2 * dpiScale))
             };
 
-            _scenarioCombo = new ToolStripComboBox("Scenario") { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200, ToolTipText = "Active scenario" };
+            _scenarioCombo = new ToolStripComboBox("Scenario") { DropDownStyle = ComboBoxStyle.DropDownList, Width = 140, AutoSize = false, ToolTipText = "Active scenario" };
             _scenarioCombo.SelectedIndexChanged += (s, e) =>
             {
                 if (_scenarioCombo.SelectedIndex >= 0)
@@ -233,7 +235,7 @@ namespace DisperSim3D.Controls
                 }
             };
 
-            _solverCombo = new ToolStripComboBox("Solver") { DropDownStyle = ComboBoxStyle.DropDownList, Width = 260, ToolTipText = "Solver type" };
+            _solverCombo = new ToolStripComboBox("Solver") { DropDownStyle = ComboBoxStyle.DropDownList, Width = 210, AutoSize = false, ToolTipText = "Solver type" };
             _solverCombo.Items.AddRange(new object[] {
                 "Gaussian Puff (Transient)",
                 "Gaussian Plume (Steady-State)",
@@ -264,7 +266,6 @@ namespace DisperSim3D.Controls
                 var sc = _editor.Scene.DispersionScenario;
                 if (sc == null || sc.Sources.Count == 0) return;
 
-                // Sync solver type from combo in case scenario was created after combo selection
                 switch (_solverCombo.SelectedIndex)
                 {
                     case 0: sc.SolverType = CfdSolverType.GaussianPuff; break;
@@ -274,29 +275,11 @@ namespace DisperSim3D.Controls
                     case 4: sc.SolverType = CfdSolverType.ScalarSimpleFoam; break;
                 }
 
-                if (sc.SolverType == CfdSolverType.ScalarTransportFoam ||
-                    sc.SolverType == CfdSolverType.ScalarTransportFoamSteady ||
-                    sc.SolverType == CfdSolverType.ScalarSimpleFoam)
-                {
-                    if (sc.CfdConfig == null)
-                        sc.CfdConfig = AppSettings.Instance.CreateCfdConfig();
-                    _cfdSimPanel.ShowSolveProgress();
-                    ShowDockPanel(_cfdSimDock, DockState.DockBottom);
-                    _editor.StartCfdSolve(sc.CfdConfig);
-                }
-                else if (sc.SolverType == CfdSolverType.GaussianPlume)
-                {
-                    _editor.StartSteadyStateDispersion();
-                    _cfdSimPanel.ShowPlaybackControls("Gaussian Plume (Steady-State)", false);
-                    _cfdSimPanelUserVisible = true;
-                    ShowDockPanel(_cfdSimDock, DockState.DockBottom);
-                }
-                else
-                {
-                    _cfdSimPanel.ShowSolveProgress();
-                    ShowDockPanel(_cfdSimDock, DockState.DockBottom);
-                    _editor.RunGaussianPuffAsync();
-                }
+                if (sc.CfdConfig == null)
+                    sc.CfdConfig = AppSettings.Instance.CreateCfdConfig();
+
+                _editor.EnqueueSimulation(sc.SolverType, sc.CfdConfig);
+                DoShowSimulationManager();
                 UpdatePlaybackButtons();
             };
 
@@ -325,7 +308,7 @@ namespace DisperSim3D.Controls
                 _dispersionTimeLabel.Text = "";
             };
 
-            var speedCombo = new ToolStripComboBox("Speed") { DropDownStyle = ComboBoxStyle.DropDownList, Width = 60, ToolTipText = "Animation speed" };
+            var speedCombo = new ToolStripComboBox("Speed") { DropDownStyle = ComboBoxStyle.DropDownList, Width = 40, AutoSize = false, ToolTipText = "Animation speed" };
             speedCombo.Items.AddRange(new object[] { "0.25x", "0.5x", "1x", "2x", "5x", "10x" });
             speedCombo.SelectedIndex = 2;
             speedCombo.SelectedIndexChanged += (s, e) =>
@@ -334,7 +317,7 @@ namespace DisperSim3D.Controls
                 _editor.AnimationSpeedFactor = speeds[speedCombo.SelectedIndex];
             };
 
-            var nudGroundLevel = new ToolStripTextBox { Text = "0", Width = 45, ToolTipText = "Ground level elevation (m)" };
+            var nudGroundLevel = new ToolStripTextBox { Text = "0", Width = 40, AutoSize = false, ToolTipText = "Ground level elevation (m)" };
             nudGroundLevel.KeyDown += (s, e) =>
             {
                 if (e.KeyCode == Keys.Enter)
@@ -350,7 +333,7 @@ namespace DisperSim3D.Controls
                 }
             };
 
-            var nudGroundSize = new ToolStripTextBox { Text = "200", Width = 45, ToolTipText = "Ground plane size (m)" };
+            var nudGroundSize = new ToolStripTextBox { Text = "200", Width = 40, AutoSize = false, ToolTipText = "Ground plane size (m)" };
             nudGroundSize.KeyDown += (s, e) =>
             {
                 if (e.KeyCode == Keys.Enter)
@@ -444,11 +427,6 @@ namespace DisperSim3D.Controls
             // --- CFD Simulations dock panel ---
             _cfdSimPanel = new CfdSimulationsPanel();
             _cfdSimDock = new CfdSimulationsDockPanel(_cfdSimPanel);
-            _cfdSimPanel.CancelSolveRequested += (s, ev) =>
-            {
-                _editor.CfdRunner?.Cancel();
-                _editor.CancelGaussianPuff();
-            };
             _cfdSimPanel.PlayRequested += (s, entry) =>
             {
                 if (!_editor.LoadCfdSimulation(entry))
@@ -483,7 +461,6 @@ namespace DisperSim3D.Controls
             };
             _editor.CfdProgressUpdated += (s, p) =>
             {
-                _cfdSimPanel.UpdateProgress(p);
                 if (p.IsError)
                 {
                     ShowDockPanel(_cfdSimDock, DockState.DockBottom);
@@ -502,7 +479,6 @@ namespace DisperSim3D.Controls
                 _cfdSimPanel.AddEntry(entry);
                 if (entry.HasResults)
                 {
-                    _cfdSimPanel.HideSolveProgress();
                     string simType = entry.SolverType ?? "OpenFOAM";
                     bool isDynamic = entry.TimeStepCount > 1;
                     _cfdSimPanel.ShowPlaybackControls(simType, isDynamic);
@@ -528,6 +504,7 @@ namespace DisperSim3D.Controls
             {
                 _editor.CfdRunner?.Cancel();
                 _editor.CancelGaussianPuff();
+                _editor.SimulationManager.CancelAll();
                 _editor.StopDispersion();
                 _cfdSimPanel.HidePlaybackControls();
                 UpdatePlaybackButtons();
@@ -1015,6 +992,32 @@ namespace DisperSim3D.Controls
             }
         }
 
+        private void DoShowSimulationManager()
+        {
+            if (_simManagerDock == null)
+            {
+                var panel = new SimulationManagerPanel(_editor.SimulationManager);
+                panel.PlayResultRequested += (s, entry) =>
+                {
+                    if (_editor.LoadCfdSimulation(entry))
+                    {
+                        string simType = entry.SolverType ?? "OpenFOAM";
+                        bool isDynamic = entry.TimeStepCount > 1;
+                        _cfdSimPanel.ShowPlaybackControls(simType, isDynamic);
+                        _cfdSimPanelUserVisible = true;
+                        ShowDockPanel(_cfdSimDock, DockState.DockBottom);
+                        UpdatePlaybackButtons();
+                    }
+                };
+                _simManagerDock = new SimulationManagerDockPanel(panel);
+                _simManagerDock.Show(_dockPanel, DockState.DockBottom);
+            }
+            else
+            {
+                ShowDockPanel(_simManagerDock, DockState.DockBottom);
+            }
+        }
+
         private void DoMeteo()
         {
             var scenario = EnsureScenario();
@@ -1114,13 +1117,10 @@ namespace DisperSim3D.Controls
 
             if (isSolving)
             {
-                _cfdSimPanel.EnsureSolveProgressVisible();
-                ShowDockPanel(_cfdSimDock, DockState.DockBottom);
                 _dispersionTimeLabel.Text = "CFD solving...";
             }
             else if (isRunning || isPaused)
             {
-                _cfdSimPanel.HideSolveProgress();
                 if (_dispersionStatusTimer == null)
                 {
                     _dispersionStatusTimer = new Timer { Interval = 200 };
@@ -1146,12 +1146,10 @@ namespace DisperSim3D.Controls
             }
             else if (isSteadyComplete)
             {
-                _cfdSimPanel.HideSolveProgress();
                 _dispersionTimeLabel.Text = "Steady-state";
             }
             else if (isStopped)
             {
-                _cfdSimPanel.HideSolveProgress();
                 _cfdSimPanel.HidePlaybackControls();
                 if (!_cfdSimPanelUserVisible)
                     _cfdSimDock.DockState = DockState.Hidden;

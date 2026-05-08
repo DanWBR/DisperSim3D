@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Windows.Forms.Integration;
 using System.Windows.Media.Media3D;
@@ -46,8 +47,10 @@ namespace DisperSim3D.Controls
         private DispersionSimulationState _dispersionState = DispersionSimulationState.Stopped;
         private double _animationSpeedFactor = 1.0;
         private int _frameCount;
+        private bool _computingFrame;
         private System.Windows.Media.Media3D.ModelVisual3D _isosurfaceVisual;
         private System.Windows.Media.Media3D.ModelVisual3D _particleVisual;
+        private System.Windows.Controls.StackPanel _legendPanel;
         private System.Windows.Media.Media3D.ModelVisual3D _windArrowVisual;
 
         private MonitorPoint3D _pendingMonitorTemplate;
@@ -70,6 +73,8 @@ namespace DisperSim3D.Controls
         private bool _cfdPlaybackActive;
         private double _cfdPlaybackTimeS;
         private OpenFoamConcentrationField _cfdConcentrationField;
+
+        private SimulationManager _simulationManager;
 
         #endregion
 
@@ -264,8 +269,22 @@ namespace DisperSim3D.Controls
             _viewport.KeyDown += Viewport_KeyDown;
             _viewport.PreviewMouseWheel += Viewport_PreviewMouseWheel;
 
+            // Legend overlay panel (top-right corner)
+            _legendPanel = new System.Windows.Controls.StackPanel
+            {
+                Orientation = System.Windows.Controls.Orientation.Vertical,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+                VerticalAlignment = System.Windows.VerticalAlignment.Top,
+                Margin = new System.Windows.Thickness(0, 60, 10, 0),
+                Visibility = System.Windows.Visibility.Collapsed
+            };
+
+            var rootGrid = new System.Windows.Controls.Grid();
+            rootGrid.Children.Add(_viewport);
+            rootGrid.Children.Add(_legendPanel);
+
             // Hospedar no ElementHost
-            _wpfHost.Child = _viewport;
+            _wpfHost.Child = rootGrid;
 
             // Adicionar ao UserControl
             this.Controls.Add(_wpfHost);
@@ -320,6 +339,9 @@ namespace DisperSim3D.Controls
             _frameCount = 0;
             _dispersionState = DispersionSimulationState.Running;
 
+            if (scenario.Thresholds.Count > 0)
+                ShowLegend(scenario.Thresholds);
+
             if (_animationTimer == null)
             {
                 _animationTimer = new System.Windows.Threading.DispatcherTimer();
@@ -342,6 +364,7 @@ namespace DisperSim3D.Controls
                 _dispersionEngine.Reset();
 
             RemoveDispersionVisuals();
+            HideLegend();
             _steadyStateEngine = null;
         }
 
@@ -349,7 +372,7 @@ namespace DisperSim3D.Controls
         /// Computes and displays the steady-state Gaussian plume concentration field.
         /// Renders isosurfaces and contour planes in a single pass with no animation.
         /// </summary>
-        public void StartSteadyStateDispersion()
+        public async void StartSteadyStateDispersion()
         {
             var scenario = _scene.DispersionScenario;
             if (scenario == null || scenario.Sources.Count == 0) return;
@@ -360,91 +383,279 @@ namespace DisperSim3D.Controls
             plume.Initialize(scenario);
             _steadyStateEngine = plume;
 
-            _dispersionRenderer = new DispersionRenderer();
-            _dispersionRenderer.Initialize(scenario);
-            _dispersionRenderer.ComputeOccupancyGrid(_scene);
+            var renderer = new DispersionRenderer();
+            renderer.Initialize(scenario);
+            renderer.ComputeOccupancyGrid(_scene);
+            _dispersionRenderer = renderer;
 
             RemoveDispersionVisuals();
 
             var thresholds = scenario.Thresholds;
-            bool autoThresholds = thresholds.Count == 0;
+            var engine = _steadyStateEngine;
+            var monitors = _scene.MonitorPoints.ToList();
+            var detectors = _scene.GasDetectors;
+            bool hasContours = scenario.ContourPlanes.Count > 0;
+            var contourConfigs = hasContours ? scenario.ContourPlanes.Where(cp => cp.Visible).ToList() : null;
 
-            // Always sample the scalar field (GenerateIsosurfaces calls SampleScalarField)
-            _isosurfaceVisual = _dispersionRenderer.GenerateIsosurfaces(
-                _steadyStateEngine, thresholds);
-            if (((System.Windows.Media.Media3D.Model3DGroup)_isosurfaceVisual.Content).Children.Count > 0)
+            var result = await Task.Run(() =>
             {
+                if (thresholds.Count == 0)
+                {
+                    renderer.ComputeIsosurfaces(engine, thresholds);
+                    double maxC = renderer.GetMaxConcentration();
+                    if (maxC > 1e-20)
+                    {
+                        var autoThresholds = new List<DispersionThreshold>
+                        {
+                            new DispersionThreshold { Name = "High", ConcentrationValue = maxC * 0.1,
+                                Color = System.Windows.Media.Colors.Red, Opacity = 0.6, Visible = true },
+                            new DispersionThreshold { Name = "Medium", ConcentrationValue = maxC * 0.01,
+                                Color = System.Windows.Media.Colors.Orange, Opacity = 0.35, Visible = true },
+                            new DispersionThreshold { Name = "Low", ConcentrationValue = maxC * 0.001,
+                                Color = System.Windows.Media.Colors.Yellow, Opacity = 0.12, Visible = true }
+                        };
+                        return ComputeSteadyState(renderer, engine, autoThresholds, monitors, contourConfigs, autoThresholds);
+                    }
+                }
+                return ComputeSteadyState(renderer, engine, thresholds, monitors, contourConfigs, thresholds);
+            });
+
+            thresholds = result.Thresholds;
+
+            RemoveDispersionVisuals();
+
+            if (result.IsoGroup != null && result.IsoGroup.Children.Count > 0)
+            {
+                _isosurfaceVisual = new ModelVisual3D { Content = result.IsoGroup };
                 _isosurfaceVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
                     new Visual3DTag("DispersionIsosurface", "iso"));
                 _viewport.Children.Add(_isosurfaceVisual);
             }
 
-            double maxC = _dispersionRenderer.GetMaxConcentration();
-            double dom = _dispersionRenderer.DomainSize;
-
-            if (autoThresholds && maxC > 1e-20)
+            if (_steadyStateEngine is GaussianPlumeEngine plumeSS)
             {
-                var autoList = new List<DispersionThreshold>
+                foreach (var path in result.Trajectories)
                 {
-                    new DispersionThreshold { Name = "High", ConcentrationValue = maxC * 0.5,
-                        Color = System.Windows.Media.Colors.Red, Opacity = 0.35, Visible = true },
-                    new DispersionThreshold { Name = "Medium", ConcentrationValue = maxC * 0.1,
-                        Color = System.Windows.Media.Colors.Orange, Opacity = 0.25, Visible = true },
-                    new DispersionThreshold { Name = "Low", ConcentrationValue = maxC * 0.01,
-                        Color = System.Windows.Media.Colors.Yellow, Opacity = 0.15, Visible = true }
-                };
-                _isosurfaceVisual = _dispersionRenderer.GenerateIsosurfaces(_steadyStateEngine, autoList);
-                if (((System.Windows.Media.Media3D.Model3DGroup)_isosurfaceVisual.Content).Children.Count > 0)
-                {
-                    _isosurfaceVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
-                        new Visual3DTag("DispersionIsosurface", "iso"));
-                    _viewport.Children.Add(_isosurfaceVisual);
+                    if (path.Count < 2) continue;
+                    var lines = new LinesVisual3D { Color = System.Windows.Media.Colors.Cyan, Thickness = 2 };
+                    for (int ti = 0; ti < path.Count - 1; ti++)
+                    {
+                        lines.Points.Add(path[ti]);
+                        lines.Points.Add(path[ti + 1]);
+                    }
+                    lines.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("TrajectoryLine", "trajectory"));
+                    _viewport.Children.Add(lines);
                 }
             }
 
-            // Render user-configured contour planes, or auto-generate ground-level + source-height planes
-            var contourPlanes = scenario.ContourPlanes;
-            if (contourPlanes.Count == 0 && maxC > 1e-20)
-            {
-                double srcZ = scenario.Sources.Count > 0 ? scenario.Sources[0].EffectivePosition.Z : 2.0;
-                contourPlanes = new List<ContourPlaneConfig>
-                {
-                    new ContourPlaneConfig { Axis = ContourAxis.XY, Position = 1.0,
-                        Opacity = 0.85, ColorMap = Core.ColorMapName.Jet },
-                    new ContourPlaneConfig { Axis = ContourAxis.XZ, Position = 0,
-                        Opacity = 0.7, ColorMap = Core.ColorMapName.Jet }
-                };
-                if (srcZ > 3.0)
-                    contourPlanes.Add(new ContourPlaneConfig { Axis = ContourAxis.XY, Position = srcZ,
-                        Opacity = 0.7, ColorMap = Core.ColorMapName.Jet });
-            }
+            if (thresholds.Count > 0)
+                ShowLegend(thresholds);
 
-            foreach (var cp in contourPlanes)
+            foreach (var cg in result.ContourGroups)
             {
-                if (!cp.Visible) continue;
-                var cpVisual = _dispersionRenderer.GenerateContourPlane(
-                    _steadyStateEngine, cp, -dom, dom, maxC);
+                var cpVisual = new ModelVisual3D { Content = cg };
                 cpVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
                     new Visual3DTag("ContourPlane", "contour"));
                 _viewport.Children.Add(cpVisual);
             }
 
+            if (detectors.Count > 0)
+            {
+                DetectorEvaluator.Reset(detectors);
+                DetectorEvaluator.EvaluateStep(detectors, _steadyStateEngine, 0);
+            }
+
+            foreach (var (mon, c) in result.MonitorData)
+                mon.TimeSeries.Add(new MonitorSample { TimeS = 0, Concentration = c });
+
+            _dispersionState = DispersionSimulationState.SteadyStateComplete;
+        }
+
+        private struct SteadyStateResult
+        {
+            public Model3DGroup IsoGroup;
+            public List<List<Point3D>> Trajectories;
+            public List<Model3DGroup> ContourGroups;
+            public List<(MonitorPoint3D mon, double c)> MonitorData;
+            public List<DispersionThreshold> Thresholds;
+        }
+
+        private SteadyStateResult ComputeSteadyState(
+            DispersionRenderer renderer, IConcentrationField engine,
+            List<DispersionThreshold> thresholds,
+            List<MonitorPoint3D> monitors,
+            List<ContourPlaneConfig> contourConfigs,
+            List<DispersionThreshold> resultThresholds)
+        {
+            var isoGroup = renderer.ComputeIsosurfaces(engine, thresholds);
+
+            var trajectories = new List<List<Point3D>>();
+            if (engine is GaussianPlumeEngine plumeEngine)
+                trajectories = plumeEngine.GetTrajectoryPaths();
+
+            var contourGroups = new List<Model3DGroup>();
+            if (contourConfigs != null && contourConfigs.Count > 0)
+            {
+                double maxConc = renderer.GetMaxConcentration();
+                double dom = renderer.DomainSize;
+                foreach (var cp in contourConfigs)
+                    contourGroups.Add(renderer.ComputeContourPlane(engine, cp, -dom, dom, maxConc));
+            }
+
+            var monitorData = new List<(MonitorPoint3D mon, double c)>();
+            foreach (var mon in monitors)
+            {
+                if (!mon.Visible) continue;
+                double c = engine.EvaluateConcentration(mon.Position.X, mon.Position.Y, mon.Position.Z);
+                monitorData.Add((mon, c));
+            }
+
+            return new SteadyStateResult
+            {
+                IsoGroup = isoGroup,
+                Trajectories = trajectories,
+                ContourGroups = contourGroups,
+                MonitorData = monitorData,
+                Thresholds = resultThresholds
+            };
+        }
+
+        private void OnSimManagerProgress(object sender, (SimulationJob Job, OpenFoamProgress Progress) e)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<object, (SimulationJob, OpenFoamProgress)>(OnSimManagerProgress), sender, e);
+                return;
+            }
+            CfdProgressUpdated?.Invoke(this, e.Progress);
+        }
+
+        private void OnSimManagerStatusChanged(object sender, SimulationJob job)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<object, SimulationJob>(OnSimManagerStatusChanged), sender, job);
+                return;
+            }
+            SimulationJobStatusChanged?.Invoke(this, job);
+        }
+
+        private void OnSimManagerJobCompleted(object sender, SimulationJob job)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<object, SimulationJob>(OnSimManagerJobCompleted), sender, job);
+                return;
+            }
+
+            if (job.Status != SimulationJobStatus.Completed || job.ResultEntry == null)
+                return;
+
+            var entry = job.ResultEntry;
+            _scene.CfdSimulations.Add(entry);
+            CfdSolveCompleted?.Invoke(this, entry);
+
+            if (job.SolverType == CfdSolverType.GaussianPlume && entry.Tag is SteadyStateResultData ssData)
+            {
+                _steadyStateEngine = ssData.Engine;
+                _dispersionRenderer = ssData.Renderer;
+                DisplaySteadyStateResult(ssData);
+            }
+            else if (entry.Tag is OpenFoamResult ofResult)
+            {
+                _cfdResult = ofResult;
+            }
+        }
+
+        private void DisplaySteadyStateResult(SteadyStateResultData data)
+        {
+            RemoveDispersionVisuals();
+
+            if (data.IsoGroup != null && data.IsoGroup.Children.Count > 0)
+            {
+                _isosurfaceVisual = new ModelVisual3D { Content = data.IsoGroup };
+                _isosurfaceVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                    new Visual3DTag("DispersionIsosurface", "iso"));
+                _viewport.Children.Add(_isosurfaceVisual);
+            }
+
+            if (data.Trajectories != null)
+            {
+                foreach (var path in data.Trajectories)
+                {
+                    if (path.Count < 2) continue;
+                    var lines = new LinesVisual3D { Color = System.Windows.Media.Colors.Cyan, Thickness = 2 };
+                    for (int ti = 0; ti < path.Count - 1; ti++)
+                    {
+                        lines.Points.Add(path[ti]);
+                        lines.Points.Add(path[ti + 1]);
+                    }
+                    lines.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("TrajectoryLine", "trajectory"));
+                    _viewport.Children.Add(lines);
+                }
+            }
+
+            if (data.Thresholds != null && data.Thresholds.Count > 0)
+                ShowLegend(data.Thresholds);
+
+            if (data.ContourGroups != null)
+            {
+                foreach (var cg in data.ContourGroups)
+                {
+                    var cpVisual = new ModelVisual3D { Content = cg };
+                    cpVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("ContourPlane", "contour"));
+                    _viewport.Children.Add(cpVisual);
+                }
+            }
+
             if (_scene.GasDetectors.Count > 0)
             {
                 DetectorEvaluator.Reset(_scene.GasDetectors);
-                DetectorEvaluator.EvaluateStep(
-                    _scene.GasDetectors, _steadyStateEngine, 0);
+                DetectorEvaluator.EvaluateStep(_scene.GasDetectors, data.Engine, 0);
             }
 
             foreach (var monitor in _scene.MonitorPoints)
             {
                 if (!monitor.Visible) continue;
-                double c = _steadyStateEngine.EvaluateConcentration(
+                double c = data.Engine.EvaluateConcentration(
                     monitor.Position.X, monitor.Position.Y, monitor.Position.Z);
                 monitor.TimeSeries.Add(new MonitorSample { TimeS = 0, Concentration = c });
             }
 
             _dispersionState = DispersionSimulationState.SteadyStateComplete;
+        }
+
+        public SimulationJob EnqueueSimulation(CfdSolverType solverType, CfdConfiguration config = null)
+        {
+            var scenario = _scene.DispersionScenario;
+            if (scenario == null || scenario.Sources.Count == 0) return null;
+
+            if (config == null)
+                config = scenario.CfdConfig ?? new CfdConfiguration();
+
+            var obstacles = new List<BoundingBox>();
+            foreach (var deco in _scene.Decorations)
+                if (deco.BoundingBox != null) obstacles.Add(deco.BoundingBox);
+
+            var hpProfiles = new Dictionary<string, double[]>();
+            foreach (var src in scenario.Sources)
+            {
+                if (src.HighPressureLeak != null)
+                {
+                    var profile = HighPressureLeakModel.ComputeBlowdownProfile(
+                        src.HighPressureLeak, scenario.SimulationDurationS, scenario.TimeStepS);
+                    hpProfiles[src.Id] = profile;
+                }
+            }
+
+            _dispersionState = DispersionSimulationState.SolvingCfd;
+
+            return SimulationManager.Enqueue(
+                scenario, solverType, config, _scene, CfdEnvironment,
+                obstacles, hpProfiles);
         }
 
         /// <summary>
@@ -504,9 +715,10 @@ namespace DisperSim3D.Controls
         /// <summary>
         /// Seeks CFD playback to a fractional position (0.0 to 1.0).
         /// </summary>
-        public void SeekCfdPlayback(double fraction)
+        public async void SeekCfdPlayback(double fraction)
         {
             if (!_cfdPlaybackActive || _cfdResult == null || _cfdResult.TimeSteps.Count == 0) return;
+            if (_computingFrame) return;
 
             double firstTime = _cfdResult.TimeSteps[0];
             double lastTime = _cfdResult.TimeSteps[_cfdResult.TimeSteps.Count - 1];
@@ -517,6 +729,105 @@ namespace DisperSim3D.Controls
             while (_cfdPlaybackIndex < _cfdResult.TimeSteps.Count - 1 &&
                    _cfdResult.TimeSteps[_cfdPlaybackIndex + 1] <= targetTime)
                 _cfdPlaybackIndex++;
+
+            if (_dispersionState != DispersionSimulationState.Running)
+                await RenderCfdFrameAsync(_cfdPlaybackIndex);
+        }
+
+        private async Task RenderCfdFrameAsync(int frameIndex)
+        {
+            if (_cfdResult == null || !_cfdResult.IsLoaded || _computingFrame) return;
+            if (frameIndex < 0 || frameIndex >= _cfdResult.TimeSteps.Count) return;
+
+            _computingFrame = true;
+            try
+            {
+                var scenario = _scene.DispersionScenario;
+                double t = _cfdResult.TimeSteps[frameIndex];
+                var cfdResult = _cfdResult;
+                var renderer = _dispersionRenderer;
+                var thresholds = scenario?.Thresholds;
+                bool doContours = scenario != null && scenario.ContourPlanes.Count > 0;
+                bool doVectors = _showVectorField && scenario != null;
+                var contourConfigs = doContours ? scenario.ContourPlanes.Where(cp => cp.Visible).ToList() : null;
+                var windVec = scenario?.Meteo.WindVector ?? new Vector3D();
+
+                var result = await Task.Run(() =>
+                {
+                    var field = cfdResult.GetField(t);
+                    if (field == null) return (object)null;
+
+                    var concField = new OpenFoamConcentrationField(
+                        field, cfdResult.DomainXMin, cfdResult.DomainXMax,
+                        cfdResult.DomainYMin, cfdResult.DomainYMax, cfdResult.DomainZMax);
+
+                    renderer.SetScalarFieldDirect(field);
+
+                    Model3DGroup isoGroup = renderer.ComputeCloudVisual(thresholds);
+
+                    double maxC = renderer.GetMaxConcentration();
+                    Model3DGroup particleGroup = maxC > 1e-20 ? renderer.ComputeCfdParticleCloud(maxC) : null;
+
+                    var contourGroups = new List<Model3DGroup>();
+                    Model3DGroup vectorGroup = null;
+                    if (doContours || doVectors)
+                    {
+                        double dom = renderer.DomainSize;
+                        if (doContours)
+                        {
+                            foreach (var cp in contourConfigs)
+                                contourGroups.Add(renderer.ComputeContourPlane(concField, cp, -dom, dom, maxC));
+                        }
+                        if (doVectors)
+                            vectorGroup = renderer.ComputeVectorField(concField, windVec, maxC);
+                    }
+
+                    return new { concField, isoGroup, particleGroup, contourGroups, vectorGroup };
+                });
+
+                if (result == null) return;
+                dynamic r = result;
+
+                _cfdConcentrationField = r.concField;
+
+                RemoveDispersionVisuals();
+
+                if (r.isoGroup != null)
+                {
+                    _isosurfaceVisual = new ModelVisual3D { Content = r.isoGroup };
+                    _isosurfaceVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("DispersionIsosurface", "iso"));
+                    _viewport.Children.Add(_isosurfaceVisual);
+                }
+
+                if (r.particleGroup != null)
+                {
+                    _particleVisual = new ModelVisual3D { Content = r.particleGroup };
+                    _particleVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("DispersionParticles", "particles"));
+                    _viewport.Children.Add(_particleVisual);
+                }
+
+                foreach (var cg in (List<Model3DGroup>)r.contourGroups)
+                {
+                    var cpVisual = new ModelVisual3D { Content = cg };
+                    cpVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("ContourPlane", "contour"));
+                    _viewport.Children.Add(cpVisual);
+                }
+
+                if (r.vectorGroup != null)
+                {
+                    var vfVisual = new ModelVisual3D { Content = r.vectorGroup };
+                    vfVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("VectorField", "vectors"));
+                    _viewport.Children.Add(vfVisual);
+                }
+            }
+            finally
+            {
+                _computingFrame = false;
+            }
         }
 
         /// <summary>
@@ -567,8 +878,24 @@ namespace DisperSim3D.Controls
         public OpenFoamResult CfdResult => _cfdResult;
         public bool IsCfdPlaybackActive => _cfdPlaybackActive;
 
+        public SimulationManager SimulationManager
+        {
+            get
+            {
+                if (_simulationManager == null)
+                {
+                    _simulationManager = new SimulationManager(2);
+                    _simulationManager.JobProgressUpdated += OnSimManagerProgress;
+                    _simulationManager.JobCompleted += OnSimManagerJobCompleted;
+                    _simulationManager.JobStatusChanged += OnSimManagerStatusChanged;
+                }
+                return _simulationManager;
+            }
+        }
+
         public event EventHandler<OpenFoamProgress> CfdProgressUpdated;
         public event EventHandler<CfdSimulationEntry> CfdSolveCompleted;
+        public event EventHandler<SimulationJob> SimulationJobStatusChanged;
 
         public void StartCfdSolve(CfdConfiguration config)
         {
@@ -930,6 +1257,9 @@ namespace DisperSim3D.Controls
                 }
             }
 
+            if (scenario.Thresholds.Count > 0)
+                ShowLegend(scenario.Thresholds);
+
             _cfdPlaybackIndex = 0;
             _cfdPlaybackTimeS = _cfdResult.TimeSteps[0];
             _cfdPlaybackActive = true;
@@ -1207,310 +1537,383 @@ namespace DisperSim3D.Controls
             System.IO.File.WriteAllText(filePath, sb.ToString());
         }
 
-        private void AnimationTimer_Tick(object sender, EventArgs e)
+        private async void AnimationTimer_Tick(object sender, EventArgs e)
         {
             if (_dispersionState != DispersionSimulationState.Running)
                 return;
 
             if (_cfdPlaybackActive)
             {
-                AnimationTimer_CfdTick();
+                await AnimationTimer_CfdTickAsync();
                 return;
             }
 
-            if (_dispersionEngine == null)
+            if (_dispersionEngine == null || _computingFrame)
                 return;
 
-            var scenario = _scene.DispersionScenario;
-            double newTime = _dispersionEngine.CurrentTimeS + scenario.TimeStepS * _animationSpeedFactor;
+            _computingFrame = true;
 
-            bool isLastStep = newTime >= scenario.SimulationDurationS;
-            if (isLastStep)
-                newTime = scenario.SimulationDurationS;
-
-            if (scenario.TransientWind != null && scenario.TransientWind.Enabled && scenario.TransientWind.Entries.Count > 0)
+            try
             {
-                var windEntry = scenario.TransientWind.GetEntryAtTime(newTime);
-                if (windEntry != null)
+                var scenario = _scene.DispersionScenario;
+                double newTime = _dispersionEngine.CurrentTimeS + scenario.TimeStepS * _animationSpeedFactor;
+
+                bool isLastStep = newTime >= scenario.SimulationDurationS;
+                if (isLastStep)
+                    newTime = scenario.SimulationDurationS;
+
+                if (scenario.TransientWind != null && scenario.TransientWind.Enabled && scenario.TransientWind.Entries.Count > 0)
                 {
-                    _dispersionEngine.UpdateWind(windEntry.WindVector, windEntry.StabilityClass);
+                    var windEntry = scenario.TransientWind.GetEntryAtTime(newTime);
+                    if (windEntry != null)
+                        _dispersionEngine.UpdateWind(windEntry.WindVector, windEntry.StabilityClass);
                 }
-            }
 
-            if (scenario.TransientWind != null && scenario.TransientWind.ESDTimeS >= 0 && newTime >= scenario.TransientWind.ESDTimeS)
-            {
-                foreach (var src in scenario.Sources)
-                    src.ReleaseRateKgPerS = 0;
-            }
-            else
-            {
-                foreach (var src in scenario.Sources)
+                if (scenario.TransientWind != null && scenario.TransientWind.ESDTimeS >= 0 && newTime >= scenario.TransientWind.ESDTimeS)
                 {
-                    if (src.HighPressureLeak != null && _hpLeakProfiles.ContainsKey(src.Id))
+                    foreach (var src in scenario.Sources)
+                        src.ReleaseRateKgPerS = 0;
+                }
+                else
+                {
+                    foreach (var src in scenario.Sources)
                     {
-                        var profile = _hpLeakProfiles[src.Id];
-                        int step = (int)(newTime / scenario.TimeStepS);
-                        if (step >= 0 && step < profile.Length)
-                            src.ReleaseRateKgPerS = profile[step];
-                        else
-                            src.ReleaseRateKgPerS = 0;
+                        if (src.HighPressureLeak != null && _hpLeakProfiles.ContainsKey(src.Id))
+                        {
+                            var profile = _hpLeakProfiles[src.Id];
+                            int step = (int)(newTime / scenario.TimeStepS);
+                            if (step >= 0 && step < profile.Length)
+                                src.ReleaseRateKgPerS = profile[step];
+                            else
+                                src.ReleaseRateKgPerS = 0;
+                        }
                     }
                 }
-            }
 
-            _dispersionEngine.StepTo(newTime);
-            _frameCount++;
+                var engine = _dispersionEngine;
+                var renderer = _dispersionRenderer;
+                var thresholds = scenario.Thresholds;
+                int frameCount = ++_frameCount;
+                bool doIso = frameCount % 2 == 0 && thresholds.Count > 0;
+                bool doExtras = frameCount % 4 == 0;
+                bool doContours = doExtras && scenario.ContourPlanes.Count > 0;
+                bool doVectors = doExtras && _showVectorField;
+                var contourConfigs = doContours ? scenario.ContourPlanes.Where(cp => cp.Visible).ToList() : null;
+                var windVec = scenario.Meteo.WindVector;
+                var monitors = _scene.MonitorPoints.ToList();
+                var detectors = _scene.GasDetectors;
+                double finalNewTime = newTime;
 
-            foreach (var monitor in _scene.MonitorPoints)
-            {
-                if (!monitor.Visible) continue;
-                double c = 0;
-
-                switch (monitor.Type)
+                var result = await Task.Run(() =>
                 {
-                    case Models.MonitorType.Point:
-                        c = _dispersionEngine.EvaluateConcentration(
-                            monitor.Position.X, monitor.Position.Y, monitor.Position.Z);
-                        break;
+                    engine.StepTo(finalNewTime);
 
-                    case Models.MonitorType.Line:
-                        var linePts = monitor.GetLineSamplePoints();
-                        double lineSum = 0, lineMin = double.MaxValue, lineMax = 0;
-                        foreach (var pt in linePts)
-                        {
-                            double v = _dispersionEngine.EvaluateConcentration(pt.X, pt.Y, pt.Z);
-                            lineSum += v;
-                            if (v < lineMin) lineMin = v;
-                            if (v > lineMax) lineMax = v;
-                        }
-                        c = linePts.Count > 0 ? lineSum / linePts.Count : 0;
-                        monitor.LastMinConcentration = lineMin == double.MaxValue ? 0 : lineMin;
-                        monitor.LastMaxConcentration = lineMax;
-                        break;
+                    var monitorData = new List<(MonitorPoint3D mon, double c, double minC, double maxC, double gasVol)>();
+                    foreach (var monitor in monitors)
+                    {
+                        if (!monitor.Visible) continue;
+                        double c = 0;
+                        double minC = 0, maxC2 = 0, gasVol = 0;
 
-                    case Models.MonitorType.Region:
-                        var regPts = monitor.GetRegionSamplePoints();
-                        double regSum = 0, regMin = double.MaxValue, regMax = 0;
-                        int aboveThreshold = 0;
-                        foreach (var pt in regPts)
+                        switch (monitor.Type)
                         {
-                            double v = _dispersionEngine.EvaluateConcentration(pt.X, pt.Y, pt.Z);
-                            regSum += v;
-                            if (v < regMin) regMin = v;
-                            if (v > regMax) regMax = v;
-                            if (v > 1e-6) aboveThreshold++;
+                            case Models.MonitorType.Point:
+                                c = engine.EvaluateConcentration(
+                                    monitor.Position.X, monitor.Position.Y, monitor.Position.Z);
+                                break;
+
+                            case Models.MonitorType.Line:
+                                var linePts = monitor.GetLineSamplePoints();
+                                double lineSum = 0, lineMin = double.MaxValue, lineMax = 0;
+                                foreach (var pt in linePts)
+                                {
+                                    double v = engine.EvaluateConcentration(pt.X, pt.Y, pt.Z);
+                                    lineSum += v;
+                                    if (v < lineMin) lineMin = v;
+                                    if (v > lineMax) lineMax = v;
+                                }
+                                c = linePts.Count > 0 ? lineSum / linePts.Count : 0;
+                                minC = lineMin == double.MaxValue ? 0 : lineMin;
+                                maxC2 = lineMax;
+                                break;
+
+                            case Models.MonitorType.Region:
+                                var regPts = monitor.GetRegionSamplePoints();
+                                double regSum = 0, regMin = double.MaxValue, regMax = 0;
+                                int aboveThreshold = 0;
+                                foreach (var pt in regPts)
+                                {
+                                    double v = engine.EvaluateConcentration(pt.X, pt.Y, pt.Z);
+                                    regSum += v;
+                                    if (v < regMin) regMin = v;
+                                    if (v > regMax) regMax = v;
+                                    if (v > 1e-6) aboveThreshold++;
+                                }
+                                c = regPts.Count > 0 ? regSum / regPts.Count : 0;
+                                minC = regMin == double.MaxValue ? 0 : regMin;
+                                maxC2 = regMax;
+                                double cellVol = monitor.RegionSize.X * monitor.RegionSize.Y * monitor.RegionSize.Z
+                                    / Math.Max(1, regPts.Count);
+                                gasVol = aboveThreshold * cellVol;
+                                break;
                         }
-                        c = regPts.Count > 0 ? regSum / regPts.Count : 0;
-                        monitor.LastMinConcentration = regMin == double.MaxValue ? 0 : regMin;
-                        monitor.LastMaxConcentration = regMax;
-                        double cellVol = monitor.RegionSize.X * monitor.RegionSize.Y * monitor.RegionSize.Z
-                            / Math.Max(1, regPts.Count);
-                        monitor.LastGasVolume = aboveThreshold * cellVol;
-                        break;
+                        monitorData.Add((monitor, c, minC, maxC2, gasVol));
+                    }
+
+                    Model3DGroup isoGroup = doIso ? renderer.ComputeIsosurfaces(engine, thresholds) : null;
+                    Model3DGroup particleGroup = renderer.ComputeParticleCloud(engine);
+
+                    var contourGroups = new List<Model3DGroup>();
+                    Model3DGroup vectorGroup = null;
+                    if (doContours || doVectors)
+                    {
+                        double maxConc = renderer.GetMaxConcentration();
+                        double dom = renderer.DomainSize;
+                        if (doContours)
+                        {
+                            foreach (var cp in contourConfigs)
+                                contourGroups.Add(renderer.ComputeContourPlane(engine, cp, -dom, dom, maxConc));
+                        }
+                        if (doVectors)
+                            vectorGroup = renderer.ComputeVectorField(engine, windVec, maxConc);
+                    }
+
+                    return new
+                    {
+                        monitorData,
+                        isoGroup,
+                        particleGroup,
+                        contourGroups,
+                        vectorGroup,
+                        currentTime = engine.CurrentTimeS
+                    };
+                });
+
+                foreach (var (mon, c, minC, maxC2, gasVol) in result.monitorData)
+                {
+                    if (mon.Type == Models.MonitorType.Line || mon.Type == Models.MonitorType.Region)
+                    {
+                        mon.LastMinConcentration = minC;
+                        mon.LastMaxConcentration = maxC2;
+                    }
+                    if (mon.Type == Models.MonitorType.Region)
+                        mon.LastGasVolume = gasVol;
+                    mon.TimeSeries.Add(new Models.MonitorSample { TimeS = result.currentTime, Concentration = c });
+                }
+                MonitorDataUpdated?.Invoke(this, EventArgs.Empty);
+
+                if (detectors.Count > 0)
+                    DetectorEvaluator.EvaluateStep(detectors, engine, result.currentTime);
+
+                RemoveDispersionVisuals();
+
+                if (result.isoGroup != null)
+                {
+                    _isosurfaceVisual = new ModelVisual3D { Content = result.isoGroup };
+                    _isosurfaceVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("DispersionIsosurface", "iso"));
+                    _viewport.Children.Add(_isosurfaceVisual);
+                }
+                else if (_isosurfaceVisual != null)
+                {
+                    _viewport.Children.Add(_isosurfaceVisual);
                 }
 
-                monitor.TimeSeries.Add(new Models.MonitorSample
+                _particleVisual = new ModelVisual3D { Content = result.particleGroup };
+                _particleVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                    new Visual3DTag("DispersionParticles", "particles"));
+                _viewport.Children.Add(_particleVisual);
+
+                foreach (var cg in result.contourGroups)
                 {
-                    TimeS = _dispersionEngine.CurrentTimeS,
-                    Concentration = c
-                });
-            }
-
-            MonitorDataUpdated?.Invoke(this, EventArgs.Empty);
-
-            if (_scene.GasDetectors.Count > 0)
-            {
-                DetectorEvaluator.EvaluateStep(
-                    _scene.GasDetectors, _dispersionEngine, _dispersionEngine.CurrentTimeS);
-            }
-
-            RemoveDispersionVisuals();
-
-            // Isosurfaces every 2nd frame for performance
-            if (_frameCount % 2 == 0 && scenario.Thresholds.Count > 0)
-            {
-                _isosurfaceVisual = _dispersionRenderer.GenerateIsosurfaces(
-                    _dispersionEngine, scenario.Thresholds);
-                _isosurfaceVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
-                    new Visual3DTag("DispersionIsosurface", "iso"));
-                _viewport.Children.Add(_isosurfaceVisual);
-            }
-            else if (_isosurfaceVisual != null)
-            {
-                _viewport.Children.Add(_isosurfaceVisual);
-            }
-
-            // Particles every frame
-            _particleVisual = _dispersionRenderer.GenerateParticleCloud(_dispersionEngine);
-            _particleVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
-                new Visual3DTag("DispersionParticles", "particles"));
-            _viewport.Children.Add(_particleVisual);
-
-            // Contour planes every 4th frame for performance
-            if (_frameCount % 4 == 0 && scenario.ContourPlanes.Count > 0)
-            {
-                double maxC = _dispersionRenderer.GetMaxConcentration();
-                double dom = _dispersionRenderer.DomainSize;
-                foreach (var cp in scenario.ContourPlanes)
-                {
-                    if (!cp.Visible) continue;
-                    var cpVisual = _dispersionRenderer.GenerateContourPlane(
-                        _dispersionEngine, cp, -dom, dom, maxC);
+                    var cpVisual = new ModelVisual3D { Content = cg };
                     cpVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
                         new Visual3DTag("ContourPlane", "contour"));
                     _viewport.Children.Add(cpVisual);
                 }
-            }
 
-            // Vector field every 4th frame
-            if (_frameCount % 4 == 0 && _showVectorField)
-            {
-                double maxC = _dispersionRenderer.GetMaxConcentration();
-                var windVec = scenario.Meteo.WindVector;
-                var vfVisual = _dispersionRenderer.GenerateVectorField(
-                    _dispersionEngine, windVec, maxC);
-                vfVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
-                    new Visual3DTag("VectorField", "vectors"));
-                _viewport.Children.Add(vfVisual);
-            }
-
-            // Streamlines every 4th frame
-            if (_frameCount % 4 == 0 && scenario.StreamlineSeedPoints.Count > 0)
-            {
-                double maxC = _dispersionRenderer.GetMaxConcentration();
-                var windVec = scenario.Meteo.WindVector;
-                var slVisual = _dispersionRenderer.GenerateStreamlines(
-                    _dispersionEngine, windVec, scenario.StreamlineSeedPoints, maxC);
-                slVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
-                    new Visual3DTag("Streamline", "streamlines"));
-                _viewport.Children.Add(slVisual);
-            }
-
-            // Fire visuals every 4th frame
-            if (_frameCount % 4 == 0 && _scene.FireScenario != null && _scene.FireScenario.Sources.Count > 0)
-            {
-                var windVec = scenario.Meteo.WindVector;
-                foreach (var fire in _scene.FireScenario.Sources)
+                if (result.vectorGroup != null)
                 {
-                    var flameVisual = FireRenderer.GenerateFlameVisual(fire, windVec);
-                    flameVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
-                        new Visual3DTag("FireVisual", fire.Id));
-                    _viewport.Children.Add(flameVisual);
+                    var vfVisual = new ModelVisual3D { Content = result.vectorGroup };
+                    vfVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("VectorField", "vectors"));
+                    _viewport.Children.Add(vfVisual);
+                }
 
-                    var radVisual = FireRenderer.GenerateRadiationContours(
-                        fire, _scene.FireScenario.RadiationContourLevels);
-                    radVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
-                        new Visual3DTag("FireVisual", "rad_" + fire.Id));
-                    _viewport.Children.Add(radVisual);
+                // Streamlines every 4th frame (uses LinesVisual3D, must stay on UI thread)
+                if (frameCount % 4 == 0 && scenario.StreamlineSeedPoints.Count > 0)
+                {
+                    double maxC = _dispersionRenderer.GetMaxConcentration();
+                    var slVisual = _dispersionRenderer.GenerateStreamlines(
+                        engine, windVec, scenario.StreamlineSeedPoints, maxC);
+                    slVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("Streamline", "streamlines"));
+                    _viewport.Children.Add(slVisual);
+                }
+
+                // Fire visuals every 4th frame
+                if (frameCount % 4 == 0 && _scene.FireScenario != null && _scene.FireScenario.Sources.Count > 0)
+                {
+                    foreach (var fire in _scene.FireScenario.Sources)
+                    {
+                        var flameVisual = FireRenderer.GenerateFlameVisual(fire, windVec);
+                        flameVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                            new Visual3DTag("FireVisual", fire.Id));
+                        _viewport.Children.Add(flameVisual);
+
+                        var radVisual = FireRenderer.GenerateRadiationContours(
+                            fire, _scene.FireScenario.RadiationContourLevels);
+                        radVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                            new Visual3DTag("FireVisual", "rad_" + fire.Id));
+                        _viewport.Children.Add(radVisual);
+                    }
+                }
+
+                if (isLastStep)
+                {
+                    _dispersionState = DispersionSimulationState.Stopped;
+                    if (_animationTimer != null)
+                        _animationTimer.Stop();
                 }
             }
-
-            if (isLastStep)
-                StopDispersion();
+            finally
+            {
+                _computingFrame = false;
+            }
         }
 
-        private void AnimationTimer_CfdTick()
+        private async Task AnimationTimer_CfdTickAsync()
         {
-            if (_cfdResult == null || !_cfdResult.IsLoaded) return;
+            if (_cfdResult == null || !_cfdResult.IsLoaded || _computingFrame) return;
 
-            var scenario = _scene.DispersionScenario;
-            _frameCount++;
-
-            double totalDuration = _cfdResult.TimeSteps[_cfdResult.TimeSteps.Count - 1]
-                                 - _cfdResult.TimeSteps[0];
-            double dtReal = 0.033 * _animationSpeedFactor * totalDuration / 10.0;
-            _cfdPlaybackTimeS += dtReal;
-
-            double lastTime = _cfdResult.TimeSteps[_cfdResult.TimeSteps.Count - 1];
-            if (_cfdPlaybackTimeS >= lastTime)
+            _computingFrame = true;
+            try
             {
-                _cfdPlaybackIndex = _cfdResult.TimeSteps.Count - 1;
-                StopCfdPlayback();
-                return;
-            }
+                var scenario = _scene.DispersionScenario;
+                int frameCount = ++_frameCount;
 
-            while (_cfdPlaybackIndex < _cfdResult.TimeSteps.Count - 1 &&
-                   _cfdResult.TimeSteps[_cfdPlaybackIndex + 1] <= _cfdPlaybackTimeS)
-                _cfdPlaybackIndex++;
+                double totalDuration = _cfdResult.TimeSteps[_cfdResult.TimeSteps.Count - 1]
+                                     - _cfdResult.TimeSteps[0];
+                double dtReal = 0.033 * _animationSpeedFactor * totalDuration / 10.0;
+                _cfdPlaybackTimeS += dtReal;
 
-            double t = _cfdResult.TimeSteps[_cfdPlaybackIndex];
-            var field = _cfdResult.GetField(t);
-            if (field == null)
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    string.Format("CfdTick: GetField returned null for t={0}, index={1}/{2}, paths={3}, caseDir={4}",
-                    t, _cfdPlaybackIndex, _cfdResult.TimeSteps.Count,
-                    _cfdResult.TimeStepPaths.Count, _cfdResult.CaseDir ?? "null"));
-                return;
-            }
-
-            _cfdConcentrationField = new OpenFoamConcentrationField(
-                field, _cfdResult.DomainXMin, _cfdResult.DomainXMax,
-                _cfdResult.DomainYMin, _cfdResult.DomainYMax, _cfdResult.DomainZMax);
-
-            // Sample monitors
-            foreach (var mon in _scene.MonitorPoints)
-            {
-                double c = _cfdConcentrationField.EvaluateConcentration(
-                    mon.Position.X, mon.Position.Y, mon.Position.Z);
-                mon.TimeSeries.Add(new MonitorSample { TimeS = t, Concentration = c });
-            }
-            MonitorDataUpdated?.Invoke(this, EventArgs.Empty);
-
-            RemoveDispersionVisuals();
-
-            _dispersionRenderer.SetScalarFieldDirect(field);
-
-            if (_frameCount % 2 == 0)
-            {
-                _isosurfaceVisual = _dispersionRenderer.GenerateCloudVisual(scenario?.Thresholds);
-                _isosurfaceVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
-                    new Visual3DTag("DispersionIsosurface", "iso"));
-                _viewport.Children.Add(_isosurfaceVisual);
-            }
-            else if (_isosurfaceVisual != null)
-            {
-                _viewport.Children.Add(_isosurfaceVisual);
-            }
-
-            // Particles
-            {
-                double maxC = _dispersionRenderer.GetMaxConcentration();
-                if (maxC > 1e-20)
+                double lastTime = _cfdResult.TimeSteps[_cfdResult.TimeSteps.Count - 1];
+                if (_cfdPlaybackTimeS >= lastTime)
                 {
-                    _particleVisual = _dispersionRenderer.GenerateCfdParticleCloud(maxC);
+                    _cfdPlaybackIndex = _cfdResult.TimeSteps.Count - 1;
+                    _cfdPlaybackTimeS = lastTime;
+                    _dispersionState = DispersionSimulationState.Stopped;
+                    if (_animationTimer != null)
+                        _animationTimer.Stop();
+                    return;
+                }
+
+                while (_cfdPlaybackIndex < _cfdResult.TimeSteps.Count - 1 &&
+                       _cfdResult.TimeSteps[_cfdPlaybackIndex + 1] <= _cfdPlaybackTimeS)
+                    _cfdPlaybackIndex++;
+
+                double t = _cfdResult.TimeSteps[_cfdPlaybackIndex];
+                var cfdResult = _cfdResult;
+                var renderer = _dispersionRenderer;
+                var thresholds = scenario?.Thresholds;
+                bool doIso = frameCount % 2 == 0;
+                bool doExtras = frameCount % 4 == 0;
+                bool doContours = doExtras && scenario != null && scenario.ContourPlanes.Count > 0;
+                bool doVectors = doExtras && _showVectorField && scenario != null;
+                var contourConfigs = doContours ? scenario.ContourPlanes.Where(cp => cp.Visible).ToList() : null;
+                var windVec = scenario?.Meteo.WindVector ?? new Vector3D();
+                var monitors = _scene.MonitorPoints.ToList();
+
+                var result = await Task.Run(() =>
+                {
+                    var field = cfdResult.GetField(t);
+                    if (field == null) return (object)null;
+
+                    var concField = new OpenFoamConcentrationField(
+                        field, cfdResult.DomainXMin, cfdResult.DomainXMax,
+                        cfdResult.DomainYMin, cfdResult.DomainYMax, cfdResult.DomainZMax);
+
+                    var monitorData = new List<(MonitorPoint3D mon, double c)>();
+                    foreach (var mon in monitors)
+                    {
+                        double c = concField.EvaluateConcentration(
+                            mon.Position.X, mon.Position.Y, mon.Position.Z);
+                        monitorData.Add((mon, c));
+                    }
+
+                    renderer.SetScalarFieldDirect(field);
+
+                    Model3DGroup isoGroup = doIso ? renderer.ComputeCloudVisual(thresholds) : null;
+
+                    double maxC = renderer.GetMaxConcentration();
+                    Model3DGroup particleGroup = maxC > 1e-20 ? renderer.ComputeCfdParticleCloud(maxC) : null;
+
+                    var contourGroups = new List<Model3DGroup>();
+                    Model3DGroup vectorGroup = null;
+                    if (doContours || doVectors)
+                    {
+                        double dom = renderer.DomainSize;
+                        if (doContours)
+                        {
+                            foreach (var cp in contourConfigs)
+                                contourGroups.Add(renderer.ComputeContourPlane(concField, cp, -dom, dom, maxC));
+                        }
+                        if (doVectors)
+                            vectorGroup = renderer.ComputeVectorField(concField, windVec, maxC);
+                    }
+
+                    return new { concField, monitorData, isoGroup, particleGroup, contourGroups, vectorGroup };
+                });
+
+                if (result == null) return;
+                dynamic r = result;
+
+                _cfdConcentrationField = r.concField;
+                foreach (var (mon, c) in (List<(MonitorPoint3D, double)>)r.monitorData)
+                    mon.TimeSeries.Add(new MonitorSample { TimeS = t, Concentration = c });
+                MonitorDataUpdated?.Invoke(this, EventArgs.Empty);
+
+                RemoveDispersionVisuals();
+
+                if (r.isoGroup != null)
+                {
+                    _isosurfaceVisual = new ModelVisual3D { Content = r.isoGroup };
+                    _isosurfaceVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("DispersionIsosurface", "iso"));
+                    _viewport.Children.Add(_isosurfaceVisual);
+                }
+                else if (_isosurfaceVisual != null)
+                {
+                    _viewport.Children.Add(_isosurfaceVisual);
+                }
+
+                if (r.particleGroup != null)
+                {
+                    _particleVisual = new ModelVisual3D { Content = r.particleGroup };
                     _particleVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
                         new Visual3DTag("DispersionParticles", "particles"));
                     _viewport.Children.Add(_particleVisual);
                 }
-            }
 
-            // Contour planes
-            if (_frameCount % 4 == 0 && scenario != null && scenario.ContourPlanes.Count > 0)
-            {
-                double maxC = _dispersionRenderer.GetMaxConcentration();
-                double dom = _dispersionRenderer.DomainSize;
-                foreach (var cp in scenario.ContourPlanes)
+                foreach (var cg in (List<Model3DGroup>)r.contourGroups)
                 {
-                    if (!cp.Visible) continue;
-                    var cpVisual = _dispersionRenderer.GenerateContourPlane(
-                        _cfdConcentrationField, cp, -dom, dom, maxC);
+                    var cpVisual = new ModelVisual3D { Content = cg };
                     cpVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
                         new Visual3DTag("ContourPlane", "contour"));
                     _viewport.Children.Add(cpVisual);
                 }
-            }
 
-            // Vector field
-            if (_frameCount % 4 == 0 && _showVectorField && scenario != null)
+                if (r.vectorGroup != null)
+                {
+                    var vfVisual = new ModelVisual3D { Content = r.vectorGroup };
+                    vfVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("VectorField", "vectors"));
+                    _viewport.Children.Add(vfVisual);
+                }
+            }
+            finally
             {
-                double maxC = _dispersionRenderer.GetMaxConcentration();
-                var windVec = scenario.Meteo.WindVector;
-                var vfVisual = _dispersionRenderer.GenerateVectorField(
-                    _cfdConcentrationField, windVec, maxC);
-                vfVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
-                    new Visual3DTag("VectorField", "vectors"));
-                _viewport.Children.Add(vfVisual);
+                _computingFrame = false;
             }
         }
 
@@ -1532,12 +1935,91 @@ namespace DisperSim3D.Controls
             }
 
             var dynamicVisuals = _viewport.Children
-                .OfType<System.Windows.Media.Media3D.ModelVisual3D>()
+                .OfType<System.Windows.Media.Media3D.Visual3D>()
                 .Where(m => m.GetValue(System.Windows.FrameworkElement.TagProperty) is Visual3DTag tag &&
-                           (tag.Category == "ContourPlane" || tag.Category == "VectorField" || tag.Category == "Streamline" || tag.Category == "FireVisual" || tag.Category == "GasDetectorVis"))
+                           (tag.Category == "ContourPlane" || tag.Category == "VectorField" || tag.Category == "Streamline" || tag.Category == "FireVisual" || tag.Category == "GasDetectorVis" || tag.Category == "TrajectoryLine"))
                 .ToList();
             foreach (var dv in dynamicVisuals)
                 _viewport.Children.Remove(dv);
+        }
+
+        private void ShowLegend(List<DispersionThreshold> thresholds)
+        {
+            _legendPanel.Children.Clear();
+
+            var border = new System.Windows.Controls.Border
+            {
+                Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(210, 255, 255, 255)),
+                BorderBrush = System.Windows.Media.Brushes.Gray,
+                BorderThickness = new System.Windows.Thickness(1),
+                CornerRadius = new System.Windows.CornerRadius(4),
+                Padding = new System.Windows.Thickness(8, 6, 8, 6)
+            };
+
+            var stack = new System.Windows.Controls.StackPanel();
+
+            var title = new System.Windows.Controls.TextBlock
+            {
+                Text = "Concentration (kg/m³)",
+                FontWeight = System.Windows.FontWeights.Bold,
+                FontSize = 11,
+                Margin = new System.Windows.Thickness(0, 0, 0, 4)
+            };
+            stack.Children.Add(title);
+
+            foreach (var t in thresholds)
+            {
+                if (!t.Visible) continue;
+                var row = new System.Windows.Controls.StackPanel
+                {
+                    Orientation = System.Windows.Controls.Orientation.Horizontal,
+                    Margin = new System.Windows.Thickness(0, 2, 0, 2)
+                };
+
+                var swatch = new System.Windows.Shapes.Rectangle
+                {
+                    Width = 14, Height = 14,
+                    Fill = new System.Windows.Media.SolidColorBrush(t.Color),
+                    Opacity = Math.Max(t.Opacity, 0.6),
+                    Stroke = System.Windows.Media.Brushes.DarkGray,
+                    StrokeThickness = 0.5,
+                    Margin = new System.Windows.Thickness(0, 0, 6, 0),
+                    RadiusX = 2, RadiusY = 2
+                };
+
+                string valueStr;
+                if (t.ConcentrationValue >= 0.01)
+                    valueStr = t.ConcentrationValue.ToString("F3");
+                else if (t.ConcentrationValue >= 1e-6)
+                    valueStr = t.ConcentrationValue.ToString("E2");
+                else
+                    valueStr = t.ConcentrationValue.ToString("E1");
+
+                var label = new System.Windows.Controls.TextBlock
+                {
+                    Text = t.Name + ": " + valueStr,
+                    FontSize = 11,
+                    VerticalAlignment = System.Windows.VerticalAlignment.Center
+                };
+
+                row.Children.Add(swatch);
+                row.Children.Add(label);
+                stack.Children.Add(row);
+            }
+
+            border.Child = stack;
+            _legendPanel.Children.Add(border);
+            _legendPanel.Visibility = System.Windows.Visibility.Visible;
+        }
+
+        private void HideLegend()
+        {
+            if (_legendPanel != null)
+            {
+                _legendPanel.Children.Clear();
+                _legendPanel.Visibility = System.Windows.Visibility.Collapsed;
+            }
         }
 
         private void FlowAnimTimer_Tick(object sender, EventArgs e)

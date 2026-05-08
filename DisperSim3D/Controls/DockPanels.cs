@@ -100,6 +100,24 @@ namespace DisperSim3D.Controls
         }
     }
 
+    public class SimulationManagerDockPanel : DockContent
+    {
+        public Dialogs.SimulationManagerPanel ManagerPanel { get; private set; }
+
+        public SimulationManagerDockPanel(Dialogs.SimulationManagerPanel panel)
+        {
+            Text = "Simulation Manager";
+            if (FormExtensions.AppIcon != null) Icon = FormExtensions.AppIcon;
+            HideOnClose = true;
+            DockAreas = DockAreas.DockBottom | DockAreas.DockTop |
+                        DockAreas.DockLeft | DockAreas.DockRight | DockAreas.Float;
+
+            ManagerPanel = panel;
+            panel.Dock = DockStyle.Fill;
+            Controls.Add(panel);
+        }
+    }
+
     public class ViewportDockPanel : DockContent
     {
         public ViewportDockPanel(Control viewportControl)
