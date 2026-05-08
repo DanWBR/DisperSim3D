@@ -366,9 +366,12 @@ namespace DisperSim3D.Controls
 
             RemoveDispersionVisuals();
 
-            // Always sample the scalar field so contour planes and max-concentration work
+            var thresholds = scenario.Thresholds;
+            bool autoThresholds = thresholds.Count == 0;
+
+            // Always sample the scalar field (GenerateIsosurfaces calls SampleScalarField)
             _isosurfaceVisual = _dispersionRenderer.GenerateIsosurfaces(
-                _steadyStateEngine, scenario.Thresholds);
+                _steadyStateEngine, thresholds);
             if (((System.Windows.Media.Media3D.Model3DGroup)_isosurfaceVisual.Content).Children.Count > 0)
             {
                 _isosurfaceVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
@@ -376,19 +379,54 @@ namespace DisperSim3D.Controls
                 _viewport.Children.Add(_isosurfaceVisual);
             }
 
-            if (scenario.ContourPlanes.Count > 0)
+            double maxC = _dispersionRenderer.GetMaxConcentration();
+            double dom = _dispersionRenderer.DomainSize;
+
+            if (autoThresholds && maxC > 1e-20)
             {
-                double maxC = _dispersionRenderer.GetMaxConcentration();
-                double dom = _dispersionRenderer.DomainSize;
-                foreach (var cp in scenario.ContourPlanes)
+                var autoList = new List<DispersionThreshold>
                 {
-                    if (!cp.Visible) continue;
-                    var cpVisual = _dispersionRenderer.GenerateContourPlane(
-                        _steadyStateEngine, cp, -dom, dom, maxC);
-                    cpVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
-                        new Visual3DTag("ContourPlane", "contour"));
-                    _viewport.Children.Add(cpVisual);
+                    new DispersionThreshold { Name = "High", ConcentrationValue = maxC * 0.5,
+                        Color = System.Windows.Media.Colors.Red, Opacity = 0.35, Visible = true },
+                    new DispersionThreshold { Name = "Medium", ConcentrationValue = maxC * 0.1,
+                        Color = System.Windows.Media.Colors.Orange, Opacity = 0.25, Visible = true },
+                    new DispersionThreshold { Name = "Low", ConcentrationValue = maxC * 0.01,
+                        Color = System.Windows.Media.Colors.Yellow, Opacity = 0.15, Visible = true }
+                };
+                _isosurfaceVisual = _dispersionRenderer.GenerateIsosurfaces(_steadyStateEngine, autoList);
+                if (((System.Windows.Media.Media3D.Model3DGroup)_isosurfaceVisual.Content).Children.Count > 0)
+                {
+                    _isosurfaceVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("DispersionIsosurface", "iso"));
+                    _viewport.Children.Add(_isosurfaceVisual);
                 }
+            }
+
+            // Render user-configured contour planes, or auto-generate ground-level + source-height planes
+            var contourPlanes = scenario.ContourPlanes;
+            if (contourPlanes.Count == 0 && maxC > 1e-20)
+            {
+                double srcZ = scenario.Sources.Count > 0 ? scenario.Sources[0].EffectivePosition.Z : 2.0;
+                contourPlanes = new List<ContourPlaneConfig>
+                {
+                    new ContourPlaneConfig { Axis = ContourAxis.XY, Position = 1.0,
+                        Opacity = 0.85, ColorMap = Core.ColorMapName.Jet },
+                    new ContourPlaneConfig { Axis = ContourAxis.XZ, Position = 0,
+                        Opacity = 0.7, ColorMap = Core.ColorMapName.Jet }
+                };
+                if (srcZ > 3.0)
+                    contourPlanes.Add(new ContourPlaneConfig { Axis = ContourAxis.XY, Position = srcZ,
+                        Opacity = 0.7, ColorMap = Core.ColorMapName.Jet });
+            }
+
+            foreach (var cp in contourPlanes)
+            {
+                if (!cp.Visible) continue;
+                var cpVisual = _dispersionRenderer.GenerateContourPlane(
+                    _steadyStateEngine, cp, -dom, dom, maxC);
+                cpVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                    new Visual3DTag("ContourPlane", "contour"));
+                _viewport.Children.Add(cpVisual);
             }
 
             if (_scene.GasDetectors.Count > 0)
