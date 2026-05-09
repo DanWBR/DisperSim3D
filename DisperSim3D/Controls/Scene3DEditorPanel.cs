@@ -257,7 +257,8 @@ namespace DisperSim3D.Controls
                 "CFD Transient (pimpleFoam)",
                 "CFD Transient (buoyantPimpleFoam)",
                 "CFD Transient (reactingFoam)",
-                "CFD Steady (rhoSimpleFoam)"
+                "CFD Steady (rhoSimpleFoam)",
+                "CFD Transient (rhoReactingBuoyantFoam) — universal"
             });
             _solverCombo.SelectedIndex = 0;
             _solverCombo.SelectedIndexChanged += (s, e) =>
@@ -276,6 +277,7 @@ namespace DisperSim3D.Controls
                         case 6: sc.SolverType = CfdSolverType.BuoyantPimpleFoam; break;
                         case 7: sc.SolverType = CfdSolverType.ReactingFoam; break;
                         case 8: sc.SolverType = CfdSolverType.RhoSimpleFoam; break;
+                        case 9: sc.SolverType = CfdSolverType.RhoReactingBuoyantFoam; break;
                     }
                 }
             };
@@ -987,8 +989,33 @@ namespace DisperSim3D.Controls
                 case ProjectTreeAction.AddMonitor:
                     DoAddMonitorFromTree();
                     break;
+                case ProjectTreeAction.EditMonitor:
+                    DoEditMonitor(e.ItemId);
+                    break;
+                case ProjectTreeAction.DeleteMonitor:
+                    DoDeleteMonitor(e.ItemId);
+                    break;
                 case ProjectTreeAction.AddDetector:
                     DoAddDetectorFromTree();
+                    break;
+                case ProjectTreeAction.EditDetector:
+                    DoEditDetector(e.ItemId);
+                    break;
+                case ProjectTreeAction.DeleteDetector:
+                    DoDeleteDetector(e.ItemId);
+                    break;
+                case ProjectTreeAction.EditGeometry:
+                    DoEditGeometry(e.ItemId);
+                    break;
+                case ProjectTreeAction.DeleteGeometry:
+                    DoDeleteGeometry(e.ItemId);
+                    break;
+                case ProjectTreeAction.DuplicateSource:
+                    DoDuplicateSource(e.ItemId);
+                    break;
+                case ProjectTreeAction.ViewSimulationResults:
+                case ProjectTreeAction.OpenSimulationCase:
+                    DoOpenSimulationCase(e.ItemId);
                     break;
             }
             RefreshProjectTree();
@@ -1281,6 +1308,99 @@ namespace DisperSim3D.Controls
             }
         }
 
+        private void DoEditMonitor(string id)
+        {
+            var m = _editor.Scene.MonitorPoints.FirstOrDefault(x => x.Name == id || x.Id == id);
+            if (m == null) return;
+            using (var dlg = new MonitorPointDialog(m.Name, m.Position.X, m.Position.Y, m.Position.Z))
+            {
+                if (dlg.ShowDialog() == DialogResult.OK)
+                {
+                    m.Name = dlg.MonitorName;
+                    m.Position = new System.Windows.Media.Media3D.Point3D(dlg.PosX, dlg.PosY, dlg.PosZ);
+                    _editor.RefreshViewport();
+                }
+            }
+        }
+
+        private void DoDeleteMonitor(string id)
+        {
+            var m = _editor.Scene.MonitorPoints.FirstOrDefault(x => x.Name == id || x.Id == id);
+            if (m == null) return;
+            if (MessageBox.Show("Delete monitor '" + m.Name + "'?", "Confirm",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            _editor.Scene.MonitorPoints.Remove(m);
+            _editor.RefreshViewport();
+        }
+
+        private void DoEditDetector(string id)
+        {
+            var d = _editor.Scene.GasDetectors.FirstOrDefault(x => x.Id == id);
+            if (d == null) return;
+            _propertyGrid.SelectedObject = d;
+        }
+
+        private void DoDeleteDetector(string id)
+        {
+            var d = _editor.Scene.GasDetectors.FirstOrDefault(x => x.Id == id);
+            if (d == null) return;
+            if (MessageBox.Show("Delete detector '" + d.Name + "'?", "Confirm",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            _editor.Scene.GasDetectors.Remove(d);
+            _editor.RefreshViewport();
+        }
+
+        private void DoEditGeometry(string id)
+        {
+            var deco = _editor.Scene.Decorations.FirstOrDefault(x => x.Id == id);
+            if (deco == null) return;
+            _propertyGrid.SelectedObject = new DecorationPropertyAdapter(deco, () => _editor.RefreshViewport());
+        }
+
+        private void DoDeleteGeometry(string id)
+        {
+            var deco = _editor.Scene.Decorations.FirstOrDefault(x => x.Id == id);
+            if (deco == null) return;
+            if (MessageBox.Show("Delete '" + deco.Name + "'?", "Confirm",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            _editor.Scene.Decorations.Remove(deco);
+            _editor.RefreshViewport();
+        }
+
+        private void DoDuplicateSource(string id)
+        {
+            var src = _editor.Scene.TopLevelSources.FirstOrDefault(x => x.Id == id);
+            if (src == null) return;
+            var copy = new ReleaseSource3D
+            {
+                Name = src.Name + " (copy)",
+                Gas = src.Gas,
+                GasRefId = src.GasRefId,
+                Position = new System.Windows.Media.Media3D.Point3D(src.Position.X + 5, src.Position.Y, src.Position.Z),
+                ReleaseRateKgPerS = src.ReleaseRateKgPerS,
+                PuffIntervalS = src.PuffIntervalS,
+                ReleaseHeightOffset = src.ReleaseHeightOffset,
+                ReleaseAzimuthDeg = src.ReleaseAzimuthDeg,
+                ReleaseElevationDeg = src.ReleaseElevationDeg
+            };
+            _editor.Scene.TopLevelSources.Add(copy);
+            _editor.RefreshViewport();
+        }
+
+        private void DoOpenSimulationCase(string id)
+        {
+            var sim = _editor.Scene.Simulations.FirstOrDefault(x => x.Id == id);
+            if (sim == null || string.IsNullOrEmpty(sim.CasePath)) return;
+            if (!System.IO.Directory.Exists(sim.CasePath))
+            {
+                MessageBox.Show("Case folder no longer exists: " + sim.CasePath,
+                    "Simulation", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            try { System.Diagnostics.Process.Start("explorer.exe", "\"" + sim.CasePath + "\""); }
+            catch (Exception ex) { UpdateStatus("Failed to open folder: " + ex.Message); }
+        }
+
         private void DoAddDetectorFromTree()
         {
             var det = new GasDetector3D { Name = "Detector " + (_editor.Scene.GasDetectors.Count + 1) };
@@ -1439,6 +1559,7 @@ namespace DisperSim3D.Controls
                 case CfdSolverType.BuoyantPimpleFoam: _solverCombo.SelectedIndex = 6; break;
                 case CfdSolverType.ReactingFoam: _solverCombo.SelectedIndex = 7; break;
                 case CfdSolverType.RhoSimpleFoam: _solverCombo.SelectedIndex = 8; break;
+                case CfdSolverType.RhoReactingBuoyantFoam: _solverCombo.SelectedIndex = 9; break;
             }
         }
 

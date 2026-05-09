@@ -89,6 +89,7 @@ namespace DisperSim3D.Core
                 case CfdSolverType.BuoyantPimpleFoam: solverLabel = "CFD buoyantPimpleFoam"; break;
                 case CfdSolverType.ReactingFoam: solverLabel = "CFD reactingFoam"; break;
                 case CfdSolverType.RhoSimpleFoam: solverLabel = "CFD rhoSimpleFoam"; break;
+                case CfdSolverType.RhoReactingBuoyantFoam: solverLabel = "CFD rhoReactingBuoyantFoam"; break;
                 default: solverLabel = "CFD (OpenFOAM)"; break;
             }
 
@@ -247,6 +248,7 @@ namespace DisperSim3D.Core
                     case CfdSolverType.BuoyantPimpleFoam:
                     case CfdSolverType.ReactingFoam:
                     case CfdSolverType.RhoSimpleFoam:
+                    case CfdSolverType.RhoReactingBuoyantFoam:
                         await RunCfdAsync(job);
                         break;
                 }

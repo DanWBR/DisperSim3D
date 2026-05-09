@@ -82,7 +82,9 @@ namespace DisperSim3D.Core
             double maxExitVelocity = 0;
             foreach (var src in scenario.Sources)
             {
-                double v = src.ComputedExitVelocity;
+                // Use the (subsonic) Birch expanded velocity for time-step sizing — sonic real-orifice
+                // velocity would force impractically tiny dt without adding accuracy.
+                double v = src.ExpandedVelocityForCfdMS;
                 if (v > maxExitVelocity) maxExitVelocity = v;
             }
             if (maxExitVelocity > 0)
@@ -635,7 +637,8 @@ namespace DisperSim3D.Core
             sb.AppendFormat("divSchemes\n{{\n    default         none;\n    div(phi,T)      {0};\n}}\n\n", divEntry);
             sb.Append("laplacianSchemes\n{\n    default         Gauss linear corrected;\n}\n\n");
             sb.Append("interpolationSchemes\n{\n    default         linear;\n}\n\n");
-            sb.Append("snGradSchemes\n{\n    default         corrected;\n}\n");
+            sb.Append("snGradSchemes\n{\n    default         corrected;\n}\n\n");
+            sb.Append("wallDist\n{\n    method meshWave;\n}\n");
             WriteFile(Path.Combine(caseDir, "system", "fvSchemes"), sb.ToString());
         }
 
@@ -784,7 +787,7 @@ namespace DisperSim3D.Core
         {
             bool hasJet = false;
             foreach (var src in sources)
-                if (src.ComputedExitVelocity > 0) { hasJet = true; break; }
+                if (src.ExpandedVelocityForCfdMS > 0) { hasJet = true; break; }
 
             if (!hasJet) return;
 
@@ -800,22 +803,19 @@ namespace DisperSim3D.Core
             for (int s = 0; s < sources.Count; s++)
             {
                 var src = sources[s];
-                double v = src.ComputedExitVelocity;
+                // Birch & Schefer expanded pseudo-source — ensures Mach < 0.3 at the seeding box.
+                double v = src.ExpandedVelocityForCfdMS;
                 if (v <= 0) continue;
 
-                var jet = src.ExitVelocityVector;
-                double jetMag = Math.Sqrt(jet.X * jet.X + jet.Y * jet.Y + jet.Z * jet.Z);
-                double scale = 1.0;
-                if (jetMag > maxJetSpeed)
-                    scale = maxJetSpeed / jetMag;
-
-                double jx = jet.X * scale;
-                double jy = jet.Y * scale;
-                double jz = jet.Z * scale;
+                var dir = src.ReleaseDirection;
+                double jetMag = Math.Min(v, maxJetSpeed);
+                double jx = dir.X * jetMag;
+                double jy = dir.Y * jetMag;
+                double jz = dir.Z * jetMag;
 
                 var pos = src.EffectivePosition;
-                var dir = src.ReleaseDirection;
-                double half = cellSize * 0.55;
+                // Box width = max(grid cell, expanded pseudo-orifice) so the seeding region covers the pseudo-source.
+                double half = Math.Max(cellSize * 0.55, src.ExpandedDiameterForCfdM * 0.5);
 
                 int nSegments = 5;
                 double segLen = cellSize;
@@ -883,7 +883,7 @@ namespace DisperSim3D.Core
         {
             bool hasJet = false;
             foreach (var src in sources)
-                if (src.ComputedExitVelocity > 0) { hasJet = true; break; }
+                if (src.ExpandedVelocityForCfdMS > 0) { hasJet = true; break; }
             if (!hasJet) return;
 
             double windMag = Math.Sqrt(wind.X * wind.X + wind.Y * wind.Y + wind.Z * wind.Z);
@@ -898,7 +898,8 @@ namespace DisperSim3D.Core
             for (int s = 0; s < sources.Count; s++)
             {
                 var src = sources[s];
-                double v = src.ComputedExitVelocity;
+                // Use Birch & Schefer expanded pseudo-source for choked HP leaks; physical for others.
+                double v = src.ExpandedVelocityForCfdMS;
                 if (v <= 0) continue;
 
                 var dir = src.ReleaseDirection;
@@ -909,7 +910,8 @@ namespace DisperSim3D.Core
                 double jz = dir.Z * jetMag;
 
                 var pos = src.EffectivePosition;
-                double half = cellSize * 0.55;
+                // Box width = max(grid cell, expanded pseudo-orifice) so the seeding region covers the pseudo-source.
+                double half = Math.Max(cellSize * 0.55, src.ExpandedDiameterForCfdM * 0.5);
 
                 int nSegments = 3;
                 double segLen = cellSize;
@@ -1181,6 +1183,134 @@ namespace DisperSim3D.Core
                 WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
 
             return caseDir;
+        }
+
+        // ────────────────────────────────────────────────────────────────────
+        //  rhoReactingBuoyantFoam (combustion off) — universal dispersion solver
+        //  Compressible, multi-species, buoyant. Subsonic + sonic releases.
+        //  See Fiates &amp; Vianna 2016 (Process Safety &amp; Env. Protection 104:277-293).
+        // ────────────────────────────────────────────────────────────────────
+
+        public static string GenerateRhoReactingBuoyantFoam(DispersionScenario scenario, CfdConfiguration config)
+        {
+            string caseDir = Path.Combine(config.WorkingDirectory, "rhoreact_case_" + scenario.Id);
+            if (Directory.Exists(caseDir))
+                Directory.Delete(caseDir, true);
+
+            Directory.CreateDirectory(Path.Combine(caseDir, "0"));
+            Directory.CreateDirectory(Path.Combine(caseDir, "constant"));
+            Directory.CreateDirectory(Path.Combine(caseDir, "system"));
+
+            double domain = scenario.DomainSizeM;
+            double xMin = -domain, xMax = domain;
+            double yMin = -domain, yMax = domain;
+            double zMax = domain;
+
+            int nx = scenario.GridResolution;
+            int ny = scenario.GridResolution;
+            int nz = scenario.GridResolution / 2;
+            if (nz < 1) nz = 1;
+
+            var wind = scenario.Meteo.WindVector;
+            double cellSize = Math.Max((xMax - xMin) / nx, (yMax - yMin) / ny);
+            double endTime = scenario.SimulationDurationS;
+            double dt = Math.Max(scenario.TimeStepS, cellSize / (Math.Max(wind.Length, 1.0) * 10));
+            double writeInterval = config.WriteIntervalS > 0
+                ? config.WriteIntervalS
+                : Math.Max(endTime / 20.0, dt);
+
+            double ambientT = scenario.Meteo.AmbientTemperature > 0
+                ? scenario.Meteo.AmbientTemperature : 293.15;
+
+            WritePimpleControlDict(caseDir, endTime, dt, writeInterval, config, "rhoReactingBuoyantFoam");
+            WriteReactingFvSchemes(caseDir, config);
+            WriteReactingFvSolution(caseDir, config);
+            WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
+            WriteRhoReactingThermophysicalProperties(caseDir);
+            WriteRhoReactingChemistryProperties(caseDir);
+            WriteReactingCombustionProperties(caseDir);
+            WriteRhoReactingReactions(caseDir);
+            WriteTurbulenceProperties(caseDir, true);
+            WriteGravity(caseDir);
+            WriteBuoyantUField(caseDir, wind.X, wind.Y, wind.Z);
+            WriteBuoyantPRghField(caseDir);
+            WriteReactingPField(caseDir);
+            WriteBuoyantTemperatureField(caseDir, ambientT);
+            WriteSpeciesFields(caseDir, scenario.Sources);
+            WriteKEpsilonFields(caseDir, wind.Length);
+            WriteReactingSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
+            WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
+            WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
+
+            if (config.NumberOfProcessors > 1)
+                WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
+
+            return caseDir;
+        }
+
+        private static void WriteRhoReactingThermophysicalProperties(string caseDir)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "thermophysicalProperties"));
+            sb.Append("thermoType\n{\n");
+            sb.Append("    type            heRhoThermo;\n");
+            sb.Append("    mixture         reactingMixture;\n");
+            sb.Append("    transport       sutherland;\n");
+            sb.Append("    thermo          janaf;\n");
+            sb.Append("    energy          sensibleEnthalpy;\n");
+            sb.Append("    equationOfState perfectGas;\n");
+            sb.Append("    specie          specie;\n");
+            sb.Append("}\n\n");
+            sb.Append("inertSpecie     N2;\n\n");
+            sb.Append("chemistryReader foamChemistryReader;\n");
+            sb.Append("foamChemistryFile \"$FOAM_CASE/constant/reactions\";\n");
+            sb.Append("foamChemistryThermoFile \"$FOAM_CASE/constant/thermo.compressibleGas\";\n");
+            WriteFile(Path.Combine(caseDir, "constant", "thermophysicalProperties"), sb.ToString());
+
+            // Minimal thermo data (janaf + sutherland) for N2/O2/CH4
+            var thermo = new StringBuilder();
+            thermo.Append(FoamHeader("dictionary", "thermo.compressibleGas"));
+            thermo.Append("N2\n{\n");
+            thermo.Append("    specie { molWeight 28.0134; }\n");
+            thermo.Append("    thermodynamics { Tlow 200; Thigh 5000; Tcommon 1000;\n");
+            thermo.Append("        highCpCoeffs (2.92664 0.001487977 -5.68476e-07 1.0097e-10 -6.75335e-15 -922.7977 5.98053);\n");
+            thermo.Append("        lowCpCoeffs  (3.298677 0.0014082404 -3.963222e-06 5.641515e-09 -2.444854e-12 -1020.8999 3.950372); }\n");
+            thermo.Append("    transport { As 1.4792e-06; Ts 116; }\n");
+            thermo.Append("}\n\n");
+            thermo.Append("O2\n{\n");
+            thermo.Append("    specie { molWeight 31.9988; }\n");
+            thermo.Append("    thermodynamics { Tlow 200; Thigh 5000; Tcommon 1000;\n");
+            thermo.Append("        highCpCoeffs (3.69757 0.000613519 -1.25884e-07 1.77528e-11 -1.13644e-15 -1233.93 3.18917);\n");
+            thermo.Append("        lowCpCoeffs  (3.21294 0.00112748 -5.75615e-07 1.31388e-09 -8.76855e-13 -1005.25 6.034738); }\n");
+            thermo.Append("    transport { As 1.6934e-06; Ts 127; }\n");
+            thermo.Append("}\n\n");
+            thermo.Append("CH4\n{\n");
+            thermo.Append("    specie { molWeight 16.0428; }\n");
+            thermo.Append("    thermodynamics { Tlow 200; Thigh 5000; Tcommon 1000;\n");
+            thermo.Append("        highCpCoeffs (1.683479 0.01023724 -3.875129e-06 6.785585e-10 -4.503423e-14 -10080.787 9.623395);\n");
+            thermo.Append("        lowCpCoeffs  (5.149876 -0.013671 4.918005e-05 -4.847431e-08 1.666933e-11 -10246.64 -4.641304); }\n");
+            thermo.Append("    transport { As 1.4067e-06; Ts 197.6; }\n");
+            thermo.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "constant", "thermo.compressibleGas"), thermo.ToString());
+        }
+
+        private static void WriteRhoReactingChemistryProperties(string caseDir)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "chemistryProperties"));
+            sb.Append("chemistryType\n{\n    chemistrySolver noChemistrySolver;\n    chemistryThermo rho;\n}\n\n");
+            sb.Append("chemistry       off;\n");
+            sb.Append("initialChemicalTimeStep 1e-07;\n");
+            WriteFile(Path.Combine(caseDir, "constant", "chemistryProperties"), sb.ToString());
+        }
+
+        private static void WriteRhoReactingReactions(string caseDir)
+        {
+            // Empty reactions block — chemistry is disabled but the file is required by foamChemistryReader
+            var sb = new StringBuilder();
+            sb.Append("species\n(\n    N2\n    O2\n    CH4\n);\n\n");
+            sb.Append("reactions\n(\n);\n");
+            WriteFile(Path.Combine(caseDir, "constant", "reactions"), sb.ToString());
         }
 
         // ────────────────────────────────────────────────────────────────────
@@ -1663,9 +1793,10 @@ namespace DisperSim3D.Core
                 var src = sources[s];
                 var pos = src.EffectivePosition;
                 var dir = src.ReleaseDirection;
-                double half = cellSize * 0.55;
+                // Box width = max(grid cell, expanded pseudo-orifice). Birch & Schefer for choked sources.
+                double half = Math.Max(cellSize * 0.55, src.ExpandedDiameterForCfdM * 0.5);
 
-                double v = src.ComputedExitVelocity;
+                double v = src.ExpandedVelocityForCfdMS;
                 double jetMag = v > 0 ? Math.Min(v, maxJetSpeed) : 0;
 
                 int nSegments = 3;

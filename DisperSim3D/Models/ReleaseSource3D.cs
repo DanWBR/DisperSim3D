@@ -177,6 +177,39 @@ namespace DisperSim3D.Models
         }
 
         /// <summary>
+        /// Birch &amp; Schefer expanded diameter for CFD meshing of sonic releases.
+        /// Returns the physical orifice diameter when there's no HP leak or the flow is subsonic,
+        /// and the larger pseudo-source diameter otherwise (subsonic at atmospheric, ~100 m/s).
+        /// </summary>
+        [System.Xml.Serialization.XmlIgnore]
+        public double ExpandedDiameterForCfdM
+        {
+            get
+            {
+                if (HighPressureLeak == null || !Core.HighPressureLeakModel.IsChoked(HighPressureLeak))
+                    return EffectiveDiameterM;
+                var (d, _, _) = Core.HighPressureLeakModel.ComputeExpandedSource(HighPressureLeak);
+                return d > 0 ? d : EffectiveDiameterM;
+            }
+        }
+
+        /// <summary>
+        /// Velocity at the Birch expanded pseudo-source (subsonic, suitable for CFD).
+        /// Returns <see cref="ComputedExitVelocity"/> for non-choked cases.
+        /// </summary>
+        [System.Xml.Serialization.XmlIgnore]
+        public double ExpandedVelocityForCfdMS
+        {
+            get
+            {
+                if (HighPressureLeak == null || !Core.HighPressureLeakModel.IsChoked(HighPressureLeak))
+                    return ComputedExitVelocity;
+                var (_, v, _) = Core.HighPressureLeakModel.ComputeExpandedSource(HighPressureLeak);
+                return v > 0 ? v : ComputedExitVelocity;
+            }
+        }
+
+        /// <summary>
         /// Gets the computed gas exit velocity in meters per second.
         /// Returns <see cref="ExitVelocityMPerS"/> if explicitly set; otherwise computes from
         /// high-pressure leak parameters or from the release rate, diameter, and gas properties.

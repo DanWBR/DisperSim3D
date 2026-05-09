@@ -125,6 +125,38 @@ namespace DisperSim3D.Core
         }
 
         /// <summary>
+        /// Computes the Birch &amp; Schefer (1984) "expanded" pseudo-source for a sonic underexpanded jet.
+        /// Instead of meshing the actual orifice (which would require sub-millimetre cells), CFD codes
+        /// represent the leak as a fictitious larger orifice with subsonic velocity at atmospheric
+        /// conditions, conserving the mass flow. This is the standard approach in industrial dispersion
+        /// modelling per Fiates &amp; Vianna (2016) and Benintendi (2010).
+        /// </summary>
+        /// <param name="p">Leak parameters.</param>
+        /// <param name="targetExpandedVelocityMS">Desired velocity at the pseudo-source
+        ///   (typical: 100 m/s — keeps Mach ≪ 1 and avoids the need for compressible refinement).</param>
+        /// <param name="ambientTemperatureK">Atmospheric temperature for the expanded jet.</param>
+        public static (double DiameterM, double VelocityMS, double TemperatureK) ComputeExpandedSource(
+            HighPressureLeakParams p,
+            double targetExpandedVelocityMS = 100.0,
+            double ambientTemperatureK = 293.15)
+        {
+            // Mass flow at the real (sonic if choked) orifice
+            double mdot = MassFlowRate(p);
+
+            // Density at the pseudo-source (fully expanded to ambient)
+            double rhoAmbient = p.AmbientPressurePa * p.GasMolarMassKgMol / (R * ambientTemperatureK);
+
+            // Required cross-section: A = mdot / (rho * V)
+            if (rhoAmbient <= 0 || targetExpandedVelocityMS <= 0)
+                return (p.OrificeDiameterM, 0, ambientTemperatureK);
+
+            double areaPseudo = mdot / (rhoAmbient * targetExpandedVelocityMS);
+            double dPseudo = Math.Sqrt(4.0 * areaPseudo / Math.PI);
+
+            return (dPseudo, targetExpandedVelocityMS, ambientTemperatureK);
+        }
+
+        /// <summary>
         /// Computes a time-dependent blowdown mass flow profile using isentropic expansion.
         /// The simulation steps forward in time, reducing vessel pressure and temperature
         /// until the gas is depleted or pressure drops to ambient.

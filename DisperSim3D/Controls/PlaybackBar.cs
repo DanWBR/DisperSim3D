@@ -27,14 +27,14 @@ namespace DisperSim3D.Controls
 
         public PlaybackBar()
         {
+            this.AutoScaleMode = AutoScaleMode.Dpi;
+            this.AutoScaleDimensions = new SizeF(96F, 96F);
             var dpi = DeviceDpi / 96f;
             int rowHeight = (int)(28 * dpi);
             this.Height = rowHeight + (int)(4 * dpi); // 4px total vertical padding
             this.Dock = DockStyle.Bottom;
-            this.AutoScaleMode = AutoScaleMode.Dpi;
-            this.AutoScaleDimensions = new SizeF(96F, 96F);
             this.BackColor = SystemColors.ControlLight;
-            this.Padding = new Padding((int)(6 * dpi), (int)(2 * dpi), (int)(6 * dpi), (int)(2 * dpi));
+            this.Padding = new Padding((int)(4 * dpi), (int)(2 * dpi), (int)(4 * dpi), (int)(2 * dpi));
 
             var layout = new TableLayoutPanel
             {
@@ -55,7 +55,7 @@ namespace DisperSim3D.Controls
             _lblTitle = new Label
             {
                 AutoSize = false,
-                Width = (int)(160 * dpi),
+                Width = (int)(80 * dpi),
                 Height = rowHeight,
                 Anchor = AnchorStyles.Left | AnchorStyles.Right,
                 TextAlign = ContentAlignment.MiddleLeft,
@@ -143,8 +143,8 @@ namespace DisperSim3D.Controls
             {
                 Text = text,
                 Width = (int)(32 * dpi),
-                Height = rowHeight,
-                FlatStyle = FlatStyle.Flat,
+                Height = (int)(rowHeight * dpi),
+                FlatStyle = FlatStyle.Standard,
                 Margin = new Padding(1, 0, 1, 0),
                 Padding = new Padding(0),
                 TextAlign = ContentAlignment.MiddleCenter,

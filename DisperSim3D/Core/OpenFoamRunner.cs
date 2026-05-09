@@ -120,6 +120,7 @@ namespace DisperSim3D.Core
                 case CfdSolverType.PimpleFoam: solverCommand = "pimpleFoam"; break;
                 case CfdSolverType.BuoyantPimpleFoam: solverCommand = "buoyantPimpleFoam"; break;
                 case CfdSolverType.ReactingFoam: solverCommand = "reactingFoam"; break;
+                case CfdSolverType.RhoReactingBuoyantFoam: solverCommand = "rhoReactingBuoyantFoam"; break;
                 default: solverCommand = "scalarTransportFoam"; break;
             }
 
@@ -139,6 +140,9 @@ namespace DisperSim3D.Core
                             break;
                         case CfdSolverType.ReactingFoam:
                             _casePath = OpenFoamCaseGenerator.GenerateReactingFoam(scenario, config);
+                            break;
+                        case CfdSolverType.RhoReactingBuoyantFoam:
+                            _casePath = OpenFoamCaseGenerator.GenerateRhoReactingBuoyantFoam(scenario, config);
                             break;
                         default:
                             _casePath = OpenFoamCaseGenerator.Generate(scenario, config);
@@ -213,6 +217,7 @@ namespace DisperSim3D.Core
                     switch (solverType)
                     {
                         case CfdSolverType.ReactingFoam: fieldName = "CH4"; break;
+                        case CfdSolverType.RhoReactingBuoyantFoam: fieldName = "CH4"; break;
                         case CfdSolverType.BuoyantPimpleFoam: fieldName = "s"; break;
                         default: fieldName = "T"; break;
                     }

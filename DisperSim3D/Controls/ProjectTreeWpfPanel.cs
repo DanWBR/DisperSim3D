@@ -225,7 +225,35 @@ namespace DisperSim3D.Controls
                     showCheckBox, isChecked, kind, itemId)
             };
             item.ContextMenu = BuildContextMenu(kind, itemId);
+            item.MouseDoubleClick += (s, e) =>
+            {
+                // Only fire for the directly-clicked TreeViewItem (avoid bubbling from children)
+                if (s != e.OriginalSource && !(e.OriginalSource is System.Windows.Controls.TextBlock)) return;
+                var action = MapKindToEditAction(kind);
+                if (action.HasValue)
+                {
+                    ActionRequested?.Invoke(this,
+                        new ProjectTreeActionEventArgs(action.Value, itemId));
+                    e.Handled = true;
+                }
+            };
             return item;
+        }
+
+        private static ProjectTreeAction? MapKindToEditAction(NodeKind kind)
+        {
+            switch (kind)
+            {
+                case NodeKind.GeneralRoot: return ProjectTreeAction.EditGeneralSettings;
+                case NodeKind.GasItem: return ProjectTreeAction.EditGas;
+                case NodeKind.GeometryItem: return ProjectTreeAction.EditGeometry;
+                case NodeKind.SourceItem: return ProjectTreeAction.EditSource;
+                case NodeKind.WindFieldItem: return ProjectTreeAction.EditWindField;
+                case NodeKind.SimulationItem: return ProjectTreeAction.EditSimulation;
+                case NodeKind.MonitorItem: return ProjectTreeAction.EditMonitor;
+                case NodeKind.DetectorItem: return ProjectTreeAction.EditDetector;
+                default: return null;
+            }
         }
 
         private object BuildHeader(string label, string glyph, int? count,

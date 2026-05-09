@@ -80,7 +80,10 @@
             SolverTolerance = 1e-8;
             NumericalScheme = "linearUpwind";
             AdjustableTimeStep = true;
-            MaxCourantNumber = 0.5;
+            // Higher Courant numbers (up to 10) are stable for dispersion-only runs
+            // (combustion off) and dramatically reduce wallclock time per the validation
+            // study by Fiates & Vianna 2016 (Process Safety & Env. Protection 104:277).
+            MaxCourantNumber = 10.0;
             PurgeWrite = 0;
             CleanCaseOnCompletion = true;
             UseGaussianSubgrid = true;

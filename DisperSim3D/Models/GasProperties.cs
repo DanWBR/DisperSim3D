@@ -16,6 +16,9 @@ namespace DisperSim3D.Models
         [Description("Lower Flammability Limit (kg/m³). Concentration above this in air can ignite.")]
         public double LFL { get; set; }
 
+        [Description("Upper Flammability Limit (kg/m³). Above this, mixture is too rich to ignite.")]
+        public double UFL { get; set; }
+
         [Description("Immediately Dangerous to Life and Health concentration (kg/m³).")]
         public double IDLH { get; set; }
 
@@ -55,7 +58,8 @@ namespace DisperSim3D.Models
             {
                 Name = "Methane",
                 MolarMass = 0.01604,
-                LFL = 0.033,
+                LFL = 0.033,    // 5% v/v at NTP
+                UFL = 0.099,    // 15% v/v at NTP
                 IDLH = 0.0,
                 ERPG1 = 0.0,
                 ERPG2 = 0.0,

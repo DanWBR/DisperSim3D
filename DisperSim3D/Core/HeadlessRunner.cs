@@ -284,6 +284,7 @@ namespace DisperSim3D.Core
                     case "reactingfoam": solverType = CfdSolverType.ReactingFoam; break;
                     case "scalarsimplefoam": solverType = CfdSolverType.ScalarSimpleFoam; break;
                     case "rhosimplefoam": solverType = CfdSolverType.RhoSimpleFoam; break;
+                    case "rhoreactingbuoyantfoam": solverType = CfdSolverType.RhoReactingBuoyantFoam; break;
                     default:
                         return new HeadlessResult
                         {

@@ -74,7 +74,7 @@ namespace DisperSim3D.Core
                     CfdDefaults.SolverTolerance = ParseDouble(cfd, "SolverTolerance", 1e-8);
                     CfdDefaults.NumericalScheme = (string)cfd.Attribute("NumericalScheme") ?? "linearUpwind";
                     CfdDefaults.AdjustableTimeStep = ParseBool(cfd, "AdjustableTimeStep", true);
-                    CfdDefaults.MaxCourantNumber = ParseDouble(cfd, "MaxCourantNumber", 0.5);
+                    CfdDefaults.MaxCourantNumber = ParseDouble(cfd, "MaxCourantNumber", 10.0);
                     CfdDefaults.PurgeWrite = ParseInt(cfd, "PurgeWrite", 0);
                     CfdDefaults.CleanCaseOnCompletion = ParseBool(cfd, "CleanCaseOnCompletion", true);
                     CfdDefaults.UseGaussianSubgrid = ParseBool(cfd, "UseGaussianSubgrid", true);
