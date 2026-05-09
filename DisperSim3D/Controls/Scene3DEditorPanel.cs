@@ -33,7 +33,7 @@ namespace DisperSim3D.Controls
         private MonitorDockPanel _monitorDock;
         private AddItemDockPanel _addItemDock;
         private ViewportDockPanel _viewportDock;
-        private PropertyGrid _propertyGrid;
+        private PropertyGridWpfPanel _propertyGrid;
         private DataGridView _monitorGrid;
         private bool _monitorPanelVisible;
         private ToolStripComboBox _scenarioCombo;
@@ -222,7 +222,6 @@ namespace DisperSim3D.Controls
                 new ToolStripMenuItem("Properties Panel", Img("table.png"), (s, e) => ShowDockPanel(_propertiesDock, DockState.DockRight)),
                 new ToolStripMenuItem("Add Item Panel", Img("add.png"), (s, e) => ToggleAddItemPanel(true)),
                 new ToolStripMenuItem("Simulation Manager", Img("table.png"), (s, e) => DoShowSimulationManager()),
-                new ToolStripMenuItem("CFD Simulations", Img("control_play_blue.png"), (s, e) => ToggleCfdSimPanel(true)),
                 new ToolStripMenuItem("Monitors", Img("icons8-ecg.png"), (s, e) => ToggleMonitorPanel(true))
             });
 
@@ -467,8 +466,6 @@ namespace DisperSim3D.Controls
                     _editor.ShowWindFieldArrows(wfSel, silent: true);
                 }
                 _editor.RefreshViewport();
-                _propertyGrid.Refresh();
-                RefreshProjectTree();
             };
 
             // --- Monitor dock panel ---
@@ -625,6 +622,10 @@ namespace DisperSim3D.Controls
                 UpdatePlaybackBarState();
             };
             _viewportDock.PlaybackBar.SpeedChanged += (s, factor) => _editor.AnimationSpeedFactor = factor;
+            _viewportDock.PlaybackBar.SeekRequested += (s, fraction) =>
+            {
+                _editor.SeekCfdPlayback(fraction);
+            };
 
             // --- DockPanel layout ---
             _dockPanel = new DockPanel
@@ -651,8 +652,6 @@ namespace DisperSim3D.Controls
             _projectTreeDock.Show(_dockPanel, DockState.DockLeft);
             _projectTreePanel.BindScene(_editor.Scene);
             _propertiesDock.Show(_dockPanel, DockState.DockRight);
-            _cfdSimDock.Show(_dockPanel, DockState.DockBottom);
-            _cfdSimDock.DockState = DockState.Hidden;
             _monitorDock.Show(_dockPanel, DockState.DockBottom);
             _monitorDock.DockState = DockState.Hidden;
             _addItemDock.Show(_dockPanel, DockState.DockLeft);
@@ -1040,7 +1039,10 @@ namespace DisperSim3D.Controls
                         }
                         if (_editor.LoadCfdSimulation(entry))
                         {
-                            _editor.StartCfdPlayback();
+                            bool isTransient = entry.TimeStepCount > 1;
+                            if (isTransient) _editor.StartCfdPlayback();
+                            UpdatePlaybackBarState(sim.Name);
+                            UpdatePlaybackButtons();
                             UpdateStatus("Showing results: " + sim.Name);
                         }
                         else
@@ -1051,6 +1053,8 @@ namespace DisperSim3D.Controls
                     else
                     {
                         _editor.StopDispersion();
+                        UpdatePlaybackBarState();
+                        UpdatePlaybackButtons();
                         UpdateStatus("Stopped: " + sim.Name);
                     }
                     break;
@@ -1084,6 +1088,12 @@ namespace DisperSim3D.Controls
                 _propertyGrid.SelectedObject = e.Selected;
             if (e.Selected is ReleaseSource3D src)
                 _editor.SelectedSource = src;
+
+            if (_propertiesDock != null)
+                _propertiesDock.Text = string.IsNullOrEmpty(e.Title)
+                    ? "Properties"
+                    : "Properties - " + e.Title;
+
             UpdatePlaybackBarState(e.Title);
         }
 
@@ -1110,11 +1120,24 @@ namespace DisperSim3D.Controls
                 pauseEnabled: isRunning,
                 stopEnabled: !isStopped && !isSteadyComplete);
 
-            if (isSolving) bar.SetTimeText("CFD solving...");
+            if (isSolving)
+            {
+                bar.SetTimeText("CFD solving...");
+                bar.SetSliderEnabled(false);
+            }
             else if (isRunning || isPaused)
-                bar.SetTimeText(string.Format("T = {0:F1} s / {1:F0} s",
-                    _editor.DispersionTimeS, _editor.SimulationTotalDurationS));
-            else bar.SetTimeText("Ready");
+            {
+                double cur = _editor.DispersionTimeS;
+                double tot = _editor.SimulationTotalDurationS;
+                bar.SetTimeText(string.Format("T = {0:F1} s / {1:F0} s", cur, tot));
+                bar.SetSliderEnabled(true);
+                if (tot > 0) bar.SetProgress(cur / tot);
+            }
+            else
+            {
+                bar.SetTimeText("Ready");
+                bar.SetSliderEnabled(hasPlayable);
+            }
         }
 
         private void DoEditGeneralSettings()
@@ -1690,11 +1713,6 @@ namespace DisperSim3D.Controls
                 {
                     if (_editor.LoadCfdSimulation(entry))
                     {
-                        string simType = entry.SolverType ?? "OpenFOAM";
-                        bool isDynamic = entry.TimeStepCount > 1;
-                        _cfdSimPanel.ShowPlaybackControls(simType, isDynamic);
-                        _cfdSimPanelUserVisible = true;
-                        ShowDockPanel(_cfdSimDock, DockState.DockBottom);
                         UpdatePlaybackButtons();
                     }
                 };
@@ -1778,16 +1796,8 @@ namespace DisperSim3D.Controls
 
         private void ToggleCfdSimPanel(bool visible)
         {
-            _cfdSimPanelUserVisible = visible;
-            if (visible)
-            {
-                ShowDockPanel(_cfdSimDock, DockState.DockBottom);
-                _cfdSimPanel.RefreshList(_editor.Scene.CfdSimulations);
-            }
-            else
-            {
-                _cfdSimDock.DockState = DockState.Hidden;
-            }
+            // CFD Simulations dock panel was retired — simulations now live in the project tree.
+            _cfdSimPanelUserVisible = false;
         }
 
         private void UpdatePlaybackButtons()
@@ -1814,7 +1824,7 @@ namespace DisperSim3D.Controls
             {
                 if (_dispersionStatusTimer == null)
                 {
-                    _dispersionStatusTimer = new Timer { Interval = 200 };
+                    _dispersionStatusTimer = new Timer { Interval = 100 };
                     _dispersionStatusTimer.Tick += (s, e) =>
                     {
                         var ds = _editor.DispersionState;
@@ -1826,6 +1836,13 @@ namespace DisperSim3D.Controls
                             _dispersionTimeLabel.Text = string.Format("T = {0:F1} s / {1:F0} s", currentT, totalT);
                             _cfdSimPanel.UpdatePlaybackState(
                                 ds == DispersionSimulationState.Running, currentT, totalT);
+
+                            var bar = _viewportDock?.PlaybackBar;
+                            if (bar != null && bar.Visible)
+                            {
+                                bar.SetTimeText(string.Format("T = {0:F1} s / {1:F0} s", currentT, totalT));
+                                if (totalT > 0) bar.SetProgress(currentT / totalT);
+                            }
                         }
                         else
                         {

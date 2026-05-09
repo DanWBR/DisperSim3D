@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Xml.Serialization;
 
 namespace DisperSim3D.Models
@@ -15,13 +16,28 @@ namespace DisperSim3D.Models
     /// </summary>
     public class GasLibraryItem
     {
+        [Category("Identity")]
+        [Description("Unique identifier (read-only).")]
         public string Id { get; set; }
+
+        [Category("Identity")]
+        [Description("Display name of the gas or mixture.")]
         public string Name { get; set; }
+
+        [Category("Identity")]
+        [Description("Whether this is a pure substance or a multi-component mixture.")]
         public GasLibraryItemKind Kind { get; set; }
+
+        [Category("Composition")]
+        [Description("Properties of the pure substance (used when Kind = Pure).")]
         public GasProperties PureGas { get; set; }
+
+        [Category("Composition")]
+        [Description("Multi-component mixture definition (used when Kind = Mixture).")]
         public GasMixture Mixture { get; set; }
 
         [XmlIgnore]
+        [Browsable(false)]
         public bool IsMixture => Kind == GasLibraryItemKind.Mixture;
 
         public GasLibraryItem()

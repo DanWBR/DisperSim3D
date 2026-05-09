@@ -20,6 +20,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("General")]
         [DisplayName("Name")]
+        [Description("Display name shown in the project tree.")]
         public string Name
         {
             get => _deco.Name;
@@ -29,15 +30,18 @@ namespace DisperSim3D.PropertyAdapters
         [Category("General")]
         [DisplayName("ID")]
         [ReadOnly(true)]
+        [Description("Unique identifier (read-only).")]
         public string Id => _deco.Id;
 
         [Category("General")]
         [DisplayName("File")]
         [ReadOnly(true)]
+        [Description("Path to the source 3D model file (read-only).")]
         public string FilePath => _deco.FilePath;
 
         [Category("Position")]
         [DisplayName("X")]
+        [Description("East-west position (m).")]
         public double PosX
         {
             get => _deco.Position.X;
@@ -46,6 +50,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("Position")]
         [DisplayName("Y")]
+        [Description("North-south position (m).")]
         public double PosY
         {
             get => _deco.Position.Y;
@@ -54,6 +59,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("Position")]
         [DisplayName("Z")]
+        [Description("Vertical position (m). Z = 0 is ground level.")]
         public double PosZ
         {
             get => _deco.Position.Z;
@@ -62,6 +68,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("Rotation")]
         [DisplayName("Rotation X (deg)")]
+        [Description("Pitch rotation around the X axis.")]
         public double RotX
         {
             get => _deco.Rotation.X;
@@ -70,6 +77,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("Rotation")]
         [DisplayName("Rotation Y (deg)")]
+        [Description("Roll rotation around the Y axis.")]
         public double RotY
         {
             get => _deco.Rotation.Y;
@@ -78,6 +86,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("Rotation")]
         [DisplayName("Rotation Z (deg)")]
+        [Description("Yaw rotation around the vertical Z axis.")]
         public double RotZ
         {
             get => _deco.Rotation.Z;
@@ -86,6 +95,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("Transform")]
         [DisplayName("Scale")]
+        [Description("Uniform scale factor (1.0 = original size).")]
         public double Scale
         {
             get => _deco.Scale;

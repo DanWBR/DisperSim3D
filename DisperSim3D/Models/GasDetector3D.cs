@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Windows.Media.Media3D;
 
 namespace DisperSim3D.Models
@@ -10,44 +11,36 @@ namespace DisperSim3D.Models
     /// </summary>
     public class GasDetector3D
     {
-        /// <summary>
-        /// Gets or sets the unique identifier for this gas detector.
-        /// </summary>
+        [Category("Identity")]
+        [Description("Unique identifier (read-only).")]
         public string Id { get; set; } = Guid.NewGuid().ToString();
 
-        /// <summary>
-        /// Gets or sets the display name of this gas detector.
-        /// </summary>
+        [Category("Identity")]
+        [Description("Display name shown in the project tree and detector reports.")]
         public string Name { get; set; } = "Detector1";
 
-        /// <summary>
-        /// Gets or sets the 3D position of the detector in the scene, in meters.
-        /// </summary>
+        [Category("Position")]
+        [Description("3D position of the detector in the scene (m).")]
         public Point3D Position { get; set; }
 
-        /// <summary>
-        /// Gets or sets the concentration threshold for triggering detection, in kg/m^3. Default is 0.01 kg/m^3.
-        /// </summary>
+        [Category("Detection")]
+        [Description("Concentration threshold above which the detector triggers an alarm (kg/m³).")]
         public double ThresholdKgM3 { get; set; } = 0.01;
 
-        /// <summary>
-        /// Gets or sets a value indicating whether the detector is visible in the 3D viewport. Default is <c>true</c>.
-        /// </summary>
+        [Category("Display")]
+        [Description("Whether the detector marker is shown in the 3D viewport.")]
         public bool Visible { get; set; } = true;
 
-        /// <summary>
-        /// Gets or sets the simulation time in seconds at which the detector first triggered. A value of -1 indicates no detection has occurred.
-        /// </summary>
+        [Category("Detection")]
+        [Description("Simulation time when the detector first triggered (s). -1 = not triggered.")]
         public double DetectionTimeS { get; set; } = -1;
 
-        /// <summary>
-        /// Gets or sets a value indicating whether the detector has been triggered (concentration exceeded the threshold).
-        /// </summary>
+        [Category("Detection")]
+        [Description("Whether this detector has been triggered during the latest run.")]
         public bool Detected { get; set; }
 
-        /// <summary>
-        /// Gets or sets the time-series of concentration samples recorded by this detector.
-        /// </summary>
+        [Category("Detection")]
+        [Description("Concentration time-series recorded at this detector during the run.")]
         public List<MonitorSample> TimeSeries { get; set; } = new List<MonitorSample>();
     }
 

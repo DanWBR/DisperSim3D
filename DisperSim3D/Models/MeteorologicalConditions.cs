@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Windows.Media.Media3D;
 
 namespace DisperSim3D.Models
@@ -9,51 +10,40 @@ namespace DisperSim3D.Models
     /// </summary>
     public class MeteorologicalConditions
     {
-        /// <summary>
-        /// Gets or sets the reference wind speed in meters per second.
-        /// </summary>
+        [Category("Wind")]
+        [Description("Reference wind speed at the measurement height (m/s).")]
         public double WindSpeed { get; set; }
 
-        /// <summary>
-        /// Gets or sets the wind direction in degrees (meteorological convention: 0 = from North, 270 = from West).
-        /// </summary>
+        [Category("Wind")]
+        [Description("Direction the wind blows FROM (meteorological convention): 0=N, 90=E, 180=S, 270=W.")]
         public double WindDirectionDeg { get; set; }
 
-        /// <summary>
-        /// Gets or sets the Pasquill-Gifford atmospheric stability class.
-        /// </summary>
+        [Category("Stability")]
+        [Description("Pasquill-Gifford atmospheric stability class. A=very unstable, D=neutral, F=very stable.")]
         public PasquillStabilityClass StabilityClass { get; set; }
 
-        /// <summary>
-        /// Gets or sets the ambient temperature in Kelvin.
-        /// </summary>
+        [Category("Ambient")]
+        [Description("Ambient air temperature (K). 293.15 K = 20 °C.")]
         public double AmbientTemperature { get; set; }
 
-        /// <summary>
-        /// Gets or sets the ambient atmospheric pressure in Pascals.
-        /// </summary>
+        [Category("Ambient")]
+        [Description("Ambient atmospheric pressure (Pa). 101325 Pa = sea level standard.")]
         public double AmbientPressure { get; set; }
 
-        /// <summary>
-        /// Gets or sets the atmospheric mixing height in meters.
-        /// </summary>
+        [Category("Wind")]
+        [Description("Atmospheric mixing height — vertical extent above which dispersion is bounded (m).")]
         public double MixingHeightM { get; set; }
 
-        /// <summary>
-        /// Gets or sets the height at which wind speed was measured, in meters.
-        /// </summary>
+        [Category("Wind")]
+        [Description("Reference height at which the wind speed was measured (m). Default = 10 m.")]
         public double WindMeasurementHeightM { get; set; }
 
-        /// <summary>
-        /// Gets or sets the wind shear power-law exponent.
-        /// A negative value indicates the default exponent should be used based on stability class and terrain.
-        /// </summary>
+        [Category("Wind")]
+        [Description("Power-law exponent for wind profile u(z) = uref·(z/zref)^p. Negative = use default for stability + terrain.")]
         public double WindShearExponent { get; set; }
 
-        /// <summary>
-        /// Gets or sets a value indicating whether the terrain is urban.
-        /// Affects the default wind shear exponent selection.
-        /// </summary>
+        [Category("Wind")]
+        [Description("If true, uses the urban shear-exponent table; otherwise rural.")]
         public bool IsUrbanTerrain { get; set; }
 
         /// <summary>

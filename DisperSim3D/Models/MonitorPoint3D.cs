@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Windows.Media.Media3D;
 
@@ -23,34 +24,44 @@ namespace DisperSim3D.Models
     /// </summary>
     public class MonitorPoint3D
     {
-        /// <summary>Gets or sets the unique identifier for this monitor.</summary>
+        [Category("Identity")]
+        [Description("Unique identifier (read-only).")]
         public string Id { get; set; } = Guid.NewGuid().ToString();
 
-        /// <summary>Gets or sets the display name of this monitor.</summary>
+        [Category("Identity")]
+        [Description("Display name shown in the project tree and result tables.")]
         public string Name { get; set; } = "Monitor1";
 
-        /// <summary>Gets or sets the 3D position of this monitor (start point for line monitors, corner for region monitors).</summary>
+        [Category("Position")]
+        [Description("3D position (start point for line monitors, corner for region monitors).")]
         public Point3D Position { get; set; }
 
-        /// <summary>Gets or sets a value indicating whether this monitor is visible in the 3D viewport.</summary>
+        [Category("Display")]
+        [Description("Whether the monitor marker is shown in the 3D viewport.")]
         public bool Visible { get; set; } = true;
 
-        /// <summary>Gets or sets the time-series collection of sampled concentration data.</summary>
+        [Category("Data")]
+        [Description("Concentration time-series collected during the run.")]
         public List<MonitorSample> TimeSeries { get; set; } = new List<MonitorSample>();
 
-        /// <summary>Gets or sets the geometry type of this monitor.</summary>
+        [Category("Geometry")]
+        [Description("Monitor shape: Point, Line, or Region.")]
         public MonitorType Type { get; set; } = MonitorType.Point;
 
-        /// <summary>Gets or sets the endpoint for line-type monitors. <see cref="Position"/> is the start point.</summary>
+        [Category("Geometry")]
+        [Description("End position (used only by Line monitors).")]
         public Point3D EndPosition { get; set; }
 
-        /// <summary>Gets or sets the box dimensions for region-type monitors, measured from <see cref="Position"/>.</summary>
+        [Category("Geometry")]
+        [Description("Box dimensions extending from Position (used only by Region monitors).")]
         public Vector3D RegionSize { get; set; } = new Vector3D(10, 10, 5);
 
-        /// <summary>Gets or sets the number of equally spaced sample points along a line monitor.</summary>
+        [Category("Geometry")]
+        [Description("Number of equally spaced sample points along the line.")]
         public int LineSampleCount { get; set; } = 20;
 
-        /// <summary>Gets or sets the number of sub-grid divisions per axis for region monitors.</summary>
+        [Category("Geometry")]
+        [Description("Number of sub-grid divisions per axis for region monitors.")]
         public int RegionResolution { get; set; } = 5;
 
         /// <summary>Gets the most recent concentration value from the time series, or zero if no data exists.</summary>

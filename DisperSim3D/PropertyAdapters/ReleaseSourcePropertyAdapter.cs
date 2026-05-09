@@ -22,6 +22,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("General")]
         [DisplayName("Name")]
+        [Description("Identifier shown in the project tree, results, and reports.")]
         public string Name
         {
             get => _src.Name;
@@ -31,6 +32,7 @@ namespace DisperSim3D.PropertyAdapters
         [Category("General")]
         [DisplayName("ID")]
         [ReadOnly(true)]
+        [Description("Unique identifier (read-only). Used internally to reference this source.")]
         public string Id => _src.Id;
 
         // --- Gas ---
@@ -38,10 +40,12 @@ namespace DisperSim3D.PropertyAdapters
         [Category("Gas")]
         [DisplayName("Gas Name")]
         [ReadOnly(true)]
+        [Description("Name of the released substance from the project Gas Library.")]
         public string GasName => _src.Gas != null ? _src.Gas.Name : "";
 
         [Category("Gas")]
         [DisplayName("Molar Mass (kg/mol)")]
+        [Description("Molecular weight; drives the gas density relative to air.")]
         public double MolarMass
         {
             get => _src.Gas != null ? _src.Gas.MolarMass : 0;
@@ -50,6 +54,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("Gas")]
         [DisplayName("LFL (kg/m³)")]
+        [Description("Lower Flammability Limit. Concentration above this in air can ignite.")]
         public double LFL
         {
             get => _src.Gas != null ? _src.Gas.LFL : 0;
@@ -58,6 +63,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("Gas")]
         [DisplayName("IDLH (kg/m³)")]
+        [Description("Immediately Dangerous to Life and Health threshold (toxicity reference).")]
         public double IDLH
         {
             get => _src.Gas != null ? _src.Gas.IDLH : 0;
@@ -68,6 +74,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("Position")]
         [DisplayName("X (m)")]
+        [Description("East-west position (+X = East) in scene coordinates.")]
         public double PosX
         {
             get => _src.Position.X;
@@ -76,6 +83,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("Position")]
         [DisplayName("Y (m)")]
+        [Description("North-south position (+Y = North) in scene coordinates.")]
         public double PosY
         {
             get => _src.Position.Y;
@@ -84,6 +92,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("Position")]
         [DisplayName("Z (m)")]
+        [Description("Vertical position (Z = 0 is ground level).")]
         public double PosZ
         {
             get => _src.Position.Z;
@@ -118,6 +127,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("Release")]
         [DisplayName("Puff Interval (s)")]
+        [Description("Time between successive puff emissions in the Gaussian Puff model.")]
         public double PuffInterval
         {
             get => _src.PuffIntervalS;
@@ -166,6 +176,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("Jet / Orifice")]
         [DisplayName("Exit Temperature (°C)")]
+        [Description("Gas temperature at the orifice. Drives buoyancy via Briggs plumerise.")]
         public double ExitTemperature
         {
             get => _src.ExitTemperatureK - 273.15;
@@ -224,6 +235,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("High Pressure Leak")]
         [DisplayName("Vessel Pressure (bar)")]
+        [Description("Absolute stagnation pressure inside the vessel.")]
         public double HPVesselPressure
         {
             get => _src.HighPressureLeak != null ? _src.HighPressureLeak.VesselPressurePa / 1e5 : 0;
@@ -232,6 +244,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("High Pressure Leak")]
         [DisplayName("Vessel Temperature (°C)")]
+        [Description("Stagnation temperature inside the vessel.")]
         public double HPVesselTemperature
         {
             get => _src.HighPressureLeak != null ? _src.HighPressureLeak.VesselTemperatureK - 273.15 : 0;
@@ -249,6 +262,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("High Pressure Leak")]
         [DisplayName("Vessel Volume (m³)")]
+        [Description("Vessel inventory; used to estimate blowdown duration.")]
         public double HPVesselVolume
         {
             get => _src.HighPressureLeak != null ? _src.HighPressureLeak.VesselVolumeM3 : 0;
@@ -257,6 +271,7 @@ namespace DisperSim3D.PropertyAdapters
 
         [Category("High Pressure Leak")]
         [DisplayName("Gas Gamma (Cp/Cv)")]
+        [Description("Heat capacity ratio. Air/N₂ ≈ 1.4, methane ≈ 1.31, steam ≈ 1.33.")]
         public double HPGasGamma
         {
             get => _src.HighPressureLeak != null ? _src.HighPressureLeak.GasGamma : 0;
@@ -303,6 +318,7 @@ namespace DisperSim3D.PropertyAdapters
         [Category("High Pressure Leak")]
         [DisplayName("Flow Regime")]
         [ReadOnly(true)]
+        [Description("Choked (sonic) when downstream pressure < critical; otherwise subsonic.")]
         public string HPFlowRegime
         {
             get

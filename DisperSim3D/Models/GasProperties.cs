@@ -1,53 +1,37 @@
-﻿namespace DisperSim3D.Models
+﻿using System.ComponentModel;
+
+namespace DisperSim3D.Models
 {
     /// <summary>
     /// Represents the physical and hazard properties of a gas substance used in dispersion modeling.
     /// </summary>
     public class GasProperties
     {
-        /// <summary>
-        /// Gets or sets the name of the gas substance.
-        /// </summary>
+        [Description("Display name of the gas substance.")]
         public string Name { get; set; }
 
-        /// <summary>
-        /// Gets or sets the molar mass of the gas in kilograms per mole (kg/mol).
-        /// </summary>
+        [Description("Molecular weight in kg/mol. Air ≈ 0.029, methane ≈ 0.016, H₂S ≈ 0.034.")]
         public double MolarMass { get; set; }
 
-        /// <summary>
-        /// Gets or sets the Lower Flammability Limit as a volume fraction.
-        /// </summary>
+        [Description("Lower Flammability Limit (kg/m³). Concentration above this in air can ignite.")]
         public double LFL { get; set; }
 
-        /// <summary>
-        /// Gets or sets the Immediately Dangerous to Life or Health concentration as a volume fraction.
-        /// </summary>
+        [Description("Immediately Dangerous to Life and Health concentration (kg/m³).")]
         public double IDLH { get; set; }
 
-        /// <summary>
-        /// Gets or sets the Emergency Response Planning Guideline Level 1 concentration as a volume fraction.
-        /// </summary>
+        [Description("Emergency Response Planning Guideline Level 1 — mild transient effects (kg/m³).")]
         public double ERPG1 { get; set; }
 
-        /// <summary>
-        /// Gets or sets the Emergency Response Planning Guideline Level 2 concentration as a volume fraction.
-        /// </summary>
+        [Description("ERPG Level 2 — irreversible or other serious health effects threshold (kg/m³).")]
         public double ERPG2 { get; set; }
 
-        /// <summary>
-        /// Gets or sets the Emergency Response Planning Guideline Level 3 concentration as a volume fraction.
-        /// </summary>
+        [Description("ERPG Level 3 — life-threatening health effects threshold (kg/m³).")]
         public double ERPG3 { get; set; }
 
-        /// <summary>
-        /// Gets or sets the chemical half-life in seconds for first-order decay modeling. Zero means no decay.
-        /// </summary>
+        [Description("Chemical half-life for first-order decay (s). Zero disables decay.")]
         public double HalfLifeS { get; set; }
 
-        /// <summary>
-        /// Gets or sets the dry deposition velocity in meters per second. Zero means no deposition.
-        /// </summary>
+        [Description("Dry deposition velocity (m/s). Zero disables deposition.")]
         public double DryDepositionVelocityMPerS { get; set; }
 
         /// <summary>

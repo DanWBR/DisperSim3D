@@ -7,7 +7,7 @@ namespace DisperSim3D.Controls
 {
     public class PropertiesDockPanel : DockContent
     {
-        public PropertyGrid PropertyGrid { get; private set; }
+        public PropertyGridWpfPanel PropertyGrid { get; private set; }
 
         public PropertiesDockPanel()
         {
@@ -16,15 +16,9 @@ namespace DisperSim3D.Controls
             HideOnClose = true;
             DockAreas = DockAreas.DockLeft | DockAreas.DockRight | DockAreas.Float;
 
-            var font = new Font(SystemFonts.MessageBoxFont.FontFamily, 9f);
-            PropertyGrid = new PropertyGrid
+            PropertyGrid = new PropertyGridWpfPanel
             {
-                Dock = DockStyle.Fill,
-                HelpVisible = true,
-                ToolbarVisible = true,
-                PropertySort = PropertySort.Categorized,
-                Font = font,
-                LargeButtons = false
+                Dock = DockStyle.Fill
             };
 
             Controls.Add(PropertyGrid);
