@@ -115,6 +115,23 @@ namespace DisperSim3D.Models
         }
 
         /// <summary>
+        /// Gets the effective mass release rate in kg/s.
+        /// Returns the HP leak computed rate when HP leak is enabled, otherwise the manual rate.
+        /// </summary>
+        public double EffectiveReleaseRateKgPerS
+        {
+            get
+            {
+                if (HighPressureLeak != null && HighPressureLeak.OrificeDiameterM > 0)
+                {
+                    double mdot = Core.HighPressureLeakModel.MassFlowRate(HighPressureLeak);
+                    if (mdot > 0) return mdot;
+                }
+                return ReleaseRateKgPerS;
+            }
+        }
+
+        /// <summary>
         /// Gets the mass of gas released per puff in kilograms, computed as
         /// <see cref="ReleaseRateKgPerS"/> multiplied by <see cref="PuffIntervalS"/>.
         /// </summary>
@@ -122,7 +139,7 @@ namespace DisperSim3D.Models
         {
             get
             {
-                return ReleaseRateKgPerS * PuffIntervalS;
+                return EffectiveReleaseRateKgPerS * PuffIntervalS;
             }
         }
 
@@ -166,12 +183,13 @@ namespace DisperSim3D.Models
                 }
 
                 double diam = EffectiveDiameterM;
-                if (diam <= 0 || ReleaseRateKgPerS <= 0) return 0;
+                double effRate = EffectiveReleaseRateKgPerS;
+                if (diam <= 0 || effRate <= 0) return 0;
 
                 double areaSimple = Math.PI * 0.25 * diam * diam;
                 double molarMass = Gas != null && Gas.MolarMass > 0 ? Gas.MolarMass : 0.029;
                 double rhoSimple = 101325.0 * molarMass / (8.314 * ExitTemperatureK);
-                return ReleaseRateKgPerS / (rhoSimple * areaSimple);
+                return effRate / (rhoSimple * areaSimple);
             }
         }
 

@@ -77,7 +77,7 @@ namespace DisperSim3D.Core
                     OriginX = pos.X,
                     OriginY = pos.Y,
                     H = H,
-                    Q = src.ReleaseRateKgPerS,
+                    Q = src.EffectiveReleaseRateKgPerS,
                     WindSpeed = windSpeed,
                     Stability = meteo.StabilityClass,
                     WindDirX = windDir3D.X,

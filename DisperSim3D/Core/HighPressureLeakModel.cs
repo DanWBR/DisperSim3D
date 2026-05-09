@@ -27,6 +27,9 @@ namespace DisperSim3D.Core
 
         /// <summary>Gets or sets the ambient pressure in Pascals.</summary>
         public double AmbientPressurePa { get; set; } = 101325.0;
+
+        /// <summary>Gets or sets the discharge coefficient (0 to 1). Default is 0.65.</summary>
+        public double DischargeCoefficient { get; set; } = 0.65;
     }
 
     /// <summary>
@@ -61,8 +64,7 @@ namespace DisperSim3D.Core
             double T = p.VesselTemperatureK;
             double P0 = p.VesselPressurePa;
             double A = Math.PI * 0.25 * p.OrificeDiameterM * p.OrificeDiameterM;
-
-            double Cd = 0.85;
+            double Cd = p.DischargeCoefficient;
 
             if (IsChoked(p))
             {
@@ -79,6 +81,41 @@ namespace DisperSim3D.Core
                 double rho0 = P0 * M / (R * T);
                 return Cd * A * Math.Sqrt(rho0 * P0 * term1 * term2);
             }
+        }
+
+        /// <summary>
+        /// Calculates the orifice diameter required to produce a given mass flow rate.
+        /// </summary>
+        public static double OrificeDiameterFromMassFlow(HighPressureLeakParams p, double targetMdot)
+        {
+            if (targetMdot <= 0) return 0;
+
+            double gamma = p.GasGamma;
+            double M = p.GasMolarMassKgMol;
+            double T = p.VesselTemperatureK;
+            double P0 = p.VesselPressurePa;
+            double Cd = p.DischargeCoefficient;
+
+            double massFluxPerArea;
+            if (IsChoked(p))
+            {
+                double factor = gamma * M / (R * T);
+                double term = Math.Pow(2.0 / (gamma + 1), (gamma + 1) / (gamma - 1));
+                massFluxPerArea = Cd * P0 * Math.Sqrt(factor * term);
+            }
+            else
+            {
+                double Pb = p.AmbientPressurePa;
+                double pr = Pb / P0;
+                double term1 = 2 * gamma / (gamma - 1);
+                double term2 = Math.Pow(pr, 2.0 / gamma) - Math.Pow(pr, (gamma + 1) / gamma);
+                double rho0 = P0 * M / (R * T);
+                massFluxPerArea = Cd * Math.Sqrt(rho0 * P0 * term1 * term2);
+            }
+
+            if (massFluxPerArea <= 0) return 0;
+            double A = targetMdot / massFluxPerArea;
+            return Math.Sqrt(4.0 * A / Math.PI);
         }
 
         /// <summary>

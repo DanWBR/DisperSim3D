@@ -252,7 +252,7 @@ namespace DisperSim3D.Core
                         sb.Append("                scalarSemiImplicitSourceCoeffs\n                {\n");
                         sb.AppendFormat(Inv, "                    selectionMode   cellSet;\n                    cellSet         sourceZone_{0};\n", s);
                         sb.Append("                    volumeMode      absolute;\n                    injectionRateSuSp\n                    {\n");
-                        sb.AppendFormat(Inv, "                        {0}           ({1} 0);\n", passiveScalar, src.ReleaseRateKgPerS);
+                        sb.AppendFormat(Inv, "                        {0}           ({1} 0);\n", passiveScalar, src.EffectiveReleaseRateKgPerS);
                         sb.Append("                    }\n                }\n            }\n");
                     }
                     sb.Append("        }\n");
@@ -732,7 +732,7 @@ namespace DisperSim3D.Core
             {
                 var src = sources[s];
                 var pos = src.EffectivePosition;
-                double injectionRate = src.ReleaseRateKgPerS;
+                double injectionRate = src.EffectiveReleaseRateKgPerS;
 
                 sb.AppendFormat(Inv, "source_{0}\n{{\n", s);
                 sb.Append("    type            scalarSemiImplicitSource;\n    active          true;\n\n");
@@ -755,7 +755,7 @@ namespace DisperSim3D.Core
             for (int s = 0; s < sources.Count; s++)
             {
                 var src = sources[s];
-                double injectionRate = src.ReleaseRateKgPerS;
+                double injectionRate = src.EffectiveReleaseRateKgPerS;
 
                 sb.AppendFormat(Inv, "source_{0}\n{{\n", s);
                 sb.Append("    type            semiImplicitSource;\n\n");
@@ -1217,7 +1217,7 @@ namespace DisperSim3D.Core
                         sb.Append("                scalarSemiImplicitSourceCoeffs\n                {\n");
                         sb.AppendFormat(Inv, "                    selectionMode   cellSet;\n                    cellSet         sourceZone_{0};\n", s);
                         sb.Append("                    volumeMode      absolute;\n                    injectionRateSuSp\n                    {\n");
-                        sb.AppendFormat(Inv, "                        {0}           ({1} 0);\n", passiveScalar, src.ReleaseRateKgPerS);
+                        sb.AppendFormat(Inv, "                        {0}           ({1} 0);\n", passiveScalar, src.EffectiveReleaseRateKgPerS);
                         sb.Append("                    }\n                }\n            }\n");
                     }
                     sb.Append("        }\n");

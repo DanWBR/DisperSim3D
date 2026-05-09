@@ -222,6 +222,15 @@ namespace DisperSim3D.PropertyAdapters
         }
 
         [Category("High Pressure Leak")]
+        [DisplayName("Discharge Coefficient")]
+        [Description("Orifice discharge coefficient (0.1 to 1.0)")]
+        public double HPDischargeCoefficient
+        {
+            get => _src.HighPressureLeak != null ? _src.HighPressureLeak.DischargeCoefficient : 0;
+            set { if (_src.HighPressureLeak != null) { _src.HighPressureLeak.DischargeCoefficient = Math.Max(0.1, Math.Min(1.0, value)); _onChanged?.Invoke(); } }
+        }
+
+        [Category("High Pressure Leak")]
         [DisplayName("Computed Rate (kg/s)")]
         [Description("Mass flow rate from HP leak model (choked or unchoked)")]
         [ReadOnly(true)]

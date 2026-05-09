@@ -2369,7 +2369,8 @@ namespace DisperSim3D.Controls
                                 new System.Xml.Linq.XAttribute("Orifice", src.HighPressureLeak.OrificeDiameterM.ToString(inv)),
                                 new System.Xml.Linq.XAttribute("Volume", src.HighPressureLeak.VesselVolumeM3.ToString(inv)),
                                 new System.Xml.Linq.XAttribute("Gamma", src.HighPressureLeak.GasGamma.ToString(inv)),
-                                new System.Xml.Linq.XAttribute("MolarMass", src.HighPressureLeak.GasMolarMassKgMol.ToString(inv))) : null,
+                                new System.Xml.Linq.XAttribute("MolarMass", src.HighPressureLeak.GasMolarMassKgMol.ToString(inv)),
+                                new System.Xml.Linq.XAttribute("Cd", src.HighPressureLeak.DischargeCoefficient.ToString(inv))) : null,
                             new System.Xml.Linq.XElement("Gas",
                                 new System.Xml.Linq.XAttribute("Name", src.Gas.Name ?? ""),
                                 new System.Xml.Linq.XAttribute("MolarMass", src.Gas.MolarMass.ToString(inv)),
@@ -2506,7 +2507,8 @@ namespace DisperSim3D.Controls
                             OrificeDiameterM = double.Parse((string)hpEl.Attribute("Orifice") ?? "0.01", inv),
                             VesselVolumeM3 = double.Parse((string)hpEl.Attribute("Volume") ?? "10", inv),
                             GasGamma = double.Parse((string)hpEl.Attribute("Gamma") ?? "1.4", inv),
-                            GasMolarMassKgMol = double.Parse((string)hpEl.Attribute("MolarMass") ?? "0.016", inv)
+                            GasMolarMassKgMol = double.Parse((string)hpEl.Attribute("MolarMass") ?? "0.016", inv),
+                            DischargeCoefficient = double.Parse((string)hpEl.Attribute("Cd") ?? "0.65", inv)
                         };
                     }
 
