@@ -44,7 +44,12 @@ namespace DisperSim3D.Dialogs
             {
                 Dock = DockStyle.Fill, AutoSize = true,
                 Padding = new Padding(10),
-                Text = string.Format("{0} monitor location(s) analyzed", _results.Count)
+                MaximumSize = new Size((int)(580 * dpi), 0),
+                Text = string.Format("{0} monitor location(s) analyzed.\n\n", _results.Count) +
+                       "Exceedance curve: probability that the concentration at a monitor exceeds a given threshold, " +
+                       "computed across all wind-rose scenarios weighted by frequency. " +
+                       "Threshold (X) is on log scale; probability (Y) is 0–1. " +
+                       "Useful for siting decisions and comparing to LFL/IDLH limits."
             };
             outerLayout.Controls.Add(summary, 0, 0);
 

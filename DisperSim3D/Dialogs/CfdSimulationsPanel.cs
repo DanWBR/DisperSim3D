@@ -245,25 +245,9 @@ namespace DisperSim3D.Dialogs
 
         public void ShowPlaybackControls(string simulationType, bool isDynamic)
         {
-            _lblSimType.Text = simulationType;
-            _playbackSection.Visible = true;
-
-            _btnPlayPause.Enabled = isDynamic;
-            _btnStopPlayback.Enabled = isDynamic;
-            _btnRewind.Enabled = isDynamic;
-            _timeTrackBar.Enabled = isDynamic;
-            _timeTrackBar.Value = 0;
-
-            if (!isDynamic)
-            {
-                _lblPlaybackTime.Text = "Steady-state";
-                _btnPlayPause.Text = "▶";
-            }
-            else
-            {
-                _lblPlaybackTime.Text = "0.0 / 0.0 s";
-                _btnPlayPause.Text = "▶";
-            }
+            // Playback is now handled by the unified bar at the bottom of the 3D viewport.
+            // Keep this method as a no-op for backward compatibility.
+            _playbackSection.Visible = false;
             _isPlaying = false;
         }
 

@@ -24,7 +24,6 @@ namespace TestApp
             {
                 Name = "Source1",
                 ReleaseRateKgPerS = 0.5,
-                ReleaseDurationS = 300,
                 PuffIntervalS = 1,
                 ReleaseHeightOffset = 2
             };

@@ -19,13 +19,20 @@ namespace DisperSim3D.Core
         public static MeshGeometry3D GenerateIsosurface(
             double[,,] field, double isoValue, Point3D origin, double cellSize)
         {
+            return GenerateIsosurface(field, isoValue, origin, cellSize, cellSize, cellSize);
+        }
+
+        public static MeshGeometry3D GenerateIsosurface(
+            double[,,] field, double isoValue, Point3D origin,
+            double cellSizeX, double cellSizeY, double cellSizeZ)
+        {
             var mesh = new MeshGeometry3D();
             int nx = field.GetLength(0);
             int ny = field.GetLength(1);
             int nz = field.GetLength(2);
 
             var vertList = new Point3D[12];
-            double snapRes = cellSize * 0.001;
+            double snapRes = System.Math.Min(cellSizeX, System.Math.Min(cellSizeY, cellSizeZ)) * 0.001;
             var vertexMap = new Dictionary<long, int>();
             var positions = new List<Point3D>();
             var normals = new List<Vector3D>();
@@ -58,18 +65,18 @@ namespace DisperSim3D.Core
 
                         if (EdgeTable[cubeIndex] == 0) continue;
 
-                        double ox = origin.X + i * cellSize;
-                        double oy = origin.Y + j * cellSize;
-                        double oz = origin.Z + k * cellSize;
+                        double ox = origin.X + i * cellSizeX;
+                        double oy = origin.Y + j * cellSizeY;
+                        double oz = origin.Z + k * cellSizeZ;
 
                         var p0 = new Point3D(ox, oy, oz);
-                        var p1 = new Point3D(ox + cellSize, oy, oz);
-                        var p2 = new Point3D(ox + cellSize, oy + cellSize, oz);
-                        var p3 = new Point3D(ox, oy + cellSize, oz);
-                        var p4 = new Point3D(ox, oy, oz + cellSize);
-                        var p5 = new Point3D(ox + cellSize, oy, oz + cellSize);
-                        var p6 = new Point3D(ox + cellSize, oy + cellSize, oz + cellSize);
-                        var p7 = new Point3D(ox, oy + cellSize, oz + cellSize);
+                        var p1 = new Point3D(ox + cellSizeX, oy, oz);
+                        var p2 = new Point3D(ox + cellSizeX, oy + cellSizeY, oz);
+                        var p3 = new Point3D(ox, oy + cellSizeY, oz);
+                        var p4 = new Point3D(ox, oy, oz + cellSizeZ);
+                        var p5 = new Point3D(ox + cellSizeX, oy, oz + cellSizeZ);
+                        var p6 = new Point3D(ox + cellSizeX, oy + cellSizeY, oz + cellSizeZ);
+                        var p7 = new Point3D(ox, oy + cellSizeY, oz + cellSizeZ);
 
                         int edges = EdgeTable[cubeIndex];
                         if ((edges & 1) != 0) vertList[0] = Interpolate(p0, p1, v0, v1, isoValue);

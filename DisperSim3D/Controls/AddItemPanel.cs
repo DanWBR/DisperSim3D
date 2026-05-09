@@ -739,7 +739,6 @@ namespace DisperSim3D.Controls
                         Name = _txtName.Text,
                         Position = pos,
                         ReleaseRateKgPerS = ParseDouble(_txtReleaseRate, 1.0),
-                        ReleaseDurationS = ParseDouble(_txtDuration, 60),
                         PuffIntervalS = ParseDouble(_txtPuffInterval, 1.0),
                         ReleaseHeightOffset = ParseDouble(_txtHeightOffset, 2.0),
                         Gas = new GasProperties { Name = _cmbGas?.SelectedItem?.ToString() ?? "METHANE" }
@@ -765,7 +764,6 @@ namespace DisperSim3D.Controls
                         Name = _txtName.Text,
                         Position = pos,
                         ReleaseRateKgPerS = mdot,
-                        ReleaseDurationS = 300,
                         PuffIntervalS = 1.0,
                         ReleaseHeightOffset = 0,
                         HighPressureLeak = hpParams,

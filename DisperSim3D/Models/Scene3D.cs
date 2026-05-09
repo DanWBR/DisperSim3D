@@ -94,6 +94,31 @@ namespace DisperSim3D.Models
         public List<CfdSimulationEntry> CfdSimulations { get; set; }
 
         /// <summary>
+        /// Gets or sets the list of pre-computed wind field scenarios available to dispersion runs.
+        /// </summary>
+        public List<WindFieldScenario> WindFieldScenarios { get; set; }
+
+        /// <summary>
+        /// Project-wide settings (defaults for new sources, simulations, etc.).
+        /// </summary>
+        public ProjectSettings GeneralSettings { get; set; }
+
+        /// <summary>
+        /// Project gas library — pure substances and mixtures, referenced by sources via <see cref="ReleaseSource3D.GasRefId"/>.
+        /// </summary>
+        public List<GasLibraryItem> GasLibrary { get; set; }
+
+        /// <summary>
+        /// Top-level sources, decoupled from dispersion scenarios. Used by Simulations.
+        /// </summary>
+        public List<ReleaseSource3D> TopLevelSources { get; set; }
+
+        /// <summary>
+        /// Project-level simulations (snapshot pairings of Source × WindField).
+        /// </summary>
+        public List<Simulation> Simulations { get; set; }
+
+        /// <summary>
         /// Gets or sets the grid spacing in meters.
         /// </summary>
         public double GridSpacing { get; set; }
@@ -119,6 +144,11 @@ namespace DisperSim3D.Models
             FireScenario = new FireScenario();
             GasDetectors = new List<GasDetector3D>();
             CfdSimulations = new List<CfdSimulationEntry>();
+            WindFieldScenarios = new List<WindFieldScenario>();
+            GeneralSettings = new ProjectSettings();
+            GasLibrary = new List<GasLibraryItem>();
+            TopLevelSources = new List<ReleaseSource3D>();
+            Simulations = new List<Simulation>();
             GridSpacing = 5.0;
             SnapToGrid = true;
         }

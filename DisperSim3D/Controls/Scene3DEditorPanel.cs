@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 using System.Windows.Media.Media3D;
 using WeifenLuo.WinFormsUI.Docking;
@@ -26,6 +27,8 @@ namespace DisperSim3D.Controls
         private Timer _dispersionStatusTimer;
         private DockPanel _dockPanel;
         private PropertiesDockPanel _propertiesDock;
+        private ProjectTreeDockPanel _projectTreeDock;
+        private ProjectTreeWpfPanel _projectTreePanel;
         private CfdSimulationsDockPanel _cfdSimDock;
         private MonitorDockPanel _monitorDock;
         private AddItemDockPanel _addItemDock;
@@ -41,7 +44,7 @@ namespace DisperSim3D.Controls
         private CfdSimulationsPanel _cfdSimPanel;
         private SimulationManagerDockPanel _simManagerDock;
         private ToolStripMenuItem _miSelectMode;
-        private ToolStripMenuItem _miSnap, _miGround, _miVectors;
+        private ToolStripMenuItem _miSnap, _miGround, _miVectors, _miWindArrows;
         private string _resPath;
 
         public static string ResourcesBasePath { get; set; }
@@ -127,7 +130,7 @@ namespace DisperSim3D.Controls
             menuEdit.DropDownItems.AddRange(new ToolStripItem[] {
                 _miSelectMode,
                 new ToolStripSeparator(),
-                new ToolStripMenuItem("Delete", Img("cross.png"), (s, e) => { if (_editor.SelectedDecoration != null) _editor.DeleteSelectedDecoration(); }),
+                new ToolStripMenuItem("Delete", Img("cross.png"), (s, e) => _editor.DeleteSelected()),
                 new ToolStripMenuItem("Scale +", Img("zoom_in.png"), (s, e) => { if (_editor.SelectedDecoration != null) _editor.ScaleSelectedDecoration(1.2); }),
                 new ToolStripMenuItem("Scale -", Img("zoom_out.png"), (s, e) => { if (_editor.SelectedDecoration != null) _editor.ScaleSelectedDecoration(1.0 / 1.2); })
             });
@@ -171,6 +174,8 @@ namespace DisperSim3D.Controls
             var menuDispersion = new ToolStripMenuItem("&Dispersion");
             menuDispersion.DropDownItems.AddRange(new ToolStripItem[] {
                 new ToolStripMenuItem("Manage Scenarios...", Img("icons8-layers.png"), (s, e) => DoManageScenarios()),
+                new ToolStripMenuItem("Manage Wind Fields...", Img("icons8-wind.png"), (s, e) => DoManageWindFields()),
+                new ToolStripMenuItem("New Simulation...", Img("icons8-vector.png"), (s, e) => DoNewSimulation(null)),
                 new ToolStripSeparator(),
                 new ToolStripMenuItem("Meteorological Conditions...", Img("icons8-weather.png"), (s, e) => DoMeteo()),
                 new ToolStripMenuItem("Gas Mixture...", Img("icons8-test_tube.png"), (s, e) => DoGasMixture()),
@@ -178,7 +183,7 @@ namespace DisperSim3D.Controls
                 new ToolStripMenuItem("Wind Profile...", Img("icons8-realtime.png"), (s, e) => DoTransientWind()),
                 new ToolStripMenuItem("Thresholds...", Img("icons8-slider.png"), (s, e) => DoThresholds()),
                 new ToolStripSeparator(),
-                new ToolStripMenuItem("CFD Settings...", Img("cog.png"), (s, e) => DoCfdSettings()),
+                new ToolStripMenuItem("CFD Settings (Application)...", Img("cog.png"), (s, e) => DoCfdSettings()),
                 new ToolStripMenuItem("Simulation Manager...", Img("table.png"), (s, e) => DoShowSimulationManager()),
                 new ToolStripSeparator(),
                 new ToolStripMenuItem("Exceedance Curves...", Img("icons8-combo_chart.png"), (s, e) => DoExceedanceCurves()),
@@ -201,12 +206,19 @@ namespace DisperSim3D.Controls
             _miGround.Click += (s, e) => { _editor.ShowGroundPlane = _miGround.Checked; };
             _miVectors = new ToolStripMenuItem("Vector Field", Img("icons8-vector.png")) { CheckOnClick = true };
             _miVectors.Click += (s, e) => { _editor.ShowVectorField = _miVectors.Checked; };
+            _miWindArrows = new ToolStripMenuItem("Wind Field Arrows", Img("icons8-wind.png")) { CheckOnClick = true };
+            _miWindArrows.Click += (s, e) =>
+            {
+                _editor.ToggleWindFieldArrows(_miWindArrows.Checked);
+                if (!_editor.IsWindFieldArrowsVisible) _miWindArrows.Checked = false;
+            };
             menuView.DropDownItems.AddRange(new ToolStripItem[] {
                 miCamera,
                 new ToolStripMenuItem("Save Camera Preset", Img("icons8-save_as.png"), (s, e) => DoSaveCameraPreset()),
                 new ToolStripSeparator(),
-                _miSnap, _miGround, _miVectors,
+                _miSnap, _miGround, _miVectors, _miWindArrows,
                 new ToolStripSeparator(),
+                new ToolStripMenuItem("Project Tree", Img("application_view_columns.png"), (s, e) => ShowDockPanel(_projectTreeDock, DockState.DockLeft)),
                 new ToolStripMenuItem("Properties Panel", Img("table.png"), (s, e) => ShowDockPanel(_propertiesDock, DockState.DockRight)),
                 new ToolStripMenuItem("Add Item Panel", Img("add.png"), (s, e) => ToggleAddItemPanel(true)),
                 new ToolStripMenuItem("Simulation Manager", Img("table.png"), (s, e) => DoShowSimulationManager()),
@@ -287,6 +299,14 @@ namespace DisperSim3D.Controls
                 if (sc.CfdConfig == null)
                     sc.CfdConfig = AppSettings.Instance.CreateCfdConfig();
 
+                string validationError = WindFieldResolver.ValidateForDispersion(_editor.Scene, sc);
+                if (!string.IsNullOrEmpty(validationError))
+                {
+                    MessageBox.Show(this, validationError, "Wind field required",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
                 _editor.EnqueueSimulation(sc.SolverType, sc.CfdConfig);
                 DoShowSimulationManager();
                 UpdatePlaybackButtons();
@@ -358,10 +378,28 @@ namespace DisperSim3D.Controls
                 }
             };
 
+            var btnEditScenario = new ToolStripButton(Img("cog.png"))
+            {
+                ToolTipText = "Edit selected scenario",
+                DisplayStyle = ToolStripItemDisplayStyle.Image
+            };
+            if (btnEditScenario.Image == null)
+                btnEditScenario.Text = "...";
+            btnEditScenario.Click += (s, e) => DoManageScenarios();
+
+            var btnSolverSettings = new ToolStripButton(Img("cog.png"))
+            {
+                ToolTipText = "Solver settings (CFD or Gaussian meteorology)",
+                DisplayStyle = ToolStripItemDisplayStyle.Image
+            };
+            if (btnSolverSettings.Image == null)
+                btnSolverSettings.Text = "...";
+            btnSolverSettings.Click += (s, e) => DoSolverSettings();
+
             _simToolStrip.Items.AddRange(new ToolStripItem[] {
-                new ToolStripLabel("Scenario:"), _scenarioCombo,
+                new ToolStripLabel("Scenario:"), _scenarioCombo, btnEditScenario,
                 new ToolStripSeparator(),
-                new ToolStripLabel("Solver:"), _solverCombo,
+                new ToolStripLabel("Solver:"), _solverCombo, btnSolverSettings,
                 new ToolStripSeparator(),
                 _btnRun, _btnPlay, _btnPause, _btnStop,
                 new ToolStripSeparator(),
@@ -392,12 +430,16 @@ namespace DisperSim3D.Controls
                 {
                     UpdateStatus("Decoration: " + _editor.SelectedDecoration.Name);
                     ShowDecorationProperties(_editor.SelectedDecoration);
+                    if (_propertiesDock.IsHidden) _propertiesDock.Show(_dockPanel);
+                    else _propertiesDock.Activate();
                 }
                 else if (_editor.SelectedSource != null)
                 {
                     var src = _editor.SelectedSource;
                     UpdateStatus("Release Source: " + src.Name);
                     ShowSourceProperties(src);
+                    if (_propertiesDock.IsHidden) _propertiesDock.Show(_dockPanel);
+                    else _propertiesDock.Activate();
                 }
                 else
                 {
@@ -406,10 +448,28 @@ namespace DisperSim3D.Controls
                 }
             };
 
+            _editor.ObjectPlaced += Editor_ObjectPlaced;
+
             // --- Properties dock panel ---
             _propertiesDock = new PropertiesDockPanel();
             _propertyGrid = _propertiesDock.PropertyGrid;
-            _propertyGrid.PropertyValueChanged += (s2, e2) => _editor.RefreshViewport();
+
+            _projectTreePanel = new ProjectTreeWpfPanel();
+            _projectTreePanel.ActionRequested += ProjectTree_ActionRequested;
+            _projectTreePanel.SelectionChanged += ProjectTree_SelectionChanged;
+            _projectTreePanel.VisibilityChanged += ProjectTree_VisibilityChanged;
+            _projectTreeDock = new ProjectTreeDockPanel(_projectTreePanel);
+            _propertyGrid.PropertyValueChanged += (s2, e2) =>
+            {
+                if (_propertyGrid.SelectedObject is WindFieldScenario wfSel
+                    && _editor.IsWindFieldArrowsVisible)
+                {
+                    _editor.ShowWindFieldArrows(wfSel, silent: true);
+                }
+                _editor.RefreshViewport();
+                _propertyGrid.Refresh();
+                RefreshProjectTree();
+            };
 
             // --- Monitor dock panel ---
             _monitorDock = new MonitorDockPanel();
@@ -472,8 +532,6 @@ namespace DisperSim3D.Controls
             {
                 if (p.IsError)
                 {
-                    ShowDockPanel(_cfdSimDock, DockState.DockBottom);
-                    _cfdSimPanelUserVisible = true;
                     _dispersionTimeLabel.Text = "CFD failed";
                     _btnRun.Enabled = true;
                     _btnStop.Enabled = false;
@@ -492,9 +550,24 @@ namespace DisperSim3D.Controls
                     bool isDynamic = entry.TimeStepCount > 1;
                     _cfdSimPanel.ShowPlaybackControls(simType, isDynamic);
                 }
-                _cfdSimPanelUserVisible = true;
-                ShowDockPanel(_cfdSimDock, DockState.DockBottom);
+
+                // Find any project Simulation that's running and update its status
+                var sim = _editor.Scene.Simulations.FirstOrDefault(sm =>
+                    (sm.Status == SimulationStatus.Running || sm.Status == SimulationStatus.Queued) &&
+                    (sm.Id == entry.Id || sm.Name == entry.ScenarioName || sm.Name == entry.Name));
+                if (sim != null)
+                {
+                    sim.Status = entry.HasResults ? SimulationStatus.Completed : SimulationStatus.Failed;
+                    sim.CompletedAt = DateTime.Now;
+                    sim.CasePath = entry.CasePath;
+                    sim.TimeStepCount = entry.TimeStepCount;
+                    sim.Progress = 1.0;
+                    if (!entry.HasResults && string.IsNullOrEmpty(sim.StatusMessage))
+                        sim.StatusMessage = "Solver finished without results";
+                }
+
                 UpdatePlaybackButtons();
+                RefreshProjectTree();
             };
 
             _cfdSimPanel.PlayPauseClicked += (s, ev) =>
@@ -532,6 +605,27 @@ namespace DisperSim3D.Controls
             // --- Viewport dock panel ---
             _viewportDock = new ViewportDockPanel(_editor);
 
+            _viewportDock.PlaybackBar.PlayClicked += (s, e) =>
+            {
+                var ds = _editor.DispersionState;
+                if (ds == DispersionSimulationState.Paused) _editor.ResumeDispersion();
+                else if (ds == DispersionSimulationState.Stopped &&
+                         _editor.CfdResult != null && _editor.CfdResult.IsLoaded)
+                    _editor.StartCfdPlayback();
+                UpdatePlaybackBarState();
+            };
+            _viewportDock.PlaybackBar.PauseClicked += (s, e) =>
+            {
+                _editor.PauseDispersion();
+                UpdatePlaybackBarState();
+            };
+            _viewportDock.PlaybackBar.StopClicked += (s, e) =>
+            {
+                _editor.StopDispersion();
+                UpdatePlaybackBarState();
+            };
+            _viewportDock.PlaybackBar.SpeedChanged += (s, factor) => _editor.AnimationSpeedFactor = factor;
+
             // --- DockPanel layout ---
             _dockPanel = new DockPanel
             {
@@ -545,14 +639,17 @@ namespace DisperSim3D.Controls
             _simToolStrip.ApplyDpiScaling(dpiScale);
             _menuStrip.ApplyDpiScaling(dpiScale);
 
+            _simToolStrip.Visible = false;
+
             // --- Assemble ---
             this.Controls.Add(_dockPanel);
-            this.Controls.Add(_simToolStrip);
             this.Controls.Add(_menuStrip);
             this.Controls.Add(_statusStrip);
 
             // Show dock contents (order matters: document first, then panels)
             _viewportDock.Show(_dockPanel, DockState.Document);
+            _projectTreeDock.Show(_dockPanel, DockState.DockLeft);
+            _projectTreePanel.BindScene(_editor.Scene);
             _propertiesDock.Show(_dockPanel, DockState.DockRight);
             _cfdSimDock.Show(_dockPanel, DockState.DockBottom);
             _cfdSimDock.DockState = DockState.Hidden;
@@ -560,6 +657,8 @@ namespace DisperSim3D.Controls
             _monitorDock.DockState = DockState.Hidden;
             _addItemDock.Show(_dockPanel, DockState.DockLeft);
             _addItemDock.DockState = DockState.Hidden;
+
+            RefreshScenarioCombo();
         }
 
         #region Public API
@@ -595,6 +694,8 @@ namespace DisperSim3D.Controls
         public void LoadFromFile(string filePath)
         {
             _editor.LoadFromFile(filePath);
+            RefreshScenarioCombo();
+            RefreshProjectTree();
             UpdateStatus("Loaded: " + filePath);
         }
 
@@ -602,7 +703,15 @@ namespace DisperSim3D.Controls
         {
             _editor.ClearScene();
             ClearPropertyGrid();
+            RefreshScenarioCombo();
+            RefreshProjectTree();
             UpdateStatus("Scene cleared");
+        }
+
+        public void RefreshProjectTree()
+        {
+            if (_projectTreePanel != null)
+                _projectTreePanel.BindScene(_editor.Scene);
         }
 
         public bool HandleKeyDown(Keys keyCode, bool ctrl)
@@ -692,47 +801,16 @@ namespace DisperSim3D.Controls
 
         private void DoAddSource()
         {
-            double windDir = 0;
-            var sc = _editor.Scene.DispersionScenario;
-            if (sc != null)
-                windDir = sc.Meteo.WindDirectionDeg;
-            using (var dlg = new DispersionSourceDialog(windDir))
-            {
-                if (dlg.ShowDialog() == DialogResult.OK)
-                {
-                    _editor.PendingSourceTemplate = new ReleaseSource3D
-                    {
-                        Name = dlg.SourceName,
-                        Gas = dlg.Gas,
-                        ReleaseRateKgPerS = dlg.ReleaseRateKgPerS,
-                        ReleaseDurationS = dlg.ReleaseDurationS,
-                        PuffIntervalS = dlg.PuffIntervalS,
-                        ReleaseHeightOffset = dlg.HeightOffset,
-                        ReleaseAzimuthDeg = dlg.AzimuthDeg,
-                        ReleaseElevationDeg = dlg.ElevationDeg
-                    };
-                    _editor.CurrentEditMode = EditMode.PlaceReleaseSource;
-                    UncheckAllModes();
-                    UpdateStatus("Click to place: " + dlg.SourceName);
-                }
-            }
+            _editor.CurrentEditMode = EditMode.PlaceReleaseSource;
+            UncheckAllModes();
+            UpdateStatus("Click to place release source");
         }
 
         private void DoAddMonitor()
         {
-            using (var dlg = new MonitorPointDialog())
-            {
-                if (dlg.ShowDialog() == DialogResult.OK)
-                {
-                    _editor.PendingMonitorTemplate = new Models.MonitorPoint3D
-                    {
-                        Name = dlg.MonitorName
-                    };
-                    _editor.CurrentEditMode = EditMode.PlaceMonitorPoint;
-                    UncheckAllModes();
-                    UpdateStatus("Click to place monitor: " + dlg.MonitorName);
-                }
-            }
+            _editor.CurrentEditMode = EditMode.PlaceMonitorPoint;
+            UncheckAllModes();
+            UpdateStatus("Click to place monitor point");
         }
 
         private void DoExportMonitorCsv()
@@ -826,7 +904,8 @@ namespace DisperSim3D.Controls
             if (fs.DispersionScenarios.Count == 0)
                 fs.DispersionScenarios.Add(new Models.DispersionScenario());
 
-            using (var dlg = new ScenarioManagerDialog(fs.DispersionScenarios, fs.ActiveScenarioIndex))
+            using (var dlg = new ScenarioManagerDialog(fs.DispersionScenarios, fs.ActiveScenarioIndex,
+                fs.WindFieldScenarios))
             {
                 if (dlg.ShowDialog() == DialogResult.OK)
                 {
@@ -835,6 +914,479 @@ namespace DisperSim3D.Controls
                     fs.ActiveScenarioIndex = dlg.SelectedIndex;
                     RefreshScenarioCombo();
                     UpdateStatus("Scenarios updated. Active: " + (fs.DispersionScenario?.Name ?? "none"));
+                }
+            }
+        }
+
+        private void ProjectTree_ActionRequested(object sender, ProjectTreeActionEventArgs e)
+        {
+            var scene = _editor.Scene;
+            switch (e.Action)
+            {
+                case ProjectTreeAction.EditGeneralSettings:
+                    DoEditGeneralSettings();
+                    break;
+                case ProjectTreeAction.AddPureGas:
+                    DoAddGas(false);
+                    break;
+                case ProjectTreeAction.AddMixture:
+                    DoAddGas(true);
+                    break;
+                case ProjectTreeAction.EditGas:
+                    DoEditGas(e.ItemId);
+                    break;
+                case ProjectTreeAction.DuplicateGas:
+                    DoDuplicateGas(e.ItemId);
+                    break;
+                case ProjectTreeAction.DeleteGas:
+                    DoDeleteGas(e.ItemId);
+                    break;
+                case ProjectTreeAction.ImportGeometry:
+                    DoImport3D();
+                    break;
+                case ProjectTreeAction.AddSource:
+                    DoAddSourceFromTree();
+                    break;
+                case ProjectTreeAction.EditSource:
+                    DoEditSource(e.ItemId);
+                    break;
+                case ProjectTreeAction.DeleteSource:
+                    DoDeleteSource(e.ItemId);
+                    break;
+                case ProjectTreeAction.NewSimulationFromSource:
+                    DoNewSimulation(e.ItemId);
+                    break;
+                case ProjectTreeAction.OpenWindFieldManager:
+                case ProjectTreeAction.AddWindField:
+                    DoManageWindFields();
+                    break;
+                case ProjectTreeAction.EditWindField:
+                    DoEditWindField(e.ItemId);
+                    break;
+                case ProjectTreeAction.RunWindField:
+                    DoRunWindField(e.ItemId);
+                    break;
+                case ProjectTreeAction.OpenWindFieldCase:
+                    DoOpenWindFieldCase(e.ItemId);
+                    break;
+                case ProjectTreeAction.DeleteWindField:
+                    DoDeleteWindField(e.ItemId);
+                    break;
+                case ProjectTreeAction.AddSimulation:
+                    DoNewSimulation(null);
+                    break;
+                case ProjectTreeAction.RunSimulation:
+                case ProjectTreeAction.RerunSimulation:
+                    DoRunSimulation(e.ItemId);
+                    break;
+                case ProjectTreeAction.EditSimulation:
+                    DoEditSimulation(e.ItemId);
+                    break;
+                case ProjectTreeAction.DeleteSimulation:
+                    DoDeleteSimulation(e.ItemId);
+                    break;
+                case ProjectTreeAction.AddMonitor:
+                    DoAddMonitorFromTree();
+                    break;
+                case ProjectTreeAction.AddDetector:
+                    DoAddDetectorFromTree();
+                    break;
+            }
+            RefreshProjectTree();
+        }
+
+        private void ProjectTree_VisibilityChanged(object sender, ProjectTreeVisibilityEventArgs e)
+        {
+            var scene = _editor.Scene;
+            switch (e.Target)
+            {
+                case ProjectTreeTarget.WindField:
+                    var wf = scene.WindFieldScenarios.FirstOrDefault(w => w.Id == e.ItemId);
+                    if (wf == null) return;
+                    if (e.Visible)
+                    {
+                        if (wf.Status != WindFieldStatus.Ready)
+                        {
+                            UpdateStatus("Wind field '" + wf.Name + "' is not ready (status: " + wf.Status + ")");
+                            return;
+                        }
+                        _editor.ShowWindFieldArrows(wf, silent: true);
+                        UpdateStatus("Showing wind field: " + wf.Name);
+                    }
+                    else
+                    {
+                        _editor.HideWindFieldArrows();
+                        UpdateStatus("Hidden wind field: " + wf.Name);
+                    }
+                    break;
+
+                case ProjectTreeTarget.Simulation:
+                    var sim = scene.Simulations.FirstOrDefault(x => x.Id == e.ItemId);
+                    if (sim == null) return;
+                    sim.IsVisible = e.Visible;
+                    if (e.Visible)
+                    {
+                        if (sim.Status != SimulationStatus.Completed)
+                        {
+                            UpdateStatus("Simulation '" + sim.Name + "' has no results yet (" + sim.Status + ")");
+                            return;
+                        }
+                        var entry = _editor.Scene.CfdSimulations.FirstOrDefault(en =>
+                            en.Id == sim.Id || en.Name == sim.Name || en.ScenarioName == sim.Name);
+                        if (entry == null)
+                        {
+                            UpdateStatus("No result entry found for simulation '" + sim.Name + "'");
+                            return;
+                        }
+                        if (_editor.LoadCfdSimulation(entry))
+                        {
+                            _editor.StartCfdPlayback();
+                            UpdateStatus("Showing results: " + sim.Name);
+                        }
+                        else
+                        {
+                            UpdateStatus("Failed to load results from: " + entry.CasePath);
+                        }
+                    }
+                    else
+                    {
+                        _editor.StopDispersion();
+                        UpdateStatus("Stopped: " + sim.Name);
+                    }
+                    break;
+
+                case ProjectTreeTarget.Source:
+                    var src = scene.TopLevelSources.FirstOrDefault(s => s.Id == e.ItemId)
+                        ?? scene.DispersionScenarios.SelectMany(d => d.Sources).FirstOrDefault(s => s.Id == e.ItemId);
+                    if (src == null)
+                    {
+                        UpdateStatus("Source not found: " + e.ItemId);
+                        return;
+                    }
+                    src.IsVisible = e.Visible;
+                    // Also update any duplicate references (legacy migration may leave the same source in DispersionScenario.Sources)
+                    foreach (var ds in scene.DispersionScenarios)
+                        foreach (var s in ds.Sources)
+                            if (s.Id == src.Id) s.IsVisible = e.Visible;
+                    _editor.RefreshViewport();
+                    UpdateStatus((e.Visible ? "Showing" : "Hidden") + " source: " + src.Name);
+                    break;
+
+                default:
+                    UpdateStatus("Visibility toggle for " + e.Target + " not implemented yet");
+                    break;
+            }
+        }
+
+        private void ProjectTree_SelectionChanged(object sender, ProjectTreeSelectionEventArgs e)
+        {
+            if (e.Selected != null && _propertyGrid != null)
+                _propertyGrid.SelectedObject = e.Selected;
+            if (e.Selected is ReleaseSource3D src)
+                _editor.SelectedSource = src;
+            UpdatePlaybackBarState(e.Title);
+        }
+
+        private void UpdatePlaybackBarState(string title = null)
+        {
+            var bar = _viewportDock?.PlaybackBar;
+            if (bar == null) return;
+
+            var state = _editor.DispersionState;
+            bool isStopped = state == DispersionSimulationState.Stopped;
+            bool isRunning = state == DispersionSimulationState.Running;
+            bool isPaused = state == DispersionSimulationState.Paused;
+            bool isSolving = state == DispersionSimulationState.SolvingCfd;
+            bool isSteadyComplete = state == DispersionSimulationState.SteadyStateComplete;
+
+            bool hasPlayable = (_editor.CfdResult != null && _editor.CfdResult.IsLoaded);
+            bool show = isRunning || isPaused || isSolving || hasPlayable;
+            bar.Visible = show;
+            if (!show) return;
+
+            bar.SetTitle(title ?? "Playback");
+            bar.SetButtons(
+                playEnabled: isPaused || (isStopped && hasPlayable),
+                pauseEnabled: isRunning,
+                stopEnabled: !isStopped && !isSteadyComplete);
+
+            if (isSolving) bar.SetTimeText("CFD solving...");
+            else if (isRunning || isPaused)
+                bar.SetTimeText(string.Format("T = {0:F1} s / {1:F0} s",
+                    _editor.DispersionTimeS, _editor.SimulationTotalDurationS));
+            else bar.SetTimeText("Ready");
+        }
+
+        private void DoEditGeneralSettings()
+        {
+            var s = _editor.Scene.GeneralSettings ?? (_editor.Scene.GeneralSettings = new ProjectSettings());
+            using (var dlg = new MeteorologicalDialog(s.DefaultMeteo))
+            {
+                if (dlg.ShowDialog() == DialogResult.OK && dlg.Result != null)
+                {
+                    s.DefaultMeteo = dlg.Result;
+                    UpdateStatus("General settings updated");
+                }
+            }
+        }
+
+        private void DoAddGas(bool mixture)
+        {
+            var item = mixture
+                ? GasLibraryItem.FromMixture("New Mixture", new GasMixture())
+                : GasLibraryItem.FromGasProperties(GasProperties.CreateMethane());
+            using (var dlg = new GasLibraryItemDialog(item))
+            {
+                if (dlg.ShowDialog() == DialogResult.OK)
+                {
+                    _editor.Scene.GasLibrary.Add(dlg.Result);
+                    UpdateStatus("Added gas: " + dlg.Result.Name);
+                }
+            }
+        }
+
+        private void DoEditGas(string id)
+        {
+            var item = _editor.Scene.GasLibrary.FirstOrDefault(g => g.Id == id);
+            if (item == null) return;
+            using (var dlg = new GasLibraryItemDialog(item))
+            {
+                if (dlg.ShowDialog() == DialogResult.OK)
+                {
+                    var idx = _editor.Scene.GasLibrary.IndexOf(item);
+                    _editor.Scene.GasLibrary[idx] = dlg.Result;
+                    UpdateStatus("Gas updated: " + dlg.Result.Name);
+                }
+            }
+        }
+
+        private void DoDuplicateGas(string id)
+        {
+            var item = _editor.Scene.GasLibrary.FirstOrDefault(g => g.Id == id);
+            if (item == null) return;
+            GasLibraryItem copy;
+            if (item.Kind == GasLibraryItemKind.Mixture)
+                copy = GasLibraryItem.FromMixture(item.Name + " (copy)", item.Mixture);
+            else
+                copy = GasLibraryItem.FromGasProperties(item.PureGas);
+            copy.Name = item.Name + " (copy)";
+            _editor.Scene.GasLibrary.Add(copy);
+        }
+
+        private void DoDeleteGas(string id)
+        {
+            var item = _editor.Scene.GasLibrary.FirstOrDefault(g => g.Id == id);
+            if (item == null) return;
+            if (MessageBox.Show("Delete gas '" + item.Name + "'?", "Confirm",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            _editor.Scene.GasLibrary.Remove(item);
+        }
+
+        private void DoAddSourceFromTree()
+        {
+            _editor.CurrentEditMode = EditMode.PlaceReleaseSource;
+            UncheckAllModes();
+            UpdateStatus("Click on the map to place the source...");
+        }
+
+        private void DoEditSource(string id)
+        {
+            var src = _editor.Scene.TopLevelSources.FirstOrDefault(s => s.Id == id);
+            if (src == null) return;
+            _propertyGrid.SelectedObject = src;
+            UpdateStatus("Edit source via Properties panel");
+        }
+
+        private void DoDeleteSource(string id)
+        {
+            var src = _editor.Scene.TopLevelSources.FirstOrDefault(s => s.Id == id);
+            if (src == null) return;
+            if (MessageBox.Show("Delete source '" + src.Name + "'?", "Confirm",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            _editor.Scene.TopLevelSources.Remove(src);
+        }
+
+        private void DoNewSimulation(string preselectedSourceId)
+        {
+            using (var dlg = new SimulationEditorDialog(_editor.Scene, preselectedSourceId))
+            {
+                if (dlg.ShowDialog() == DialogResult.OK && dlg.Result != null)
+                {
+                    _editor.Scene.Simulations.Add(dlg.Result);
+                    UpdateStatus("Simulation created: " + dlg.Result.Name);
+                }
+            }
+        }
+
+        private void DoEditSimulation(string id)
+        {
+            var sim = _editor.Scene.Simulations.FirstOrDefault(s => s.Id == id);
+            if (sim == null) return;
+            _propertyGrid.SelectedObject = sim;
+        }
+
+        private void DoDeleteSimulation(string id)
+        {
+            var sim = _editor.Scene.Simulations.FirstOrDefault(s => s.Id == id);
+            if (sim == null) return;
+            if (MessageBox.Show("Delete simulation '" + sim.Name + "'?", "Confirm",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            _editor.Scene.Simulations.Remove(sim);
+        }
+
+        private void DoRunSimulation(string id)
+        {
+            var sim = _editor.Scene.Simulations.FirstOrDefault(s => s.Id == id);
+            if (sim == null) return;
+            if (SimulationRunner.RunSnapshot(sim, _editor.Scene, _editor, m => UpdateStatus(m)))
+                DoShowSimulationManager();
+            RefreshProjectTree();
+        }
+
+        private void DoAddMonitorFromTree()
+        {
+            using (var dlg = new MonitorPointDialog())
+            {
+                if (dlg.ShowDialog() == DialogResult.OK)
+                {
+                    _editor.Scene.MonitorPoints.Add(new MonitorPoint3D
+                    {
+                        Name = dlg.MonitorName,
+                        Position = new System.Windows.Media.Media3D.Point3D(dlg.PosX, dlg.PosY, dlg.PosZ)
+                    });
+                }
+            }
+        }
+
+        private void DoAddDetectorFromTree()
+        {
+            var det = new GasDetector3D { Name = "Detector " + (_editor.Scene.GasDetectors.Count + 1) };
+            _editor.Scene.GasDetectors.Add(det);
+            _propertyGrid.SelectedObject = det;
+        }
+
+        private void DoEditWindField(string id)
+        {
+            var fs = _editor.Scene;
+            var wf = fs.WindFieldScenarios.FirstOrDefault(w => w.Id == id);
+            if (wf == null) return;
+            using (var dlg = new WindFieldManagerDialog(fs, _editor.CfdEnvironment, id))
+            {
+                if (dlg.ShowDialog() == DialogResult.OK)
+                {
+                    fs.WindFieldScenarios.Clear();
+                    fs.WindFieldScenarios.AddRange(dlg.Scenarios);
+                    UpdateStatus("Wind field updated");
+                }
+            }
+        }
+
+        private void DoRunWindField(string id)
+        {
+            var fs = _editor.Scene;
+            var wf = fs.WindFieldScenarios.FirstOrDefault(w => w.Id == id);
+            if (wf == null) return;
+
+            wf.CfdConfig = AppSettings.Instance.CreateCfdConfig();
+
+            var obstacles = new System.Collections.Generic.List<BoundingBox>();
+            foreach (var deco in fs.Decorations)
+                if (deco.BoundingBox != null) obstacles.Add(deco.BoundingBox);
+
+            var dpiF = this.DeviceDpi / 96f;
+            var dlg = new System.Windows.Forms.Form
+            {
+                Text = "Running wind field: " + wf.Name,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                StartPosition = FormStartPosition.CenterParent,
+                MinimizeBox = false,
+                MaximizeBox = false,
+                AutoScaleMode = AutoScaleMode.Dpi,
+                AutoScaleDimensions = new System.Drawing.SizeF(96F, 96F),
+                ClientSize = new System.Drawing.Size((int)(460 * dpiF), (int)(110 * dpiF)),
+                Padding = new Padding((int)(10 * dpiF))
+            };
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                AutoSize = false
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            var lbl = new Label
+            {
+                AutoSize = false, Dock = DockStyle.Fill,
+                Height = (int)(36 * dpiF),
+                TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
+                Text = "Starting..."
+            };
+            var pb = new ProgressBar
+            {
+                Dock = DockStyle.Fill, Height = (int)(22 * dpiF),
+                Minimum = 0, Maximum = 100
+            };
+            layout.Controls.Add(lbl, 0, 0);
+            layout.Controls.Add(pb, 0, 1);
+            dlg.Controls.Add(layout);
+
+            var worker = new System.ComponentModel.BackgroundWorker { WorkerReportsProgress = true };
+            worker.DoWork += (s, e) =>
+            {
+                var runner = new WindFieldRunner(_editor.CfdEnvironment);
+                runner.Run(wf, obstacles, (frac, msg) => worker.ReportProgress((int)(frac * 100), msg));
+            };
+            worker.ProgressChanged += (s, e) =>
+            {
+                pb.Value = Math.Max(0, Math.Min(100, e.ProgressPercentage));
+                lbl.Text = (string)e.UserState ?? "";
+            };
+            worker.RunWorkerCompleted += (s, e) =>
+            {
+                dlg.Close();
+                UpdateStatus(string.Format("Wind field '{0}': {1} {2}", wf.Name, wf.Status,
+                    string.IsNullOrEmpty(wf.StatusMessage) ? "" : "— " + wf.StatusMessage));
+                RefreshProjectTree();
+            };
+            worker.RunWorkerAsync();
+            dlg.ShowDialog(this);
+        }
+
+        private void DoOpenWindFieldCase(string id)
+        {
+            var wf = _editor.Scene.WindFieldScenarios.FirstOrDefault(w => w.Id == id);
+            if (wf == null || string.IsNullOrEmpty(wf.CasePath)) return;
+            if (!System.IO.Directory.Exists(wf.CasePath))
+            {
+                MessageBox.Show(this, "Case folder no longer exists: " + wf.CasePath,
+                    "Wind Field", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            try { System.Diagnostics.Process.Start("explorer.exe", "\"" + wf.CasePath + "\""); }
+            catch (Exception ex) { UpdateStatus("Failed to open folder: " + ex.Message); }
+        }
+
+        private void DoDeleteWindField(string id)
+        {
+            var wf = _editor.Scene.WindFieldScenarios.FirstOrDefault(w => w.Id == id);
+            if (wf == null) return;
+            if (MessageBox.Show("Delete wind field '" + wf.Name + "'? Simulations referencing it will fail to run.",
+                "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            _editor.Scene.WindFieldScenarios.Remove(wf);
+        }
+
+        private void DoManageWindFields()
+        {
+            var fs = _editor.Scene;
+            using (var dlg = new WindFieldManagerDialog(fs, _editor.CfdEnvironment))
+            {
+                if (dlg.ShowDialog() == DialogResult.OK)
+                {
+                    fs.WindFieldScenarios.Clear();
+                    fs.WindFieldScenarios.AddRange(dlg.Scenarios);
+                    UpdateStatus("Wind field scenarios updated (" + fs.WindFieldScenarios.Count + ")");
                 }
             }
         }
@@ -867,18 +1419,122 @@ namespace DisperSim3D.Controls
             }
         }
 
+        private void Editor_ObjectPlaced(object sender, ObjectPlacedEventArgs e)
+        {
+            switch (e.PlacementType)
+            {
+                case EditMode.PlaceReleaseSource:
+                    var src = (ReleaseSource3D)e.PlacedObject;
+                    double windDir = _editor.Scene.GeneralSettings?.DefaultMeteo?.WindDirectionDeg
+                        ?? _editor.Scene.DispersionScenario?.Meteo?.WindDirectionDeg ?? 0;
+                    using (var dlg = new DispersionSourceDialog(windDir))
+                    {
+                        dlg.Text = "Configure Release Source";
+                        if (dlg.ShowDialog() == DialogResult.OK)
+                        {
+                            src.Name = dlg.SourceName;
+                            src.Gas = dlg.Gas;
+                            src.ReleaseRateKgPerS = dlg.ReleaseRateKgPerS;
+                            src.PuffIntervalS = dlg.PuffIntervalS;
+                            src.ReleaseHeightOffset = dlg.HeightOffset;
+                            src.ReleaseAzimuthDeg = dlg.AzimuthDeg;
+                            src.ReleaseElevationDeg = dlg.ElevationDeg;
+
+                            if (dlg.Gas != null)
+                            {
+                                var libItem = _editor.Scene.GasLibrary.FirstOrDefault(g =>
+                                    g.Kind == GasLibraryItemKind.Pure && g.PureGas != null &&
+                                    g.PureGas.Name == dlg.Gas.Name &&
+                                    g.PureGas.MolarMass == dlg.Gas.MolarMass);
+                                if (libItem == null)
+                                {
+                                    libItem = GasLibraryItem.FromGasProperties(dlg.Gas);
+                                    _editor.Scene.GasLibrary.Add(libItem);
+                                }
+                                src.GasRefId = libItem.Id;
+                            }
+
+                            _editor.Scene.DispersionScenario?.Sources.Remove(src);
+                            if (!_editor.Scene.TopLevelSources.Contains(src))
+                                _editor.Scene.TopLevelSources.Add(src);
+
+                            _editor.RefreshViewport();
+                            RefreshProjectTree();
+                            ShowSourceProperties(src);
+                            UpdateStatus("Source placed: " + src.Name);
+                        }
+                        else
+                        {
+                            _editor.Scene.DispersionScenario?.Sources.Remove(src);
+                            _editor.Scene.TopLevelSources.Remove(src);
+                            _editor.RefreshViewport();
+                            RefreshProjectTree();
+                            UpdateStatus("Source placement cancelled");
+                        }
+                    }
+                    break;
+
+                case EditMode.PlaceMonitorPoint:
+                    var mon = (MonitorPoint3D)e.PlacedObject;
+                    using (var dlg = new MonitorPointDialog(mon.Name, mon.Position.X, mon.Position.Y, mon.Position.Z))
+                    {
+                        dlg.Text = "Configure Monitor Point";
+                        if (dlg.ShowDialog() == DialogResult.OK)
+                        {
+                            mon.Name = dlg.MonitorName;
+                            mon.Position = new Point3D(dlg.PosX, dlg.PosY, dlg.PosZ);
+                            _editor.RefreshViewport();
+                            UpdateStatus("Monitor placed: " + mon.Name);
+                        }
+                        else
+                        {
+                            _editor.RemoveMonitorPoint(mon);
+                            UpdateStatus("Monitor placement cancelled");
+                        }
+                    }
+                    break;
+
+                case EditMode.PlaceFireSource:
+                    var fire = (FireSource)e.PlacedObject;
+                    using (var dlg = new FireSourceDialog())
+                    {
+                        dlg.Text = "Configure Fire Source";
+                        if (dlg.ShowDialog() == DialogResult.OK)
+                        {
+                            var r = dlg.Result;
+                            fire.Name = r.Name;
+                            fire.MassFlowRateKgS = r.MassFlowRateKgS;
+                            fire.OrificeDiameterM = r.OrificeDiameterM;
+                            fire.HeatOfCombustionJKg = r.HeatOfCombustionJKg;
+                            fire.RadiativeFraction = r.RadiativeFraction;
+                            fire.IsPoolFire = r.IsPoolFire;
+                            fire.PoolDiameterM = r.PoolDiameterM;
+                            fire.PoolBurnRateKgM2S = r.PoolBurnRateKgM2S;
+                            fire.Direction = r.Direction;
+                            _editor.RefreshViewport();
+                            UpdateStatus("Fire source placed: " + fire.Name);
+                        }
+                        else
+                        {
+                            _editor.Scene.FireScenario.Sources.Remove(fire);
+                            _editor.RefreshViewport();
+                            UpdateStatus("Fire source placement cancelled");
+                        }
+                    }
+                    break;
+
+                case EditMode.PlaceGasDetector:
+                    var det = (GasDetector3D)e.PlacedObject;
+                    UpdateStatus("Detector placed: " + det.Name);
+                    break;
+            }
+        }
+
         private void DoAddFireSource()
         {
-            using (var dlg = new FireSourceDialog())
-            {
-                if (dlg.ShowDialog() == DialogResult.OK)
-                {
-                    _editor.PendingFireTemplate = dlg.Result;
-                    _editor.CurrentEditMode = EditMode.PlaceFireSource;
-                    UncheckAllModes();
-                    UpdateStatus("Click to place fire: " + dlg.Result.Name);
-                }
-            }
+            _editor.CurrentEditMode = EditMode.PlaceFireSource;
+            UncheckAllModes();
+            UpdateStatus("Click to place fire source");
         }
 
         private void DoAddDetector()
@@ -990,18 +1646,38 @@ namespace DisperSim3D.Controls
 
         private void DoCfdSettings()
         {
-            var scenario = EnsureScenario();
-            if (scenario.CfdConfig == null)
-                scenario.CfdConfig = AppSettings.Instance.CreateCfdConfig();
-
-            using (var dlg = new CfdSettingsDialog(scenario.CfdConfig, _editor.CfdEnvironment))
+            var current = AppSettings.Instance.CreateCfdConfig();
+            using (var dlg = new CfdSettingsDialog(current, _editor.CfdEnvironment))
             {
                 if (dlg.ShowDialog() == DialogResult.OK)
                 {
-                    scenario.CfdConfig = dlg.Result;
                     AppSettings.Instance.UpdateFromConfig(dlg.Result);
-                    UpdateStatus("CFD settings updated (" + dlg.Result.DetectedEnvironment + ")");
+                    UpdateStatus("Application CFD settings updated (" + dlg.Result.DetectedEnvironment + ")");
                 }
+            }
+        }
+
+        private void DoSolverSettings()
+        {
+            var scenario = EnsureScenario();
+            bool isGaussian = scenario.SolverType == CfdSolverType.GaussianPuff
+                           || scenario.SolverType == CfdSolverType.GaussianPlume;
+
+            if (isGaussian)
+            {
+                if (scenario.Meteo == null) scenario.Meteo = new MeteorologicalConditions();
+                using (var dlg = new MeteorologicalDialog(scenario.Meteo))
+                {
+                    if (dlg.ShowDialog() == DialogResult.OK && dlg.Result != null)
+                    {
+                        scenario.Meteo = dlg.Result;
+                        UpdateStatus("Gaussian meteorology updated");
+                    }
+                }
+            }
+            else
+            {
+                DoCfdSettings();
             }
         }
 
@@ -1116,6 +1792,8 @@ namespace DisperSim3D.Controls
 
         private void UpdatePlaybackButtons()
         {
+            UpdatePlaybackBarState();
+
             var state = _editor.DispersionState;
             bool isStopped = state == DispersionSimulationState.Stopped;
             bool isRunning = state == DispersionSimulationState.Running;

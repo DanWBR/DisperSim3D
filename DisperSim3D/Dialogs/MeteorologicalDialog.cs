@@ -67,10 +67,12 @@ namespace DisperSim3D.Dialogs
 
             int row = 0;
             nudWindSpeed = MakeNud(0.1m, 50m, 5m, 1);
-            AddRow(table, row++, "Wind Speed (m/s):", nudWindSpeed);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Wind Speed (m/s):", nudWindSpeed,
+                "Mean wind magnitude at the 10 m reference height.");
 
             nudWindDirection = MakeNud(0m, 360m, 270m, 0);
-            AddRow(table, row++, "Wind Direction (deg, 0=N):", nudWindDirection);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Wind Direction (deg, 0=N):", nudWindDirection,
+                "Meteorological convention: direction the wind blows FROM (0°=N, 90°=E, 180°=S, 270°=W).");
 
             cmbStability = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
             cmbStability.Items.AddRange(new object[] {
@@ -78,13 +80,16 @@ namespace DisperSim3D.Dialogs
                 "D - Neutral", "E - Slightly Stable", "F - Stable"
             });
             cmbStability.SelectedIndex = 3;
-            AddRow(table, row++, "Stability Class:", cmbStability);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Stability Class:", cmbStability,
+                "Pasquill-Gifford atmospheric stability. Controls turbulent dispersion: A spreads fastest, F traps the plume.");
 
             nudTemperature = MakeNud(200m, 350m, 293.15m, 2);
-            AddRow(table, row++, "Temperature (K):", nudTemperature);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Temperature (K):", nudTemperature,
+                "Ambient air temperature in Kelvin (293.15 K = 20 °C).");
 
             nudPressure = MakeNud(80000m, 120000m, 101325m, 0);
-            AddRow(table, row++, "Pressure (Pa):", nudPressure);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Pressure (Pa):", nudPressure,
+                "Ambient atmospheric pressure (101325 Pa = sea level standard).");
 
             var buttons = new TableLayoutPanel
             {

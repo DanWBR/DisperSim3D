@@ -85,6 +85,12 @@ namespace DisperSim3D.Models
         public CfdConfiguration CfdConfig { get; set; }
 
         /// <summary>
+        /// Gets or sets the ID of the associated <see cref="WindFieldScenario"/>.
+        /// Required for all dispersion runs.
+        /// </summary>
+        public string WindFieldScenarioId { get; set; }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="DispersionScenario"/> class with default values.
         /// </summary>
         public DispersionScenario()

@@ -53,19 +53,37 @@ namespace DisperSim3D.Dialogs
             this.MinimizeBox = false;
             this.StartPosition = FormStartPosition.CenterParent;
             var dpi = DeviceDpi / 96f;
-            this.ClientSize = new System.Drawing.Size((int)(580 * dpi), (int)(320 * dpi));
-            this.MinimumSize = new System.Drawing.Size((int)(450 * dpi), (int)(280 * dpi));
+            this.ClientSize = new System.Drawing.Size((int)(620 * dpi), (int)(440 * dpi));
+            this.MinimumSize = new System.Drawing.Size((int)(500 * dpi), (int)(380 * dpi));
             this.Padding = new Padding((int)(10 * dpi));
 
             var outerLayout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 2
+                RowCount = 3
             };
             outerLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            outerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             outerLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             outerLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            var help = new Label
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ForeColor = System.Drawing.SystemColors.GrayText,
+                Font = new System.Drawing.Font("Segoe UI", 7.5f, System.Drawing.FontStyle.Regular),
+                MaximumSize = new System.Drawing.Size((int)(560 * dpi), 0),
+                Margin = new Padding(0, 0, 0, 6),
+                Text = "Each threshold becomes a 3D isosurface in the visualization.\n" +
+                       "Name: label shown in the legend (e.g. Low, Medium, High, LFL).\n" +
+                       "Concentration: kg/m³ value defining the isosurface.\n" +
+                       "Color (ARGB hex): 8 hex digits, e.g. 64FF0000 = semi-transparent red.\n" +
+                       "Opacity: 0 = invisible, 1 = solid (also baked into the alpha channel of Color).\n" +
+                       "Visible: uncheck to hide without deleting."
+            };
+            outerLayout.Controls.Add(help, 0, 0);
 
             _grid = new DataGridView
             {
@@ -82,7 +100,7 @@ namespace DisperSim3D.Dialogs
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Opacity", HeaderText = "Opacity (0-1)" });
             _grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Visible", HeaderText = "Visible" });
 
-            outerLayout.Controls.Add(_grid, 0, 0);
+            outerLayout.Controls.Add(_grid, 0, 1);
 
             var buttons = new TableLayoutPanel
             {
@@ -132,7 +150,7 @@ namespace DisperSim3D.Dialogs
             this.AcceptButton = btnOK;
             this.CancelButton = btnCancel;
 
-            outerLayout.Controls.Add(buttons, 0, 1);
+            outerLayout.Controls.Add(buttons, 0, 2);
             this.Controls.Add(outerLayout);
             this.ApplyDpiScaling();
         }

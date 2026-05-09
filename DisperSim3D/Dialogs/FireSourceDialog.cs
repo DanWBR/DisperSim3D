@@ -57,19 +57,24 @@ namespace DisperSim3D.Dialogs
 
             int row = 0;
             txtName = new TextBox { Text = "JetFire1", Dock = DockStyle.Fill };
-            AddRow(table, row++, "Name:", txtName);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Name:", txtName,
+                "Identifier shown in the scene tree and result reports.");
 
             nudMassFlow = MakeNud(0.001m, 1000m, 1.0m, 3);
-            AddRow(table, row++, "Mass Flow (kg/s):", nudMassFlow);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Mass Flow (kg/s):", nudMassFlow,
+                "Fuel mass burning rate. Drives flame length and radiative output.");
 
             nudOrifice = MakeNud(0.001m, 1.0m, 0.025m, 3);
-            AddRow(table, row++, "Orifice Dia (m):", nudOrifice);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Orifice Dia (m):", nudOrifice,
+                "Jet outlet diameter, used for flame length correlations (e.g. Chamberlain).");
 
             nudHeatCombustion = MakeNud(1e6m, 100e6m, 50e6m, 0);
-            AddRow(table, row++, "Heat Combustion (J/kg):", nudHeatCombustion);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Heat Combustion (J/kg):", nudHeatCombustion,
+                "Energy released per kg of fuel. Methane ≈ 50 MJ/kg, propane ≈ 46 MJ/kg.");
 
             nudRadFraction = MakeNud(0.05m, 0.5m, 0.2m, 2);
-            AddRow(table, row++, "Radiative Fraction:", nudRadFraction);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Radiative Fraction:", nudRadFraction,
+                "Fraction of combustion heat radiated away. Typical: 0.15-0.25 for jet fires, 0.30-0.40 for pool fires.");
 
             chkPoolFire = new CheckBox { Text = "Pool Fire", AutoSize = true };
             chkPoolFire.CheckedChanged += (s, e) =>
@@ -77,15 +82,18 @@ namespace DisperSim3D.Dialogs
                 nudPoolDiameter.Enabled = chkPoolFire.Checked;
                 nudBurnRate.Enabled = chkPoolFire.Checked;
             };
-            AddRow(table, row++, "", chkPoolFire);
+            DialogHelpers.AddRowWithHelp(table, ref row, "", chkPoolFire,
+                "Check for a liquid pool fire. Unchecked = jet/flare fire.");
 
             nudPoolDiameter = MakeNud(0.5m, 100m, 5.0m, 1);
             nudPoolDiameter.Enabled = false;
-            AddRow(table, row++, "Pool Diameter (m):", nudPoolDiameter);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Pool Diameter (m):", nudPoolDiameter,
+                "Diameter of the liquid pool surface (only used when Pool Fire is enabled).");
 
             nudBurnRate = MakeNud(0.001m, 1.0m, 0.05m, 3);
             nudBurnRate.Enabled = false;
-            AddRow(table, row++, "Burn Rate (kg/m²/s):", nudBurnRate);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Burn Rate (kg/m²/s):", nudBurnRate,
+                "Mass burned per unit pool area. Hydrocarbons typically 0.04-0.10 kg/m²/s.");
 
             var buttons = new TableLayoutPanel
             {

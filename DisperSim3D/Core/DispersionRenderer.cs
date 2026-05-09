@@ -20,6 +20,9 @@ namespace DisperSim3D.Core
         private double _domainSize;
         private Point3D _gridOrigin;
         private double _cellSize;
+        private double _cellSizeX;
+        private double _cellSizeY;
+        private double _cellSizeZ;
         private readonly Random _rng = new Random(42);
 
         /// <summary>
@@ -31,6 +34,9 @@ namespace DisperSim3D.Core
             _gridRes = scenario.GridResolution;
             _domainSize = scenario.DomainSizeM;
             _cellSize = (_domainSize * 2.0) / _gridRes;
+            _cellSizeX = _cellSize;
+            _cellSizeY = _cellSize;
+            _cellSizeZ = _cellSize;
             _gridOrigin = new Point3D(-_domainSize, -_domainSize, 0);
             _scalarField = new double[_gridRes, _gridRes, _gridRes / 2 > 0 ? _gridRes / 2 : 1];
         }
@@ -56,7 +62,8 @@ namespace DisperSim3D.Core
             foreach (var threshold in sorted)
             {
                 var mesh = MarchingCubes.GenerateIsosurface(
-                    _scalarField, threshold.ConcentrationValue, _gridOrigin, _cellSize);
+                    _scalarField, threshold.ConcentrationValue, _gridOrigin,
+                    _cellSizeX, _cellSizeY, _cellSizeZ);
 
                 if (mesh.Positions.Count == 0) continue;
 
@@ -337,7 +344,11 @@ namespace DisperSim3D.Core
             _gridOrigin = new Point3D(xMin, yMin, 0);
             int nx = _scalarField != null ? _scalarField.GetLength(0) : _gridRes;
             int ny = _scalarField != null ? _scalarField.GetLength(1) : _gridRes;
-            _cellSize = Math.Max((xMax - xMin) / nx, (yMax - yMin) / ny);
+            int nz = _scalarField != null ? _scalarField.GetLength(2) : (_gridRes / 2 > 0 ? _gridRes / 2 : 1);
+            _cellSizeX = (xMax - xMin) / nx;
+            _cellSizeY = (yMax - yMin) / ny;
+            _cellSizeZ = zMax / nz;
+            _cellSize = Math.Max(_cellSizeX, Math.Max(_cellSizeY, _cellSizeZ));
             _domainSize = Math.Max(xMax - xMin, yMax - yMin) / 2.0;
         }
 
@@ -361,7 +372,8 @@ namespace DisperSim3D.Core
                 foreach (var th in sorted)
                 {
                     var mesh = MarchingCubes.GenerateIsosurface(
-                        _scalarField, th.ConcentrationValue, _gridOrigin, _cellSize);
+                        _scalarField, th.ConcentrationValue, _gridOrigin,
+                        _cellSizeX, _cellSizeY, _cellSizeZ);
                     if (mesh.Positions.Count == 0) continue;
                     group.Children.Add(MakeCloudGeometry(mesh, th.Color, th.Opacity));
                 }
@@ -381,7 +393,8 @@ namespace DisperSim3D.Core
             for (int i = 0; i < fractions.Length; i++)
             {
                 double isoVal = maxC * fractions[i];
-                var mesh = MarchingCubes.GenerateIsosurface(_scalarField, isoVal, _gridOrigin, _cellSize);
+                var mesh = MarchingCubes.GenerateIsosurface(_scalarField, isoVal, _gridOrigin,
+                    _cellSizeX, _cellSizeY, _cellSizeZ);
                 if (mesh.Positions.Count == 0) continue;
 
                 var color = Color.FromRgb(colors[i][0], colors[i][1], colors[i][2]);
@@ -440,7 +453,8 @@ namespace DisperSim3D.Core
             foreach (var threshold in sorted)
             {
                 var mesh = MarchingCubes.GenerateIsosurface(
-                    _scalarField, threshold.ConcentrationValue, _gridOrigin, _cellSize);
+                    _scalarField, threshold.ConcentrationValue, _gridOrigin,
+                    _cellSizeX, _cellSizeY, _cellSizeZ);
                 if (mesh.Positions.Count == 0) continue;
 
                 var color = threshold.Color;
@@ -676,6 +690,9 @@ namespace DisperSim3D.Core
             if (newResolution > 100) newResolution = 100;
             _gridRes = newResolution;
             _cellSize = (_domainSize * 2.0) / _gridRes;
+            _cellSizeX = _cellSize;
+            _cellSizeY = _cellSize;
+            _cellSizeZ = _cellSize;
             _scalarField = new double[_gridRes, _gridRes, _gridRes / 2 > 0 ? _gridRes / 2 : 1];
             _occupancyGrid = null;
         }
@@ -699,17 +716,15 @@ namespace DisperSim3D.Core
 
             if (boxes.Count == 0) return;
 
-            double halfCell = _cellSize * 0.5;
-
             for (int i = 0; i < _gridRes; i++)
             {
-                double x = _gridOrigin.X + i * _cellSize + halfCell;
+                double x = _gridOrigin.X + i * _cellSizeX + _cellSizeX * 0.5;
                 for (int j = 0; j < _gridRes; j++)
                 {
-                    double y = _gridOrigin.Y + j * _cellSize + halfCell;
+                    double y = _gridOrigin.Y + j * _cellSizeY + _cellSizeY * 0.5;
                     for (int k = 0; k < nz; k++)
                     {
-                        double z = _gridOrigin.Z + k * _cellSize + halfCell;
+                        double z = _gridOrigin.Z + k * _cellSizeZ + _cellSizeZ * 0.5;
                         var pt = new Point3D(x, y, z);
 
                         for (int b = 0; b < boxes.Count; b++)
@@ -736,9 +751,9 @@ namespace DisperSim3D.Core
         {
             if (_occupancyGrid == null) return false;
 
-            int i = (int)((x - _gridOrigin.X) / _cellSize);
-            int j = (int)((y - _gridOrigin.Y) / _cellSize);
-            int k = (int)((z - _gridOrigin.Z) / _cellSize);
+            int i = (int)((x - _gridOrigin.X) / _cellSizeX);
+            int j = (int)((y - _gridOrigin.Y) / _cellSizeY);
+            int k = (int)((z - _gridOrigin.Z) / _cellSizeZ);
 
             int nz = _occupancyGrid.GetLength(2);
             if (i < 0 || i >= _gridRes || j < 0 || j >= _gridRes || k < 0 || k >= nz)
@@ -754,10 +769,10 @@ namespace DisperSim3D.Core
 
             for (int i = 0; i < _gridRes; i++)
             {
-                double x = _gridOrigin.X + i * _cellSize;
+                double x = _gridOrigin.X + i * _cellSizeX;
                 for (int j = 0; j < _gridRes; j++)
                 {
-                    double y = _gridOrigin.Y + j * _cellSize;
+                    double y = _gridOrigin.Y + j * _cellSizeY;
                     for (int k = 0; k < nz; k++)
                     {
                         if (hasOccupancy && _occupancyGrid[i, j, k])
@@ -765,7 +780,7 @@ namespace DisperSim3D.Core
                             _scalarField[i, j, k] = 0;
                             continue;
                         }
-                        double z = _gridOrigin.Z + k * _cellSize;
+                        double z = _gridOrigin.Z + k * _cellSizeZ;
                         _scalarField[i, j, k] = engine.EvaluateConcentration(x, y, z);
                     }
                 }
@@ -867,7 +882,9 @@ namespace DisperSim3D.Core
 
             var group = group0;
             var sphereMesh = CreateLowPolySphere(0.5, 4, 4);
-            double halfCell = _cellSize * 0.5;
+            double halfCellX = _cellSizeX * 0.5;
+            double halfCellY = _cellSizeY * 0.5;
+            double halfCellZ = _cellSizeZ * 0.5;
 
             int particlesPlaced = 0;
             double invMax = 1.0 / maxConcentration;
@@ -881,9 +898,9 @@ namespace DisperSim3D.Core
 
                 for (int p = 0; p < count && particlesPlaced < maxParticles; p++)
                 {
-                    double px = _gridOrigin.X + cell.Item2 * _cellSize + halfCell + (NextGaussian(_rng) * halfCell * 0.6);
-                    double py = _gridOrigin.Y + cell.Item3 * _cellSize + halfCell + (NextGaussian(_rng) * halfCell * 0.6);
-                    double pz = _gridOrigin.Z + cell.Item4 * _cellSize + halfCell + (NextGaussian(_rng) * halfCell * 0.6);
+                    double px = _gridOrigin.X + cell.Item2 * _cellSizeX + halfCellX + (NextGaussian(_rng) * halfCellX * 0.6);
+                    double py = _gridOrigin.Y + cell.Item3 * _cellSizeY + halfCellY + (NextGaussian(_rng) * halfCellY * 0.6);
+                    double pz = _gridOrigin.Z + cell.Item4 * _cellSizeZ + halfCellZ + (NextGaussian(_rng) * halfCellZ * 0.6);
                     if (pz < 0) pz = 0.1;
 
                     double alpha = 0.08 + 0.35 * fraction;
@@ -895,7 +912,7 @@ namespace DisperSim3D.Core
                     brush.Freeze();
                     var material = new DiffuseMaterial(brush);
 
-                    double scale = _cellSize * (0.15 + 0.25 * fraction);
+                    double scale = Math.Min(_cellSizeX, Math.Min(_cellSizeY, _cellSizeZ)) * (0.15 + 0.25 * fraction);
                     var transform = new Transform3DGroup();
                     transform.Children.Add(new ScaleTransform3D(scale, scale, scale));
                     transform.Children.Add(new TranslateTransform3D(px, py, pz));

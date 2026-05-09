@@ -96,8 +96,24 @@ namespace DisperSim3D.Dialogs
             this.AcceptButton = btnOK;
             this.CancelButton = btnCancel;
 
+            var helpLabel = new Label
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ForeColor = SystemColors.GrayText,
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Regular),
+                MaximumSize = new Size((int)(680 * dpi), 0),
+                Padding = new Padding(8, 6, 8, 6),
+                Text = "Wind rose: directional frequency distribution. " +
+                       "Each row defines a bin: Direction (°, meteorological — wind blows FROM), Frequency (% of time), " +
+                       "mean Wind Speed (m/s), and Pasquill Stability class. " +
+                       "Use '8 Dirs' or '16 Dirs' for standard sectors. " +
+                       "'Generate scenarios from bins' creates one dispersion scenario per row on OK."
+            };
+
             this.Controls.Add(split);
             this.Controls.Add(bottomPanel);
+            this.Controls.Add(helpLabel);
             this.ApplyDpiScaling();
         }
 

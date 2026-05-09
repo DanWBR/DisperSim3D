@@ -86,6 +86,9 @@ namespace DisperSim3D.Dialogs
             // --- Environment section ---
             AddSectionHeader(layout, row++, "OpenFOAM Environment");
 
+            AddDescription(layout, ref row,
+                "Configure how OpenFOAM is invoked. Required for CFD solvers (scalarTransportFoam, buoyantPimpleFoam, etc.).");
+
             AddLabel(layout, row, "Environment:");
             _cmbEnvType = new ComboBox
             {
@@ -156,6 +159,8 @@ namespace DisperSim3D.Dialogs
 
             // --- Solver section ---
             AddSectionHeader(layout, row++, "Solver Settings");
+            AddDescription(layout, ref row,
+                "Numerical parameters for the CFD solver. Hover each field for detailed guidance.");
 
             AddLabel(layout, row, "Diffusivity:");
             var diffPanel = new TableLayoutPanel
@@ -446,6 +451,8 @@ namespace DisperSim3D.Dialogs
 
             // --- Optimization section ---
             AddSectionHeader(layout, row++, "Optimization");
+            AddDescription(layout, ref row,
+                "Speed-up options that pre-compute plume bounds or wind fields before the main CFD run.");
 
             _chkSubgrid = new CheckBox
             {
@@ -770,6 +777,23 @@ namespace DisperSim3D.Dialogs
             }
             _lblCellEstimate.Text = string.Format("≈ {0:N0} cells ({1}³)  —  {2}", cells, n, category);
             _lblCellEstimate.ForeColor = clr;
+        }
+
+        private static void AddDescription(TableLayoutPanel table, ref int row, string text)
+        {
+            table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            var lbl = new Label
+            {
+                Text = text,
+                AutoSize = true,
+                MaximumSize = new Size(2000, 0),
+                ForeColor = SystemColors.GrayText,
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Regular),
+                Margin = new Padding(0, 0, 0, 6)
+            };
+            table.SetColumnSpan(lbl, 2);
+            table.Controls.Add(lbl, 0, row);
+            row++;
         }
 
         private static void AddLabel(TableLayoutPanel table, int row, string text)

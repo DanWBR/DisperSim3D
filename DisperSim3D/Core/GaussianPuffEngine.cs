@@ -121,7 +121,7 @@ namespace DisperSim3D.Core
             _puffSchedule = new List<PuffScheduleEntry>();
             foreach (var source in scenario.Sources)
             {
-                int numPuffs = (int)Math.Ceiling(source.ReleaseDurationS / source.PuffIntervalS);
+                int numPuffs = (int)Math.Ceiling(scenario.SimulationDurationS / source.PuffIntervalS);
                 double effectiveHeight = ComputeEffectiveHeight(source);
 
                 for (int i = 0; i < numPuffs; i++)

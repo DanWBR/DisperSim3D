@@ -97,7 +97,22 @@ namespace DisperSim3D.Dialogs
             this.AcceptButton = btnOK;
             this.CancelButton = btnCancel;
 
+            var help = new Label
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                ForeColor = System.Drawing.SystemColors.GrayText,
+                Font = new System.Drawing.Font("Segoe UI", 7.5f, System.Drawing.FontStyle.Regular),
+                MaximumSize = new System.Drawing.Size((int)(530 * dpi), 0),
+                Padding = new Padding(8, 4, 8, 4),
+                Text = "Time-varying wind: each row is a sample (Time, Speed, Direction, Stability). " +
+                       "Values between samples are linearly interpolated. " +
+                       "Direction follows meteorological convention (0°=N, blowing FROM that bearing).\n" +
+                       "ESD time: emergency-shutdown timestamp at which the source release is cut to zero (-1 disables ESD)."
+            };
+
             this.Controls.Add(_grid);
+            this.Controls.Add(help);
             this.Controls.Add(topPanel);
             this.Controls.Add(btnPanel);
             this.ApplyDpiScaling();

@@ -52,6 +52,10 @@ namespace DisperSim3D.Controls
         private System.Windows.Media.Media3D.ModelVisual3D _particleVisual;
         private System.Windows.Controls.StackPanel _legendPanel;
         private System.Windows.Media.Media3D.ModelVisual3D _windArrowVisual;
+        private System.Windows.Media.Media3D.ModelVisual3D _windFieldArrowsVisual;
+        private AnimatedArrowField _windFieldArrowField;
+        private System.Windows.Threading.DispatcherTimer _windFieldAnimTimer;
+        private double _windFieldAnimTimeS;
 
         private MonitorPoint3D _pendingMonitorTemplate;
         private bool _showVectorField;
@@ -194,6 +198,7 @@ namespace DisperSim3D.Controls
 
         public event EventHandler MonitorDataUpdated;
         public event EventHandler<Point3D> PointPicked;
+        public event EventHandler<ObjectPlacedEventArgs> ObjectPlaced;
 
         #endregion
 
@@ -317,6 +322,7 @@ namespace DisperSim3D.Controls
 
             _cfdPlaybackActive = false;
             _dispersionEngine = new GaussianPuffEngine();
+            _dispersionEngine.WindField = WindFieldResolver.ResolveWindField(_scene, scenario);
             _dispersionEngine.Initialize(scenario);
 
             _dispersionRenderer = new DispersionRenderer();
@@ -355,6 +361,125 @@ namespace DisperSim3D.Controls
         /// <summary>
         /// Stops the dispersion simulation and removes visuals
         /// </summary>
+        /// <summary>
+        /// Shows or hides the animated wind field arrows in the 3D viewport.
+        /// Reads the wind field from the scenario's associated WindFieldScenario.
+        /// </summary>
+        public void ToggleWindFieldArrows(bool show)
+        {
+            if (!show)
+            {
+                HideWindFieldArrows();
+                return;
+            }
+            var scenario = _scene.DispersionScenario;
+            if (scenario == null) return;
+            var wfScenario = WindFieldResolver.FindWindFieldScenario(_scene, scenario);
+            if (wfScenario == null)
+            {
+                System.Windows.MessageBox.Show(
+                    "No ready wind field is associated with the active dispersion scenario.\n" +
+                    "Open Dispersion → Manage Wind Fields..., create and run one, then assign it via the Scenario Manager.",
+                    "Wind Field", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                return;
+            }
+            ShowWindFieldArrows(wfScenario, silent: false);
+        }
+
+        public void ShowWindFieldArrows(WindFieldScenario wfScenario, bool silent = false)
+        {
+            if (wfScenario == null) { HideWindFieldArrows(); return; }
+
+            WindField3D field = wfScenario.WindField;
+            if (field == null && wfScenario.Status == WindFieldStatus.Ready)
+                field = WindFieldRunner.LoadFromCase(wfScenario);
+
+            if (field == null)
+            {
+                if (!silent)
+                {
+                    System.Windows.MessageBox.Show(
+                        "Wind field '" + wfScenario.Name + "' is not Ready (status: " + wfScenario.Status + ").\n" +
+                        "Run it from the project tree (right-click → Run) before visualizing.",
+                        "Wind Field", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                }
+                HideWindFieldArrows();
+                return;
+            }
+
+            double domain = wfScenario.DomainSizeM;
+            double height = wfScenario.DomainHeightM > 0 ? wfScenario.DomainHeightM : domain;
+
+            int nx = Math.Max(2, wfScenario.ArrowsPerAxis);
+            int nz = Math.Max(1, wfScenario.ArrowVerticalLayers);
+            System.Windows.Media.Color arrowColor = System.Windows.Media.Colors.Black;
+            if (!string.IsNullOrEmpty(wfScenario.ArrowColorHex))
+            {
+                try
+                {
+                    var hex = wfScenario.ArrowColorHex;
+                    if (hex.Length == 8)
+                        arrowColor = System.Windows.Media.Color.FromArgb(
+                            Convert.ToByte(hex.Substring(0, 2), 16),
+                            Convert.ToByte(hex.Substring(2, 2), 16),
+                            Convert.ToByte(hex.Substring(4, 2), 16),
+                            Convert.ToByte(hex.Substring(6, 2), 16));
+                    else if (hex.Length == 6)
+                        arrowColor = System.Windows.Media.Color.FromRgb(
+                            Convert.ToByte(hex.Substring(0, 2), 16),
+                            Convert.ToByte(hex.Substring(2, 2), 16),
+                            Convert.ToByte(hex.Substring(4, 2), 16));
+                }
+                catch { }
+            }
+
+            _windFieldArrowField = WindFieldVisual.Build(field,
+                -domain, domain, -domain, domain, height,
+                nx, nx, nz,
+                arrowColor,
+                wfScenario.ArrowLengthFactor > 0 ? wfScenario.ArrowLengthFactor : 0.30,
+                wfScenario.ArrowThicknessFactor > 0 ? wfScenario.ArrowThicknessFactor : 0.025,
+                wfScenario.ArrowOpacity > 0 ? wfScenario.ArrowOpacity : 0.55,
+                wfScenario.ArrowAnimated);
+            if (_windFieldArrowsVisual == null)
+            {
+                _windFieldArrowsVisual = new System.Windows.Media.Media3D.ModelVisual3D();
+                _viewport.Children.Add(_windFieldArrowsVisual);
+            }
+            _windFieldAnimTimeS = 0;
+            _windFieldArrowsVisual.Content = _windFieldArrowField.BuildVisual(0);
+
+            if (_windFieldAnimTimer == null)
+            {
+                _windFieldAnimTimer = new System.Windows.Threading.DispatcherTimer();
+                _windFieldAnimTimer.Interval = TimeSpan.FromMilliseconds(50);
+                _windFieldAnimTimer.Tick += (s, e) =>
+                {
+                    if (_windFieldArrowsVisual == null || _windFieldArrowField == null) return;
+                    _windFieldAnimTimeS += 0.05;
+                    _windFieldArrowsVisual.Content = _windFieldArrowField.BuildVisual(_windFieldAnimTimeS);
+                };
+            }
+            _windFieldAnimTimer.Start();
+        }
+
+        public void HideWindFieldArrows()
+        {
+            if (_windFieldArrowsVisual != null)
+            {
+                _viewport.Children.Remove(_windFieldArrowsVisual);
+                _windFieldArrowsVisual = null;
+            }
+            _windFieldArrowField = null;
+            if (_windFieldAnimTimer != null)
+            {
+                _windFieldAnimTimer.Stop();
+                _windFieldAnimTimer = null;
+            }
+        }
+
+        public bool IsWindFieldArrowsVisible => _windFieldArrowsVisual != null;
+
         public void StopDispersion()
         {
             _dispersionState = DispersionSimulationState.Stopped;
@@ -381,6 +506,7 @@ namespace DisperSim3D.Controls
             StopDispersion();
 
             var plume = new GaussianPlumeEngine();
+            plume.WindField = WindFieldResolver.ResolveWindField(_scene, scenario);
             plume.Initialize(scenario);
             _steadyStateEngine = plume;
 
@@ -767,7 +893,6 @@ namespace DisperSim3D.Controls
                     Model3DGroup isoGroup = renderer.ComputeCloudVisual(thresholds);
 
                     double maxC = renderer.GetMaxConcentration();
-                    Model3DGroup particleGroup = maxC > 1e-20 ? renderer.ComputeCfdParticleCloud(maxC) : null;
 
                     var contourGroups = new List<Model3DGroup>();
                     Model3DGroup vectorGroup = null;
@@ -783,7 +908,7 @@ namespace DisperSim3D.Controls
                             vectorGroup = renderer.ComputeVectorField(concField, windVec, maxC);
                     }
 
-                    return new { concField, isoGroup, particleGroup, contourGroups, vectorGroup };
+                    return new { concField, isoGroup, contourGroups, vectorGroup };
                 });
 
                 if (result == null) return;
@@ -799,14 +924,6 @@ namespace DisperSim3D.Controls
                     _isosurfaceVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
                         new Visual3DTag("DispersionIsosurface", "iso"));
                     _viewport.Children.Add(_isosurfaceVisual);
-                }
-
-                if (r.particleGroup != null)
-                {
-                    _particleVisual = new ModelVisual3D { Content = r.particleGroup };
-                    _particleVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
-                        new Visual3DTag("DispersionParticles", "particles"));
-                    _viewport.Children.Add(_particleVisual);
                 }
 
                 foreach (var cg in (List<Model3DGroup>)r.contourGroups)
@@ -1021,9 +1138,11 @@ namespace DisperSim3D.Controls
                     if (deco.BoundingBox != null) obstacles.Add(deco.BoundingBox);
             }
 
+            var preResolvedWindField = WindFieldResolver.ResolveWindField(_scene, scenario);
             worker.DoWork += (s, e) =>
             {
                 var engine = new GaussianPuffEngine();
+                if (preResolvedWindField != null) engine.WindField = preResolvedWindField;
                 engine.Initialize(scenario);
 
                 if (useWindField)
@@ -1209,9 +1328,10 @@ namespace DisperSim3D.Controls
                 _cfdResult.DomainYMin, _cfdResult.DomainYMax,
                 _cfdResult.DomainZMax);
 
-            if (scenario.Thresholds.Count == 0)
-            {
-                double lastTime = _cfdResult.TimeSteps[_cfdResult.TimeSteps.Count - 1];
+            System.Diagnostics.Debug.WriteLine("StartCfdPlayback: existing thresholds=" + scenario.Thresholds.Count);
+            scenario.Thresholds.Clear();
+
+            double lastTime = _cfdResult.TimeSteps[_cfdResult.TimeSteps.Count - 1];
                 var lastField = _cfdResult.GetField(lastTime);
                 System.Diagnostics.Debug.WriteLine(string.Format(
                     "StartCfdPlayback: lastTime={0}, lastField={1}, timeSteps={2}, paths={3}",
@@ -1227,37 +1347,48 @@ namespace DisperSim3D.Controls
                     }
                 }
                 if (lastField != null)
+                {
+                    double fieldMax = 0;
+                    for (int i = 0; i < lastField.GetLength(0); i++)
+                        for (int j = 0; j < lastField.GetLength(1); j++)
+                            for (int k = 0; k < lastField.GetLength(2); k++)
+                                if (lastField[i, j, k] > fieldMax) fieldMax = lastField[i, j, k];
+                    System.Diagnostics.Debug.WriteLine(string.Format(
+                        "StartCfdPlayback: field dims=[{0},{1},{2}], fieldMax={3}, path={4}",
+                        lastField.GetLength(0), lastField.GetLength(1), lastField.GetLength(2),
+                        fieldMax, _cfdResult.TimeStepPaths.ContainsKey(_cfdResult.TimeSteps[_cfdResult.TimeSteps.Count - 1])
+                            ? _cfdResult.TimeStepPaths[_cfdResult.TimeSteps[_cfdResult.TimeSteps.Count - 1]] : "N/A"));
                     _dispersionRenderer.SetScalarFieldDirect(lastField);
+                }
                 double maxC = _dispersionRenderer.GetMaxConcentration();
-                System.Diagnostics.Debug.WriteLine("maxC = " + maxC);
+                System.Diagnostics.Debug.WriteLine("maxC from renderer = " + maxC);
                 if (maxC > 1e-20)
                 {
                     scenario.Thresholds.Add(new DispersionThreshold
                     {
-                        Name = "High (50%)",
-                        ConcentrationValue = maxC * 0.5,
-                        Color = System.Windows.Media.Colors.Red,
-                        Opacity = 0.4,
-                        Visible = true
-                    });
-                    scenario.Thresholds.Add(new DispersionThreshold
-                    {
-                        Name = "Medium (10%)",
+                        Name = "High (10%)",
                         ConcentrationValue = maxC * 0.1,
-                        Color = System.Windows.Media.Colors.Yellow,
-                        Opacity = 0.25,
+                        Color = System.Windows.Media.Colors.Red,
+                        Opacity = 0.6,
                         Visible = true
                     });
                     scenario.Thresholds.Add(new DispersionThreshold
                     {
-                        Name = "Low (1%)",
+                        Name = "Medium (1%)",
                         ConcentrationValue = maxC * 0.01,
-                        Color = System.Windows.Media.Colors.LightBlue,
-                        Opacity = 0.15,
+                        Color = System.Windows.Media.Colors.Orange,
+                        Opacity = 0.35,
+                        Visible = true
+                    });
+                    scenario.Thresholds.Add(new DispersionThreshold
+                    {
+                        Name = "Low (0.1%)",
+                        ConcentrationValue = maxC * 0.001,
+                        Color = System.Windows.Media.Colors.Yellow,
+                        Opacity = 0.12,
                         Visible = true
                     });
                 }
-            }
 
             if (scenario.Thresholds.Count > 0)
                 ShowLegend(scenario.Thresholds);
@@ -1480,7 +1611,6 @@ namespace DisperSim3D.Controls
                 Gas = template?.Gas ?? GasProperties.CreateMethane(),
                 Name = template?.Name ?? "Source",
                 ReleaseRateKgPerS = template?.ReleaseRateKgPerS ?? 0.5,
-                ReleaseDurationS = template?.ReleaseDurationS ?? 60,
                 PuffIntervalS = template?.PuffIntervalS ?? 1.0,
                 ReleaseHeightOffset = template?.ReleaseHeightOffset ?? 2.0
             };
@@ -1848,7 +1978,6 @@ namespace DisperSim3D.Controls
                     Model3DGroup isoGroup = doIso ? renderer.ComputeCloudVisual(thresholds) : null;
 
                     double maxC = renderer.GetMaxConcentration();
-                    Model3DGroup particleGroup = maxC > 1e-20 ? renderer.ComputeCfdParticleCloud(maxC) : null;
 
                     var contourGroups = new List<Model3DGroup>();
                     Model3DGroup vectorGroup = null;
@@ -1864,7 +1993,7 @@ namespace DisperSim3D.Controls
                             vectorGroup = renderer.ComputeVectorField(concField, windVec, maxC);
                     }
 
-                    return new { concField, monitorData, isoGroup, particleGroup, contourGroups, vectorGroup };
+                    return new { concField, monitorData, isoGroup, contourGroups, vectorGroup };
                 });
 
                 if (result == null) return;
@@ -1887,14 +2016,6 @@ namespace DisperSim3D.Controls
                 else if (_isosurfaceVisual != null)
                 {
                     _viewport.Children.Add(_isosurfaceVisual);
-                }
-
-                if (r.particleGroup != null)
-                {
-                    _particleVisual = new ModelVisual3D { Content = r.particleGroup };
-                    _particleVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
-                        new Visual3DTag("DispersionParticles", "particles"));
-                    _viewport.Children.Add(_particleVisual);
                 }
 
                 foreach (var cg in (List<Model3DGroup>)r.contourGroups)
@@ -2249,6 +2370,23 @@ namespace DisperSim3D.Controls
             UpdateViewport();
         }
 
+        public void DeleteSelectedSource()
+        {
+            if (_selectedSource == null) return;
+
+            _scene.DispersionScenario?.Sources.Remove(_selectedSource);
+            SelectedSource = null;
+            UpdateViewport();
+        }
+
+        public void DeleteSelected()
+        {
+            if (_selectedSource != null)
+                DeleteSelectedSource();
+            else if (_selectedDecoration != null)
+                DeleteSelectedDecoration();
+        }
+
         /// <summary>
         /// Scales the selected decoration by a factor
         /// </summary>
@@ -2311,6 +2449,11 @@ namespace DisperSim3D.Controls
                                 new System.Xml.Linq.XAttribute("ClipValue", d.ClipValue.ToString(inv)),
                                 new System.Xml.Linq.XAttribute("ClipAbove", d.ClipAbove.ToString())))),
 
+                    SerializeGeneralSettings(inv),
+                    SerializeGasLibrary(inv),
+                    SerializeTopLevelSources(inv),
+                    SerializeWindFieldScenarios(inv),
+                    SerializeSimulations(inv),
                     SerializeDispersionScenarios(inv),
                     SerializeMonitorPoints(inv),
                     SerializeWindRose(inv),
@@ -2320,6 +2463,147 @@ namespace DisperSim3D.Controls
                 ));
 
             doc.Save(filePath);
+        }
+
+        private System.Xml.Linq.XElement SerializeGeneralSettings(System.Globalization.CultureInfo inv)
+        {
+            var s = _scene.GeneralSettings;
+            if (s == null) return null;
+            return new System.Xml.Linq.XElement("GeneralSettings",
+                new System.Xml.Linq.XAttribute("Name", s.Name ?? ""),
+                new System.Xml.Linq.XAttribute("Description", s.Description ?? ""),
+                new System.Xml.Linq.XAttribute("Author", s.Author ?? ""),
+                new System.Xml.Linq.XAttribute("CreatedAt", s.CreatedAt.ToString("o", inv)),
+                new System.Xml.Linq.XAttribute("DefaultDomainSize", s.DefaultDomainSizeM.ToString(inv)),
+                new System.Xml.Linq.XAttribute("DefaultGridRes", s.DefaultGridResolution.ToString(inv)),
+                s.DefaultMeteo != null ? new System.Xml.Linq.XElement("DefaultMeteo",
+                    new System.Xml.Linq.XAttribute("WindSpeed", s.DefaultMeteo.WindSpeed.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("WindDir", s.DefaultMeteo.WindDirectionDeg.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("Stability", s.DefaultMeteo.StabilityClass.ToString()),
+                    new System.Xml.Linq.XAttribute("Temp", s.DefaultMeteo.AmbientTemperature.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("Pressure", s.DefaultMeteo.AmbientPressure.ToString(inv))) : null);
+        }
+
+        private System.Xml.Linq.XElement SerializeGasLibrary(System.Globalization.CultureInfo inv)
+        {
+            if (_scene.GasLibrary == null || _scene.GasLibrary.Count == 0) return null;
+            return new System.Xml.Linq.XElement("GasLibrary",
+                _scene.GasLibrary.Select(g =>
+                {
+                    if (g.Kind == GasLibraryItemKind.Mixture && g.Mixture != null)
+                    {
+                        return new System.Xml.Linq.XElement("Gas",
+                            new System.Xml.Linq.XAttribute("Id", g.Id ?? ""),
+                            new System.Xml.Linq.XAttribute("Name", g.Name ?? ""),
+                            new System.Xml.Linq.XAttribute("Kind", "Mixture"),
+                            new System.Xml.Linq.XElement("Mixture",
+                                g.Mixture.Components.Select(c =>
+                                    new System.Xml.Linq.XElement("Component",
+                                        new System.Xml.Linq.XAttribute("Name", c.Name ?? ""),
+                                        new System.Xml.Linq.XAttribute("MolarMass", c.MolarMass.ToString(inv)),
+                                        new System.Xml.Linq.XAttribute("MoleFrac", c.MoleFraction.ToString(inv)),
+                                        new System.Xml.Linq.XAttribute("LFL", c.LFL.ToString(inv)),
+                                        new System.Xml.Linq.XAttribute("IDLH", c.IDLH.ToString(inv))))));
+                    }
+                    var gp = g.PureGas ?? new GasProperties();
+                    return new System.Xml.Linq.XElement("Gas",
+                        new System.Xml.Linq.XAttribute("Id", g.Id ?? ""),
+                        new System.Xml.Linq.XAttribute("Name", g.Name ?? ""),
+                        new System.Xml.Linq.XAttribute("Kind", "Pure"),
+                        new System.Xml.Linq.XAttribute("MolarMass", gp.MolarMass.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("LFL", gp.LFL.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("IDLH", gp.IDLH.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("ERPG1", gp.ERPG1.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("ERPG2", gp.ERPG2.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("ERPG3", gp.ERPG3.ToString(inv)));
+                }));
+        }
+
+        private System.Xml.Linq.XElement SerializeTopLevelSources(System.Globalization.CultureInfo inv)
+        {
+            if (_scene.TopLevelSources == null || _scene.TopLevelSources.Count == 0) return null;
+            return new System.Xml.Linq.XElement("TopLevelSources",
+                _scene.TopLevelSources.Select(src => SerializeSourceCommon(src, inv)));
+        }
+
+        private System.Xml.Linq.XElement SerializeSourceCommon(ReleaseSource3D src, System.Globalization.CultureInfo inv)
+        {
+            return new System.Xml.Linq.XElement("Source",
+                new System.Xml.Linq.XAttribute("Id", src.Id ?? ""),
+                new System.Xml.Linq.XAttribute("Name", src.Name ?? ""),
+                new System.Xml.Linq.XAttribute("AttachedUnitId", src.AttachedUnitId ?? ""),
+                new System.Xml.Linq.XAttribute("GasRefId", src.GasRefId ?? ""),
+                new System.Xml.Linq.XAttribute("PosX", src.Position.X.ToString(inv)),
+                new System.Xml.Linq.XAttribute("PosY", src.Position.Y.ToString(inv)),
+                new System.Xml.Linq.XAttribute("PosZ", src.Position.Z.ToString(inv)),
+                new System.Xml.Linq.XAttribute("ReleaseRate", src.ReleaseRateKgPerS.ToString(inv)),
+                new System.Xml.Linq.XAttribute("PuffInterval", src.PuffIntervalS.ToString(inv)),
+                new System.Xml.Linq.XAttribute("HeightOffset", src.ReleaseHeightOffset.ToString(inv)),
+                new System.Xml.Linq.XAttribute("Azimuth", src.ReleaseAzimuthDeg.ToString(inv)),
+                new System.Xml.Linq.XAttribute("Elevation", src.ReleaseElevationDeg.ToString(inv)),
+                src.HighPressureLeak != null ? new System.Xml.Linq.XElement("HPLeak",
+                    new System.Xml.Linq.XAttribute("VesselP", src.HighPressureLeak.VesselPressurePa.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("VesselT", src.HighPressureLeak.VesselTemperatureK.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("Orifice", src.HighPressureLeak.OrificeDiameterM.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("Volume", src.HighPressureLeak.VesselVolumeM3.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("Gamma", src.HighPressureLeak.GasGamma.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("MolarMass", src.HighPressureLeak.GasMolarMassKgMol.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("Cd", src.HighPressureLeak.DischargeCoefficient.ToString(inv))) : null,
+                src.Gas != null ? new System.Xml.Linq.XElement("Gas",
+                    new System.Xml.Linq.XAttribute("Name", src.Gas.Name ?? ""),
+                    new System.Xml.Linq.XAttribute("MolarMass", src.Gas.MolarMass.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("LFL", src.Gas.LFL.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("IDLH", src.Gas.IDLH.ToString(inv))) : null);
+        }
+
+        private System.Xml.Linq.XElement SerializeSimulations(System.Globalization.CultureInfo inv)
+        {
+            if (_scene.Simulations == null || _scene.Simulations.Count == 0) return null;
+            return new System.Xml.Linq.XElement("Simulations",
+                _scene.Simulations.Select(s => new System.Xml.Linq.XElement("Simulation",
+                    new System.Xml.Linq.XAttribute("Id", s.Id ?? ""),
+                    new System.Xml.Linq.XAttribute("Name", s.Name ?? ""),
+                    new System.Xml.Linq.XAttribute("CreatedAt", s.CreatedAt.ToString("o", inv)),
+                    s.CompletedAt.HasValue ? new System.Xml.Linq.XAttribute("CompletedAt", s.CompletedAt.Value.ToString("o", inv)) : null,
+                    new System.Xml.Linq.XAttribute("SourceId", s.SourceId ?? ""),
+                    new System.Xml.Linq.XAttribute("WindFieldId", s.WindFieldId ?? ""),
+                    new System.Xml.Linq.XAttribute("SolverType", s.SolverType.ToString()),
+                    new System.Xml.Linq.XAttribute("Status", s.Status.ToString()),
+                    new System.Xml.Linq.XAttribute("StatusMessage", s.StatusMessage ?? ""),
+                    new System.Xml.Linq.XAttribute("DomainSize", s.SnapshotDomainSizeM.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("GridRes", s.SnapshotGridResolution.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("Duration", s.SnapshotDurationS.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("TimeStep", s.SnapshotTimeStepS.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("CasePath", s.CasePath ?? ""),
+                    new System.Xml.Linq.XAttribute("MaxC", s.MaxConcentration.ToString(inv)),
+                    s.SnapshotSource != null ? new System.Xml.Linq.XElement("SnapshotSource", SerializeSourceCommon(s.SnapshotSource, inv).Attributes(), SerializeSourceCommon(s.SnapshotSource, inv).Elements()) : null,
+                    s.SnapshotMeteo != null ? new System.Xml.Linq.XElement("SnapshotMeteo",
+                        new System.Xml.Linq.XAttribute("WindSpeed", s.SnapshotMeteo.WindSpeed.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("WindDir", s.SnapshotMeteo.WindDirectionDeg.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("Stability", s.SnapshotMeteo.StabilityClass.ToString()),
+                        new System.Xml.Linq.XAttribute("Temp", s.SnapshotMeteo.AmbientTemperature.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("Pressure", s.SnapshotMeteo.AmbientPressure.ToString(inv))) : null)));
+        }
+
+        private System.Xml.Linq.XElement SerializeWindFieldScenarios(System.Globalization.CultureInfo inv)
+        {
+            if (_scene.WindFieldScenarios == null || _scene.WindFieldScenarios.Count == 0) return null;
+            return new System.Xml.Linq.XElement("WindFieldScenarios",
+                _scene.WindFieldScenarios.Select(wf =>
+                    new System.Xml.Linq.XElement("WindFieldScenario",
+                        new System.Xml.Linq.XAttribute("Id", wf.Id ?? ""),
+                        new System.Xml.Linq.XAttribute("Name", wf.Name ?? ""),
+                        new System.Xml.Linq.XAttribute("DomainSize", wf.DomainSizeM.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("DomainHeight", wf.DomainHeightM.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("GridRes", wf.GridResolution.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("Status", wf.Status.ToString()),
+                        new System.Xml.Linq.XAttribute("CasePath", wf.CasePath ?? ""),
+                        new System.Xml.Linq.XElement("Meteo",
+                            new System.Xml.Linq.XAttribute("WindSpeed", wf.Meteo.WindSpeed.ToString(inv)),
+                            new System.Xml.Linq.XAttribute("WindDir", wf.Meteo.WindDirectionDeg.ToString(inv)),
+                            new System.Xml.Linq.XAttribute("Stability", wf.Meteo.StabilityClass.ToString()),
+                            new System.Xml.Linq.XAttribute("Temp", wf.Meteo.AmbientTemperature.ToString(inv)),
+                            new System.Xml.Linq.XAttribute("Pressure", wf.Meteo.AmbientPressure.ToString(inv))))));
         }
 
         private System.Xml.Linq.XElement SerializeDispersionScenarios(System.Globalization.CultureInfo inv)
@@ -2340,6 +2624,7 @@ namespace DisperSim3D.Controls
                 new System.Xml.Linq.XAttribute("DomainSize", sc.DomainSizeM.ToString(inv)),
                 new System.Xml.Linq.XAttribute("GridRes", sc.GridResolution.ToString(inv)),
                 new System.Xml.Linq.XAttribute("SolverType", sc.SolverType.ToString()),
+                new System.Xml.Linq.XAttribute("WindFieldId", sc.WindFieldScenarioId ?? ""),
 
                 new System.Xml.Linq.XElement("Meteo",
                     new System.Xml.Linq.XAttribute("WindSpeed", sc.Meteo.WindSpeed.ToString(inv)),
@@ -2358,7 +2643,6 @@ namespace DisperSim3D.Controls
                             new System.Xml.Linq.XAttribute("PosY", src.Position.Y.ToString(inv)),
                             new System.Xml.Linq.XAttribute("PosZ", src.Position.Z.ToString(inv)),
                             new System.Xml.Linq.XAttribute("ReleaseRate", src.ReleaseRateKgPerS.ToString(inv)),
-                            new System.Xml.Linq.XAttribute("Duration", src.ReleaseDurationS.ToString(inv)),
                             new System.Xml.Linq.XAttribute("PuffInterval", src.PuffIntervalS.ToString(inv)),
                             new System.Xml.Linq.XAttribute("HeightOffset", src.ReleaseHeightOffset.ToString(inv)),
                             new System.Xml.Linq.XAttribute("Azimuth", src.ReleaseAzimuthDeg.ToString(inv)),
@@ -2370,7 +2654,9 @@ namespace DisperSim3D.Controls
                                 new System.Xml.Linq.XAttribute("Volume", src.HighPressureLeak.VesselVolumeM3.ToString(inv)),
                                 new System.Xml.Linq.XAttribute("Gamma", src.HighPressureLeak.GasGamma.ToString(inv)),
                                 new System.Xml.Linq.XAttribute("MolarMass", src.HighPressureLeak.GasMolarMassKgMol.ToString(inv)),
-                                new System.Xml.Linq.XAttribute("Cd", src.HighPressureLeak.DischargeCoefficient.ToString(inv))) : null,
+                                new System.Xml.Linq.XAttribute("Cd", src.HighPressureLeak.DischargeCoefficient.ToString(inv)),
+                                new System.Xml.Linq.XAttribute("SpecifyMdot", src.HighPressureLeak.SpecifyMassFlow ? "1" : "0"),
+                                new System.Xml.Linq.XAttribute("Mdot", src.HighPressureLeak.SpecifiedMassFlowKgPerS.ToString(inv))) : null,
                             new System.Xml.Linq.XElement("Gas",
                                 new System.Xml.Linq.XAttribute("Name", src.Gas.Name ?? ""),
                                 new System.Xml.Linq.XAttribute("MolarMass", src.Gas.MolarMass.ToString(inv)),
@@ -2423,6 +2709,237 @@ namespace DisperSim3D.Controls
                     : null);
         }
 
+        private void DeserializeGeneralSettings(System.Xml.Linq.XElement root,
+            System.Globalization.CultureInfo inv, Scene3D fs)
+        {
+            var el = root.Element("GeneralSettings");
+            if (el == null) return;
+            var s = new ProjectSettings();
+            s.Name = (string)el.Attribute("Name") ?? "";
+            s.Description = (string)el.Attribute("Description") ?? "";
+            s.Author = (string)el.Attribute("Author") ?? "";
+            DateTime ca;
+            if (DateTime.TryParse((string)el.Attribute("CreatedAt") ?? "", null, System.Globalization.DateTimeStyles.RoundtripKind, out ca))
+                s.CreatedAt = ca;
+            s.DefaultDomainSizeM = double.Parse((string)el.Attribute("DefaultDomainSize") ?? "200", inv);
+            s.DefaultGridResolution = int.Parse((string)el.Attribute("DefaultGridRes") ?? "40", inv);
+            var mEl = el.Element("DefaultMeteo");
+            if (mEl != null)
+            {
+                s.DefaultMeteo = new MeteorologicalConditions
+                {
+                    WindSpeed = double.Parse((string)mEl.Attribute("WindSpeed") ?? "5", inv),
+                    WindDirectionDeg = double.Parse((string)mEl.Attribute("WindDir") ?? "270", inv),
+                    StabilityClass = (PasquillStabilityClass)Enum.Parse(typeof(PasquillStabilityClass),
+                        (string)mEl.Attribute("Stability") ?? "D"),
+                    AmbientTemperature = double.Parse((string)mEl.Attribute("Temp") ?? "293.15", inv),
+                    AmbientPressure = double.Parse((string)mEl.Attribute("Pressure") ?? "101325", inv)
+                };
+            }
+            fs.GeneralSettings = s;
+        }
+
+        private void DeserializeGasLibrary(System.Xml.Linq.XElement root,
+            System.Globalization.CultureInfo inv, Scene3D fs)
+        {
+            var el = root.Element("GasLibrary");
+            if (el == null) return;
+            foreach (var ge in el.Elements("Gas"))
+            {
+                var item = new GasLibraryItem
+                {
+                    Id = (string)ge.Attribute("Id") ?? Guid.NewGuid().ToString(),
+                    Name = (string)ge.Attribute("Name") ?? "Gas"
+                };
+                string kind = (string)ge.Attribute("Kind") ?? "Pure";
+                if (kind == "Mixture")
+                {
+                    item.Kind = GasLibraryItemKind.Mixture;
+                    item.Mixture = new GasMixture();
+                    var mxEl = ge.Element("Mixture");
+                    if (mxEl != null)
+                    {
+                        foreach (var ce in mxEl.Elements("Component"))
+                        {
+                            item.Mixture.Components.Add(new GasComponent
+                            {
+                                Name = (string)ce.Attribute("Name") ?? "",
+                                MolarMass = double.Parse((string)ce.Attribute("MolarMass") ?? "0.016", inv),
+                                MoleFraction = double.Parse((string)ce.Attribute("MoleFrac") ?? "1", inv),
+                                LFL = double.Parse((string)ce.Attribute("LFL") ?? "0", inv),
+                                IDLH = double.Parse((string)ce.Attribute("IDLH") ?? "0", inv)
+                            });
+                        }
+                    }
+                }
+                else
+                {
+                    item.Kind = GasLibraryItemKind.Pure;
+                    item.PureGas = new GasProperties
+                    {
+                        Name = item.Name,
+                        MolarMass = double.Parse((string)ge.Attribute("MolarMass") ?? "0.016", inv),
+                        LFL = double.Parse((string)ge.Attribute("LFL") ?? "0", inv),
+                        IDLH = double.Parse((string)ge.Attribute("IDLH") ?? "0", inv),
+                        ERPG1 = double.Parse((string)ge.Attribute("ERPG1") ?? "0", inv),
+                        ERPG2 = double.Parse((string)ge.Attribute("ERPG2") ?? "0", inv),
+                        ERPG3 = double.Parse((string)ge.Attribute("ERPG3") ?? "0", inv)
+                    };
+                }
+                fs.GasLibrary.Add(item);
+            }
+        }
+
+        private ReleaseSource3D DeserializeSourceCommon(System.Xml.Linq.XElement se, System.Globalization.CultureInfo inv)
+        {
+            var src = new ReleaseSource3D();
+            src.Id = (string)se.Attribute("Id") ?? Guid.NewGuid().ToString();
+            src.Name = (string)se.Attribute("Name") ?? "";
+            src.AttachedUnitId = (string)se.Attribute("AttachedUnitId");
+            if (string.IsNullOrEmpty(src.AttachedUnitId)) src.AttachedUnitId = null;
+            src.GasRefId = (string)se.Attribute("GasRefId");
+            if (string.IsNullOrEmpty(src.GasRefId)) src.GasRefId = null;
+            src.Position = new System.Windows.Media.Media3D.Point3D(
+                double.Parse((string)se.Attribute("PosX") ?? "0", inv),
+                double.Parse((string)se.Attribute("PosY") ?? "0", inv),
+                double.Parse((string)se.Attribute("PosZ") ?? "0", inv));
+            src.ReleaseRateKgPerS = double.Parse((string)se.Attribute("ReleaseRate") ?? "0.5", inv);
+            src.PuffIntervalS = double.Parse((string)se.Attribute("PuffInterval") ?? "1", inv);
+            src.ReleaseHeightOffset = double.Parse((string)se.Attribute("HeightOffset") ?? "2", inv);
+            src.ReleaseAzimuthDeg = double.Parse((string)se.Attribute("Azimuth") ?? "0", inv);
+            src.ReleaseElevationDeg = double.Parse((string)se.Attribute("Elevation") ?? "0", inv);
+
+            var hpEl = se.Element("HPLeak");
+            if (hpEl != null)
+            {
+                src.HighPressureLeak = new HighPressureLeakParams
+                {
+                    VesselPressurePa = double.Parse((string)hpEl.Attribute("VesselP") ?? "1000000", inv),
+                    VesselTemperatureK = double.Parse((string)hpEl.Attribute("VesselT") ?? "293.15", inv),
+                    OrificeDiameterM = double.Parse((string)hpEl.Attribute("Orifice") ?? "0.01", inv),
+                    VesselVolumeM3 = double.Parse((string)hpEl.Attribute("Volume") ?? "10", inv),
+                    GasGamma = double.Parse((string)hpEl.Attribute("Gamma") ?? "1.4", inv),
+                    GasMolarMassKgMol = double.Parse((string)hpEl.Attribute("MolarMass") ?? "0.016", inv),
+                    DischargeCoefficient = double.Parse((string)hpEl.Attribute("Cd") ?? "0.65", inv)
+                };
+            }
+            var gasEl = se.Element("Gas");
+            if (gasEl != null)
+            {
+                src.Gas = new GasProperties
+                {
+                    Name = (string)gasEl.Attribute("Name") ?? "",
+                    MolarMass = double.Parse((string)gasEl.Attribute("MolarMass") ?? "0.016", inv),
+                    LFL = double.Parse((string)gasEl.Attribute("LFL") ?? "0", inv),
+                    IDLH = double.Parse((string)gasEl.Attribute("IDLH") ?? "0", inv)
+                };
+            }
+            return src;
+        }
+
+        private void DeserializeTopLevelSources(System.Xml.Linq.XElement root,
+            System.Globalization.CultureInfo inv, Scene3D fs)
+        {
+            var el = root.Element("TopLevelSources");
+            if (el == null) return;
+            foreach (var se in el.Elements("Source"))
+                fs.TopLevelSources.Add(DeserializeSourceCommon(se, inv));
+        }
+
+        private void DeserializeSimulations(System.Xml.Linq.XElement root,
+            System.Globalization.CultureInfo inv, Scene3D fs)
+        {
+            var el = root.Element("Simulations");
+            if (el == null) return;
+            foreach (var se in el.Elements("Simulation"))
+            {
+                var sim = new Simulation
+                {
+                    Id = (string)se.Attribute("Id") ?? Guid.NewGuid().ToString(),
+                    Name = (string)se.Attribute("Name") ?? "Simulation",
+                    SourceId = (string)se.Attribute("SourceId") ?? "",
+                    WindFieldId = (string)se.Attribute("WindFieldId") ?? "",
+                    StatusMessage = (string)se.Attribute("StatusMessage") ?? "",
+                    SnapshotDomainSizeM = double.Parse((string)se.Attribute("DomainSize") ?? "200", inv),
+                    SnapshotGridResolution = int.Parse((string)se.Attribute("GridRes") ?? "40", inv),
+                    SnapshotDurationS = double.Parse((string)se.Attribute("Duration") ?? "300", inv),
+                    SnapshotTimeStepS = double.Parse((string)se.Attribute("TimeStep") ?? "0.5", inv),
+                    CasePath = (string)se.Attribute("CasePath") ?? "",
+                    MaxConcentration = double.Parse((string)se.Attribute("MaxC") ?? "0", inv)
+                };
+                DateTime ca;
+                if (DateTime.TryParse((string)se.Attribute("CreatedAt") ?? "", null, System.Globalization.DateTimeStyles.RoundtripKind, out ca))
+                    sim.CreatedAt = ca;
+                DateTime cmp;
+                if (DateTime.TryParse((string)se.Attribute("CompletedAt") ?? "", null, System.Globalization.DateTimeStyles.RoundtripKind, out cmp))
+                    sim.CompletedAt = cmp;
+                CfdSolverType solverType;
+                if (Enum.TryParse((string)se.Attribute("SolverType") ?? "GaussianPuff", out solverType))
+                    sim.SolverType = solverType;
+                SimulationStatus statusVal;
+                if (Enum.TryParse((string)se.Attribute("Status") ?? "Configured", out statusVal))
+                    sim.Status = statusVal;
+
+                var snapSrcEl = se.Element("SnapshotSource");
+                if (snapSrcEl != null)
+                    sim.SnapshotSource = DeserializeSourceCommon(snapSrcEl, inv);
+                var snapMeteoEl = se.Element("SnapshotMeteo");
+                if (snapMeteoEl != null)
+                {
+                    sim.SnapshotMeteo = new MeteorologicalConditions
+                    {
+                        WindSpeed = double.Parse((string)snapMeteoEl.Attribute("WindSpeed") ?? "5", inv),
+                        WindDirectionDeg = double.Parse((string)snapMeteoEl.Attribute("WindDir") ?? "270", inv),
+                        StabilityClass = (PasquillStabilityClass)Enum.Parse(typeof(PasquillStabilityClass),
+                            (string)snapMeteoEl.Attribute("Stability") ?? "D"),
+                        AmbientTemperature = double.Parse((string)snapMeteoEl.Attribute("Temp") ?? "293.15", inv),
+                        AmbientPressure = double.Parse((string)snapMeteoEl.Attribute("Pressure") ?? "101325", inv)
+                    };
+                }
+                fs.Simulations.Add(sim);
+            }
+        }
+
+        private void DeserializeWindFieldScenarios(System.Xml.Linq.XElement root,
+            System.Globalization.CultureInfo inv, Scene3D fs)
+        {
+            var listEl = root.Element("WindFieldScenarios");
+            if (listEl == null) return;
+            foreach (var wfEl in listEl.Elements("WindFieldScenario"))
+            {
+                var wf = new WindFieldScenario
+                {
+                    Id = (string)wfEl.Attribute("Id") ?? Guid.NewGuid().ToString(),
+                    Name = (string)wfEl.Attribute("Name") ?? "Wind Field",
+                    DomainSizeM = double.Parse((string)wfEl.Attribute("DomainSize") ?? "200", inv),
+                    DomainHeightM = double.Parse((string)wfEl.Attribute("DomainHeight") ?? "100", inv),
+                    GridResolution = int.Parse((string)wfEl.Attribute("GridRes") ?? "40", inv),
+                    CasePath = (string)wfEl.Attribute("CasePath") ?? null
+                };
+                var statusStr = (string)wfEl.Attribute("Status");
+                if (!string.IsNullOrEmpty(statusStr))
+                {
+                    WindFieldStatus parsedStatus;
+                    if (Enum.TryParse(statusStr, out parsedStatus))
+                        wf.Status = parsedStatus;
+                }
+                var mEl = wfEl.Element("Meteo");
+                if (mEl != null)
+                {
+                    wf.Meteo = new MeteorologicalConditions
+                    {
+                        WindSpeed = double.Parse((string)mEl.Attribute("WindSpeed") ?? "5", inv),
+                        WindDirectionDeg = double.Parse((string)mEl.Attribute("WindDir") ?? "270", inv),
+                        StabilityClass = (PasquillStabilityClass)Enum.Parse(typeof(PasquillStabilityClass),
+                            (string)mEl.Attribute("Stability") ?? "D"),
+                        AmbientTemperature = double.Parse((string)mEl.Attribute("Temp") ?? "293.15", inv),
+                        AmbientPressure = double.Parse((string)mEl.Attribute("Pressure") ?? "101325", inv)
+                    };
+                }
+                fs.WindFieldScenarios.Add(wf);
+            }
+        }
+
         private void DeserializeDispersionScenario(System.Xml.Linq.XElement root,
             System.Globalization.CultureInfo inv, Scene3D fs)
         {
@@ -2462,6 +2979,9 @@ namespace DisperSim3D.Controls
                     sc.SolverType = parsed;
             }
 
+            var wfId = (string)dEl.Attribute("WindFieldId");
+            sc.WindFieldScenarioId = string.IsNullOrEmpty(wfId) ? null : wfId;
+
             var meteoEl = dEl.Element("Meteo");
             if (meteoEl != null)
             {
@@ -2491,7 +3011,6 @@ namespace DisperSim3D.Controls
                         double.Parse((string)se.Attribute("PosY") ?? "0", inv),
                         double.Parse((string)se.Attribute("PosZ") ?? "0", inv));
                     source.ReleaseRateKgPerS = double.Parse((string)se.Attribute("ReleaseRate") ?? "0.5", inv);
-                    source.ReleaseDurationS = double.Parse((string)se.Attribute("Duration") ?? "60", inv);
                     source.PuffIntervalS = double.Parse((string)se.Attribute("PuffInterval") ?? "1", inv);
                     source.ReleaseHeightOffset = double.Parse((string)se.Attribute("HeightOffset") ?? "2", inv);
                     source.ReleaseAzimuthDeg = double.Parse((string)se.Attribute("Azimuth") ?? "0", inv);
@@ -2508,7 +3027,9 @@ namespace DisperSim3D.Controls
                             VesselVolumeM3 = double.Parse((string)hpEl.Attribute("Volume") ?? "10", inv),
                             GasGamma = double.Parse((string)hpEl.Attribute("Gamma") ?? "1.4", inv),
                             GasMolarMassKgMol = double.Parse((string)hpEl.Attribute("MolarMass") ?? "0.016", inv),
-                            DischargeCoefficient = double.Parse((string)hpEl.Attribute("Cd") ?? "0.65", inv)
+                            DischargeCoefficient = double.Parse((string)hpEl.Attribute("Cd") ?? "0.65", inv),
+                            SpecifyMassFlow = ((string)hpEl.Attribute("SpecifyMdot") ?? "0") == "1",
+                            SpecifiedMassFlowKgPerS = double.Parse((string)hpEl.Attribute("Mdot") ?? "1", inv)
                         };
                     }
 
@@ -3036,7 +3557,15 @@ namespace DisperSim3D.Controls
                     }
                 }
 
+                DeserializeGeneralSettings(root, inv, fs);
+                DeserializeGasLibrary(root, inv, fs);
+                DeserializeTopLevelSources(root, inv, fs);
+                DeserializeWindFieldScenarios(root, inv, fs);
+                DeserializeSimulations(root, inv, fs);
                 DeserializeDispersionScenario(root, inv, fs);
+
+                LegacyProjectMigrator.MigrateInPlace(fs);
+
                 DeserializeMonitorPoints(root, inv, fs);
                 DeserializeWindRose(root, inv, fs);
                 DeserializeFireScenario(root, inv, fs);
@@ -3163,8 +3692,11 @@ namespace DisperSim3D.Controls
                     var releasePoint = GetHitPoint(position);
                     if (releasePoint != null)
                     {
-                        AddReleaseSource(releasePoint.Value, PendingSourceTemplate);
+                        var src = AddReleaseSource(releasePoint.Value, PendingSourceTemplate);
                         PendingSourceTemplate = null;
+                        CurrentEditMode = EditMode.Select;
+                        ObjectPlaced?.Invoke(this, new ObjectPlacedEventArgs
+                            { PlacementType = EditMode.PlaceReleaseSource, PlacedObject = src });
                     }
                     break;
 
@@ -3172,32 +3704,42 @@ namespace DisperSim3D.Controls
                     var monitorPoint = GetHitPoint(position);
                     if (monitorPoint != null)
                     {
-                        AddMonitorPoint(monitorPoint.Value, PendingMonitorTemplate);
+                        var mon = AddMonitorPoint(monitorPoint.Value, PendingMonitorTemplate);
                         PendingMonitorTemplate = null;
+                        CurrentEditMode = EditMode.Select;
+                        ObjectPlaced?.Invoke(this, new ObjectPlacedEventArgs
+                            { PlacementType = EditMode.PlaceMonitorPoint, PlacedObject = mon });
                     }
                     break;
 
                 case EditMode.PlaceFireSource:
                     var firePoint = GetHitPoint(position);
-                    if (firePoint != null && PendingFireTemplate != null)
+                    if (firePoint != null)
                     {
-                        PendingFireTemplate.Position = firePoint.Value;
-                        _scene.FireScenario.Sources.Add(PendingFireTemplate);
+                        var fire = PendingFireTemplate ?? new Models.FireSource();
+                        fire.Position = _snapToGrid ? firePoint.Value.SnapToGrid(_gridSpacing) : firePoint.Value;
+                        _scene.FireScenario.Sources.Add(fire);
                         PendingFireTemplate = null;
                         CurrentEditMode = EditMode.Select;
                         UpdateViewport();
+                        ObjectPlaced?.Invoke(this, new ObjectPlacedEventArgs
+                            { PlacementType = EditMode.PlaceFireSource, PlacedObject = fire });
                     }
                     break;
 
                 case EditMode.PlaceGasDetector:
                     var detPoint = GetHitPoint(position);
-                    if (detPoint != null && PendingDetectorTemplate != null)
+                    if (detPoint != null)
                     {
-                        PendingDetectorTemplate.Position = detPoint.Value;
-                        _scene.GasDetectors.Add(PendingDetectorTemplate);
+                        var det = PendingDetectorTemplate ?? new Models.GasDetector3D
+                            { Name = "Detector" + (_scene.GasDetectors.Count + 1) };
+                        det.Position = _snapToGrid ? detPoint.Value.SnapToGrid(_gridSpacing) : detPoint.Value;
+                        _scene.GasDetectors.Add(det);
                         PendingDetectorTemplate = null;
                         CurrentEditMode = EditMode.Select;
                         UpdateViewport();
+                        ObjectPlaced?.Invoke(this, new ObjectPlacedEventArgs
+                            { PlacementType = EditMode.PlaceGasDetector, PlacedObject = det });
                     }
                     break;
 
@@ -3254,8 +3796,7 @@ namespace DisperSim3D.Controls
             switch (e.Key)
             {
                 case System.Windows.Input.Key.Delete:
-                    if (_selectedDecoration != null)
-                        DeleteSelectedDecoration();
+                    DeleteSelected();
                     break;
 
                 case System.Windows.Input.Key.Escape:
@@ -3672,10 +4213,21 @@ namespace DisperSim3D.Controls
                 _viewport.Children.Remove(model);
             }
 
+            var sourcesToRender = new List<ReleaseSource3D>();
             if (_scene.DispersionScenario != null)
+                sourcesToRender.AddRange(_scene.DispersionScenario.Sources);
+            if (_scene.TopLevelSources != null)
             {
-                foreach (var source in _scene.DispersionScenario.Sources)
+                foreach (var s in _scene.TopLevelSources)
+                    if (!sourcesToRender.Any(x => x.Id == s.Id))
+                        sourcesToRender.Add(s);
+            }
+
+            if (sourcesToRender.Count > 0)
+            {
+                foreach (var source in sourcesToRender)
                 {
+                    if (!source.IsVisible) continue;
                     var pos = source.EffectivePosition;
                     var dir = source.ReleaseDirection;
 

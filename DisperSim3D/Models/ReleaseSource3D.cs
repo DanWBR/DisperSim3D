@@ -31,18 +31,25 @@ namespace DisperSim3D.Models
 
         /// <summary>
         /// Gets or sets the gas properties for the released substance.
+        /// Kept inline for backward compatibility; new code should prefer <see cref="GasRefId"/>.
         /// </summary>
         public GasProperties Gas { get; set; }
+
+        /// <summary>
+        /// Optional reference to a <see cref="GasLibraryItem"/> in the project's gas library.
+        /// When set, takes precedence over the inline <see cref="Gas"/> property.
+        /// </summary>
+        public string GasRefId { get; set; }
+
+        /// <summary>
+        /// Whether to draw the source marker in the 3D viewport. Toggled via the project tree checkbox.
+        /// </summary>
+        public bool IsVisible { get; set; } = true;
 
         /// <summary>
         /// Gets or sets the mass release rate in kilograms per second.
         /// </summary>
         public double ReleaseRateKgPerS { get; set; }
-
-        /// <summary>
-        /// Gets or sets the total release duration in seconds.
-        /// </summary>
-        public double ReleaseDurationS { get; set; }
 
         /// <summary>
         /// Gets or sets the time interval between consecutive puff emissions in seconds.
@@ -122,10 +129,15 @@ namespace DisperSim3D.Models
         {
             get
             {
-                if (HighPressureLeak != null && HighPressureLeak.OrificeDiameterM > 0)
+                if (HighPressureLeak != null)
                 {
-                    double mdot = Core.HighPressureLeakModel.MassFlowRate(HighPressureLeak);
-                    if (mdot > 0) return mdot;
+                    if (HighPressureLeak.SpecifyMassFlow)
+                        return HighPressureLeak.SpecifiedMassFlowKgPerS;
+                    if (HighPressureLeak.OrificeDiameterM > 0)
+                    {
+                        double mdot = Core.HighPressureLeakModel.MassFlowRate(HighPressureLeak);
+                        if (mdot > 0) return mdot;
+                    }
                 }
                 return ReleaseRateKgPerS;
             }
@@ -151,9 +163,15 @@ namespace DisperSim3D.Models
         {
             get
             {
+                if (HighPressureLeak != null)
+                {
+                    if (HighPressureLeak.SpecifyMassFlow)
+                        return Core.HighPressureLeakModel.OrificeDiameterFromMassFlow(
+                            HighPressureLeak, HighPressureLeak.SpecifiedMassFlowKgPerS);
+                    if (HighPressureLeak.OrificeDiameterM > 0)
+                        return HighPressureLeak.OrificeDiameterM;
+                }
                 if (StackDiameterM > 0) return StackDiameterM;
-                if (HighPressureLeak != null && HighPressureLeak.OrificeDiameterM > 0)
-                    return HighPressureLeak.OrificeDiameterM;
                 return 0;
             }
         }
@@ -217,7 +235,6 @@ namespace DisperSim3D.Models
             Name = "Release Source";
             Gas = new GasProperties();
             ReleaseRateKgPerS = 1.0;
-            ReleaseDurationS = 60.0;
             PuffIntervalS = 1.0;
             ReleaseHeightOffset = 2.0;
             ExitTemperatureK = 293.15;

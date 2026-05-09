@@ -30,6 +30,12 @@ namespace DisperSim3D.Core
 
         /// <summary>Gets or sets the discharge coefficient (0 to 1). Default is 0.65.</summary>
         public double DischargeCoefficient { get; set; } = 0.65;
+
+        /// <summary>When true, the user specifies mass flow rate and orifice diameter is back-calculated.</summary>
+        public bool SpecifyMassFlow { get; set; }
+
+        /// <summary>User-specified mass flow rate in kg/s (used when SpecifyMassFlow is true).</summary>
+        public double SpecifiedMassFlowKgPerS { get; set; } = 1.0;
     }
 
     /// <summary>

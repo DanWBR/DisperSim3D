@@ -12,14 +12,12 @@ namespace TestApp.Dialogs
         private NumericUpDown nudLFL;
         private NumericUpDown nudIDLH;
         private NumericUpDown nudReleaseRate;
-        private NumericUpDown nudDuration;
         private NumericUpDown nudPuffInterval;
         private NumericUpDown nudHeightOffset;
 
         public string SourceName { get; private set; } = "Source1";
         public GasProperties Gas { get; private set; }
         public double ReleaseRateKgPerS { get; private set; } = 0.5;
-        public double ReleaseDurationS { get; private set; } = 60;
         public double PuffIntervalS { get; private set; } = 1.0;
         public double HeightOffset { get; private set; } = 2.0;
 
@@ -59,7 +57,7 @@ namespace TestApp.Dialogs
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 ColumnCount = 2,
-                RowCount = 9,
+                RowCount = 8,
                 Margin = new Padding(0, 0, 0, 8)
             };
             table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -89,9 +87,6 @@ namespace TestApp.Dialogs
 
             nudReleaseRate = MakeNud(0.001m, 1000.0m, 0.5m, 3);
             AddRow(table, row++, "Release Rate (kg/s):", nudReleaseRate);
-
-            nudDuration = MakeNud(1m, 100000m, 60m, 0);
-            AddRow(table, row++, "Duration (s):", nudDuration);
 
             nudPuffInterval = MakeNud(0.1m, 60m, 1.0m, 1);
             AddRow(table, row++, "Puff Interval (s):", nudPuffInterval);
@@ -139,7 +134,6 @@ namespace TestApp.Dialogs
         {
             SourceName = txtName.Text;
             ReleaseRateKgPerS = (double)nudReleaseRate.Value;
-            ReleaseDurationS = (double)nudDuration.Value;
             PuffIntervalS = (double)nudPuffInterval.Value;
             HeightOffset = (double)nudHeightOffset.Value;
 

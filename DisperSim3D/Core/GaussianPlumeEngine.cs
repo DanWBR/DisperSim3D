@@ -15,6 +15,12 @@ namespace DisperSim3D.Core
         private readonly List<SourceData> _sources = new List<SourceData>();
         private double _mixingHeight;
 
+        /// <summary>
+        /// Optional pre-computed 3D wind field. When set, the wind speed and direction
+        /// at each source are sampled from the field rather than from <see cref="MeteorologicalConditions"/>.
+        /// </summary>
+        public WindField3D WindField { get; set; }
+
         private static readonly double TwoPi = 2.0 * Math.PI;
         private const int TrajectoryPoints = 200;
         private const double MinWindSpeed = 0.5;
@@ -26,7 +32,7 @@ namespace DisperSim3D.Core
             _mixingHeight = meteo.MixingHeightM > 0 ? meteo.MixingHeightM : 1e6;
 
             double windDirRad = meteo.WindDirectionDeg * Math.PI / 180.0;
-            var windDir3D = new Vector3D(
+            var windDir3DGlobal = new Vector3D(
                 -Math.Sin(windDirRad),
                 -Math.Cos(windDirRad),
                 0);
@@ -35,6 +41,19 @@ namespace DisperSim3D.Core
             {
                 var pos = src.EffectivePosition;
                 double baseHeight = pos.Z;
+
+                Vector3D windDir3D = windDir3DGlobal;
+                double localWindSpeedOverride = -1;
+                if (WindField != null)
+                {
+                    var sampled = WindField.Interpolate(pos.X, pos.Y, baseHeight + 2.0);
+                    double mag = sampled.Length;
+                    if (mag > 0.05)
+                    {
+                        windDir3D = new Vector3D(sampled.X / mag, sampled.Y / mag, 0);
+                        localWindSpeedOverride = mag;
+                    }
+                }
 
                 double effDiam = src.EffectiveDiameterM;
                 if (effDiam > 0 && (src.ExitVelocityMPerS > 0 || src.ExitTemperatureK > meteo.AmbientTemperature))
@@ -48,7 +67,7 @@ namespace DisperSim3D.Core
                 }
                 double H = Math.Min(baseHeight, _mixingHeight);
 
-                double windSpeed = meteo.WindSpeedAtHeight(H);
+                double windSpeed = localWindSpeedOverride > 0 ? localWindSpeedOverride : meteo.WindSpeedAtHeight(H);
                 if (windSpeed < MinWindSpeed) windSpeed = MinWindSpeed;
 
                 double exitVel = src.ComputedExitVelocity;

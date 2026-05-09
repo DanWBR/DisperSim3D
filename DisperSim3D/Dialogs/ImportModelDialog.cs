@@ -90,9 +90,20 @@ namespace DisperSim3D.Dialogs
             table.SetColumnSpan(lblInfo, 2);
             table.Controls.Add(lblInfo, 0, row++);
 
+            var lblIntro = new Label
+            {
+                Text = "Position, rotate and scale the model in scene units (meters).\nUse the preview on the right to see the result.",
+                AutoSize = true,
+                ForeColor = System.Drawing.SystemColors.GrayText,
+                Font = new System.Drawing.Font("Segoe UI", 7.5f, System.Drawing.FontStyle.Regular),
+                Margin = new Padding(0, 0, 0, 6)
+            };
+            table.SetColumnSpan(lblIntro, 2);
+            table.Controls.Add(lblIntro, 0, row++);
+
             var lblPos = new Label
             {
-                Text = "Position",
+                Text = "Position (meters)",
                 AutoSize = true,
                 Font = new System.Drawing.Font(this.Font, System.Drawing.FontStyle.Bold),
                 Margin = new Padding(0, 4, 0, 2)

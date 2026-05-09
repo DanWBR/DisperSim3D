@@ -16,7 +16,7 @@ namespace DisperSim3D.Controls
             HideOnClose = true;
             DockAreas = DockAreas.DockLeft | DockAreas.DockRight | DockAreas.Float;
 
-            var font = new Font(SystemFonts.MessageBoxFont.FontFamily, 8f);
+            var font = new Font(SystemFonts.MessageBoxFont.FontFamily, 9f);
             PropertyGrid = new PropertyGrid
             {
                 Dock = DockStyle.Fill,
@@ -118,8 +118,26 @@ namespace DisperSim3D.Controls
         }
     }
 
+    public class ProjectTreeDockPanel : DockContent
+    {
+        public ProjectTreeWpfPanel Panel { get; private set; }
+
+        public ProjectTreeDockPanel(ProjectTreeWpfPanel panel)
+        {
+            Text = "Project";
+            if (FormExtensions.AppIcon != null) Icon = FormExtensions.AppIcon;
+            HideOnClose = true;
+            DockAreas = DockAreas.DockLeft | DockAreas.DockRight | DockAreas.Float;
+            Panel = panel;
+            panel.Dock = DockStyle.Fill;
+            Controls.Add(panel);
+        }
+    }
+
     public class ViewportDockPanel : DockContent
     {
+        public PlaybackBar PlaybackBar { get; private set; }
+
         public ViewportDockPanel(Control viewportControl)
         {
             Text = "3D Viewport";
@@ -128,8 +146,12 @@ namespace DisperSim3D.Controls
             CloseButton = false;
             CloseButtonVisible = false;
 
+            PlaybackBar = new PlaybackBar { Visible = false };
             viewportControl.Dock = DockStyle.Fill;
+
+            // Add Playback bar first so DockStyle.Bottom takes precedence over Fill
             Controls.Add(viewportControl);
+            Controls.Add(PlaybackBar);
         }
     }
 }

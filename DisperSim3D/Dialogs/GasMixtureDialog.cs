@@ -73,7 +73,12 @@ namespace DisperSim3D.Dialogs
                 Font = new System.Drawing.Font("Segoe UI", 9f),
                 Padding = new Padding(8),
                 Text = "Define gas mixture components. Mole fractions should sum to 1.0.\n" +
-                       "Individual component concentrations = total concentration × mole fraction."
+                       "Individual component concentrations = total concentration × mole fraction.\n\n" +
+                       "Component:  display name (e.g. Methane, H2S).\n" +
+                       "Molar Mass: kg per mole (CH₄ = 0.016, H₂S = 0.034).\n" +
+                       "Mole Fraction: 0–1, fraction of moles in the mixture.\n" +
+                       "LFL: lower flammability limit in kg/m³ (combustion threshold).\n" +
+                       "IDLH: immediately dangerous to life and health threshold (toxic exposure)."
             };
 
             this.Controls.Add(_grid);

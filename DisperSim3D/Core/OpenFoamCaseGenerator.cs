@@ -428,6 +428,7 @@ namespace DisperSim3D.Core
             WriteWindFvSchemes(caseDir);
             WriteWindFvSolution(caseDir);
             WriteWindTransportProperties(caseDir);
+            WriteWindTurbulenceProperties(caseDir);
             WriteUField(caseDir, wind.X, wind.Y, wind.Z);
             WritePField(caseDir);
 
@@ -500,6 +501,14 @@ namespace DisperSim3D.Core
             WriteFile(Path.Combine(caseDir, "constant", "transportProperties"), sb.ToString());
         }
 
+        private static void WriteWindTurbulenceProperties(string caseDir)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "turbulenceProperties"));
+            sb.Append("simulationType  laminar;\n");
+            WriteFile(Path.Combine(caseDir, "constant", "turbulenceProperties"), sb.ToString());
+        }
+
         private static void WritePField(string caseDir)
         {
             var sb = new StringBuilder();
@@ -524,7 +533,8 @@ namespace DisperSim3D.Core
                 sb.AppendFormat(Inv,
                     "    {{\n        name    obstacle_{0};\n        type    cellSet;\n        action  new;\n" +
                     "        source  boxToCell;\n        sourceInfo\n        {{\n" +
-                    "            box ({1} {2} {3}) ({4} {5} {6});\n        }}\n    }}\n\n",
+                    "            min ({1} {2} {3});\n" +
+                    "            max ({4} {5} {6});\n        }}\n    }}\n\n",
                     i, box.Min.X, box.Min.Y, Math.Max(0, box.Min.Z),
                     box.Max.X, box.Max.Y, box.Max.Z);
             }
@@ -538,8 +548,9 @@ namespace DisperSim3D.Core
             {
                 var box = obstacles[i];
                 sfb.Append("    boxToCell\n    {\n");
-                sfb.AppendFormat(Inv, "        box ({0} {1} {2}) ({3} {4} {5});\n",
-                    box.Min.X, box.Min.Y, Math.Max(0, box.Min.Z),
+                sfb.AppendFormat(Inv, "        min ({0} {1} {2});\n",
+                    box.Min.X, box.Min.Y, Math.Max(0, box.Min.Z));
+                sfb.AppendFormat(Inv, "        max ({0} {1} {2});\n",
                     box.Max.X, box.Max.Y, box.Max.Z);
                 sfb.Append("        fieldValues\n        (\n");
                 sfb.Append("            volVectorFieldValue U (0 0 0)\n");
@@ -820,8 +831,9 @@ namespace DisperSim3D.Core
                     double cz = pos.Z + dir.Z * (i + 0.5) * segLen;
 
                     sb.Append("    boxToCell\n    {\n");
-                    sb.AppendFormat(Inv, "        box ({0} {1} {2}) ({3} {4} {5});\n",
-                        cx - half, cy - half, Math.Max(0, cz - half),
+                    sb.AppendFormat(Inv, "        min ({0} {1} {2});\n",
+                        cx - half, cy - half, Math.Max(0, cz - half));
+                    sb.AppendFormat(Inv, "        max ({0} {1} {2});\n",
                         cx + half, cy + half, cz + half);
                     sb.Append("        fieldValues\n        (\n");
                     sb.AppendFormat(Inv, "            volVectorFieldValue U ({0} {1} {2})\n", ux, uy, uz);
@@ -855,8 +867,9 @@ namespace DisperSim3D.Core
 
                 sb.AppendFormat(Inv, "    {{\n        name    sourceZone_{0};\n        type    cellSet;\n        action  new;\n", s);
                 sb.AppendFormat(Inv, "        source  boxToCell;\n        sourceInfo\n        {{\n");
-                sb.AppendFormat(Inv, "            box ({0} {1} {2}) ({3} {4} {5});\n",
-                    pos.X - half, pos.Y - half, Math.Max(0, pos.Z - half),
+                sb.AppendFormat(Inv, "            min ({0} {1} {2});\n",
+                    pos.X - half, pos.Y - half, Math.Max(0, pos.Z - half));
+                sb.AppendFormat(Inv, "            max ({0} {1} {2});\n",
                     pos.X + half, pos.Y + half, pos.Z + half);
                 sb.Append("        }\n    }\n\n");
             }
@@ -912,8 +925,9 @@ namespace DisperSim3D.Core
                     double cz = pos.Z + dir.Z * (i + 0.5) * segLen;
 
                     sb.Append("    boxToCell\n    {\n");
-                    sb.AppendFormat(Inv, "        box ({0} {1} {2}) ({3} {4} {5});\n",
-                        cx - half, cy - half, Math.Max(0, cz - half),
+                    sb.AppendFormat(Inv, "        min ({0} {1} {2});\n",
+                        cx - half, cy - half, Math.Max(0, cz - half));
+                    sb.AppendFormat(Inv, "        max ({0} {1} {2});\n",
                         cx + half, cy + half, cz + half);
                     sb.Append("        fieldValues\n        (\n");
                     sb.AppendFormat(Inv, "            volVectorFieldValue U ({0} {1} {2})\n", ux, uy, uz);
@@ -928,6 +942,11 @@ namespace DisperSim3D.Core
         private static void WriteRefinementDicts(string caseDir, List<ReleaseSource3D> sources,
             double cellSize, List<Models.BoundingBox> obstacles)
         {
+            int srcCount = sources != null ? sources.Count : 0;
+            int obsCount = obstacles != null ? obstacles.Count : 0;
+            if (srcCount == 0 && obsCount == 0)
+                return; // nothing to refine — skip writing dicts entirely
+
             double coarseRadius = cellSize * 8;
             double fineRadius = cellSize * 3;
 
@@ -940,41 +959,36 @@ namespace DisperSim3D.Core
                 sb.Append(FoamHeader("dictionary", dictName));
                 sb.Append("actions\n(\n");
 
-                sb.Append("    {\n        name    refineZone;\n        type    cellSet;\n        action  new;\n");
-                sb.Append("        source  boxToCell;\n        sourceInfo\n        {\n");
+                bool firstAction = true;
 
-                if (sources.Count > 0)
-                {
-                    var pos = sources[0].EffectivePosition;
-                    sb.AppendFormat(Inv, "            box ({0} {1} {2}) ({3} {4} {5});\n",
-                        pos.X - radius, pos.Y - radius, Math.Max(0, pos.Z - radius),
-                        pos.X + radius, pos.Y + radius, pos.Z + radius);
-                }
-
-                sb.Append("        }\n    }\n\n");
-
-                for (int s = 1; s < sources.Count; s++)
+                for (int s = 0; s < srcCount; s++)
                 {
                     var pos = sources[s].EffectivePosition;
-                    sb.Append("    {\n        name    refineZone;\n        type    cellSet;\n        action  add;\n");
+                    string action = firstAction ? "new" : "add";
+                    sb.AppendFormat(Inv, "    {{\n        name    refineZone;\n        type    cellSet;\n        action  {0};\n", action);
                     sb.Append("        source  boxToCell;\n        sourceInfo\n        {\n");
-                    sb.AppendFormat(Inv, "            box ({0} {1} {2}) ({3} {4} {5});\n",
-                        pos.X - radius, pos.Y - radius, Math.Max(0, pos.Z - radius),
+                    sb.AppendFormat(Inv, "            min ({0} {1} {2});\n",
+                        pos.X - radius, pos.Y - radius, Math.Max(0, pos.Z - radius));
+                    sb.AppendFormat(Inv, "            max ({0} {1} {2});\n",
                         pos.X + radius, pos.Y + radius, pos.Z + radius);
                     sb.Append("        }\n    }\n\n");
+                    firstAction = false;
                 }
 
-                if (obstacles != null)
+                if (obsCount > 0)
                 {
                     double margin = radius * 0.5;
                     foreach (var box in obstacles)
                     {
-                        sb.Append("    {\n        name    refineZone;\n        type    cellSet;\n        action  add;\n");
+                        string action = firstAction ? "new" : "add";
+                        sb.AppendFormat(Inv, "    {{\n        name    refineZone;\n        type    cellSet;\n        action  {0};\n", action);
                         sb.Append("        source  boxToCell;\n        sourceInfo\n        {\n");
-                        sb.AppendFormat(Inv, "            box ({0} {1} {2}) ({3} {4} {5});\n",
-                            box.Min.X - margin, box.Min.Y - margin, Math.Max(0, box.Min.Z - margin),
+                        sb.AppendFormat(Inv, "            min ({0} {1} {2});\n",
+                            box.Min.X - margin, box.Min.Y - margin, Math.Max(0, box.Min.Z - margin));
+                        sb.AppendFormat(Inv, "            max ({0} {1} {2});\n",
                             box.Max.X + margin, box.Max.Y + margin, box.Max.Z + margin);
                         sb.Append("        }\n    }\n\n");
+                        firstAction = false;
                     }
                 }
 
@@ -1663,8 +1677,9 @@ namespace DisperSim3D.Core
                     double cz = pos.Z + dir.Z * (i + 0.5) * segLen;
 
                     sb.Append("    boxToCell\n    {\n");
-                    sb.AppendFormat(Inv, "        box ({0} {1} {2}) ({3} {4} {5});\n",
-                        cx - half, cy - half, Math.Max(0, cz - half),
+                    sb.AppendFormat(Inv, "        min ({0} {1} {2});\n",
+                        cx - half, cy - half, Math.Max(0, cz - half));
+                    sb.AppendFormat(Inv, "        max ({0} {1} {2});\n",
                         cx + half, cy + half, cz + half);
                     sb.Append("        fieldValues\n        (\n");
 

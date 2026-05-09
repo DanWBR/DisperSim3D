@@ -13,7 +13,6 @@ namespace DisperSim3D.Dialogs
         private NumericUpDown nudLFL;
         private NumericUpDown nudIDLH;
         private NumericUpDown nudReleaseRate;
-        private NumericUpDown nudDuration;
         private NumericUpDown nudPuffInterval;
         private NumericUpDown nudHeightOffset;
         private NumericUpDown nudAzimuth;
@@ -22,7 +21,6 @@ namespace DisperSim3D.Dialogs
         public string SourceName { get; private set; } = "Source1";
         public GasProperties Gas { get; private set; }
         public double ReleaseRateKgPerS { get; private set; } = 0.5;
-        public double ReleaseDurationS { get; private set; } = 60;
         public double PuffIntervalS { get; private set; } = 1.0;
         public double HeightOffset { get; private set; } = 2.0;
         public double AzimuthDeg { get; private set; } = 0;
@@ -70,7 +68,7 @@ namespace DisperSim3D.Dialogs
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 ColumnCount = 2,
-                RowCount = 11,
+                RowCount = 10,
                 Margin = new Padding(0, 0, 0, 8)
             };
             table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -78,43 +76,50 @@ namespace DisperSim3D.Dialogs
 
             int row = 0;
             txtName = new TextBox { Text = "Source1", Dock = DockStyle.Fill };
-            AddRow(table, row++, "Name:", txtName);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Name:", txtName,
+                "Identifier shown in the scene tree and result reports.");
 
             cmbGasPreset = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
             cmbGasPreset.Items.AddRange(new object[] { "Methane", "H2S", "Ammonia", "Custom" });
             cmbGasPreset.SelectedIndex = 0;
             cmbGasPreset.SelectedIndexChanged += CmbGasPreset_Changed;
-            AddRow(table, row++, "Gas Preset:", cmbGasPreset);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Gas Preset:", cmbGasPreset,
+                "Pre-loaded gas properties. Choose 'Custom' to enter your own molar mass, LFL and IDLH.");
 
             nudMolarMass = MakeNud(0.001m, 1.0m, 0.016m, 3);
             nudMolarMass.Enabled = false;
-            AddRow(table, row++, "Molar Mass (kg/mol):", nudMolarMass);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Molar Mass (kg/mol):", nudMolarMass,
+                "Molecular weight, used to compute density relative to air.");
 
             nudLFL = MakeNud(0.0m, 10.0m, 0.033m, 4);
             nudLFL.Enabled = false;
-            AddRow(table, row++, "LFL (kg/m³):", nudLFL);
+            DialogHelpers.AddRowWithHelp(table, ref row, "LFL (kg/m³):", nudLFL,
+                "Lower Flammability Limit. Concentration above this in air can ignite.");
 
             nudIDLH = MakeNud(0.0m, 10.0m, 0.033m, 4);
             nudIDLH.Enabled = false;
-            AddRow(table, row++, "IDLH (kg/m³):", nudIDLH);
+            DialogHelpers.AddRowWithHelp(table, ref row, "IDLH (kg/m³):", nudIDLH,
+                "Immediately Dangerous to Life and Health threshold (toxicity reference).");
 
             nudReleaseRate = MakeNud(0.001m, 1000.0m, 0.5m, 3);
-            AddRow(table, row++, "Release Rate (kg/s):", nudReleaseRate);
-
-            nudDuration = MakeNud(1m, 100000m, 60m, 0);
-            AddRow(table, row++, "Duration (s):", nudDuration);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Release Rate (kg/s):", nudReleaseRate,
+                "Mass emission rate at the source.");
 
             nudPuffInterval = MakeNud(0.1m, 60m, 1.0m, 1);
-            AddRow(table, row++, "Puff Interval (s):", nudPuffInterval);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Puff Interval (s):", nudPuffInterval,
+                "Time between successive puff emissions in the Gaussian Puff model.");
 
             nudHeightOffset = MakeNud(0m, 100m, 2.0m, 1);
-            AddRow(table, row++, "Height Offset (m):", nudHeightOffset);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Height Offset (m):", nudHeightOffset,
+                "Vertical offset from the source position (e.g. stack height above the unit).");
 
             nudAzimuth = MakeNud(0m, 359m, (decimal)_defaultAzimuth, 0);
-            AddRow(table, row++, "Release Azimuth (°):", nudAzimuth);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Release Azimuth (°):", nudAzimuth,
+                "Horizontal direction of the initial jet (0°=N, 90°=E, 180°=S, 270°=W).");
 
             nudElevation = MakeNud(-90m, 90m, 0m, 0);
-            AddRow(table, row++, "Release Elevation (°):", nudElevation);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Release Elevation (°):", nudElevation,
+                "Vertical jet angle: 0° = horizontal, +90° = straight up, -90° = straight down.");
 
             var buttons = new TableLayoutPanel
             {
@@ -160,7 +165,6 @@ namespace DisperSim3D.Dialogs
         {
             SourceName = txtName.Text;
             ReleaseRateKgPerS = (double)nudReleaseRate.Value;
-            ReleaseDurationS = (double)nudDuration.Value;
             PuffIntervalS = (double)nudPuffInterval.Value;
             HeightOffset = (double)nudHeightOffset.Value;
             AzimuthDeg = (double)nudAzimuth.Value;

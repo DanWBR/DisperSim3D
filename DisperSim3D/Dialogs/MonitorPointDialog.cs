@@ -68,16 +68,20 @@ namespace DisperSim3D.Dialogs
 
             int row = 0;
             txtName = new TextBox { Text = "Monitor1", Dock = DockStyle.Fill };
-            AddRow(table, row++, "Name:", txtName);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Name:", txtName,
+                "Identifier shown in monitor time-series plots and result tables.");
 
             nudX = MakeNud(-10000m, 10000m, 0m, 2);
-            AddRow(table, row++, "X (m):", nudX);
+            DialogHelpers.AddRowWithHelp(table, ref row, "X (m):", nudX,
+                "East-west position in scene coordinates (+X = East).");
 
             nudY = MakeNud(-10000m, 10000m, 0m, 2);
-            AddRow(table, row++, "Y (m):", nudY);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Y (m):", nudY,
+                "North-south position in scene coordinates (+Y = North).");
 
             nudZ = MakeNud(-10000m, 10000m, 2m, 2);
-            AddRow(table, row++, "Z (m):", nudZ);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Z (m):", nudZ,
+                "Height above ground (Z = 0 is ground level). Typical breathing height: 1.5–2 m.");
 
             var buttons = new TableLayoutPanel
             {

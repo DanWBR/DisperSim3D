@@ -42,14 +42,17 @@ namespace DisperSim3D.Dialogs
                 Dock = DockStyle.Fill,
                 AutoSize = true,
                 Padding = new Padding(10),
+                MaximumSize = new System.Drawing.Size((int)(480 * dpi), 0),
                 Text = string.Format(inv,
                     "Coverage: {0:F1}% ({1}/{2} detectors triggered)\n" +
                     "Min detection time: {3:F1} s\n" +
                     "Max detection time: {4:F1} s\n" +
-                    "Avg detection time: {5:F1} s",
+                    "Avg detection time: {5:F1} s\n\n",
                     result.CoveragePercent, result.DetectorsTriggered, result.TotalDetectors,
                     result.MinDetectionTimeS == double.MaxValue ? 0 : result.MinDetectionTimeS,
-                    result.MaxDetectionTimeS, result.AvgDetectionTimeS)
+                    result.MaxDetectionTimeS, result.AvgDetectionTimeS) +
+                    "Coverage = fraction of detectors that saw concentration above their threshold during the simulation. " +
+                    "Detection time = first instant the threshold was crossed at each detector."
             };
             outerLayout.Controls.Add(summary, 0, 0);
 

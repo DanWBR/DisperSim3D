@@ -17,8 +17,6 @@ namespace DisperSim3D.Dialogs
         private CheckBox chkSpecifyMassFlow;
         private Label lblFlowRate;
         private Label lblChoked;
-        private Label lblOrificeLabel;
-        private Label lblMassFlowLabel;
         private bool _updating;
 
         public HighPressureLeakParams Result { get; private set; }
@@ -64,26 +62,32 @@ namespace DisperSim3D.Dialogs
             int row = 0;
             nudPressure = MakeNud(100000m, 100000000m, 1000000m, 0);
             nudPressure.ValueChanged += (s, e) => UpdateCalc();
-            AddRow(table, row++, "Vessel Pressure (Pa):", nudPressure);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Vessel Pressure (Pa):", nudPressure,
+                "Absolute stagnation pressure inside the vessel before the leak.");
 
             nudTemperature = MakeNud(100m, 1000m, 293.15m, 2);
             nudTemperature.ValueChanged += (s, e) => UpdateCalc();
-            AddRow(table, row++, "Vessel Temperature (K):", nudTemperature);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Vessel Temperature (K):", nudTemperature,
+                "Stagnation temperature inside the vessel (293.15 K = 20 °C).");
 
             nudGamma = MakeNud(1.0m, 1.7m, 1.4m, 2);
             nudGamma.ValueChanged += (s, e) => UpdateCalc();
-            AddRow(table, row++, "Gamma (Cp/Cv):", nudGamma);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Gamma (Cp/Cv):", nudGamma,
+                "Heat capacity ratio. Air/N₂ ≈ 1.4, methane ≈ 1.31, steam ≈ 1.33.");
 
             nudMolarMass = MakeNud(0.002m, 0.2m, 0.016m, 3);
             nudMolarMass.ValueChanged += (s, e) => UpdateCalc();
-            AddRow(table, row++, "Molar Mass (kg/mol):", nudMolarMass);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Molar Mass (kg/mol):", nudMolarMass,
+                "Molecular weight, used in the choked-flow equation.");
 
             nudDischargeCoeff = MakeNud(0.1m, 1.0m, 0.65m, 2);
             nudDischargeCoeff.ValueChanged += (s, e) => UpdateCalc();
-            AddRow(table, row++, "Discharge Coefficient:", nudDischargeCoeff);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Discharge Coefficient:", nudDischargeCoeff,
+                "Real-vs-ideal flow ratio. Sharp-edged orifice ≈ 0.61, rounded ≈ 0.95.");
 
             nudVolume = MakeNud(0.01m, 10000m, 10m, 2);
-            AddRow(table, row++, "Vessel Volume (m³):", nudVolume);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Vessel Volume (m³):", nudVolume,
+                "Vessel inventory. Used to estimate blowdown duration.");
 
             // Separator: input mode
             chkSpecifyMassFlow = new CheckBox
@@ -95,19 +99,15 @@ namespace DisperSim3D.Dialogs
             table.SetColumnSpan(chkSpecifyMassFlow, 2);
             table.Controls.Add(chkSpecifyMassFlow, 0, row++);
 
-            lblOrificeLabel = new Label { Text = "Orifice Diameter (m):", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 8, 0) };
             nudOrifice = MakeNud(0.001m, 0.5m, 0.025m, 4);
             nudOrifice.ValueChanged += (s, e) => UpdateCalc();
-            table.Controls.Add(lblOrificeLabel, 0, row);
-            nudOrifice.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-            table.Controls.Add(nudOrifice, 1, row++);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Orifice Diameter (m):", nudOrifice,
+                "Hole diameter; used when computing mass flow.");
 
-            lblMassFlowLabel = new Label { Text = "Mass Flow Rate (kg/s):", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 6, 8, 0) };
             nudMassFlowRate = MakeNud(0.0001m, 10000m, 1m, 4);
             nudMassFlowRate.ValueChanged += (s, e) => UpdateCalc();
-            table.Controls.Add(lblMassFlowLabel, 0, row);
-            nudMassFlowRate.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-            table.Controls.Add(nudMassFlowRate, 1, row++);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Mass Flow Rate (kg/s):", nudMassFlowRate,
+                "Target leak rate; used when back-calculating the equivalent hole diameter.");
 
             lblChoked = new Label { AutoSize = true, Font = new System.Drawing.Font("Segoe UI", 9f, System.Drawing.FontStyle.Bold) };
             AddRow(table, row++, "Flow regime:", lblChoked);

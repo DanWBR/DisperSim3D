@@ -50,7 +50,12 @@ namespace DisperSim3D.Dialogs
             foreach (var p in presets)
                 lstPresets.Items.Add(p.Name, true);
 
-            var lblPresets = new Label { Text = "Camera presets:", AutoSize = true };
+            var lblPresets = new Label
+            {
+                Text = "Camera presets:\nSelect which saved camera angles to render. One PNG is generated per checked preset.",
+                AutoSize = true,
+                MaximumSize = new System.Drawing.Size((int)(360 * dpi), 0)
+            };
             table.Controls.Add(lblPresets, 0, 0);
             table.SetColumnSpan(lstPresets, 2);
             table.Controls.Add(lstPresets, 0, 1);
