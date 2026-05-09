@@ -1,59 +1,78 @@
 # DisperSim 3D
 
-An interactive 3D gas dispersion simulation tool. Model atmospheric releases, visualize concentration fields with isosurfaces and contour planes, evaluate gas detector placement, and integrate with OpenFOAM for CFD-based wind fields.
+An interactive 3D gas dispersion analysis tool for process safety. Build a project, define release sources and gases, run Gaussian or CFD-based dispersion simulations, visualize concentration fields, and optimize gas detector placement.
 
-Built on **.NET 10** with **HelixToolkit.WPF** for 3D rendering and **DockPanelSuite** for the panel layout.
+Built on **.NET 10** with **HelixToolkit.WPF** for 3D rendering, **DockPanelSuite** for the docked layout, and **OpenFOAM** for CFD-based wind fields and reactive transport.
+
+For a detailed description of physical models, file format, OpenFOAM case structure, and validation, see [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md).
 
 ---
 
 ## Features
 
+### Project-Centric Workflow
+
+DisperSim 3D organizes work around a **Project** with discrete sections shown in a left-side dockable tree:
+
+- **General Settings** — defaults for meteo, domain size, grid, CFD config
+- **Gases** — central library of pure gases and mixtures, referenced by sources
+- **Geometry** — imported obstacles and decorations (`.obj`, `.stl`, `.glb`, `.3ds`)
+- **Sources** — top-level release sources with gas-library references
+- **Wind Fields** — meteo + obstacle scenarios resolved to 3D velocity fields (uniform or CFD)
+- **Simulations** — frozen snapshot of source × wind field × CFD config; immutable history
+- **Monitors** — concentration probes with CSV export
+- **Detectors** — fixed sensors and SCP-based placement optimization
+
 ### Dispersion Modeling
 
-- **Gaussian Puff Engine** with Pasquill-Gifford stability classes (A-F), Slade 1968 puff coefficients, and Briggs plume rise
-- **Jet momentum modeling** using TNO Yellow Book jet-in-crossflow correlations
-- **High-pressure leak model** with choked/unchoked flow calculation and inventory decay
-- **Gas mixtures** with individual component tracking
-- **Transient wind profiles** with time-varying speed, direction, and stability
-- Built-in gas presets (Methane, H2S, Ammonia) with LFL, IDLH, and ERPG thresholds
+- **Gaussian Puff Engine** with Pasquill-Gifford stability classes (A-F), Slade 1968 puff coefficients, ground reflection, mixing-height lid
+- **Gaussian Plume Engine** for steady-state continuous releases
+- **Briggs plume rise** (buoyant and momentum-dominated)
+- **Jet momentum modeling** using TNO Yellow Book correlations
+- **High-pressure leak model** with choked/unchoked flow and inventory decay
+- **Birch & Schefer expanded source** for sonic underexpanded jets, automatically wired into CFD source patches and timestep sizing
+- **Gas mixtures** with per-component tracking
+- **Transient wind profiles** with time-varying speed, direction, stability
+
+### CFD Integration (OpenFOAM v2512+)
+
+Choose a solver per simulation:
+
+- **scalarTransportFoam** — passive scalar transport on a steady wind field
+- **simpleFoam** — steady-state RANS wind field generation
+- **pimpleFoam** — transient incompressible
+- **buoyantPimpleFoam** — buoyant transient
+- **reactingFoam** — combustion / dispersion with reactions
+- **rhoSimpleFoam** — compressible steady-state
+- **rhoReactingBuoyantFoam** — compressible buoyant reactive transient (recommended for heavy gas / fuel-air clouds, per Fiates & Vianna 2016)
+
+Automatic mesh generation with snappyHexMesh, building/obstacle refinement zones, and proper handling of v2512 `topoSetDict` syntax. Default `MaxCourantNumber = 10` and `wallDist meshWave` follow Fiates & Vianna recommendations.
 
 ### Visualization
 
-- **Isosurfaces** via Marching Cubes algorithm, colored by threshold level
-- **Contour planes** (XY, XZ, YZ) with configurable color maps (Jet, Viridis, Inferno, Coolwarm)
-- **Particle animation** showing puff transport in real time
-- **Wind rose** display (polar chart + 3D visual)
-- **Streamlines** and **vector fields** colored by concentration
-- **Camera presets** with batch image export for reports
-- Multiple camera modes: perspective, isometric, top-down, front, side, free orbit
+- **Isosurfaces** via Marching Cubes, colored by threshold
+- **Contour planes** (XY, XZ, YZ) with Jet, Viridis, Inferno, Coolwarm color maps
+- **Wind fields** as configurable animated arrows (density, color, opacity, length, thickness, animation)
+- **Particle animation** of puff transport
+- **Wind rose** (polar chart + 3D visual)
+- **Streamlines** colored by concentration
+- **Per-item visibility checkboxes** in the project tree
+- **Synchronized playback bar** with seekable timeline and speed control
+- **Camera presets** with batch image export
 
 ### Analysis
 
-- **Monitor points** that sample concentration in real time with CSV export
-- **Gas detector evaluation** with detection time and coverage scoring
-- **Exceedance curves** combining multiple scenarios with frequency weighting
-- **Multiple scenarios** per project with independent meteorological conditions
-- **Dispersion thresholds** (LFL fractions, IDLH, ERPG, custom values)
+- **Flammable cloud volume** between LFL and UFL
+- **Monitor points** sampling concentration in real time
+- **Gas detector optimization** via Set Covering Problem (Vianna 2019), with both greedy and exact Balas branch-and-bound solvers, Cardinal or Moore neighborhoods, and on-demand result loading from saved CFD cases
+- **Detection time** scoring per detector
+- **Exceedance curves** with frequency weighting
+- **Dispersion thresholds** (LFL fractions, IDLH, ERPG, custom)
 
 ### Fire Modeling
 
-- **Jet fire** model using Chamberlain correlation for flame length
-- Brzustowski flame tilt under crosswind
-- Point-source thermal radiation contours on ground level
-
-### CFD Integration
-
-- **OpenFOAM** case generation (simpleFoam) for steady-state wind fields
-- Automatic mesh generation with building/obstacle geometry
-- Import CFD velocity fields to drive dispersion instead of uniform wind
-- Disk-backed LRU cache for computed fields
-
-### Scene & Import
-
-- Import 3D obstacle/building geometry (`.obj`, `.stl`, `.3ds`)
-- Decorations with positioning, scaling, and rotation
-- Configurable work planes at multiple elevations
-- Snap-to-grid with adjustable spacing
+- **Jet fire** model (Chamberlain) with Brzustowski tilt
+- Point-source thermal radiation contours
 
 ---
 
@@ -61,52 +80,42 @@ Built on **.NET 10** with **HelixToolkit.WPF** for 3D rendering and **DockPanelS
 
 ```
 DisperSim3D/
-├── Models/                     # Data classes
-│   ├── Scene3D.cs              # Scene3D: root container
-│   ├── DispersionScenario.cs   # Scenario configuration
-│   ├── ReleaseSource3D.cs      # Gas release sources
-│   ├── MeteorologicalConditions.cs
-│   ├── GasProperties.cs        # LFL, IDLH, ERPG presets
-│   ├── FireScenario.cs         # Jet fire parameters
-│   ├── GasDetector3D.cs        # Detector placement
-│   ├── MonitorPoint3D.cs       # Concentration probes
-│   ├── WindRoseData.cs         # Wind frequency data
-│   ├── CfdConfiguration.cs     # OpenFOAM settings
-│   ├── TransientWindProfile.cs # Time-varying wind
-│   ├── GasComponent.cs         # Mixture components
+├── Models/                       # Data classes
+│   ├── Project.cs / Scene3D.cs   # Root container (legacy XML alias)
+│   ├── ProjectSettings.cs        # General defaults
+│   ├── GasLibraryItem.cs         # Pure gas or mixture
+│   ├── ReleaseSource3D.cs        # Top-level sources
+│   ├── WindFieldScenario.cs      # Wind field + visualization
+│   ├── Simulation.cs             # Snapshot-based runnable
+│   ├── CfdConfiguration.cs       # OpenFOAM settings
+│   ├── GasProperties.cs          # LFL, UFL, IDLH, ERPG
 │   └── ...
-├── Core/                       # Engines and renderers
-│   ├── GaussianPuffEngine.cs   # Puff dispersion solver
-│   ├── PasquillGiffordCoefficients.cs
-│   ├── BriggsPlumerise.cs      # Buoyant/momentum plume rise
-│   ├── HighPressureLeakModel.cs
-│   ├── JetFireModel.cs         # Chamberlain flame model
-│   ├── DispersionRenderer.cs   # Isosurfaces, contours, particles
-│   ├── MarchingCubes.cs        # Isosurface extraction
-│   ├── ColorMapHelper.cs       # Jet, Viridis, Inferno palettes
-│   ├── WindRoseRenderer.cs     # 3D wind rose visual
-│   ├── FireRenderer.cs         # Flame cone + radiation contours
-│   ├── DetectorEvaluator.cs    # Detector coverage analysis
-│   ├── ExceedanceCurveCalculator.cs
-│   ├── ModelLoader.cs          # OBJ/STL/3DS import
+├── Core/                         # Engines
+│   ├── GaussianPuffEngine.cs
+│   ├── GaussianPlumeEngine.cs
+│   ├── HighPressureLeakModel.cs  # incl. Birch & Schefer expanded source
+│   ├── FlammableCloudCalculator.cs
+│   ├── DetectorOptimizer.cs      # Vianna 2019 SCP orchestrator
+│   ├── SetCoveringSolver.cs      # Greedy + Balas exact
 │   ├── OpenFoamCaseGenerator.cs
 │   ├── OpenFoamRunner.cs
 │   ├── OpenFoamResultReader.cs
+│   ├── LegacyProjectMigrator.cs
 │   └── ...
-├── Dialogs/                    # Configuration dialogs
+├── Dialogs/
 │   ├── DispersionSourceDialog.cs
 │   ├── MeteorologicalDialog.cs
-│   ├── FireSourceDialog.cs
 │   ├── CfdSettingsDialog.cs
-│   ├── WindRoseDialog.cs
+│   ├── DetectorOptimizationDialog.cs
 │   └── ...
-├── Controls/                   # Main UI
-│   ├── FlowsheetEditor3DControl.cs   # WPF HelixViewport3D host
-│   ├── FlowsheetEditorPanel.cs       # WinForms panel with menus/toolbars
-│   ├── AddItemPanel.cs               # Item palette
-│   └── DockPanels.cs
-├── PropertyAdapters/           # PropertyGrid adapters
-├── TestApp/                    # Standalone test application
+├── Controls/
+│   ├── Scene3DEditorPanel.cs       # WinForms shell with docked layout
+│   ├── Scene3DEditorControl.cs     # WPF HelixViewport3D host
+│   ├── ProjectTreeWpfPanel.cs      # WPF TreeView via ElementHost
+│   ├── PropertyGridWpfPanel.cs     # WinForms PropertyGrid wrapper
+│   ├── PlaybackBar.cs              # Sync'd playback control
+│   └── ...
+├── TestApp/
 └── DisperSim3D.sln
 ```
 
@@ -114,22 +123,16 @@ DisperSim3D/
 
 ## Building
 
-### Visual Studio 2022
-
-1. Open `DisperSim3D.sln`
-2. Build (NuGet packages restore automatically)
-
-### Command Line
-
 ```powershell
 dotnet build DisperSim3D.sln
 ```
 
 ### Requirements
 
-- .NET 10 SDK
-- Visual Studio 2022 17.14+ (or `dotnet` CLI)
-- [OpenFOAM](https://www.openfoam.com/) v2512+ (optional, for CFD features only)
+- **.NET 10 SDK**
+- **Visual Studio 2022 17.14+** (or `dotnet` CLI)
+- **Windows** (WinForms shell + WPF viewport)
+- **OpenFOAM v2512+** (optional, for CFD features)
 
 ---
 
@@ -140,62 +143,72 @@ using DisperSim3D.Controls;
 using DisperSim3D.Models;
 using System.Windows.Media.Media3D;
 
-// Host the editor in a WinForms panel
-var editor = new FlowsheetEditor3DControl { Dock = DockStyle.Fill };
+var editor = new Scene3DEditorPanel { Dock = DockStyle.Fill };
 panel.Controls.Add(editor);
 
-// Configure a release source
-var source = new ReleaseSource3D
+var project = editor.Project;
+
+// Add a gas to the library
+var methane = GasLibraryItem.FromGasProperties(GasProperties.Methane());
+project.GasLibrary.Add(methane);
+
+// Add a top-level source referencing the gas
+project.Sources.Add(new ReleaseSource3D
 {
     Name = "Flange Leak",
     Position = new Point3D(0, 0, 2),
     ReleaseRateKgPerS = 0.5,
     ReleaseDurationS = 120,
-    Gas = GasProperties.Methane()
-};
+    GasRefId = methane.Id
+});
 
-// Set meteorological conditions
-var scenario = editor.Flowsheet.ActiveScenario;
-scenario.Sources.Add(source);
-scenario.Meteo.WindSpeed = 3.0;
-scenario.Meteo.WindDirectionDeg = 225;
-scenario.Meteo.PasquillStabilityClass = 'D';
+// Add a wind field
+project.WindFieldScenarios.Add(new WindFieldScenario
+{
+    Name = "5 m/s SW",
+    Meteo = { WindSpeed = 5, WindDirectionDeg = 225, PasquillStabilityClass = 'D' }
+});
 
-// Run the simulation
-editor.StartDispersionSimulation();
+// Refresh the tree to surface them in the UI
+editor.RefreshProjectTree();
 ```
 
 ---
 
-## Atmospheric Dispersion Model
+## XML File Format
 
-The core engine implements the **Gaussian Puff** model:
+Projects are saved as XML with root `<Project Version="2">`. Legacy `<Scene3D>` files are auto-migrated on load: inline gases are hoisted into `GasLibrary`, sources promoted to top level, and old scenarios converted into `Simulation` snapshots.
 
-- Discrete puffs released at configurable intervals
-- Each puff advects with the wind field and grows according to Pasquill-Gifford sigma correlations
-- Concentration at any point is the superposition of all active puffs
-- **Plume rise** via Briggs equations (buoyant and momentum-dominated)
-- **Jet momentum** with exponential velocity decay (TNO Yellow Book)
-- Wind profile power law with stability-dependent shear exponents (urban/rural)
-- Ground reflection and mixing height lid
-- First-order chemical decay (configurable half-life)
-- Dry deposition velocity
+```xml
+<Project Version="2">
+  <GeneralSettings>...</GeneralSettings>
+  <GasLibrary>
+    <Gas Kind="Pure" Id="..." Name="Methane">...</Gas>
+  </GasLibrary>
+  <Sources>...</Sources>
+  <WindFieldScenarios>...</WindFieldScenarios>
+  <Simulations>
+    <Simulation Status="Completed">
+      <SnapshotSource>...</SnapshotSource>
+      <SnapshotGas>...</SnapshotGas>
+      <SnapshotMeteo>...</SnapshotMeteo>
+      <Result CasePath="..." MaxC="..." />
+    </Simulation>
+  </Simulations>
+  ...
+</Project>
+```
 
-The solver supports both **steady-state** (continuous release) and **transient** (time-varying wind, ESD scenarios) modes.
+See [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md) for the full schema.
 
 ---
 
-## OpenFOAM Integration
+## References
 
-DisperSim 3D can generate OpenFOAM cases for computing 3D wind fields around buildings:
-
-1. Define obstacle geometry (import `.obj`/`.stl` or use built-in shapes)
-2. Configure domain size, mesh resolution, and boundary conditions
-3. Generate case files (`system/`, `constant/`, `0/`)
-4. Run `simpleFoam` (steady-state RANS)
-5. Import the velocity field back to drive puff advection
-
-This replaces the uniform wind assumption with a realistic flow field that accounts for building wakes, channeling, and recirculation zones.
+- Fiates, J. & Vianna, S. S. V. (2016). *Numerical modelling of gas dispersion using OpenFOAM.* Process Safety and Environmental Protection.
+- Vianna, S. S. V. et al. (2019). *Optimal allocation of gas detectors as a Set Covering Problem.* Computers & Chemical Engineering.
+- Birch, A. D., Hughes, D. J., & Swaffield, F. (1987). *Velocity decay of high pressure jets.* Combustion Science and Technology.
+- TNO Yellow Book — *Methods for the Calculation of Physical Effects.*
 
 ---
 
@@ -209,6 +222,6 @@ If you find DisperSim 3D useful, consider making a donation to help fund continu
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0** - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **GNU General Public License v3.0** — see the [LICENSE](LICENSE) file for details.
 
 Copyright (C) 2026 Daniel Wagner Oliveira de Medeiros

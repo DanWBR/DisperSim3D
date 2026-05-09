@@ -86,6 +86,10 @@ namespace DisperSim3D.Models
         [Description("Whether arrows pulse/animate over time.")]
         public bool ArrowAnimated { get; set; }
 
+        [Category("Bundling")]
+        [Description("How the OpenFOAM case is packed into a .dsproj bundle. ResultsOnly = small, FullCase = re-runnable after extraction.")]
+        public BundleEmbedMode EmbedMode { get; set; } = BundleEmbedMode.ResultsOnly;
+
         public WindFieldScenario()
         {
             Id = Guid.NewGuid().ToString();

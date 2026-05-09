@@ -112,6 +112,10 @@ namespace DisperSim3D.Models
         [Description("Whether this simulation's result is visible in the 3D viewport.")]
         public bool IsVisible { get; set; }
 
+        [Category("Bundling")]
+        [Description("How the OpenFOAM case is packed into a .dsproj bundle. ResultsOnly = small, FullCase = re-runnable after extraction.")]
+        public BundleEmbedMode EmbedMode { get; set; } = BundleEmbedMode.ResultsOnly;
+
         [XmlIgnore]
         public object ResultTag { get; set; } // OpenFoamResult or SteadyStateResultData (transient)
 

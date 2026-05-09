@@ -176,6 +176,7 @@ namespace DisperSim3D.Controls
                 new ToolStripMenuItem("Manage Scenarios...", Img("icons8-layers.png"), (s, e) => DoManageScenarios()),
                 new ToolStripMenuItem("Manage Wind Fields...", Img("icons8-wind.png"), (s, e) => DoManageWindFields()),
                 new ToolStripMenuItem("New Simulation...", Img("icons8-vector.png"), (s, e) => DoNewSimulation(null)),
+                new ToolStripMenuItem("Optimize Detector Placement...", Img("icons8-ecg.png"), (s, e) => DoOptimizeDetectors()),
                 new ToolStripSeparator(),
                 new ToolStripMenuItem("Meteorological Conditions...", Img("icons8-weather.png"), (s, e) => DoMeteo()),
                 new ToolStripMenuItem("Gas Mixture...", Img("icons8-test_tube.png"), (s, e) => DoGasMixture()),
@@ -745,7 +746,11 @@ namespace DisperSim3D.Controls
 
         private void DoSave()
         {
-            using (var dlg = new SaveFileDialog { Filter = "XML files (*.xml)|*.xml", DefaultExt = "xml" })
+            using (var dlg = new SaveFileDialog
+            {
+                Filter = "DisperSim 3D Project (*.dsproj)|*.dsproj|Legacy XML (*.xml)|*.xml",
+                DefaultExt = "dsproj"
+            })
             {
                 if (dlg.ShowDialog() == DialogResult.OK)
                     SaveToFile(dlg.FileName);
@@ -754,7 +759,12 @@ namespace DisperSim3D.Controls
 
         private void DoLoad()
         {
-            using (var dlg = new OpenFileDialog { Filter = "XML files (*.xml)|*.xml" })
+            using (var dlg = new OpenFileDialog
+            {
+                Filter = "DisperSim 3D Project (*.dsproj;*.xml)|*.dsproj;*.xml|"
+                       + "DisperSim 3D Bundle (*.dsproj)|*.dsproj|"
+                       + "Legacy XML (*.xml)|*.xml"
+            })
             {
                 if (dlg.ShowDialog() == DialogResult.OK)
                     LoadFromFile(dlg.FileName);
@@ -1406,6 +1416,31 @@ namespace DisperSim3D.Controls
             var det = new GasDetector3D { Name = "Detector " + (_editor.Scene.GasDetectors.Count + 1) };
             _editor.Scene.GasDetectors.Add(det);
             _propertyGrid.SelectedObject = det;
+        }
+
+        private void DoOptimizeDetectors()
+        {
+            using (var dlg = new DetectorOptimizationDialog(_editor.Scene))
+            {
+                if (dlg.ShowDialog() != DialogResult.OK) return;
+                if (dlg.ResultDetectorPositions == null || dlg.ResultDetectorPositions.Count == 0)
+                {
+                    UpdateStatus("Optimization returned no detectors.");
+                    return;
+                }
+                int baseCount = _editor.Scene.GasDetectors.Count;
+                for (int i = 0; i < dlg.ResultDetectorPositions.Count; i++)
+                {
+                    _editor.Scene.GasDetectors.Add(new GasDetector3D
+                    {
+                        Name = "OptDet " + (baseCount + i + 1),
+                        Position = dlg.ResultDetectorPositions[i]
+                    });
+                }
+                _editor.RefreshViewport();
+                RefreshProjectTree();
+                UpdateStatus("Added " + dlg.ResultDetectorPositions.Count + " optimised detectors.");
+            }
         }
 
         private void DoEditWindField(string id)

@@ -2402,13 +2402,29 @@ namespace DisperSim3D.Controls
 
 
         /// <summary>
-        /// Saves the scene to an XML file.
+        /// Saves the scene to a file. If the path ends in .dsproj it's written as a self-contained
+        /// ZIP bundle (project.xml + assets + embedded CFD cases). Otherwise it's a bare XML file
+        /// with external references (legacy format).
         /// </summary>
         public void SaveToFile(string filePath)
         {
+            var doc = BuildSceneXDocument(filePath);
+
+            if (ProjectBundle.IsBundleFile(filePath))
+            {
+                ProjectBundle.Save(filePath, _scene, doc);
+            }
+            else
+            {
+                doc.Save(filePath);
+            }
+        }
+
+        private System.Xml.Linq.XDocument BuildSceneXDocument(string filePath)
+        {
             var inv = System.Globalization.CultureInfo.InvariantCulture;
 
-            var doc = new System.Xml.Linq.XDocument(
+            return new System.Xml.Linq.XDocument(
                 new System.Xml.Linq.XElement("Scene3D",
                     new System.Xml.Linq.XAttribute("Version", "1"),
                     new System.Xml.Linq.XAttribute("Name", _scene.Name ?? ""),
@@ -2461,8 +2477,6 @@ namespace DisperSim3D.Controls
                     SerializeGasDetectors(inv),
                     SerializeCfdSimulations(inv, filePath)
                 ));
-
-            doc.Save(filePath);
         }
 
         private System.Xml.Linq.XElement SerializeGeneralSettings(System.Globalization.CultureInfo inv)
@@ -2575,6 +2589,7 @@ namespace DisperSim3D.Controls
                     new System.Xml.Linq.XAttribute("Duration", s.SnapshotDurationS.ToString(inv)),
                     new System.Xml.Linq.XAttribute("TimeStep", s.SnapshotTimeStepS.ToString(inv)),
                     new System.Xml.Linq.XAttribute("CasePath", s.CasePath ?? ""),
+                    new System.Xml.Linq.XAttribute("EmbedMode", s.EmbedMode.ToString()),
                     new System.Xml.Linq.XAttribute("MaxC", s.MaxConcentration.ToString(inv)),
                     s.SnapshotSource != null ? new System.Xml.Linq.XElement("SnapshotSource", SerializeSourceCommon(s.SnapshotSource, inv).Attributes(), SerializeSourceCommon(s.SnapshotSource, inv).Elements()) : null,
                     s.SnapshotMeteo != null ? new System.Xml.Linq.XElement("SnapshotMeteo",
@@ -2598,6 +2613,7 @@ namespace DisperSim3D.Controls
                         new System.Xml.Linq.XAttribute("GridRes", wf.GridResolution.ToString(inv)),
                         new System.Xml.Linq.XAttribute("Status", wf.Status.ToString()),
                         new System.Xml.Linq.XAttribute("CasePath", wf.CasePath ?? ""),
+                        new System.Xml.Linq.XAttribute("EmbedMode", wf.EmbedMode.ToString()),
                         new System.Xml.Linq.XElement("Meteo",
                             new System.Xml.Linq.XAttribute("WindSpeed", wf.Meteo.WindSpeed.ToString(inv)),
                             new System.Xml.Linq.XAttribute("WindDir", wf.Meteo.WindDirectionDeg.ToString(inv)),
@@ -2879,6 +2895,9 @@ namespace DisperSim3D.Controls
                 SimulationStatus statusVal;
                 if (Enum.TryParse((string)se.Attribute("Status") ?? "Configured", out statusVal))
                     sim.Status = statusVal;
+                BundleEmbedMode embedMode;
+                if (Enum.TryParse((string)se.Attribute("EmbedMode") ?? "ResultsOnly", out embedMode))
+                    sim.EmbedMode = embedMode;
 
                 var snapSrcEl = se.Element("SnapshotSource");
                 if (snapSrcEl != null)
@@ -2923,6 +2942,9 @@ namespace DisperSim3D.Controls
                     if (Enum.TryParse(statusStr, out parsedStatus))
                         wf.Status = parsedStatus;
                 }
+                BundleEmbedMode wfEmbed;
+                if (Enum.TryParse((string)wfEl.Attribute("EmbedMode") ?? "ResultsOnly", out wfEmbed))
+                    wf.EmbedMode = wfEmbed;
                 var mEl = wfEl.Element("Meteo");
                 if (mEl != null)
                 {
@@ -3459,8 +3481,12 @@ namespace DisperSim3D.Controls
             }
         }
 
+        /// <summary>Path to the extracted bundle for the currently loaded .dsproj, if any.</summary>
+        private string _currentBundleRoot;
+
         /// <summary>
-        /// Loads a scene from an XML file.
+        /// Loads a scene from a file. Accepts both .dsproj (self-contained ZIP bundle) and bare
+        /// .xml (legacy with external file references).
         /// </summary>
         public void LoadFromFile(string filePath)
         {
@@ -3468,9 +3494,27 @@ namespace DisperSim3D.Controls
 
             var inv = System.Globalization.CultureInfo.InvariantCulture;
 
+            // Drop any previous bundle's temp dir.
+            if (!string.IsNullOrEmpty(_currentBundleRoot))
+            {
+                try { if (System.IO.Directory.Exists(_currentBundleRoot))
+                    System.IO.Directory.Delete(_currentBundleRoot, recursive: true); } catch { }
+                _currentBundleRoot = null;
+            }
+
             try
             {
-                var doc = System.Xml.Linq.XDocument.Load(filePath);
+                System.Xml.Linq.XDocument doc;
+                if (ProjectBundle.IsBundleFile(filePath))
+                {
+                    var bundle = ProjectBundle.Open(filePath);
+                    _currentBundleRoot = bundle.BundleRoot;
+                    doc = bundle.ProjectXml;
+                }
+                else
+                {
+                    doc = System.Xml.Linq.XDocument.Load(filePath);
+                }
                 var root = doc.Root;
                 if (root == null || (root.Name.LocalName != "Scene3D" && root.Name.LocalName != "Flowsheet3D")) return;
 
