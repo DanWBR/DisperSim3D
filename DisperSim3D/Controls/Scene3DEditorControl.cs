@@ -985,10 +985,11 @@ namespace DisperSim3D.Controls
             };
 
             if (scenario.SolverType == CfdSolverType.ScalarTransportFoamSteady ||
-                scenario.SolverType == CfdSolverType.ScalarSimpleFoam)
+                scenario.SolverType == CfdSolverType.ScalarSimpleFoam ||
+                scenario.SolverType == CfdSolverType.RhoSimpleFoam)
                 _cfdRunner.RunSteadyAsync(scenario, config, scenario.SolverType);
             else
-                _cfdRunner.RunAsync(scenario, config);
+                _cfdRunner.RunAsync(scenario, config, scenario.SolverType);
         }
 
         public void RunGaussianPuffAsync()
@@ -2314,7 +2315,8 @@ namespace DisperSim3D.Controls
                     SerializeMonitorPoints(inv),
                     SerializeWindRose(inv),
                     SerializeFireScenario(inv),
-                    SerializeGasDetectors(inv)
+                    SerializeGasDetectors(inv),
+                    SerializeCfdSimulations(inv, filePath)
                 ));
 
             doc.Save(filePath);
@@ -2801,6 +2803,139 @@ namespace DisperSim3D.Controls
             }
         }
 
+        private System.Xml.Linq.XElement SerializeCfdSimulations(
+            System.Globalization.CultureInfo inv, string projectFilePath)
+        {
+            if (_scene.CfdSimulations.Count == 0) return null;
+
+            string projectDir = System.IO.Path.GetDirectoryName(projectFilePath);
+            string projectName = System.IO.Path.GetFileNameWithoutExtension(projectFilePath);
+            string resultsDir = System.IO.Path.Combine(projectDir, projectName + "_results");
+
+            foreach (var entry in _scene.CfdSimulations)
+            {
+                if (!entry.HasResults || string.IsNullOrEmpty(entry.CasePath)) continue;
+                if (!System.IO.Directory.Exists(entry.CasePath)) continue;
+
+                string destDir = System.IO.Path.Combine(resultsDir, entry.Id);
+                if (entry.CasePath == destDir) continue;
+
+                try
+                {
+                    if (!System.IO.Directory.Exists(destDir))
+                        System.IO.Directory.CreateDirectory(destDir);
+
+                    if (entry.SolverType == "Gaussian Puff")
+                    {
+                        foreach (var f in System.IO.Directory.GetFiles(entry.CasePath, "*.bin"))
+                            System.IO.File.Copy(f, System.IO.Path.Combine(destDir,
+                                System.IO.Path.GetFileName(f)), true);
+                    }
+                    else
+                    {
+                        CopyEssentialCfdResults(entry.CasePath, destDir);
+                    }
+
+                    entry.CasePath = destDir;
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("Failed to copy results for " + entry.Id + ": " + ex.Message);
+                }
+            }
+
+            return new System.Xml.Linq.XElement("CfdSimulations",
+                _scene.CfdSimulations.Select(e =>
+                    new System.Xml.Linq.XElement("Simulation",
+                        new System.Xml.Linq.XAttribute("Id", e.Id ?? ""),
+                        new System.Xml.Linq.XAttribute("Name", e.Name ?? ""),
+                        new System.Xml.Linq.XAttribute("ScenarioName", e.ScenarioName ?? ""),
+                        new System.Xml.Linq.XAttribute("CasePath", e.CasePath ?? ""),
+                        new System.Xml.Linq.XAttribute("CreatedAt", e.CreatedAt.ToString("o", inv)),
+                        new System.Xml.Linq.XAttribute("DurationS", e.DurationS.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("TimeStepCount", e.TimeStepCount.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("GridNx", e.GridNx.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("GridNy", e.GridNy.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("GridNz", e.GridNz.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("DomainSizeM", e.DomainSizeM.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("HasResults", e.HasResults),
+                        new System.Xml.Linq.XAttribute("SolverType", e.SolverType ?? ""))));
+        }
+
+        private static void CopyEssentialCfdResults(string srcCase, string destCase)
+        {
+            string sysDir = System.IO.Path.Combine(destCase, "system");
+            if (!System.IO.Directory.Exists(sysDir))
+                System.IO.Directory.CreateDirectory(sysDir);
+
+            string srcBlockMesh = System.IO.Path.Combine(srcCase, "system", "blockMeshDict");
+            if (System.IO.File.Exists(srcBlockMesh))
+                System.IO.File.Copy(srcBlockMesh, System.IO.Path.Combine(sysDir, "blockMeshDict"), true);
+
+            foreach (var dir in System.IO.Directory.GetDirectories(srcCase))
+            {
+                string name = System.IO.Path.GetFileName(dir);
+                double t;
+                if (!double.TryParse(name, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out t)) continue;
+                if (t <= 0) continue;
+
+                string tFile = System.IO.Path.Combine(dir, "T");
+                if (!System.IO.File.Exists(tFile)) continue;
+
+                string destTimeDir = System.IO.Path.Combine(destCase, name);
+                if (!System.IO.Directory.Exists(destTimeDir))
+                    System.IO.Directory.CreateDirectory(destTimeDir);
+
+                System.IO.File.Copy(tFile, System.IO.Path.Combine(destTimeDir, "T"), true);
+
+                foreach (var extra in new[] { "C", "Cx", "Cy", "Cz" })
+                {
+                    string src = System.IO.Path.Combine(dir, extra);
+                    if (System.IO.File.Exists(src))
+                        System.IO.File.Copy(src, System.IO.Path.Combine(destTimeDir, extra), true);
+                }
+            }
+        }
+
+        private void DeserializeCfdSimulations(System.Xml.Linq.XElement root,
+            System.Globalization.CultureInfo inv, Scene3D fs)
+        {
+            var el = root.Element("CfdSimulations");
+            if (el == null) return;
+
+            foreach (var se in el.Elements("Simulation"))
+            {
+                var entry = new CfdSimulationEntry();
+                entry.Id = (string)se.Attribute("Id") ?? entry.Id;
+                entry.Name = (string)se.Attribute("Name") ?? "";
+                entry.ScenarioName = (string)se.Attribute("ScenarioName") ?? "";
+                entry.CasePath = (string)se.Attribute("CasePath") ?? "";
+                entry.DurationS = double.Parse((string)se.Attribute("DurationS") ?? "0", inv);
+                entry.TimeStepCount = int.Parse((string)se.Attribute("TimeStepCount") ?? "0", inv);
+                entry.GridNx = int.Parse((string)se.Attribute("GridNx") ?? "40", inv);
+                entry.GridNy = int.Parse((string)se.Attribute("GridNy") ?? "40", inv);
+                entry.GridNz = int.Parse((string)se.Attribute("GridNz") ?? "20", inv);
+                entry.DomainSizeM = double.Parse((string)se.Attribute("DomainSizeM") ?? "200", inv);
+                entry.HasResults = bool.Parse((string)se.Attribute("HasResults") ?? "False");
+                entry.SolverType = (string)se.Attribute("SolverType") ?? "OpenFOAM";
+
+                var createdStr = (string)se.Attribute("CreatedAt");
+                if (createdStr != null)
+                {
+                    DateTime dt;
+                    if (DateTime.TryParse(createdStr, inv, System.Globalization.DateTimeStyles.RoundtripKind, out dt))
+                        entry.CreatedAt = dt;
+                }
+
+                if (entry.HasResults && !string.IsNullOrEmpty(entry.CasePath)
+                    && System.IO.Directory.Exists(entry.CasePath))
+                {
+                    fs.CfdSimulations.Add(entry);
+                }
+            }
+        }
+
         /// <summary>
         /// Loads a scene from an XML file.
         /// </summary>
@@ -2904,6 +3039,7 @@ namespace DisperSim3D.Controls
                 DeserializeWindRose(root, inv, fs);
                 DeserializeFireScenario(root, inv, fs);
                 DeserializeGasDetectors(root, inv, fs);
+                DeserializeCfdSimulations(root, inv, fs);
 
                 _scene = fs;
                 _snapToGrid = fs.SnapToGrid;

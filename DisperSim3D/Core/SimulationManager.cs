@@ -85,6 +85,10 @@ namespace DisperSim3D.Core
                 case CfdSolverType.GaussianPuff: solverLabel = "Gaussian Puff"; break;
                 case CfdSolverType.ScalarTransportFoamSteady: solverLabel = "CFD Steady"; break;
                 case CfdSolverType.ScalarSimpleFoam: solverLabel = "CFD SimpleFoam"; break;
+                case CfdSolverType.PimpleFoam: solverLabel = "CFD pimpleFoam"; break;
+                case CfdSolverType.BuoyantPimpleFoam: solverLabel = "CFD buoyantPimpleFoam"; break;
+                case CfdSolverType.ReactingFoam: solverLabel = "CFD reactingFoam"; break;
+                case CfdSolverType.RhoSimpleFoam: solverLabel = "CFD rhoSimpleFoam"; break;
                 default: solverLabel = "CFD (OpenFOAM)"; break;
             }
 
@@ -239,6 +243,10 @@ namespace DisperSim3D.Core
                     case CfdSolverType.ScalarTransportFoam:
                     case CfdSolverType.ScalarTransportFoamSteady:
                     case CfdSolverType.ScalarSimpleFoam:
+                    case CfdSolverType.PimpleFoam:
+                    case CfdSolverType.BuoyantPimpleFoam:
+                    case CfdSolverType.ReactingFoam:
+                    case CfdSolverType.RhoSimpleFoam:
                         await RunCfdAsync(job);
                         break;
                 }
@@ -515,7 +523,8 @@ namespace DisperSim3D.Core
             runner.Completed += (s, result) =>
             {
                 bool isSteady = job.SolverType == CfdSolverType.ScalarTransportFoamSteady
-                             || job.SolverType == CfdSolverType.ScalarSimpleFoam;
+                             || job.SolverType == CfdSolverType.ScalarSimpleFoam
+                             || job.SolverType == CfdSolverType.RhoSimpleFoam;
                 string solverLabel = isSteady ? "CFD Steady" : "CFD (OpenFOAM)";
 
                 var entry = new CfdSimulationEntry
@@ -549,10 +558,11 @@ namespace DisperSim3D.Core
             });
 
             if (job.SolverType == CfdSolverType.ScalarTransportFoamSteady ||
-                job.SolverType == CfdSolverType.ScalarSimpleFoam)
+                job.SolverType == CfdSolverType.ScalarSimpleFoam ||
+                job.SolverType == CfdSolverType.RhoSimpleFoam)
                 runner.RunSteadyAsync(scenario, config, job.SolverType);
             else
-                runner.RunAsync(scenario, config);
+                runner.RunAsync(scenario, config, job.SolverType);
 
             return tcs.Task;
         }

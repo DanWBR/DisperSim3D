@@ -28,7 +28,7 @@ namespace DisperSim3D.Core
         /// <param name="progressCallback">Optional callback invoked with progress fraction and status message.</param>
         /// <returns>An <see cref="OpenFoamResult"/> containing indexed time steps and domain bounds.</returns>
         public static OpenFoamResult ReadResults(string caseDir, int nx, int ny, int nz, double domainSize,
-            Action<double, string> progressCallback = null)
+            Action<double, string> progressCallback = null, string scalarFieldName = "T")
         {
             var result = new OpenFoamResult
             {
@@ -55,7 +55,7 @@ namespace DisperSim3D.Core
                 double timeVal;
                 if (double.TryParse(name, NumberStyles.Float, CultureInfo.InvariantCulture, out timeVal))
                 {
-                    if (timeVal > 0 && File.Exists(Path.Combine(dir, "T")))
+                    if (timeVal > 0 && File.Exists(Path.Combine(dir, scalarFieldName)))
                         timeDirs.Add(Tuple.Create(timeVal, dir));
                 }
             }
@@ -73,7 +73,7 @@ namespace DisperSim3D.Core
             foreach (var entry in selected)
             {
                 result.TimeSteps.Add(entry.Item1);
-                result.TimeStepPaths[entry.Item1] = Path.Combine(entry.Item2, "T");
+                result.TimeStepPaths[entry.Item1] = Path.Combine(entry.Item2, scalarFieldName);
             }
 
             progressCallback?.Invoke(0.5, "Validating last timestep...");
@@ -103,13 +103,108 @@ namespace DisperSim3D.Core
         {
             int expectedCount = nx * ny * nz;
             var flatValues = ParseScalarFieldStreaming(filePath, expectedCount);
-            if (flatValues == null) return null;
+            if (flatValues != null)
+            {
+                var field = new double[nx, ny, nz];
+                for (int k = 0; k < nz; k++)
+                    for (int j = 0; j < ny; j++)
+                        for (int i = 0; i < nx; i++)
+                            field[i, j, k] = flatValues[k * nx * ny + j * nx + i];
+                return field;
+            }
+
+            return LoadRefinedTimestep(filePath, nx, ny, nz);
+        }
+
+        private static double[,,] LoadRefinedTimestep(string filePath, int nx, int ny, int nz)
+        {
+            string timeDir = Path.GetDirectoryName(filePath);
+            string caseDir = Path.GetDirectoryName(Path.GetDirectoryName(filePath));
+
+            var scalarValues = ParseScalarFieldAny(filePath);
+            if (scalarValues == null || scalarValues.Length == 0) return null;
+
+            int cellCount = scalarValues.Length;
+            double[] cx = null, cy = null, cz = null;
+
+            var searchDirs = new List<string> { timeDir };
+            foreach (var dir in Directory.GetDirectories(caseDir))
+            {
+                string name = Path.GetFileName(dir);
+                double t;
+                if (double.TryParse(name, NumberStyles.Float, CultureInfo.InvariantCulture, out t))
+                    if (!searchDirs.Contains(dir)) searchDirs.Add(dir);
+            }
+            string zeroDir = Path.Combine(caseDir, "0");
+            if (Directory.Exists(zeroDir) && !searchDirs.Contains(zeroDir))
+                searchDirs.Add(zeroDir);
+
+            foreach (var sd in searchDirs)
+            {
+                if (cx != null) break;
+
+                string cxPath = Path.Combine(sd, "Cx");
+                string cyPath = Path.Combine(sd, "Cy");
+                string czPath = Path.Combine(sd, "Cz");
+                string cPath = Path.Combine(sd, "C");
+
+                if (File.Exists(cxPath) && File.Exists(cyPath) && File.Exists(czPath))
+                {
+                    cx = ParseScalarFieldAny(cxPath);
+                    cy = ParseScalarFieldAny(cyPath);
+                    cz = ParseScalarFieldAny(czPath);
+                }
+                else if (File.Exists(cPath))
+                {
+                    var vectors = ParseVectorFieldAny(cPath);
+                    if (vectors != null && vectors.Length >= cellCount * 3)
+                    {
+                        cx = new double[cellCount];
+                        cy = new double[cellCount];
+                        cz = new double[cellCount];
+                        for (int i = 0; i < cellCount; i++)
+                        {
+                            cx[i] = vectors[i * 3];
+                            cy[i] = vectors[i * 3 + 1];
+                            cz[i] = vectors[i * 3 + 2];
+                        }
+                    }
+                }
+            }
+
+            if (cx == null || cy == null || cz == null) return null;
+            if (cx.Length != cellCount || cy.Length != cellCount || cz.Length != cellCount) return null;
+
+            var result = new OpenFoamResult();
+            ParseBlockMeshBounds(caseDir, result);
+            double xMin = result.DomainXMin, xMax = result.DomainXMax;
+            double yMin = result.DomainYMin, yMax = result.DomainYMax;
+            double zMax = result.DomainZMax;
+
+            double dxInv = nx / (xMax - xMin);
+            double dyInv = ny / (yMax - yMin);
+            double dzInv = nz / zMax;
 
             var field = new double[nx, ny, nz];
-            for (int k = 0; k < nz; k++)
+            var weight = new double[nx, ny, nz];
+
+            for (int c = 0; c < cellCount; c++)
+            {
+                int i = (int)((cx[c] - xMin) * dxInv);
+                int j = (int)((cy[c] - yMin) * dyInv);
+                int k = (int)(cz[c] * dzInv);
+                if (i < 0) i = 0; if (i >= nx) i = nx - 1;
+                if (j < 0) j = 0; if (j >= ny) j = ny - 1;
+                if (k < 0) k = 0; if (k >= nz) k = nz - 1;
+                field[i, j, k] += scalarValues[c];
+                weight[i, j, k] += 1.0;
+            }
+
+            for (int i = 0; i < nx; i++)
                 for (int j = 0; j < ny; j++)
-                    for (int i = 0; i < nx; i++)
-                        field[i, j, k] = flatValues[k * nx * ny + j * nx + i];
+                    for (int k = 0; k < nz; k++)
+                        if (weight[i, j, k] > 0)
+                            field[i, j, k] /= weight[i, j, k];
 
             return field;
         }
@@ -278,6 +373,88 @@ namespace DisperSim3D.Core
                         if (line.Trim().StartsWith("("))
                             break;
                     }
+
+                    var values = new double[count * 3];
+                    int vi = 0;
+                    var vecRegex = new Regex(@"\(\s*([-\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)\s*\)", RegexOptions.Compiled);
+                    while (vi < count && (line = reader.ReadLine()) != null)
+                    {
+                        string t = line.Trim();
+                        if (t == ")" || t == ");") break;
+                        var match = vecRegex.Match(t);
+                        if (match.Success)
+                        {
+                            values[vi * 3] = double.Parse(match.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture);
+                            values[vi * 3 + 1] = double.Parse(match.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture);
+                            values[vi * 3 + 2] = double.Parse(match.Groups[3].Value, NumberStyles.Float, CultureInfo.InvariantCulture);
+                            vi++;
+                        }
+                    }
+                    return vi == count ? values : null;
+                }
+            }
+            catch { return null; }
+        }
+
+        private static double[] ParseScalarFieldAny(string filePath)
+        {
+            try
+            {
+                using (var reader = new StreamReader(filePath))
+                {
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
+                        if (line.TrimStart().StartsWith("internalField")) break;
+                    if (line == null) return null;
+
+                    if (line.Trim().Contains("uniform") && !line.Trim().Contains("nonuniform"))
+                        return null;
+
+                    int count = 0;
+                    while ((line = reader.ReadLine()) != null)
+                        if (int.TryParse(line.Trim(), out count)) break;
+                    if (count <= 0) return null;
+
+                    while ((line = reader.ReadLine()) != null)
+                        if (line.Trim().StartsWith("(")) break;
+
+                    var values = new double[count];
+                    int vi = 0;
+                    while (vi < count && (line = reader.ReadLine()) != null)
+                    {
+                        string t = line.Trim();
+                        if (t == ")" || t == ");") break;
+                        double val;
+                        if (double.TryParse(t, NumberStyles.Float, CultureInfo.InvariantCulture, out val))
+                            values[vi++] = val;
+                    }
+                    return vi == count ? values : null;
+                }
+            }
+            catch { return null; }
+        }
+
+        private static double[] ParseVectorFieldAny(string filePath)
+        {
+            try
+            {
+                using (var reader = new StreamReader(filePath))
+                {
+                    string line;
+                    while ((line = reader.ReadLine()) != null)
+                        if (line.TrimStart().StartsWith("internalField")) break;
+                    if (line == null) return null;
+
+                    if (line.Trim().Contains("uniform") && !line.Trim().Contains("nonuniform"))
+                        return null;
+
+                    int count = 0;
+                    while ((line = reader.ReadLine()) != null)
+                        if (int.TryParse(line.Trim(), out count)) break;
+                    if (count <= 0) return null;
+
+                    while ((line = reader.ReadLine()) != null)
+                        if (line.Trim().StartsWith("(")) break;
 
                     var values = new double[count * 3];
                     int vi = 0;

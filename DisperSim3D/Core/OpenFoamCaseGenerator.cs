@@ -105,7 +105,7 @@ namespace DisperSim3D.Core
             WriteTField(caseDir);
             WriteFvOptions(caseDir, scenario.Sources, xMin, xMax, yMin, yMax, zMax, cellSize, nx, ny, nz);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
-            WriteSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
+            WriteJetSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
             WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
 
             if (config.NumberOfProcessors > 1)
@@ -153,7 +153,7 @@ namespace DisperSim3D.Core
             WriteTField(caseDir);
             WriteFvOptions(caseDir, scenario.Sources, xMin, xMax, yMin, yMax, zMax, cellSize, nx, ny, nz);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
-            WriteSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
+            WriteJetSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
             WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
 
             if (config.NumberOfProcessors > 1)
@@ -211,7 +211,9 @@ namespace DisperSim3D.Core
             return caseDir;
         }
 
-        private static void WriteSteadyControlDict(string caseDir, int maxIter, string application)
+        private static void WriteSteadyControlDict(string caseDir, int maxIter, string application,
+            string passiveScalar = null, double scalarDiffusivity = 0,
+            bool compressible = false, List<ReleaseSource3D> inlineSources = null)
         {
             var sb = new StringBuilder();
             sb.Append(FoamHeader("dictionary", "controlDict"));
@@ -223,6 +225,42 @@ namespace DisperSim3D.Core
             sb.Append("purgeWrite      2;\n\n");
             sb.Append("writeFormat     ascii;\nwritePrecision  8;\nwriteCompression off;\n\n");
             sb.Append("timeFormat      general;\ntimePrecision   6;\n\nrunTimeModifiable true;\n");
+
+            if (passiveScalar != null)
+            {
+                sb.Append("\nfunctions\n{\n");
+                sb.AppendFormat("    {0}Transport\n    {{\n", passiveScalar);
+                sb.Append("        type            scalarTransport;\n");
+                sb.Append("        libs            (\"libsolverFunctionObjects.so\");\n");
+                sb.AppendFormat("        field           {0};\n", passiveScalar);
+                if (compressible)
+                    sb.Append("        rho             rho;\n");
+                sb.Append("        nCorr           2;\n");
+                sb.Append("        resetOnStartUp  false;\n");
+                sb.Append("        writeControl    writeTime;\n");
+                sb.AppendFormat(Inv, "        D               {0};\n", scalarDiffusivity > 0 ? scalarDiffusivity : 1e-5);
+
+                if (inlineSources != null && inlineSources.Count > 0)
+                {
+                    sb.Append("\n        fvOptions\n        {\n");
+                    for (int s = 0; s < inlineSources.Count; s++)
+                    {
+                        var src = inlineSources[s];
+                        sb.AppendFormat(Inv, "            source_{0}\n            {{\n", s);
+                        sb.Append("                type            scalarSemiImplicitSource;\n");
+                        sb.Append("                active          true;\n\n");
+                        sb.Append("                scalarSemiImplicitSourceCoeffs\n                {\n");
+                        sb.AppendFormat(Inv, "                    selectionMode   cellSet;\n                    cellSet         sourceZone_{0};\n", s);
+                        sb.Append("                    volumeMode      absolute;\n                    injectionRateSuSp\n                    {\n");
+                        sb.AppendFormat(Inv, "                        {0}           ({1} 0);\n", passiveScalar, src.ReleaseRateKgPerS);
+                        sb.Append("                    }\n                }\n            }\n");
+                    }
+                    sb.Append("        }\n");
+                }
+
+                sb.Append("    }\n}\n");
+            }
+
             WriteFile(Path.Combine(caseDir, "system", "controlDict"), sb.ToString());
         }
 
@@ -670,9 +708,22 @@ namespace DisperSim3D.Core
             WriteFile(Path.Combine(caseDir, "0", "T"), sb.ToString());
         }
 
+        private static void WritePassiveScalarField(string caseDir, string fieldName)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("volScalarField", fieldName));
+            sb.Append("dimensions      [0 0 0 0 0 0 0];\n\n");
+            sb.Append("internalField   uniform 0;\n\n");
+            sb.Append("boundaryField\n{\n");
+            sb.Append("    atmosphere\n    {\n        type            inletOutlet;\n        inletValue      uniform 0;\n        value           uniform 0;\n    }\n");
+            sb.Append("    ground\n    {\n        type            zeroGradient;\n    }\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "0", fieldName), sb.ToString());
+        }
+
         private static void WriteFvOptions(string caseDir, List<ReleaseSource3D> sources,
             double xMin, double xMax, double yMin, double yMax, double zMax,
-            double cellSize, int nx, int ny, int nz)
+            double cellSize, int nx, int ny, int nz, string scalarName = "T")
         {
             var sb = new StringBuilder();
             sb.Append(FoamHeader("dictionary", "fvOptions"));
@@ -688,11 +739,33 @@ namespace DisperSim3D.Core
                 sb.Append("    scalarSemiImplicitSourceCoeffs\n    {\n");
                 sb.AppendFormat(Inv, "        selectionMode   cellSet;\n        cellSet         sourceZone_{0};\n", s);
                 sb.Append("        volumeMode      absolute;\n        injectionRateSuSp\n        {\n");
-                sb.AppendFormat(Inv, "            T           ({0} 0);\n", injectionRate);
+                sb.AppendFormat(Inv, "            {0}           ({1} 0);\n", scalarName, injectionRate);
                 sb.Append("        }\n    }\n}\n\n");
             }
 
             WriteFile(Path.Combine(caseDir, "constant", "fvOptions"), sb.ToString());
+        }
+
+        private static void WriteFvModels(string caseDir, List<ReleaseSource3D> sources,
+            double cellSize, string scalarName)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "fvModels"));
+
+            for (int s = 0; s < sources.Count; s++)
+            {
+                var src = sources[s];
+                double injectionRate = src.ReleaseRateKgPerS;
+
+                sb.AppendFormat(Inv, "source_{0}\n{{\n", s);
+                sb.Append("    type            semiImplicitSource;\n\n");
+                sb.AppendFormat(Inv, "    selectionMode   cellSet;\n    cellSet         sourceZone_{0};\n", s);
+                sb.Append("    volumeMode      absolute;\n    sources\n    {\n");
+                sb.AppendFormat(Inv, "        {0}           ({1} 0);\n", scalarName, injectionRate);
+                sb.Append("    }\n}\n\n");
+            }
+
+            WriteFile(Path.Combine(caseDir, "constant", "fvModels"), sb.ToString());
         }
 
         private static void WriteSetFieldsDict(string caseDir, List<ReleaseSource3D> sources,
@@ -703,6 +776,10 @@ namespace DisperSim3D.Core
                 if (src.ComputedExitVelocity > 0) { hasJet = true; break; }
 
             if (!hasJet) return;
+
+            double windMag = Math.Sqrt(wind.X * wind.X + wind.Y * wind.Y + wind.Z * wind.Z);
+            if (windMag < 0.5) windMag = 0.5;
+            double maxJetSpeed = windMag * 15.0;
 
             var sb = new StringBuilder();
             sb.Append(FoamHeader("dictionary", "setFieldsDict"));
@@ -716,19 +793,27 @@ namespace DisperSim3D.Core
                 if (v <= 0) continue;
 
                 var jet = src.ExitVelocityVector;
+                double jetMag = Math.Sqrt(jet.X * jet.X + jet.Y * jet.Y + jet.Z * jet.Z);
+                double scale = 1.0;
+                if (jetMag > maxJetSpeed)
+                    scale = maxJetSpeed / jetMag;
+
+                double jx = jet.X * scale;
+                double jy = jet.Y * scale;
+                double jz = jet.Z * scale;
+
                 var pos = src.EffectivePosition;
                 var dir = src.ReleaseDirection;
                 double half = cellSize * 0.55;
 
                 int nSegments = 5;
                 double segLen = cellSize;
-                double windMag = Math.Sqrt(wind.X * wind.X + wind.Y * wind.Y + wind.Z * wind.Z);
                 for (int i = 0; i < nSegments; i++)
                 {
                     double frac = 1.0 - (double)i / nSegments;
-                    double ux = wind.X + jet.X * frac;
-                    double uy = wind.Y + jet.Y * frac;
-                    double uz = wind.Z + jet.Z * frac;
+                    double ux = wind.X + jx * frac;
+                    double uy = wind.Y + jy * frac;
+                    double uz = wind.Z + jz * frac;
 
                     double cx = pos.X + dir.X * (i + 0.5) * segLen;
                     double cy = pos.Y + dir.Y * (i + 0.5) * segLen;
@@ -778,6 +863,66 @@ namespace DisperSim3D.Core
 
             sb.Append(");\n");
             WriteFile(Path.Combine(caseDir, "system", "topoSetDict"), sb.ToString());
+        }
+
+        private static void WriteJetSetFieldsDict(string caseDir, List<ReleaseSource3D> sources,
+            System.Windows.Media.Media3D.Vector3D wind, double cellSize)
+        {
+            bool hasJet = false;
+            foreach (var src in sources)
+                if (src.ComputedExitVelocity > 0) { hasJet = true; break; }
+            if (!hasJet) return;
+
+            double windMag = Math.Sqrt(wind.X * wind.X + wind.Y * wind.Y + wind.Z * wind.Z);
+            if (windMag < 0.5) windMag = 0.5;
+            double maxJetSpeed = windMag * 5.0;
+
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "setFieldsDict"));
+            sb.Append("defaultFieldValues\n(\n);\n\n");
+            sb.Append("regions\n(\n");
+
+            for (int s = 0; s < sources.Count; s++)
+            {
+                var src = sources[s];
+                double v = src.ComputedExitVelocity;
+                if (v <= 0) continue;
+
+                var dir = src.ReleaseDirection;
+                double jetMag = Math.Min(v, maxJetSpeed);
+
+                double jx = dir.X * jetMag;
+                double jy = dir.Y * jetMag;
+                double jz = dir.Z * jetMag;
+
+                var pos = src.EffectivePosition;
+                double half = cellSize * 0.55;
+
+                int nSegments = 3;
+                double segLen = cellSize;
+                for (int i = 0; i < nSegments; i++)
+                {
+                    double frac = 1.0 - (double)i / nSegments;
+                    double ux = wind.X + jx * frac;
+                    double uy = wind.Y + jy * frac;
+                    double uz = wind.Z + jz * frac;
+
+                    double cx = pos.X + dir.X * (i + 0.5) * segLen;
+                    double cy = pos.Y + dir.Y * (i + 0.5) * segLen;
+                    double cz = pos.Z + dir.Z * (i + 0.5) * segLen;
+
+                    sb.Append("    boxToCell\n    {\n");
+                    sb.AppendFormat(Inv, "        box ({0} {1} {2}) ({3} {4} {5});\n",
+                        cx - half, cy - half, Math.Max(0, cz - half),
+                        cx + half, cy + half, cz + half);
+                    sb.Append("        fieldValues\n        (\n");
+                    sb.AppendFormat(Inv, "            volVectorFieldValue U ({0} {1} {2})\n", ux, uy, uz);
+                    sb.Append("        );\n    }\n\n");
+                }
+            }
+
+            sb.Append(");\n");
+            WriteFile(Path.Combine(caseDir, "system", "setFieldsDict"), sb.ToString());
         }
 
         private static void WriteRefinementDicts(string caseDir, List<ReleaseSource3D> sources,
@@ -843,8 +988,841 @@ namespace DisperSim3D.Core
             rmSb.Append("coordinateSystem global;\n\n");
             rmSb.Append("directions\n(\n    tan1\n    tan2\n    normal\n);\n\n");
             rmSb.Append("useHexTopology  true;\n\n");
-            rmSb.Append("geometricCut    false;\n");
+            rmSb.Append("geometricCut    false;\n\n");
+            rmSb.Append("writeMesh       true;\n");
             WriteFile(Path.Combine(caseDir, "system", "refineMeshDict"), rmSb.ToString());
+        }
+
+        // ────────────────────────────────────────────────────────────────────
+        //  pimpleFoam — transient incompressible RANS with passive scalar T
+        // ────────────────────────────────────────────────────────────────────
+
+        public static string GeneratePimpleFoam(DispersionScenario scenario, CfdConfiguration config)
+        {
+            string caseDir = Path.Combine(config.WorkingDirectory, "pimple_case_" + scenario.Id);
+            if (Directory.Exists(caseDir))
+                Directory.Delete(caseDir, true);
+
+            Directory.CreateDirectory(Path.Combine(caseDir, "0"));
+            Directory.CreateDirectory(Path.Combine(caseDir, "constant"));
+            Directory.CreateDirectory(Path.Combine(caseDir, "system"));
+
+            double domain = scenario.DomainSizeM;
+            double xMin = -domain, xMax = domain;
+            double yMin = -domain, yMax = domain;
+            double zMax = domain;
+
+            int nx = scenario.GridResolution;
+            int ny = scenario.GridResolution;
+            int nz = scenario.GridResolution / 2;
+            if (nz < 1) nz = 1;
+
+            var wind = scenario.Meteo.WindVector;
+            double cellSize = Math.Max((xMax - xMin) / nx, (yMax - yMin) / ny);
+            double effectiveDT = Math.Max(config.DiffusivityM2PerS, ComputeTurbulentDiffusivity(scenario));
+            double endTime = scenario.SimulationDurationS;
+            double dt = Math.Max(scenario.TimeStepS, cellSize / (Math.Max(wind.Length, 1.0) * 10));
+            double writeInterval = config.WriteIntervalS > 0
+                ? config.WriteIntervalS
+                : Math.Max(endTime / 20.0, dt);
+
+            WritePimpleControlDict(caseDir, endTime, dt, writeInterval, config, "pimpleFoam");
+            WritePimpleFvSchemes(caseDir, config);
+            WritePimpleFvSolution(caseDir, config);
+            WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
+            WritePimpleTransportProperties(caseDir, effectiveDT);
+            WriteTurbulenceProperties(caseDir, false);
+            WriteUField(caseDir, wind.X, wind.Y, wind.Z);
+            WritePField(caseDir);
+            WriteTField(caseDir);
+            WriteKEpsilonFields(caseDir, wind.Length);
+            WriteFvOptions(caseDir, scenario.Sources, xMin, xMax, yMin, yMax, zMax, cellSize, nx, ny, nz);
+            WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
+            WriteJetSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
+            WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
+
+            if (config.NumberOfProcessors > 1)
+                WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
+
+            return caseDir;
+        }
+
+        // ────────────────────────────────────────────────────────────────────
+        //  buoyantPimpleFoam — transient with buoyancy + passive scalar T
+        // ────────────────────────────────────────────────────────────────────
+
+        public static string GenerateBuoyantPimpleFoam(DispersionScenario scenario, CfdConfiguration config)
+        {
+            string caseDir = Path.Combine(config.WorkingDirectory, "buoyant_case_" + scenario.Id);
+            if (Directory.Exists(caseDir))
+                Directory.Delete(caseDir, true);
+
+            Directory.CreateDirectory(Path.Combine(caseDir, "0"));
+            Directory.CreateDirectory(Path.Combine(caseDir, "constant"));
+            Directory.CreateDirectory(Path.Combine(caseDir, "system"));
+
+            double domain = scenario.DomainSizeM;
+            double xMin = -domain, xMax = domain;
+            double yMin = -domain, yMax = domain;
+            double zMax = domain;
+
+            int nx = scenario.GridResolution;
+            int ny = scenario.GridResolution;
+            int nz = scenario.GridResolution / 2;
+            if (nz < 1) nz = 1;
+
+            var wind = scenario.Meteo.WindVector;
+            double cellSize = Math.Max((xMax - xMin) / nx, (yMax - yMin) / ny);
+            double effectiveDT = Math.Max(config.DiffusivityM2PerS, ComputeTurbulentDiffusivity(scenario));
+            double endTime = scenario.SimulationDurationS;
+            double dt = Math.Max(scenario.TimeStepS, cellSize / (Math.Max(wind.Length, 1.0) * 10));
+            double writeInterval = config.WriteIntervalS > 0
+                ? config.WriteIntervalS
+                : Math.Max(endTime / 20.0, dt);
+
+            double ambientT = scenario.Meteo.AmbientTemperature > 0
+                ? scenario.Meteo.AmbientTemperature : 293.15;
+
+            WritePimpleControlDict(caseDir, endTime, dt, writeInterval, config, "buoyantPimpleFoam",
+                "s", effectiveDT, compressible: true, inlineSources: scenario.Sources);
+            WriteBuoyantFvSchemes(caseDir, config);
+            WriteBuoyantFvSolution(caseDir, config);
+            WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
+            WriteBuoyantTransportProperties(caseDir, effectiveDT);
+            WriteBuoyantThermophysicalProperties(caseDir, ambientT);
+            WriteTurbulenceProperties(caseDir, false);
+            WriteGravity(caseDir);
+            WriteBuoyantUField(caseDir, wind.X, wind.Y, wind.Z);
+            WriteBuoyantPField(caseDir);
+            WriteBuoyantPRghField(caseDir);
+            WriteBuoyantTemperatureField(caseDir, ambientT);
+            WriteAlphatField(caseDir);
+            WritePassiveScalarField(caseDir, "s");
+            WriteKEpsilonFields(caseDir, wind.Length);
+            WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
+            WriteJetSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
+            WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
+
+            if (config.NumberOfProcessors > 1)
+                WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
+
+            return caseDir;
+        }
+
+        // ────────────────────────────────────────────────────────────────────
+        //  reactingFoam — compressible multi-species transient
+        // ────────────────────────────────────────────────────────────────────
+
+        public static string GenerateReactingFoam(DispersionScenario scenario, CfdConfiguration config)
+        {
+            string caseDir = Path.Combine(config.WorkingDirectory, "reacting_case_" + scenario.Id);
+            if (Directory.Exists(caseDir))
+                Directory.Delete(caseDir, true);
+
+            Directory.CreateDirectory(Path.Combine(caseDir, "0"));
+            Directory.CreateDirectory(Path.Combine(caseDir, "constant"));
+            Directory.CreateDirectory(Path.Combine(caseDir, "system"));
+
+            double domain = scenario.DomainSizeM;
+            double xMin = -domain, xMax = domain;
+            double yMin = -domain, yMax = domain;
+            double zMax = domain;
+
+            int nx = scenario.GridResolution;
+            int ny = scenario.GridResolution;
+            int nz = scenario.GridResolution / 2;
+            if (nz < 1) nz = 1;
+
+            var wind = scenario.Meteo.WindVector;
+            double cellSize = Math.Max((xMax - xMin) / nx, (yMax - yMin) / ny);
+            double endTime = scenario.SimulationDurationS;
+            double dt = Math.Max(scenario.TimeStepS, cellSize / (Math.Max(wind.Length, 1.0) * 10));
+            double writeInterval = config.WriteIntervalS > 0
+                ? config.WriteIntervalS
+                : Math.Max(endTime / 20.0, dt);
+
+            double ambientT = scenario.Meteo.AmbientTemperature > 0
+                ? scenario.Meteo.AmbientTemperature : 293.15;
+
+            WritePimpleControlDict(caseDir, endTime, dt, writeInterval, config, "reactingFoam");
+            WriteReactingFvSchemes(caseDir, config);
+            WriteReactingFvSolution(caseDir, config);
+            WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
+            WriteReactingThermophysicalProperties(caseDir);
+            WriteReactingChemistryProperties(caseDir);
+            WriteReactingCombustionProperties(caseDir);
+            WriteTurbulenceProperties(caseDir, true);
+            WriteGravity(caseDir);
+            WriteBuoyantUField(caseDir, wind.X, wind.Y, wind.Z);
+            WriteBuoyantPRghField(caseDir);
+            WriteReactingPField(caseDir);
+            WriteBuoyantTemperatureField(caseDir, ambientT);
+            WriteSpeciesFields(caseDir, scenario.Sources);
+            WriteKEpsilonFields(caseDir, wind.Length);
+            WriteReactingSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
+            WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
+            WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
+
+            if (config.NumberOfProcessors > 1)
+                WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
+
+            return caseDir;
+        }
+
+        // ────────────────────────────────────────────────────────────────────
+        //  Shared helper writers for pimpleFoam / buoyantPimpleFoam / reactingFoam
+        // ────────────────────────────────────────────────────────────────────
+
+        private static void WritePimpleControlDict(string caseDir, double endTime, double dt,
+            double writeInterval, CfdConfiguration config, string application,
+            string passiveScalar = null, double scalarDiffusivity = 0,
+            bool compressible = false, List<ReleaseSource3D> inlineSources = null)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "controlDict"));
+            sb.AppendFormat(Inv, "application     {0};\n\n", application);
+            sb.Append("startFrom       startTime;\nstartTime       0;\n\n");
+            sb.AppendFormat(Inv, "stopAt          endTime;\nendTime         {0};\n\n", endTime);
+            sb.AppendFormat(Inv, "deltaT          {0};\n\n", dt);
+            sb.AppendFormat(Inv, "writeControl    adjustableRunTime;\nwriteInterval   {0};\n\n", writeInterval);
+            sb.AppendFormat(Inv, "purgeWrite      {0};\n\n", config.PurgeWrite);
+            sb.Append("writeFormat     ascii;\nwritePrecision  8;\nwriteCompression off;\n\n");
+            sb.Append("timeFormat      general;\ntimePrecision   6;\n\nrunTimeModifiable true;\n\n");
+            sb.Append("adjustTimeStep  yes;\n");
+            sb.AppendFormat(Inv, "maxCo           {0};\n", config.MaxCourantNumber > 0 ? config.MaxCourantNumber : 0.5);
+
+            if (passiveScalar != null)
+            {
+                sb.Append("\nfunctions\n{\n");
+                sb.AppendFormat("    {0}Transport\n    {{\n", passiveScalar);
+                sb.Append("        type            scalarTransport;\n");
+                sb.Append("        libs            (\"libsolverFunctionObjects.so\");\n");
+                sb.AppendFormat("        field           {0};\n", passiveScalar);
+                if (compressible)
+                    sb.Append("        rho             rho;\n");
+                sb.Append("        nCorr           2;\n");
+                sb.Append("        resetOnStartUp  false;\n");
+                sb.Append("        writeControl    writeTime;\n");
+                sb.AppendFormat(Inv, "        D               {0};\n", scalarDiffusivity > 0 ? scalarDiffusivity : 1e-5);
+
+                if (inlineSources != null && inlineSources.Count > 0)
+                {
+                    sb.Append("\n        fvOptions\n        {\n");
+                    for (int s = 0; s < inlineSources.Count; s++)
+                    {
+                        var src = inlineSources[s];
+                        sb.AppendFormat(Inv, "            source_{0}\n            {{\n", s);
+                        sb.Append("                type            scalarSemiImplicitSource;\n");
+                        sb.Append("                active          true;\n\n");
+                        sb.Append("                scalarSemiImplicitSourceCoeffs\n                {\n");
+                        sb.AppendFormat(Inv, "                    selectionMode   cellSet;\n                    cellSet         sourceZone_{0};\n", s);
+                        sb.Append("                    volumeMode      absolute;\n                    injectionRateSuSp\n                    {\n");
+                        sb.AppendFormat(Inv, "                        {0}           ({1} 0);\n", passiveScalar, src.ReleaseRateKgPerS);
+                        sb.Append("                    }\n                }\n            }\n");
+                    }
+                    sb.Append("        }\n");
+                }
+
+                sb.Append("    }\n}\n");
+            }
+
+            WriteFile(Path.Combine(caseDir, "system", "controlDict"), sb.ToString());
+        }
+
+        private static void WritePimpleFvSchemes(string caseDir, CfdConfiguration config)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "fvSchemes"));
+            sb.Append("ddtSchemes\n{\n    default         Euler;\n}\n\n");
+            sb.Append("gradSchemes\n{\n    default         Gauss linear;\n");
+            sb.Append("    grad(U)         cellLimited Gauss linear 1;\n}\n\n");
+            sb.Append("divSchemes\n{\n    default         none;\n");
+            sb.Append("    div(phi,U)      Gauss linearUpwind grad(U);\n");
+            sb.Append("    div(phi,T)      Gauss linearUpwind grad(T);\n");
+            sb.Append("    div(phi,k)      Gauss upwind;\n");
+            sb.Append("    div(phi,epsilon) Gauss upwind;\n");
+            sb.Append("    div((nuEff*dev2(T(grad(U))))) Gauss linear;\n}\n\n");
+            sb.Append("laplacianSchemes\n{\n    default         Gauss linear corrected;\n}\n\n");
+            sb.Append("interpolationSchemes\n{\n    default         linear;\n}\n\n");
+            sb.Append("snGradSchemes\n{\n    default         corrected;\n}\n\n");
+            sb.Append("wallDist\n{\n    method meshWave;\n}\n");
+            WriteFile(Path.Combine(caseDir, "system", "fvSchemes"), sb.ToString());
+        }
+
+        private static void WritePimpleFvSolution(string caseDir, CfdConfiguration config)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "fvSolution"));
+            sb.Append("solvers\n{\n");
+            sb.Append("    p\n    {\n        solver          GAMG;\n        tolerance       1e-06;\n        relTol          0.01;\n        smoother        GaussSeidel;\n    }\n");
+            sb.Append("    pFinal\n    {\n        $p;\n        relTol          0;\n    }\n");
+            sb.Append("    \"(U|k|epsilon)\"\n    {\n        solver          PBiCGStab;\n        preconditioner  DILU;\n        tolerance       1e-06;\n        relTol          0.1;\n    }\n");
+            sb.Append("    \"(U|k|epsilon)Final\"\n    {\n        $U;\n        relTol          0;\n    }\n");
+            sb.Append("    T\n    {\n        solver          PBiCGStab;\n        preconditioner  DILU;\n");
+            sb.AppendFormat(Inv, "        tolerance       {0};\n        relTol          0;\n    }}\n", config.SolverTolerance);
+            sb.Append("}\n\n");
+            sb.Append("PIMPLE\n{\n    nOuterCorrectors 2;\n    nCorrectors     2;\n    nNonOrthogonalCorrectors 1;\n}\n");
+            WriteFile(Path.Combine(caseDir, "system", "fvSolution"), sb.ToString());
+        }
+
+        private static void WritePimpleTransportProperties(string caseDir, double diffusivity)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "transportProperties"));
+            sb.Append("transportModel  Newtonian;\n");
+            sb.AppendFormat(Inv, "nu              1.5e-05;\n");
+            sb.AppendFormat(Inv, "DT              {0};\n", diffusivity);
+            WriteFile(Path.Combine(caseDir, "constant", "transportProperties"), sb.ToString());
+        }
+
+        private static void WriteTurbulenceProperties(string caseDir, bool compressible)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "turbulenceProperties"));
+            if (compressible)
+            {
+                sb.Append("simulationType  RAS;\n\n");
+                sb.Append("RAS\n{\n    RASModel        kEpsilon;\n    turbulence      on;\n    printCoeffs     on;\n}\n");
+            }
+            else
+            {
+                sb.Append("simulationType  RAS;\n\n");
+                sb.Append("RAS\n{\n    RASModel        kEpsilon;\n    turbulence      on;\n    printCoeffs     on;\n}\n");
+            }
+            WriteFile(Path.Combine(caseDir, "constant", "turbulenceProperties"), sb.ToString());
+        }
+
+        private static void WriteKEpsilonFields(string caseDir, double windSpeed)
+        {
+            double U = Math.Max(windSpeed, 0.5);
+            double I = 0.05;
+            double k = 1.5 * (U * I) * (U * I);
+            double epsilon = 0.09 * k * k / (0.1 * k / U + 1e-10);
+            if (epsilon < 1e-6) epsilon = 1e-4;
+            double nut = 0.09 * k * k / epsilon;
+
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("volScalarField", "k"));
+            sb.Append("dimensions      [0 2 -2 0 0 0 0];\n\n");
+            sb.AppendFormat(Inv, "internalField   uniform {0};\n\n", k);
+            sb.Append("boundaryField\n{\n");
+            sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform {0};\n    }}\n", k);
+            sb.Append("    ground\n    {\n        type            kqRWallFunction;\n        value           uniform 0;\n    }\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "0", "k"), sb.ToString());
+
+            sb.Clear();
+            sb.Append(FoamHeader("volScalarField", "epsilon"));
+            sb.Append("dimensions      [0 2 -3 0 0 0 0];\n\n");
+            sb.AppendFormat(Inv, "internalField   uniform {0};\n\n", epsilon);
+            sb.Append("boundaryField\n{\n");
+            sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform {0};\n    }}\n", epsilon);
+            sb.Append("    ground\n    {\n        type            epsilonWallFunction;\n        value           uniform 0;\n    }\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "0", "epsilon"), sb.ToString());
+
+            sb.Clear();
+            sb.Append(FoamHeader("volScalarField", "nut"));
+            sb.Append("dimensions      [0 2 -1 0 0 0 0];\n\n");
+            sb.AppendFormat(Inv, "internalField   uniform {0};\n\n", nut);
+            sb.Append("boundaryField\n{\n");
+            sb.Append("    atmosphere\n    {\n        type            calculated;\n        value           uniform 0;\n    }\n");
+            sb.Append("    ground\n    {\n        type            nutkWallFunction;\n        value           uniform 0;\n    }\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "0", "nut"), sb.ToString());
+        }
+
+        private static void WriteGravity(string caseDir)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("uniformDimensionedVectorField", "g"));
+            sb.Append("dimensions      [0 1 -2 0 0 0 0];\n");
+            sb.Append("value           (0 0 -9.81);\n");
+            WriteFile(Path.Combine(caseDir, "constant", "g"), sb.ToString());
+        }
+
+        // ── buoyantPimpleFoam-specific writers ──
+
+        private static void WriteBuoyantFvSchemes(string caseDir, CfdConfiguration config)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "fvSchemes"));
+            sb.Append("ddtSchemes\n{\n    default         Euler;\n}\n\n");
+            sb.Append("gradSchemes\n{\n    default         Gauss linear;\n");
+            sb.Append("    grad(U)         cellLimited Gauss linear 1;\n}\n\n");
+            sb.Append("divSchemes\n{\n    default         none;\n");
+            sb.Append("    div(phi,U)      Gauss linearUpwind grad(U);\n");
+            sb.Append("    div(phi,s)      Gauss linearUpwind default;\n");
+            sb.Append("    div(phi,h)      Gauss linearUpwind default;\n");
+            sb.Append("    div(phi,K)      Gauss linear;\n");
+            sb.Append("    div(phi,k)      Gauss upwind;\n");
+            sb.Append("    div(phi,epsilon) Gauss upwind;\n");
+            sb.Append("    div(((rho*nuEff)*dev2(T(grad(U))))) Gauss linear;\n}\n\n");
+            sb.Append("laplacianSchemes\n{\n    default         Gauss linear corrected;\n}\n\n");
+            sb.Append("interpolationSchemes\n{\n    default         linear;\n}\n\n");
+            sb.Append("snGradSchemes\n{\n    default         corrected;\n}\n\n");
+            sb.Append("wallDist\n{\n    method meshWave;\n}\n");
+            WriteFile(Path.Combine(caseDir, "system", "fvSchemes"), sb.ToString());
+        }
+
+        private static void WriteBuoyantFvSolution(string caseDir, CfdConfiguration config)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "fvSolution"));
+            sb.Append("solvers\n{\n");
+            sb.Append("    rho\n    {\n        solver          PCG;\n        preconditioner  DIC;\n        tolerance       1e-07;\n        relTol          0.1;\n    }\n");
+            sb.Append("    rhoFinal\n    {\n        $rho;\n        relTol          0;\n    }\n");
+            sb.Append("    \"p_rgh\"\n    {\n        solver          GAMG;\n        tolerance       1e-06;\n        relTol          0.01;\n        smoother        GaussSeidel;\n    }\n");
+            sb.Append("    \"p_rghFinal\"\n    {\n        $p_rgh;\n        relTol          0;\n    }\n");
+            sb.Append("    \"(U|h|k|epsilon)\"\n    {\n        solver          PBiCGStab;\n        preconditioner  DILU;\n        tolerance       1e-06;\n        relTol          0.1;\n    }\n");
+            sb.Append("    \"(U|h|k|epsilon)Final\"\n    {\n        $U;\n        relTol          0;\n    }\n");
+            sb.Append("    s\n    {\n        solver          PBiCGStab;\n        preconditioner  DILU;\n");
+            sb.AppendFormat(Inv, "        tolerance       {0};\n        relTol          0;\n    }}\n", config.SolverTolerance);
+            sb.Append("    sFinal\n    {\n        $s;\n        relTol          0;\n    }\n");
+            sb.Append("}\n\n");
+            sb.Append("PIMPLE\n{\n    nOuterCorrectors 2;\n    nCorrectors     2;\n    nNonOrthogonalCorrectors 1;\n}\n");
+            WriteFile(Path.Combine(caseDir, "system", "fvSolution"), sb.ToString());
+        }
+
+        private static void WriteBuoyantTransportProperties(string caseDir, double diffusivity)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "transportProperties"));
+            sb.AppendFormat(Inv, "DT              {0};\n", diffusivity);
+            WriteFile(Path.Combine(caseDir, "constant", "transportProperties"), sb.ToString());
+        }
+
+        private static void WriteBuoyantThermophysicalProperties(string caseDir, double ambientT)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "thermophysicalProperties"));
+            sb.Append("thermoType\n{\n");
+            sb.Append("    type            heRhoThermo;\n");
+            sb.Append("    mixture         pureMixture;\n");
+            sb.Append("    transport       const;\n");
+            sb.Append("    thermo          hConst;\n");
+            sb.Append("    equationOfState perfectGas;\n");
+            sb.Append("    specie          specie;\n");
+            sb.Append("    energy          sensibleEnthalpy;\n");
+            sb.Append("}\n\n");
+            sb.Append("mixture\n{\n");
+            sb.Append("    specie\n    {\n        molWeight       28.96;\n    }\n");
+            sb.Append("    thermodynamics\n    {\n        Cp              1005;\n        Hf              0;\n    }\n");
+            sb.Append("    transport\n    {\n        mu              1.84e-05;\n        Pr              0.71;\n    }\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "constant", "thermophysicalProperties"), sb.ToString());
+        }
+
+        private static void WriteBuoyantUField(string caseDir, double ux, double uy, double uz)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("volVectorField", "U"));
+            sb.Append("dimensions      [0 1 -1 0 0 0 0];\n\n");
+            sb.AppendFormat(Inv, "internalField   uniform ({0} {1} {2});\n\n", ux, uy, uz);
+            sb.Append("boundaryField\n{\n");
+            sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform ({0} {1} {2});\n    }}\n", ux, uy, uz);
+            sb.Append("    ground\n    {\n        type            noSlip;\n    }\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "0", "U"), sb.ToString());
+        }
+
+        private static void WriteBuoyantPField(string caseDir)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("volScalarField", "p"));
+            sb.Append("dimensions      [1 -1 -2 0 0 0 0];\n\n");
+            sb.Append("internalField   uniform 1e5;\n\n");
+            sb.Append("boundaryField\n{\n");
+            sb.Append("    atmosphere\n    {\n        type            calculated;\n        value           uniform 1e5;\n    }\n");
+            sb.Append("    ground\n    {\n        type            calculated;\n        value           uniform 1e5;\n    }\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "0", "p"), sb.ToString());
+        }
+
+        private static void WriteBuoyantPRghField(string caseDir)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("volScalarField", "p_rgh"));
+            sb.Append("dimensions      [1 -1 -2 0 0 0 0];\n\n");
+            sb.Append("internalField   uniform 1e5;\n\n");
+            sb.Append("boundaryField\n{\n");
+            sb.Append("    atmosphere\n    {\n        type            fixedValue;\n        value           uniform 1e5;\n    }\n");
+            sb.Append("    ground\n    {\n        type            fixedFluxPressure;\n        value           uniform 1e5;\n    }\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "0", "p_rgh"), sb.ToString());
+        }
+
+        private static void WriteBuoyantTemperatureField(string caseDir, double ambientT)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("volScalarField", "T"));
+            sb.Append("dimensions      [0 0 0 1 0 0 0];\n\n");
+            sb.AppendFormat(Inv, "internalField   uniform {0};\n\n", ambientT);
+            sb.Append("boundaryField\n{\n");
+            sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform {0};\n    }}\n", ambientT);
+            sb.Append("    ground\n    {\n        type            zeroGradient;\n    }\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "0", "T"), sb.ToString());
+        }
+
+        private static void WriteAlphatField(string caseDir)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("volScalarField", "alphat"));
+            sb.Append("dimensions      [1 -1 -1 0 0 0 0];\n\n");
+            sb.Append("internalField   uniform 0;\n\n");
+            sb.Append("boundaryField\n{\n");
+            sb.Append("    atmosphere\n    {\n        type            calculated;\n        value           uniform 0;\n    }\n");
+            sb.Append("    ground\n    {\n        type            compressible::alphatWallFunction;\n        value           uniform 0;\n    }\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "0", "alphat"), sb.ToString());
+        }
+
+        // ── reactingFoam-specific writers ──
+
+        private static void WriteReactingFvSchemes(string caseDir, CfdConfiguration config)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "fvSchemes"));
+            sb.Append("ddtSchemes\n{\n    default         Euler;\n}\n\n");
+            sb.Append("gradSchemes\n{\n    default         Gauss linear;\n}\n\n");
+            sb.Append("divSchemes\n{\n    default         none;\n");
+            sb.Append("    div(phi,U)      Gauss linearUpwind grad(U);\n");
+            sb.Append("    div(phi,Yi_h)   Gauss linearUpwind default;\n");
+            sb.Append("    div(phi,K)      Gauss linear;\n");
+            sb.Append("    div(phi,k)      Gauss upwind;\n");
+            sb.Append("    div(phi,epsilon) Gauss upwind;\n");
+            sb.Append("    div(((rho*nuEff)*dev2(T(grad(U))))) Gauss linear;\n}\n\n");
+            sb.Append("laplacianSchemes\n{\n    default         Gauss linear corrected;\n}\n\n");
+            sb.Append("interpolationSchemes\n{\n    default         linear;\n}\n\n");
+            sb.Append("snGradSchemes\n{\n    default         corrected;\n}\n\n");
+            sb.Append("wallDist\n{\n    method meshWave;\n}\n");
+            WriteFile(Path.Combine(caseDir, "system", "fvSchemes"), sb.ToString());
+        }
+
+        private static void WriteReactingFvSolution(string caseDir, CfdConfiguration config)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "fvSolution"));
+            sb.Append("solvers\n{\n");
+            sb.Append("    \"rho.*\"\n    {\n        solver          diagonal;\n    }\n");
+            sb.Append("    p\n    {\n        solver          GAMG;\n        tolerance       1e-06;\n        relTol          0.01;\n        smoother        GaussSeidel;\n    }\n");
+            sb.Append("    pFinal\n    {\n        $p;\n        relTol          0;\n    }\n");
+            sb.Append("    \"(U|h|k|epsilon)\"\n    {\n        solver          PBiCGStab;\n        preconditioner  DILU;\n        tolerance       1e-06;\n        relTol          0.1;\n    }\n");
+            sb.Append("    \"(U|h|k|epsilon)Final\"\n    {\n        $U;\n        relTol          0;\n    }\n");
+            sb.Append("    \"Yi\"\n    {\n        solver          PBiCGStab;\n        preconditioner  DILU;\n");
+            sb.AppendFormat(Inv, "        tolerance       {0};\n        relTol          0;\n    }}\n", config.SolverTolerance);
+            sb.Append("}\n\n");
+            sb.Append("PIMPLE\n{\n    nOuterCorrectors 2;\n    nCorrectors     2;\n    nNonOrthogonalCorrectors 1;\n}\n");
+            WriteFile(Path.Combine(caseDir, "system", "fvSolution"), sb.ToString());
+        }
+
+        private static void WriteReactingThermophysicalProperties(string caseDir)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "thermophysicalProperties"));
+            sb.Append("thermoType\n{\n");
+            sb.Append("    type            heRhoThermo;\n");
+            sb.Append("    mixture         reactingMixture;\n");
+            sb.Append("    transport       sutherland;\n");
+            sb.Append("    thermo          janaf;\n");
+            sb.Append("    equationOfState perfectGas;\n");
+            sb.Append("    specie          specie;\n");
+            sb.Append("    energy          sensibleEnthalpy;\n");
+            sb.Append("}\n\n");
+            sb.Append("inertSpecie     N2;\n\n");
+            sb.Append("chemistryReader foamChemistryReader;\n\n");
+            sb.Append("foamChemistryFile \"<constant>/reactions\";\n");
+            sb.Append("foamChemistryThermoFile \"<constant>/thermo.compressibleGas\";\n");
+            WriteFile(Path.Combine(caseDir, "constant", "thermophysicalProperties"), sb.ToString());
+
+            var reactions = new StringBuilder();
+            reactions.Append(FoamHeader("dictionary", "reactions"));
+            reactions.Append("species ( CH4 O2 N2 );\n\n");
+            reactions.Append("reactions\n{\n}\n");
+            WriteFile(Path.Combine(caseDir, "constant", "reactions"), reactions.ToString());
+
+            var thermo = new StringBuilder();
+            thermo.Append(FoamHeader("dictionary", "thermo.compressibleGas"));
+            // CH4
+            thermo.Append("CH4\n{\n    specie\n    {\n        molWeight       16.04;\n    }\n");
+            thermo.Append("    thermodynamics\n    {\n        Tlow            200;\n        Thigh           5000;\n        Tcommon         1000;\n");
+            thermo.Append("        highCpCoeffs    ( 1.683 10.24e-3 -3.875e-6 6.785e-10 -4.503e-14 -10080 9.623 );\n");
+            thermo.Append("        lowCpCoeffs     ( 5.149 -13.66e-3 49.14e-6 -42.33e-9 12.73e-12 -10240 -4.641 );\n    }\n");
+            thermo.Append("    transport\n    {\n        As              1.67212e-06;\n        Ts              170.672;\n    }\n}\n\n");
+            // O2
+            thermo.Append("O2\n{\n    specie\n    {\n        molWeight       31.998;\n    }\n");
+            thermo.Append("    thermodynamics\n    {\n        Tlow            200;\n        Thigh           5000;\n        Tcommon         1000;\n");
+            thermo.Append("        highCpCoeffs    ( 3.697 6.135e-4 -1.259e-7 1.775e-11 -1.136e-15 -1234 3.189 );\n");
+            thermo.Append("        lowCpCoeffs     ( 3.213 1.127e-3 -5.756e-7 1.314e-9 -8.768e-13 -1005 6.034 );\n    }\n");
+            thermo.Append("    transport\n    {\n        As              1.67212e-06;\n        Ts              170.672;\n    }\n}\n\n");
+            // N2
+            thermo.Append("N2\n{\n    specie\n    {\n        molWeight       28.014;\n    }\n");
+            thermo.Append("    thermodynamics\n    {\n        Tlow            200;\n        Thigh           5000;\n        Tcommon         1000;\n");
+            thermo.Append("        highCpCoeffs    ( 2.953 1.397e-3 -4.926e-7 7.86e-11 -4.607e-15 -923.9 5.872 );\n");
+            thermo.Append("        lowCpCoeffs     ( 3.531 -1.236e-4 -5.03e-7 2.435e-9 -1.409e-12 -1047 2.967 );\n    }\n");
+            thermo.Append("    transport\n    {\n        As              1.67212e-06;\n        Ts              170.672;\n    }\n}\n");
+            WriteFile(Path.Combine(caseDir, "constant", "thermo.compressibleGas"), thermo.ToString());
+        }
+
+        private static void WriteReactingChemistryProperties(string caseDir)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "chemistryProperties"));
+            sb.Append("chemistryType\n{\n    chemistrySolver noChemistrySolver;\n    chemistryThermo psi;\n}\n\n");
+            sb.Append("chemistry       off;\n");
+            sb.Append("initialChemicalTimeStep 1e-07;\n");
+            WriteFile(Path.Combine(caseDir, "constant", "chemistryProperties"), sb.ToString());
+        }
+
+        private static void WriteReactingCombustionProperties(string caseDir)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "combustionProperties"));
+            sb.Append("combustionModel none;\n");
+            WriteFile(Path.Combine(caseDir, "constant", "combustionProperties"), sb.ToString());
+        }
+
+        private static void WriteReactingPField(string caseDir)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("volScalarField", "p"));
+            sb.Append("dimensions      [1 -1 -2 0 0 0 0];\n\n");
+            sb.Append("internalField   uniform 1e5;\n\n");
+            sb.Append("boundaryField\n{\n");
+            sb.Append("    atmosphere\n    {\n        type            calculated;\n        value           uniform 1e5;\n    }\n");
+            sb.Append("    ground\n    {\n        type            calculated;\n        value           uniform 1e5;\n    }\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "0", "p"), sb.ToString());
+        }
+
+        private static void WriteSpeciesFields(string caseDir, List<ReleaseSource3D> sources)
+        {
+            // CH4 — starts at 0 everywhere (injected via setFields)
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("volScalarField", "CH4"));
+            sb.Append("dimensions      [0 0 0 0 0 0 0];\n\n");
+            sb.Append("internalField   uniform 0;\n\n");
+            sb.Append("boundaryField\n{\n");
+            sb.Append("    atmosphere\n    {\n        type            inletOutlet;\n        inletValue      uniform 0;\n        value           uniform 0;\n    }\n");
+            sb.Append("    ground\n    {\n        type            zeroGradient;\n    }\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "0", "CH4"), sb.ToString());
+
+            // O2
+            sb.Clear();
+            sb.Append(FoamHeader("volScalarField", "O2"));
+            sb.Append("dimensions      [0 0 0 0 0 0 0];\n\n");
+            sb.Append("internalField   uniform 0.23;\n\n");
+            sb.Append("boundaryField\n{\n");
+            sb.Append("    atmosphere\n    {\n        type            fixedValue;\n        value           uniform 0.23;\n    }\n");
+            sb.Append("    ground\n    {\n        type            zeroGradient;\n    }\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "0", "O2"), sb.ToString());
+
+            // N2
+            sb.Clear();
+            sb.Append(FoamHeader("volScalarField", "N2"));
+            sb.Append("dimensions      [0 0 0 0 0 0 0];\n\n");
+            sb.Append("internalField   uniform 0.77;\n\n");
+            sb.Append("boundaryField\n{\n");
+            sb.Append("    atmosphere\n    {\n        type            fixedValue;\n        value           uniform 0.77;\n    }\n");
+            sb.Append("    ground\n    {\n        type            zeroGradient;\n    }\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "0", "N2"), sb.ToString());
+        }
+
+        private static void WriteReactingSetFieldsDict(string caseDir, List<ReleaseSource3D> sources,
+            System.Windows.Media.Media3D.Vector3D wind, double cellSize)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "setFieldsDict"));
+            sb.Append("defaultFieldValues\n(\n);\n\n");
+            sb.Append("regions\n(\n");
+
+            double windMag = Math.Sqrt(wind.X * wind.X + wind.Y * wind.Y + wind.Z * wind.Z);
+            if (windMag < 0.5) windMag = 0.5;
+            double maxJetSpeed = windMag * 5.0;
+
+            for (int s = 0; s < sources.Count; s++)
+            {
+                var src = sources[s];
+                var pos = src.EffectivePosition;
+                var dir = src.ReleaseDirection;
+                double half = cellSize * 0.55;
+
+                double v = src.ComputedExitVelocity;
+                double jetMag = v > 0 ? Math.Min(v, maxJetSpeed) : 0;
+
+                int nSegments = 3;
+                double segLen = cellSize;
+                for (int i = 0; i < nSegments; i++)
+                {
+                    double cx = pos.X + dir.X * (i + 0.5) * segLen;
+                    double cy = pos.Y + dir.Y * (i + 0.5) * segLen;
+                    double cz = pos.Z + dir.Z * (i + 0.5) * segLen;
+
+                    sb.Append("    boxToCell\n    {\n");
+                    sb.AppendFormat(Inv, "        box ({0} {1} {2}) ({3} {4} {5});\n",
+                        cx - half, cy - half, Math.Max(0, cz - half),
+                        cx + half, cy + half, cz + half);
+                    sb.Append("        fieldValues\n        (\n");
+
+                    if (jetMag > 0)
+                    {
+                        double frac = 1.0 - (double)i / nSegments;
+                        double ux = wind.X + dir.X * jetMag * frac;
+                        double uy = wind.Y + dir.Y * jetMag * frac;
+                        double uz = wind.Z + dir.Z * jetMag * frac;
+                        sb.AppendFormat(Inv, "            volVectorFieldValue U ({0} {1} {2})\n", ux, uy, uz);
+                    }
+
+                    double ch4Frac = 1.0 - (double)i / nSegments;
+                    sb.AppendFormat(Inv, "            volScalarFieldValue CH4 {0}\n", ch4Frac);
+                    sb.AppendFormat(Inv, "            volScalarFieldValue O2 {0}\n", 0.23 * (1.0 - ch4Frac));
+                    sb.AppendFormat(Inv, "            volScalarFieldValue N2 {0}\n", 0.77 * (1.0 - ch4Frac));
+
+                    sb.Append("        );\n    }\n\n");
+                }
+            }
+
+            sb.Append(");\n");
+            WriteFile(Path.Combine(caseDir, "system", "setFieldsDict"), sb.ToString());
+        }
+
+        // ────────────────────────────────────────────────────────────────────
+        //  rhoSimpleFoam — compressible steady-state RANS with passive scalar T
+        // ────────────────────────────────────────────────────────────────────
+
+        public static string GenerateRhoSimpleFoam(DispersionScenario scenario, CfdConfiguration config)
+        {
+            string caseDir = Path.Combine(config.WorkingDirectory, "rhosimple_case_" + scenario.Id);
+            if (Directory.Exists(caseDir))
+                Directory.Delete(caseDir, true);
+
+            Directory.CreateDirectory(Path.Combine(caseDir, "0"));
+            Directory.CreateDirectory(Path.Combine(caseDir, "constant"));
+            Directory.CreateDirectory(Path.Combine(caseDir, "system"));
+
+            double domain = scenario.DomainSizeM;
+            double xMin = -domain, xMax = domain;
+            double yMin = -domain, yMax = domain;
+            double zMax = domain;
+
+            int nx = scenario.GridResolution;
+            int ny = scenario.GridResolution;
+            int nz = scenario.GridResolution / 2;
+            if (nz < 1) nz = 1;
+
+            int maxIter = 2000;
+            var wind = scenario.Meteo.WindVector;
+            double cellSize = Math.Max((xMax - xMin) / nx, (yMax - yMin) / ny);
+            double effectiveDT = Math.Max(config.DiffusivityM2PerS, ComputeTurbulentDiffusivity(scenario));
+            double ambientT = scenario.Meteo.AmbientTemperature > 0
+                ? scenario.Meteo.AmbientTemperature : 293.15;
+
+            WriteSteadyControlDict(caseDir, maxIter, "rhoSimpleFoam", "s", effectiveDT,
+                compressible: true, inlineSources: scenario.Sources);
+            WriteRhoSimpleFvSchemes(caseDir, config);
+            WriteRhoSimpleFvSolution(caseDir, config);
+            WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
+            WriteRhoSimpleThermophysicalProperties(caseDir, ambientT, effectiveDT);
+            WriteTurbulenceProperties(caseDir, true);
+            WriteBuoyantUField(caseDir, wind.X, wind.Y, wind.Z);
+            WriteRhoSimplePField(caseDir);
+            WriteBuoyantTemperatureField(caseDir, ambientT);
+            WritePassiveScalarField(caseDir, "s");
+            WriteKEpsilonFields(caseDir, wind.Length);
+            WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
+            WriteSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
+            WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
+
+            if (config.NumberOfProcessors > 1)
+                WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
+
+            return caseDir;
+        }
+
+        private static void WriteRhoSimpleFvSchemes(string caseDir, CfdConfiguration config)
+        {
+            string scheme = config.NumericalScheme ?? "linearUpwind";
+            string divS = scheme == "linearUpwind"
+                ? "bounded Gauss linearUpwind grad(s)"
+                : "bounded Gauss " + scheme;
+
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "fvSchemes"));
+            sb.Append("ddtSchemes\n{\n    default         steadyState;\n}\n\n");
+            sb.Append("gradSchemes\n{\n    default         Gauss linear;\n");
+            sb.Append("    grad(U)         cellLimited Gauss linear 1;\n}\n\n");
+            sb.Append("divSchemes\n{\n    default         none;\n");
+            sb.Append("    div(phi,U)      bounded Gauss linearUpwind grad(U);\n");
+            sb.AppendFormat("    div(phi,s)      {0};\n", divS);
+            sb.Append("    div(phi,e)      bounded Gauss linearUpwind default;\n");
+            sb.Append("    div(phi,h)      bounded Gauss linearUpwind default;\n");
+            sb.Append("    div(phi,K)      bounded Gauss linear;\n");
+            sb.Append("    div(phi,Ekp)    bounded Gauss linear;\n");
+            sb.Append("    div(phi,k)      bounded Gauss upwind;\n");
+            sb.Append("    div(phi,epsilon) bounded Gauss upwind;\n");
+            sb.Append("    div(((rho*nuEff)*dev2(T(grad(U))))) Gauss linear;\n}\n\n");
+            sb.Append("laplacianSchemes\n{\n    default         Gauss linear corrected;\n}\n\n");
+            sb.Append("interpolationSchemes\n{\n    default         linear;\n}\n\n");
+            sb.Append("snGradSchemes\n{\n    default         corrected;\n}\n\n");
+            sb.Append("wallDist\n{\n    method meshWave;\n}\n");
+            WriteFile(Path.Combine(caseDir, "system", "fvSchemes"), sb.ToString());
+        }
+
+        private static void WriteRhoSimpleFvSolution(string caseDir, CfdConfiguration config)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "fvSolution"));
+            sb.Append("solvers\n{\n");
+            sb.Append("    p\n    {\n        solver          GAMG;\n        tolerance       1e-06;\n        relTol          0.01;\n        smoother        GaussSeidel;\n    }\n");
+            sb.Append("    \"(U|e|h|k|epsilon)\"\n    {\n        solver          PBiCGStab;\n        preconditioner  DILU;\n        tolerance       1e-06;\n        relTol          0.1;\n    }\n");
+            sb.Append("    s\n    {\n        solver          PBiCGStab;\n        preconditioner  DILU;\n");
+            sb.AppendFormat(Inv, "        tolerance       {0};\n        relTol          0.01;\n    }}\n", config.SolverTolerance);
+            sb.Append("}\n\n");
+            sb.Append("SIMPLE\n{\n    nNonOrthogonalCorrectors 0;\n    consistent      yes;\n\n");
+            sb.Append("    residualControl\n    {\n        p               1e-4;\n        U               1e-4;\n        e               1e-4;\n        s               1e-6;\n    }\n}\n\n");
+            sb.Append("relaxationFactors\n{\n");
+            sb.Append("    fields\n    {\n        p               0.3;\n        rho             0.5;\n    }\n");
+            sb.Append("    equations\n    {\n        U               0.7;\n        e               0.5;\n        h               0.5;\n        k               0.5;\n        epsilon         0.5;\n        s               0.7;\n    }\n}\n");
+            WriteFile(Path.Combine(caseDir, "system", "fvSolution"), sb.ToString());
+        }
+
+        private static void WriteRhoSimpleThermophysicalProperties(string caseDir, double ambientT, double diffusivity)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "thermophysicalProperties"));
+            sb.Append("thermoType\n{\n");
+            sb.Append("    type            heRhoThermo;\n");
+            sb.Append("    mixture         pureMixture;\n");
+            sb.Append("    transport       const;\n");
+            sb.Append("    thermo          hConst;\n");
+            sb.Append("    equationOfState perfectGas;\n");
+            sb.Append("    specie          specie;\n");
+            sb.Append("    energy          sensibleInternalEnergy;\n");
+            sb.Append("}\n\n");
+            sb.Append("mixture\n{\n");
+            sb.Append("    specie\n    {\n        molWeight       28.96;\n    }\n");
+            sb.Append("    thermodynamics\n    {\n        Cp              1005;\n        Hf              0;\n    }\n");
+            sb.Append("    transport\n    {\n        mu              1.84e-05;\n        Pr              0.71;\n    }\n");
+            sb.Append("}\n\n");
+            sb.AppendFormat(Inv, "DT              {0};\n", diffusivity);
+            WriteFile(Path.Combine(caseDir, "constant", "thermophysicalProperties"), sb.ToString());
+        }
+
+        private static void WriteRhoSimplePField(string caseDir)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("volScalarField", "p"));
+            sb.Append("dimensions      [1 -1 -2 0 0 0 0];\n\n");
+            sb.Append("internalField   uniform 1e5;\n\n");
+            sb.Append("boundaryField\n{\n");
+            sb.Append("    atmosphere\n    {\n        type            fixedValue;\n        value           uniform 1e5;\n    }\n");
+            sb.Append("    ground\n    {\n        type            zeroGradient;\n    }\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "0", "p"), sb.ToString());
         }
     }
 }

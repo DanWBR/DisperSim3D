@@ -14,7 +14,15 @@
         /// <summary>OpenFOAM steady-state scalar transport using pseudo-transient iteration to convergence.</summary>
         ScalarTransportFoamSteady,
         /// <summary>OpenFOAM scalarSimpleFoam solver for SIMPLE-based steady-state scalar transport.</summary>
-        ScalarSimpleFoam
+        ScalarSimpleFoam,
+        /// <summary>OpenFOAM pimpleFoam transient solver with passive scalar transport via fvOptions.</summary>
+        PimpleFoam,
+        /// <summary>OpenFOAM buoyantPimpleFoam transient solver with buoyancy and passive scalar transport.</summary>
+        BuoyantPimpleFoam,
+        /// <summary>OpenFOAM reactingFoam compressible multi-species transient solver.</summary>
+        ReactingFoam,
+        /// <summary>OpenFOAM rhoSimpleFoam compressible steady-state RANS solver with passive scalar.</summary>
+        RhoSimpleFoam
     }
 
     /// <summary>

@@ -16,7 +16,7 @@ namespace DisperSim3D.Controls
             HideOnClose = true;
             DockAreas = DockAreas.DockLeft | DockAreas.DockRight | DockAreas.Float;
 
-            var font = new Font(SystemFonts.MessageBoxFont.FontFamily, 9.5f);
+            var font = new Font(SystemFonts.MessageBoxFont.FontFamily, 8f);
             PropertyGrid = new PropertyGrid
             {
                 Dock = DockStyle.Fill,

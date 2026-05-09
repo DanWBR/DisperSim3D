@@ -242,7 +242,11 @@ namespace DisperSim3D.Controls
                 "Gaussian Plume (Steady-State)",
                 "CFD Transient (scalarTransportFoam)",
                 "CFD Steady (scalarTransportFoam)",
-                "CFD Steady (simpleFoam + scalar)"
+                "CFD Steady (simpleFoam + scalar)",
+                "CFD Transient (pimpleFoam)",
+                "CFD Transient (buoyantPimpleFoam)",
+                "CFD Transient (reactingFoam)",
+                "CFD Steady (rhoSimpleFoam)"
             });
             _solverCombo.SelectedIndex = 0;
             _solverCombo.SelectedIndexChanged += (s, e) =>
@@ -257,6 +261,10 @@ namespace DisperSim3D.Controls
                         case 2: sc.SolverType = CfdSolverType.ScalarTransportFoam; break;
                         case 3: sc.SolverType = CfdSolverType.ScalarTransportFoamSteady; break;
                         case 4: sc.SolverType = CfdSolverType.ScalarSimpleFoam; break;
+                        case 5: sc.SolverType = CfdSolverType.PimpleFoam; break;
+                        case 6: sc.SolverType = CfdSolverType.BuoyantPimpleFoam; break;
+                        case 7: sc.SolverType = CfdSolverType.ReactingFoam; break;
+                        case 8: sc.SolverType = CfdSolverType.RhoSimpleFoam; break;
                     }
                 }
             };
@@ -852,6 +860,10 @@ namespace DisperSim3D.Controls
                 case CfdSolverType.ScalarTransportFoam: _solverCombo.SelectedIndex = 2; break;
                 case CfdSolverType.ScalarTransportFoamSteady: _solverCombo.SelectedIndex = 3; break;
                 case CfdSolverType.ScalarSimpleFoam: _solverCombo.SelectedIndex = 4; break;
+                case CfdSolverType.PimpleFoam: _solverCombo.SelectedIndex = 5; break;
+                case CfdSolverType.BuoyantPimpleFoam: _solverCombo.SelectedIndex = 6; break;
+                case CfdSolverType.ReactingFoam: _solverCombo.SelectedIndex = 7; break;
+                case CfdSolverType.RhoSimpleFoam: _solverCombo.SelectedIndex = 8; break;
             }
         }
 

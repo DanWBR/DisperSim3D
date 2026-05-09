@@ -96,7 +96,8 @@ namespace DisperSim3D.Core
         /// </summary>
         /// <param name="scenario">The dispersion scenario defining sources, domain, and simulation parameters.</param>
         /// <param name="config">The CFD configuration specifying solver settings and parallelism.</param>
-        public void RunAsync(DispersionScenario scenario, CfdConfiguration config)
+        public void RunAsync(DispersionScenario scenario, CfdConfiguration config,
+            CfdSolverType solverType = CfdSolverType.ScalarTransportFoam)
         {
             if (IsRunning) return;
             if (!_env.IsAvailable)
@@ -113,13 +114,36 @@ namespace DisperSim3D.Core
             if (nz < 1) nz = 1;
             double domain = scenario.DomainSizeM;
 
+            string solverCommand;
+            switch (solverType)
+            {
+                case CfdSolverType.PimpleFoam: solverCommand = "pimpleFoam"; break;
+                case CfdSolverType.BuoyantPimpleFoam: solverCommand = "buoyantPimpleFoam"; break;
+                case CfdSolverType.ReactingFoam: solverCommand = "reactingFoam"; break;
+                default: solverCommand = "scalarTransportFoam"; break;
+            }
+
             _worker = new BackgroundWorker { WorkerSupportsCancellation = true };
             _worker.DoWork += (s, e) =>
             {
                 try
                 {
                     ReportProgress(0, "Generating case...", "");
-                    _casePath = OpenFoamCaseGenerator.Generate(scenario, config);
+                    switch (solverType)
+                    {
+                        case CfdSolverType.PimpleFoam:
+                            _casePath = OpenFoamCaseGenerator.GeneratePimpleFoam(scenario, config);
+                            break;
+                        case CfdSolverType.BuoyantPimpleFoam:
+                            _casePath = OpenFoamCaseGenerator.GenerateBuoyantPimpleFoam(scenario, config);
+                            break;
+                        case CfdSolverType.ReactingFoam:
+                            _casePath = OpenFoamCaseGenerator.GenerateReactingFoam(scenario, config);
+                            break;
+                        default:
+                            _casePath = OpenFoamCaseGenerator.Generate(scenario, config);
+                            break;
+                    }
 
                     if (_worker.CancellationPending) { e.Cancel = true; return; }
 
@@ -147,17 +171,13 @@ namespace DisperSim3D.Core
                         ReportProgress(0.05, "Running topoSet...", "");
                         RunStep("topoSet");
                         if (_worker.CancellationPending) { e.Cancel = true; return; }
+                    }
 
-                        bool hasJet = false;
-                        foreach (var src in scenario.Sources)
-                            if (src.ComputedExitVelocity > 0) { hasJet = true; break; }
-
-                        if (hasJet)
-                        {
-                            ReportProgress(0.07, "Running setFields (jet velocity)...", "");
-                            RunStep("setFields");
-                            if (_worker.CancellationPending) { e.Cancel = true; return; }
-                        }
+                    if (System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "setFieldsDict")))
+                    {
+                        ReportProgress(0.06, "Running setFields (jet velocity)...", "");
+                        RunStep("setFields");
+                        if (_worker.CancellationPending) { e.Cancel = true; return; }
                     }
 
                     bool useParallel = _nProcs > 1 && _env.CanRunParallel;
@@ -167,8 +187,8 @@ namespace DisperSim3D.Core
                         RunStep("decomposePar");
                         if (_worker.CancellationPending) { e.Cancel = true; return; }
 
-                        string mpiCmd = _env.BuildMpiCommand(_nProcs, "scalarTransportFoam -parallel");
-                        ReportProgress(0.1, "Running scalarTransportFoam (" + _nProcs + " CPUs)...", "");
+                        string mpiCmd = _env.BuildMpiCommand(_nProcs, solverCommand + " -parallel");
+                        ReportProgress(0.1, string.Format("Running {0} ({1} CPUs)...", solverCommand, _nProcs), "");
                         RunSolver(mpiCmd);
                         if (_worker.CancellationPending) { e.Cancel = true; return; }
 
@@ -178,14 +198,28 @@ namespace DisperSim3D.Core
                     }
                     else
                     {
-                        ReportProgress(0.1, "Running scalarTransportFoam...", "");
-                        RunSolver("scalarTransportFoam");
+                        ReportProgress(0.1, string.Format("Running {0}...", solverCommand), "");
+                        RunSolver(solverCommand);
                         if (_worker.CancellationPending) { e.Cancel = true; return; }
                     }
 
+                    if (System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "refineMeshDict")))
+                    {
+                        ReportProgress(0.94, "Writing cell centres...", "");
+                        try { RunStep("postProcess -func writeCellCentres"); } catch { }
+                    }
+
+                    string fieldName;
+                    switch (solverType)
+                    {
+                        case CfdSolverType.ReactingFoam: fieldName = "CH4"; break;
+                        case CfdSolverType.BuoyantPimpleFoam: fieldName = "s"; break;
+                        default: fieldName = "T"; break;
+                    }
                     ReportProgress(0.95, "Reading results...", "");
                     var result = OpenFoamResultReader.ReadResults(_casePath, nx, ny, nz, domain,
-                        (frac, msg) => ReportProgress(0.95 + frac * 0.04, msg, ""));
+                        (frac, msg) => ReportProgress(0.95 + frac * 0.04, msg, ""),
+                        fieldName);
 
                     e.Result = result;
                 }
@@ -239,8 +273,13 @@ namespace DisperSim3D.Core
             if (nz < 1) nz = 1;
             double domain = scenario.DomainSizeM;
 
-            string solverName = solverType == CfdSolverType.ScalarSimpleFoam
-                ? "simpleFoam" : "scalarTransportFoam";
+            string solverName;
+            switch (solverType)
+            {
+                case CfdSolverType.ScalarSimpleFoam: solverName = "simpleFoam"; break;
+                case CfdSolverType.RhoSimpleFoam: solverName = "rhoSimpleFoam"; break;
+                default: solverName = "scalarTransportFoam"; break;
+            }
 
             _worker = new BackgroundWorker { WorkerSupportsCancellation = true };
             _worker.DoWork += (s, e) =>
@@ -248,9 +287,18 @@ namespace DisperSim3D.Core
                 try
                 {
                     ReportProgress(0, "Generating steady-state case...", "");
-                    _casePath = solverType == CfdSolverType.ScalarSimpleFoam
-                        ? OpenFoamCaseGenerator.GenerateSteadyStateSIMPLE(scenario, config)
-                        : OpenFoamCaseGenerator.GenerateSteadyState(scenario, config);
+                    switch (solverType)
+                    {
+                        case CfdSolverType.ScalarSimpleFoam:
+                            _casePath = OpenFoamCaseGenerator.GenerateSteadyStateSIMPLE(scenario, config);
+                            break;
+                        case CfdSolverType.RhoSimpleFoam:
+                            _casePath = OpenFoamCaseGenerator.GenerateRhoSimpleFoam(scenario, config);
+                            break;
+                        default:
+                            _casePath = OpenFoamCaseGenerator.GenerateSteadyState(scenario, config);
+                            break;
+                    }
 
                     if (_worker.CancellationPending) { e.Cancel = true; return; }
 
@@ -279,15 +327,28 @@ namespace DisperSim3D.Core
                         RunStep("topoSet");
                         if (_worker.CancellationPending) { e.Cancel = true; return; }
 
-                        bool hasJet = false;
-                        foreach (var src in scenario.Sources)
-                            if (src.ComputedExitVelocity > 0) { hasJet = true; break; }
-                        if (hasJet)
+                        if ((solverType == CfdSolverType.ScalarSimpleFoam || solverType == CfdSolverType.RhoSimpleFoam)
+                            && System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "setFieldsDict")))
                         {
-                            ReportProgress(0.07, "Running setFields (jet velocity)...", "");
-                            RunStep("setFields");
-                            if (_worker.CancellationPending) { e.Cancel = true; return; }
+                            bool hasJet = false;
+                            foreach (var src in scenario.Sources)
+                                if (src.ComputedExitVelocity > 0) { hasJet = true; break; }
+                            if (hasJet)
+                            {
+                                ReportProgress(0.07, "Running setFields (jet velocity)...", "");
+                                RunStep("setFields");
+                                if (_worker.CancellationPending) { e.Cancel = true; return; }
+                            }
                         }
+                    }
+
+                    if (solverType != CfdSolverType.ScalarSimpleFoam
+                        && solverType != CfdSolverType.RhoSimpleFoam
+                        && System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "setFieldsDict")))
+                    {
+                        ReportProgress(0.06, "Running setFields (jet velocity)...", "");
+                        RunStep("setFields");
+                        if (_worker.CancellationPending) { e.Cancel = true; return; }
                     }
 
                     bool useParallel = _nProcs > 1 && _env.CanRunParallel;
@@ -313,9 +374,17 @@ namespace DisperSim3D.Core
                         if (_worker.CancellationPending) { e.Cancel = true; return; }
                     }
 
+                    if (System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "refineMeshDict")))
+                    {
+                        ReportProgress(0.94, "Writing cell centres...", "");
+                        try { RunStep("postProcess -func writeCellCentres"); } catch { }
+                    }
+
+                    string ssFieldName = solverType == CfdSolverType.RhoSimpleFoam ? "s" : "T";
                     ReportProgress(0.95, "Reading results...", "");
                     var result = OpenFoamResultReader.ReadResults(_casePath, nx, ny, nz, domain,
-                        (frac, msg) => ReportProgress(0.95 + frac * 0.04, msg, ""));
+                        (frac, msg) => ReportProgress(0.95 + frac * 0.04, msg, ""),
+                        ssFieldName);
 
                     e.Result = result;
                 }
