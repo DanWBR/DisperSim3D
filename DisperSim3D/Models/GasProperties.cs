@@ -5,35 +5,46 @@ namespace DisperSim3D.Models
     /// <summary>
     /// Represents the physical and hazard properties of a gas substance used in dispersion modeling.
     /// </summary>
+    [TypeConverter(typeof(ExpandableObjectConverter))]
     public class GasProperties
     {
+        [Category("Identity")]
         [Description("Display name of the gas substance.")]
         public string Name { get; set; }
 
+        [Category("Physical")]
         [Description("Molecular weight in kg/mol. Air ≈ 0.029, methane ≈ 0.016, H₂S ≈ 0.034.")]
         public double MolarMass { get; set; }
 
+        [Category("Flammability")]
         [Description("Lower Flammability Limit (kg/m³). Concentration above this in air can ignite.")]
         public double LFL { get; set; }
 
+        [Category("Flammability")]
         [Description("Upper Flammability Limit (kg/m³). Above this, mixture is too rich to ignite.")]
         public double UFL { get; set; }
 
+        [Category("Toxicity")]
         [Description("Immediately Dangerous to Life and Health concentration (kg/m³).")]
         public double IDLH { get; set; }
 
+        [Category("Toxicity")]
         [Description("Emergency Response Planning Guideline Level 1 — mild transient effects (kg/m³).")]
         public double ERPG1 { get; set; }
 
+        [Category("Toxicity")]
         [Description("ERPG Level 2 — irreversible or other serious health effects threshold (kg/m³).")]
         public double ERPG2 { get; set; }
 
+        [Category("Toxicity")]
         [Description("ERPG Level 3 — life-threatening health effects threshold (kg/m³).")]
         public double ERPG3 { get; set; }
 
+        [Category("Decay")]
         [Description("Chemical half-life for first-order decay (s). Zero disables decay.")]
         public double HalfLifeS { get; set; }
 
+        [Category("Decay")]
         [Description("Dry deposition velocity (m/s). Zero disables deposition.")]
         public double DryDepositionVelocityMPerS { get; set; }
 

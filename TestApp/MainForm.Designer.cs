@@ -27,7 +27,8 @@ namespace DisperSim3D.App
             Margin = new System.Windows.Forms.Padding(6);
             Name = "MainForm";
             StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
-            Text = "DisperSim 3D";
+            Text = "DisperSim3D";
+            Load += MainForm_Load;
             ResumeLayout(false);
 
         }

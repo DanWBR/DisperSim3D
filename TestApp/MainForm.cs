@@ -11,7 +11,7 @@ namespace DisperSim3D.App
         {
             InitializeComponent();
 
-            this.Text = "DisperSim 3D - Test App";
+            this.Text = "DisperSim3D";
             this.Size = new System.Drawing.Size(1280, 800);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.AutoScaleDimensions = new System.Drawing.SizeF(96F, 96F);
@@ -40,6 +40,11 @@ namespace DisperSim3D.App
                 if (result == DialogResult.No)
                     e.Cancel = true;
             }
+        }
+
+        private void MainForm_Load(object sender, System.EventArgs e)
+        {
+
         }
     }
 }

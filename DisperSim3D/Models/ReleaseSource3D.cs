@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Windows.Media.Media3D;
 using DisperSim3D.Core;
 
@@ -9,94 +10,72 @@ namespace DisperSim3D.Models
     /// </summary>
     public class ReleaseSource3D
     {
-        /// <summary>
-        /// Gets or sets the unique identifier for this release source.
-        /// </summary>
+        [Category("Identity")]
+        [Description("Unique identifier (read-only).")]
         public string Id { get; set; }
 
-        /// <summary>
-        /// Gets or sets the display name of this release source.
-        /// </summary>
+        [Category("Identity")]
+        [Description("Display name shown in the project tree.")]
         public string Name { get; set; }
 
-        /// <summary>
-        /// Gets or sets the 3D position of the release source in scene coordinates.
-        /// </summary>
+        [Category("Position")]
+        [Description("3D position of the release in scene coordinates (m).")]
         public Point3D Position { get; set; }
 
-        /// <summary>
-        /// Gets or sets the identifier of the unit operation this source is attached to, if any.
-        /// </summary>
+        [Category("Identity")]
+        [Description("Identifier of the unit operation this source is attached to, if any.")]
         public string AttachedUnitId { get; set; }
 
-        /// <summary>
-        /// Gets or sets the gas properties for the released substance.
-        /// Kept inline for backward compatibility; new code should prefer <see cref="GasRefId"/>.
-        /// </summary>
+        [Category("Gas")]
+        [Description("Inline gas properties (legacy). New code should prefer GasRefId.")]
         public GasProperties Gas { get; set; }
 
-        /// <summary>
-        /// Optional reference to a <see cref="GasLibraryItem"/> in the project's gas library.
-        /// When set, takes precedence over the inline <see cref="Gas"/> property.
-        /// </summary>
+        [Category("Gas")]
+        [Description("Reference to a GasLibraryItem in the project's gas library. Takes precedence over the inline Gas property.")]
         public string GasRefId { get; set; }
 
-        /// <summary>
-        /// Whether to draw the source marker in the 3D viewport. Toggled via the project tree checkbox.
-        /// </summary>
+        [Category("Visualization")]
+        [Description("Whether to draw the source marker in the 3D viewport.")]
         public bool IsVisible { get; set; } = true;
 
-        /// <summary>
-        /// Gets or sets the mass release rate in kilograms per second.
-        /// </summary>
+        [Category("Release")]
+        [Description("Mass release rate (kg/s).")]
         public double ReleaseRateKgPerS { get; set; }
 
-        /// <summary>
-        /// Duration of the continuous release in seconds. Used by the CFD case writer to
-        /// generate a time-limited mass source via fvOptions (timeStart=0, duration=this).
-        /// 0 (default) means "active for the whole simulation duration".
-        /// </summary>
+        [Category("Release")]
+        [Description("Duration of the continuous release (s). 0 = active for the whole simulation duration. Used by the CFD case writer for time-limited fvOptions sources.")]
         public double ReleaseDurationS { get; set; }
 
-        /// <summary>
-        /// Gets or sets the time interval between consecutive puff emissions in seconds.
-        /// </summary>
+        [Category("Release")]
+        [Description("Time interval between consecutive puff emissions (s) — Gaussian Puff only.")]
         public double PuffIntervalS { get; set; }
 
-        /// <summary>
-        /// Gets or sets the vertical height offset from the source position in meters.
-        /// </summary>
+        [Category("Position")]
+        [Description("Vertical height offset added to the position Z (m). Default 2 m.")]
         public double ReleaseHeightOffset { get; set; }
 
-        /// <summary>
-        /// Gets or sets the high-pressure leak parameters, or <c>null</c> if not applicable.
-        /// </summary>
+        [Category("High-Pressure Leak")]
+        [Description("Optional high-pressure leak parameters (vessel pressure, orifice, etc.). Null = no HP leak; release rate comes from ReleaseRateKgPerS.")]
         public HighPressureLeakParams HighPressureLeak { get; set; }
 
-        /// <summary>
-        /// Gets or sets the gas exit temperature in Kelvin.
-        /// </summary>
+        [Category("Jet")]
+        [Description("Gas exit temperature (K).")]
         public double ExitTemperatureK { get; set; }
 
-        /// <summary>
-        /// Gets or sets the manually specified gas exit velocity in meters per second.
-        /// A value of zero indicates the velocity should be computed automatically.
-        /// </summary>
+        [Category("Jet")]
+        [Description("Manually specified gas exit velocity (m/s). 0 = computed automatically from rate / orifice area.")]
         public double ExitVelocityMPerS { get; set; }
 
-        /// <summary>
-        /// Gets or sets the stack or orifice diameter in meters.
-        /// </summary>
+        [Category("Jet")]
+        [Description("Stack or orifice diameter (m). Used for jet momentum and Birch & Schefer expanded source.")]
         public double StackDiameterM { get; set; }
 
-        /// <summary>
-        /// Gets or sets the release azimuth angle in degrees (0 = North, clockwise).
-        /// </summary>
+        [Category("Release")]
+        [Description("Release azimuth angle in degrees (0 = North, clockwise).")]
         public double ReleaseAzimuthDeg { get; set; }
 
-        /// <summary>
-        /// Gets or sets the release elevation angle in degrees (0 = horizontal, positive = upward).
-        /// </summary>
+        [Category("Release")]
+        [Description("Release elevation angle in degrees (0 = horizontal, +ve = upward).")]
         public double ReleaseElevationDeg { get; set; }
 
         /// <summary>

@@ -409,12 +409,14 @@ namespace DisperSim3D.Controls
             }
 
             double cfdDomain = wfScenario.DomainSizeM;
-            // Clip the visualisation to a smaller AABB around the origin (the CFD domain
-            // may be 1 km+ but the user's scene of interest is typically tens of metres).
-            // 0 = no clipping, fall back to full CFD extent.
-            double domain = wfScenario.DisplayExtentM > 0
-                ? Math.Min(wfScenario.DisplayExtentM, cfdDomain)
-                : cfdDomain;
+            // Clip the visualisation to match the editor's ground plane exactly when the
+            // user leaves DisplayExtentM = 0 (the CFD domain may be 1 km+ but the visible
+            // scene is typically tens of metres). User can override per-scenario via the
+            // property grid.
+            double extent = wfScenario.DisplayExtentM > 0
+                ? wfScenario.DisplayExtentM
+                : _groundSize * 0.5;
+            double domain = Math.Min(extent, cfdDomain);
             double height = wfScenario.DomainHeightM > 0
                 ? Math.Min(wfScenario.DomainHeightM, domain)
                 : domain;

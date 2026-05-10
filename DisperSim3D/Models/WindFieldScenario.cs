@@ -30,40 +30,51 @@ namespace DisperSim3D.Models
     /// </summary>
     public class WindFieldScenario
     {
-        /// <summary>Gets or sets the unique identifier for this wind field scenario.</summary>
+        [Category("Identity")]
+        [Description("Unique identifier (read-only).")]
         public string Id { get; set; }
 
-        /// <summary>Gets or sets the display name.</summary>
+        [Category("Identity")]
+        [Description("Display name shown in the project tree.")]
         public string Name { get; set; }
 
-        /// <summary>Gets or sets the meteorological inlet conditions.</summary>
+        [Category("Domain")]
+        [Description("Meteorological inlet conditions (wind, stability, ambient T/p, z0).")]
         public MeteorologicalConditions Meteo { get; set; }
 
-        /// <summary>Gets or sets the half-extent of the simulation box in meters.</summary>
+        [Category("Domain")]
+        [Description("Half-extent of the simulation box in metres.")]
         public double DomainSizeM { get; set; }
 
-        /// <summary>Gets or sets the maximum height of the domain in meters.</summary>
+        [Category("Domain")]
+        [Description("Maximum height of the domain in metres.")]
         public double DomainHeightM { get; set; }
 
-        /// <summary>Gets or sets the number of cells per axis.</summary>
+        [Category("Domain")]
+        [Description("Number of cells per axis (CFD grid resolution).")]
         public int GridResolution { get; set; }
 
-        /// <summary>Gets or sets the CFD configuration.</summary>
+        [Category("Solver")]
+        [Description("CFD solver configuration (atmospheric BL, Sct, ground BC, etc.).")]
         public CfdConfiguration CfdConfig { get; set; }
 
-        /// <summary>Gets or sets the persisted OpenFOAM case path on disk.</summary>
+        [Category("Result")]
+        [Description("OpenFOAM case directory on disk (set after a successful run).")]
         public string CasePath { get; set; }
 
-        /// <summary>Gets or sets the simulation status.</summary>
+        [Category("Result")]
+        [Description("Wind-field run state: NotRun, Running, Ready, Failed.")]
         public WindFieldStatus Status { get; set; }
 
-        /// <summary>Gets or sets the last error or status message.</summary>
+        [Category("Result")]
+        [Description("Human-readable status detail (error message on failure).")]
         public string StatusMessage { get; set; }
 
         /// <summary>
         /// Cached wind field; not serialized — reloaded from <see cref="CasePath"/> when needed.
         /// </summary>
         [XmlIgnore]
+        [Browsable(false)]
         public WindField3D WindField { get; set; }
 
         // ─── Visualization (editable in property grid) ───
@@ -116,7 +127,7 @@ namespace DisperSim3D.Models
         public bool StreamlineAnimated { get; set; }
 
         [Category("Visualization")]
-        [Description("Half-extent (m) of the visualised wind region. The CFD domain may be much larger (km), but the streamlines/arrows are clipped to this AABB around the origin so they stay near the scene of interest. 0 = use the full CFD domain.")]
+        [Description("Half-extent (m) of the visualised wind region. The CFD domain may be much larger (km), but the streamlines/arrows are clipped to this AABB around the origin so they stay near the scene of interest. 0 = match the editor's ground plane size exactly.")]
         public double DisplayExtentM { get; set; }
 
         [Category("Bundling")]
@@ -147,7 +158,7 @@ namespace DisperSim3D.Models
             StreamlineVerticalLayers = 1;
             StreamlineThicknessFactor = 0.025;
             StreamlineAnimated = true;
-            DisplayExtentM = 50.0;
+            DisplayExtentM = 0; // 0 → renderer fills the editor ground-plane AABB
         }
     }
 }
