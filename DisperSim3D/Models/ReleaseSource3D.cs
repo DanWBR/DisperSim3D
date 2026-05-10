@@ -52,6 +52,13 @@ namespace DisperSim3D.Models
         public double ReleaseRateKgPerS { get; set; }
 
         /// <summary>
+        /// Duration of the continuous release in seconds. Used by the CFD case writer to
+        /// generate a time-limited mass source via fvOptions (timeStart=0, duration=this).
+        /// 0 (default) means "active for the whole simulation duration".
+        /// </summary>
+        public double ReleaseDurationS { get; set; }
+
+        /// <summary>
         /// Gets or sets the time interval between consecutive puff emissions in seconds.
         /// </summary>
         public double PuffIntervalS { get; set; }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Windows.Media.Media3D;
 using DisperSim3D.Models;
@@ -245,12 +246,87 @@ namespace DisperSim3D.Core
             return result ?? new HeadlessResult { Success = false, Error = "Unknown error" };
         }
 
+        /// <summary>
+        /// Runs a project-level <see cref="Simulation"/> headlessly. Adapts its snapshot
+        /// (or live source/wind-field references when the snapshot isn't populated) into a
+        /// transient <see cref="DispersionScenario"/> and delegates to <see cref="RunCfd"/>.
+        /// </summary>
+        public static HeadlessResult RunSimulation(Scene3D scene, Simulation sim,
+            Action<string> log = null, CancellationToken cancel = default)
+        {
+            if (scene == null || sim == null)
+                return new HeadlessResult { Success = false, Error = "scene or simulation is null" };
+
+            var src = sim.SnapshotSource
+                      ?? scene.TopLevelSources.FirstOrDefault(s => s.Id == sim.SourceId);
+            if (src == null)
+                return new HeadlessResult { Success = false, Error = "Source not found for simulation '" + sim.Name + "'" };
+
+            var meteo = sim.SnapshotMeteo
+                        ?? (scene.WindFieldScenarios.FirstOrDefault(w => w.Id == sim.WindFieldId)?.Meteo)
+                        ?? scene.GeneralSettings?.DefaultMeteo
+                        ?? new MeteorologicalConditions();
+
+            var cfd = sim.SnapshotCfdConfig ?? new CfdConfiguration();
+
+            // Resolve the source's gas (for cryogenic preset) when not already snapshotted.
+            GasLibraryItem gas = sim.SnapshotGas;
+            if (gas == null && !string.IsNullOrEmpty(src.GasRefId))
+                gas = scene.GasLibrary.FirstOrDefault(g => g.Id == src.GasRefId);
+
+            // Re-apply the per-solver atmospheric defaults — idempotent when already applied.
+            CfdConfigurationPresets.ApplyForSolver(cfd, sim.SolverType, gas, meteo);
+
+            var transient = new DispersionScenario
+            {
+                Id = sim.Id,
+                Name = sim.Name,
+                Meteo = meteo,
+                SimulationDurationS = sim.SnapshotDurationS,
+                TimeStepS = sim.SnapshotTimeStepS,
+                DomainSizeM = sim.SnapshotDomainSizeM,
+                GridResolution = sim.SnapshotGridResolution,
+                SolverType = sim.SolverType,
+                CfdConfig = cfd,
+                WindFieldScenarioId = sim.WindFieldId
+            };
+            transient.Sources.Add(src);
+
+            scene.DispersionScenarios.Add(transient);
+            int prevActive = scene.ActiveScenarioIndex;
+            scene.ActiveScenarioIndex = scene.DispersionScenarios.Count - 1;
+            try
+            {
+                return RunCfd(scene, cfd, sim.SolverType, scene.ActiveScenarioIndex, log, cancel);
+            }
+            finally
+            {
+                scene.DispersionScenarios.Remove(transient);
+                scene.ActiveScenarioIndex = prevActive;
+            }
+        }
+
         public static HeadlessResult RunFromFile(string xmlPath, string solverName = null,
             CfdConfiguration cfdConfig = null, int scenarioIndex = -1,
-            Action<string> log = null, CancellationToken cancel = default)
+            Action<string> log = null, CancellationToken cancel = default,
+            string simulationSelector = null)
         {
             log?.Invoke("Loading scene: " + xmlPath);
             var scene = SceneFileLoader.Load(xmlPath);
+
+            // Project-level Simulation selector (.dsproj first-class path).
+            if (!string.IsNullOrEmpty(simulationSelector))
+            {
+                var sim = scene.Simulations.FirstOrDefault(
+                    s => string.Equals(s.Id, simulationSelector, StringComparison.OrdinalIgnoreCase)
+                      || string.Equals(s.Name, simulationSelector, StringComparison.OrdinalIgnoreCase));
+                if (sim == null)
+                    return new HeadlessResult { Success = false, Error = "Simulation not found: " + simulationSelector };
+                log?.Invoke("Running Simulation '" + sim.Name + "' (solver: " + sim.SolverType + ")");
+                if (cfdConfig != null && sim.SnapshotCfdConfig == null)
+                    sim.SnapshotCfdConfig = cfdConfig;
+                return RunSimulation(scene, sim, log, cancel);
+            }
 
             var scenario = ResolveScenario(scene, scenarioIndex);
             if (scenario == null)

@@ -1,0 +1,61 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "DAT632",
+  "citation": "Mack & Spruijt 2013; observed values are REGRESSION BASELINES from rhoReactingBuoyantFoam (stock) at grid 120, NOT raw REDIPHEM data. The wind-tunnel scale (4 m domain) plus stock Sct=1.0 produce predictions ~25x lower than the published mole fractions; the bench locks current numerics so future solver changes are caught.",
+  "description": "Wind-tunnel SF6 release on 8.6° slope. Quasi-laminar (Re_l ~ 15000). Exercises the C_eps3 = -0.33 buoyancy treatment AND the SF6-not-CH4 species path. Used as regression baseline for the SF6 thermo + species-injection plumbing.",
+
+  "source": {
+    "name": "Hamburg WT semi-circular release",
+    "gas": {
+      "name": "SF6",
+      "molarMass": 0.146054,
+      "lfl": 0,
+      "ufl": 0,
+      "isCryogenic": false
+    },
+    "position": [0, 0, 0.025],
+    "releaseRateKgPerS": 8.715e-5,
+    "releaseDurationS": 600,
+    "stackDiameterM": 0.07,
+    "exitTemperatureK": 300,
+    "exitVelocityMPerS": 0.01
+  },
+
+  "meteo": {
+    "windSpeed": 1.0,
+    "windDirectionDeg": 270,
+    "stability": "D",
+    "ambientTemperature": 300,
+    "ambientPressure": 101325,
+    "windMeasurementHeightM": 1,
+    "roughnessLengthM": 1e-4
+  },
+
+  "domain": {
+    "sizeM": 4,
+    "gridResolution": 120,
+    "durationS": 60,
+    "timeStepS": 0.05
+  },
+
+  "solver": "RhoReactingBuoyantFoam",
+  "concentrationKind": "FinalSnapshot",
+  "concentrationField": "SF6",
+  "unit": "MassFraction",
+
+  "sensors": [
+    { "name": "sensor100_x0.6",  "position": [0.6, 0,    0.025], "measuredKgM3": 0.006335 },
+    { "name": "sensor300_x1.23", "position": [1.23, 0,   0.025], "measuredKgM3": 0.004585 },
+    { "name": "sensor400_x1.5",  "position": [1.5, 0,    0.025], "measuredKgM3": 0.004048 },
+    { "name": "sensor700_x2.0",  "position": [2.0, 0,    0.025], "measuredKgM3": 0.003279 },
+    { "name": "sensor800_x2.5",  "position": [2.5, 0,    0.025], "measuredKgM3": 0.002721 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.10, "max": 0.10 },
+    "RMSE": { "max": 0.30 },
+    "FAC2": { "min": 0.95,  "max": 2.0 },
+    "MG":   { "min": 0.90, "max": 1.10 },
+    "VG":   { "max": 1.30 }
+  }
+}

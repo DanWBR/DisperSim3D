@@ -177,6 +177,7 @@ namespace DisperSim3D.Controls
                 new ToolStripMenuItem("Manage Wind Fields...", Img("icons8-wind.png"), (s, e) => DoManageWindFields()),
                 new ToolStripMenuItem("New Simulation...", Img("icons8-vector.png"), (s, e) => DoNewSimulation(null)),
                 new ToolStripMenuItem("Optimize Detector Placement...", Img("icons8-ecg.png"), (s, e) => DoOptimizeDetectors()),
+                new ToolStripMenuItem("Validate against Benchmarks...", Img("icons8-ecg.png"), (s, e) => DoValidateBenchmarks()),
                 new ToolStripSeparator(),
                 new ToolStripMenuItem("Meteorological Conditions...", Img("icons8-weather.png"), (s, e) => DoMeteo()),
                 new ToolStripMenuItem("Gas Mixture...", Img("icons8-test_tube.png"), (s, e) => DoGasMixture()),
@@ -1485,6 +1486,15 @@ namespace DisperSim3D.Controls
                 _editor.RefreshViewport();
                 RefreshProjectTree();
                 UpdateStatus("Added " + dlg.ResultDetectorPositions.Count + " optimised detectors.");
+            }
+        }
+
+        private void DoValidateBenchmarks()
+        {
+            var envCfg = AppSettings.Instance.CreateCfdConfig();
+            using (var dlg = new ValidationDialog(envCfg))
+            {
+                dlg.ShowDialog();
             }
         }
 

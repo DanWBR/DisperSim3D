@@ -15,7 +15,21 @@ namespace DisperSim3D.Core
                 throw new System.IO.FileNotFoundException("Scene file not found", filePath);
 
             var inv = CultureInfo.InvariantCulture;
-            var doc = XDocument.Load(filePath);
+
+            XDocument doc;
+            if (ProjectBundle.IsBundleFile(filePath))
+            {
+                // .dsproj — extract bundle, return the path-resolved project.xml.
+                // The temp dir leaks intentionally for CLI runs since CFD case paths
+                // inside the bundle need to remain readable until the run finishes.
+                var bundle = ProjectBundle.Open(filePath);
+                doc = bundle.ProjectXml;
+            }
+            else
+            {
+                doc = XDocument.Load(filePath);
+            }
+
             var root = doc.Root;
             if (root == null || (root.Name.LocalName != "Scene3D" && root.Name.LocalName != "Flowsheet3D"))
                 throw new InvalidOperationException("Invalid scene file format");
@@ -31,7 +45,11 @@ namespace DisperSim3D.Core
                 scene.SnapToGrid = bool.Parse((string)gridEl.Attribute("SnapToGrid") ?? "True");
             }
 
+            DeserializeGeneralSettings(root, inv, scene);
+            DeserializeGasLibrary(root, inv, scene);
+            DeserializeTopLevelSources(root, inv, scene);
             DeserializeWindFieldScenarios(root, inv, scene);
+            DeserializeSimulations(root, inv, scene);
             DeserializeDispersionScenarios(root, inv, scene);
             LegacyProjectMigrator.MigrateInPlace(scene);
             DeserializeMonitorPoints(root, inv, scene);
@@ -39,6 +57,178 @@ namespace DisperSim3D.Core
             DeserializeGasDetectors(root, inv, scene);
 
             return scene;
+        }
+
+        private static void DeserializeGeneralSettings(XElement root, CultureInfo inv, Scene3D scene)
+        {
+            var el = root.Element("GeneralSettings");
+            if (el == null) return;
+            var s = new ProjectSettings
+            {
+                Name = (string)el.Attribute("Name") ?? "",
+                Description = (string)el.Attribute("Description") ?? "",
+                Author = (string)el.Attribute("Author") ?? "",
+                DefaultDomainSizeM = double.Parse((string)el.Attribute("DefaultDomainSize") ?? "200", inv),
+                DefaultGridResolution = int.Parse((string)el.Attribute("DefaultGridRes") ?? "40", inv)
+            };
+            var mEl = el.Element("DefaultMeteo");
+            if (mEl != null)
+            {
+                s.DefaultMeteo = ParseMeteo(mEl, inv);
+            }
+            scene.GeneralSettings = s;
+        }
+
+        private static void DeserializeGasLibrary(XElement root, CultureInfo inv, Scene3D scene)
+        {
+            var el = root.Element("GasLibrary");
+            if (el == null) return;
+            foreach (var ge in el.Elements("Gas"))
+            {
+                var item = new GasLibraryItem
+                {
+                    Id = (string)ge.Attribute("Id") ?? Guid.NewGuid().ToString(),
+                    Name = (string)ge.Attribute("Name") ?? "Gas",
+                    IsCryogenic = ((string)ge.Attribute("Cryogenic") ?? "0") == "1"
+                };
+                if (((string)ge.Attribute("Kind") ?? "Pure") == "Mixture")
+                {
+                    item.Kind = GasLibraryItemKind.Mixture;
+                    item.Mixture = new GasMixture();
+                    var mxEl = ge.Element("Mixture");
+                    if (mxEl != null)
+                    {
+                        foreach (var ce in mxEl.Elements("Component"))
+                        {
+                            item.Mixture.Components.Add(new GasComponent
+                            {
+                                Name = (string)ce.Attribute("Name") ?? "",
+                                MolarMass = double.Parse((string)ce.Attribute("MolarMass") ?? "0.016", inv),
+                                MoleFraction = double.Parse((string)ce.Attribute("MoleFrac") ?? "1", inv),
+                                LFL = double.Parse((string)ce.Attribute("LFL") ?? "0", inv),
+                                IDLH = double.Parse((string)ce.Attribute("IDLH") ?? "0", inv)
+                            });
+                        }
+                    }
+                }
+                else
+                {
+                    item.Kind = GasLibraryItemKind.Pure;
+                    item.PureGas = new GasProperties
+                    {
+                        Name = item.Name,
+                        MolarMass = double.Parse((string)ge.Attribute("MolarMass") ?? "0.016", inv),
+                        LFL = double.Parse((string)ge.Attribute("LFL") ?? "0", inv),
+                        IDLH = double.Parse((string)ge.Attribute("IDLH") ?? "0", inv),
+                        ERPG1 = double.Parse((string)ge.Attribute("ERPG1") ?? "0", inv),
+                        ERPG2 = double.Parse((string)ge.Attribute("ERPG2") ?? "0", inv),
+                        ERPG3 = double.Parse((string)ge.Attribute("ERPG3") ?? "0", inv)
+                    };
+                }
+                scene.GasLibrary.Add(item);
+            }
+        }
+
+        private static void DeserializeTopLevelSources(XElement root, CultureInfo inv, Scene3D scene)
+        {
+            var el = root.Element("TopLevelSources");
+            if (el == null) return;
+            foreach (var se in el.Elements("Source"))
+                scene.TopLevelSources.Add(ParseSource(se, inv));
+        }
+
+        private static void DeserializeSimulations(XElement root, CultureInfo inv, Scene3D scene)
+        {
+            var el = root.Element("Simulations");
+            if (el == null) return;
+            foreach (var se in el.Elements("Simulation"))
+            {
+                var sim = new Simulation
+                {
+                    Id = (string)se.Attribute("Id") ?? Guid.NewGuid().ToString(),
+                    Name = (string)se.Attribute("Name") ?? "Simulation",
+                    SourceId = (string)se.Attribute("SourceId") ?? "",
+                    WindFieldId = (string)se.Attribute("WindFieldId") ?? "",
+                    StatusMessage = (string)se.Attribute("StatusMessage") ?? "",
+                    SnapshotDomainSizeM = double.Parse((string)se.Attribute("DomainSize") ?? "200", inv),
+                    SnapshotGridResolution = int.Parse((string)se.Attribute("GridRes") ?? "40", inv),
+                    SnapshotDurationS = double.Parse((string)se.Attribute("Duration") ?? "300", inv),
+                    SnapshotTimeStepS = double.Parse((string)se.Attribute("TimeStep") ?? "0.5", inv),
+                    CasePath = (string)se.Attribute("CasePath") ?? "",
+                    MaxConcentration = double.Parse((string)se.Attribute("MaxC") ?? "0", inv)
+                };
+                CfdSolverType solverType;
+                if (Enum.TryParse((string)se.Attribute("SolverType") ?? "GaussianPuff", out solverType))
+                    sim.SolverType = solverType;
+                SimulationStatus statusVal;
+                if (Enum.TryParse((string)se.Attribute("Status") ?? "Configured", out statusVal))
+                    sim.Status = statusVal;
+
+                var snapMeteoEl = se.Element("SnapshotMeteo");
+                if (snapMeteoEl != null) sim.SnapshotMeteo = ParseMeteo(snapMeteoEl, inv);
+                var snapSrcEl = se.Element("SnapshotSource");
+                if (snapSrcEl != null) sim.SnapshotSource = ParseSource(snapSrcEl, inv);
+
+                sim.SnapshotCfdConfig = ParseAtmosphericCfd(se, inv);
+                scene.Simulations.Add(sim);
+            }
+        }
+
+        private static MeteorologicalConditions ParseMeteo(XElement mEl, CultureInfo inv)
+        {
+            return new MeteorologicalConditions
+            {
+                WindSpeed = double.Parse((string)mEl.Attribute("WindSpeed") ?? "5", inv),
+                WindDirectionDeg = double.Parse((string)mEl.Attribute("WindDir") ?? "270", inv),
+                StabilityClass = (PasquillStabilityClass)Enum.Parse(typeof(PasquillStabilityClass),
+                    (string)mEl.Attribute("Stability") ?? "D"),
+                AmbientTemperature = double.Parse((string)mEl.Attribute("Temp") ?? "293.15", inv),
+                AmbientPressure = double.Parse((string)mEl.Attribute("Pressure") ?? "101325", inv),
+                RoughnessLengthM = double.Parse((string)mEl.Attribute("Roughness") ?? "0.03", inv)
+            };
+        }
+
+        private static ReleaseSource3D ParseSource(XElement se, CultureInfo inv)
+        {
+            var s = new ReleaseSource3D
+            {
+                Id = (string)se.Attribute("Id") ?? Guid.NewGuid().ToString(),
+                Name = (string)se.Attribute("Name") ?? "",
+                AttachedUnitId = (string)se.Attribute("AttachedUnitId"),
+                GasRefId = (string)se.Attribute("GasRefId"),
+                Position = new System.Windows.Media.Media3D.Point3D(
+                    double.Parse((string)se.Attribute("PosX") ?? "0", inv),
+                    double.Parse((string)se.Attribute("PosY") ?? "0", inv),
+                    double.Parse((string)se.Attribute("PosZ") ?? "0", inv)),
+                ReleaseRateKgPerS = double.Parse((string)se.Attribute("ReleaseRate") ?? "0.5", inv),
+                PuffIntervalS = double.Parse((string)se.Attribute("PuffInterval") ?? "1", inv),
+                ReleaseHeightOffset = double.Parse((string)se.Attribute("HeightOffset") ?? "2", inv),
+                ReleaseAzimuthDeg = double.Parse((string)se.Attribute("Azimuth") ?? "0", inv),
+                ReleaseElevationDeg = double.Parse((string)se.Attribute("Elevation") ?? "0", inv)
+            };
+            if (string.IsNullOrEmpty(s.AttachedUnitId)) s.AttachedUnitId = null;
+            if (string.IsNullOrEmpty(s.GasRefId)) s.GasRefId = null;
+            return s;
+        }
+
+        private static CfdConfiguration ParseAtmosphericCfd(XElement parent, CultureInfo inv)
+        {
+            var cfd = new CfdConfiguration();
+            var el = parent.Element("Cfd");
+            if (el == null) return cfd;
+            cfd.UseAtmosphericBL = ((string)el.Attribute("AtmBL") ?? "0") == "1";
+            cfd.TurbulentSchmidtNumber = double.Parse((string)el.Attribute("Sct") ?? "0.7", inv);
+            cfd.TurbulentPrandtlNumber = double.Parse((string)el.Attribute("Prt") ?? "0.85", inv);
+            cfd.KEpsilonSigmaEpsilon = double.Parse((string)el.Attribute("SigmaEps") ?? "1.3", inv);
+            GroundThermalBoundary gbc;
+            if (Enum.TryParse((string)el.Attribute("GroundBC") ?? "Adiabatic", out gbc))
+                cfd.GroundThermalBC = gbc;
+            cfd.GroundTemperatureK = double.Parse((string)el.Attribute("GroundT") ?? "293.15", inv);
+            cfd.GroundHeatFluxWPerM2 = double.Parse((string)el.Attribute("GroundQ") ?? "0", inv);
+            var ceps3Attr = (string)el.Attribute("Ceps3");
+            cfd.BuoyancyEpsCoefficient = string.IsNullOrEmpty(ceps3Attr)
+                ? (double?)null : double.Parse(ceps3Attr, inv);
+            return cfd;
         }
 
         private static void DeserializeWindFieldScenarios(XElement root, CultureInfo inv, Scene3D scene)
@@ -64,18 +254,8 @@ namespace DisperSim3D.Core
                         wf.Status = parsedStatus;
                 }
                 var mEl = wfEl.Element("Meteo");
-                if (mEl != null)
-                {
-                    wf.Meteo = new MeteorologicalConditions
-                    {
-                        WindSpeed = double.Parse((string)mEl.Attribute("WindSpeed") ?? "5", inv),
-                        WindDirectionDeg = double.Parse((string)mEl.Attribute("WindDir") ?? "270", inv),
-                        StabilityClass = (PasquillStabilityClass)Enum.Parse(typeof(PasquillStabilityClass),
-                            (string)mEl.Attribute("Stability") ?? "D"),
-                        AmbientTemperature = double.Parse((string)mEl.Attribute("Temp") ?? "293.15", inv),
-                        AmbientPressure = double.Parse((string)mEl.Attribute("Pressure") ?? "101325", inv)
-                    };
-                }
+                if (mEl != null) wf.Meteo = ParseMeteo(mEl, inv);
+                wf.CfdConfig = ParseAtmosphericCfd(wfEl, inv);
                 scene.WindFieldScenarios.Add(wf);
             }
         }

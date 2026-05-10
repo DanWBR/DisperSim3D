@@ -821,17 +821,16 @@ namespace DisperSim3D.Dialogs
 
         private void InitializeComponent()
         {
-            this.SuspendLayout();
+            SuspendLayout();
             // 
             // CfdSettingsDialog
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(192F, 192F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
-            this.ClientSize = new System.Drawing.Size(1151, 1124);
-            this.Margin = new System.Windows.Forms.Padding(6, 6, 6, 6);
-            this.Name = "CfdSettingsDialog";
-            this.Load += new System.EventHandler(this.CfdSettingsDialog_Load);
-            this.ResumeLayout(false);
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            AutoScaleMode = AutoScaleMode.Dpi;
+            ClientSize = new Size(576, 612);
+            Name = "CfdSettingsDialog";
+            Load += CfdSettingsDialog_Load;
+            ResumeLayout(false);
 
         }
 

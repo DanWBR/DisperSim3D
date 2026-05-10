@@ -73,6 +73,7 @@ Automatic mesh generation with snappyHexMesh, building/obstacle refinement zones
 ### Analysis
 
 - **Flammable cloud volume** between LFL and UFL
+- **Validation harness** — compare any solver against published benchmarks via `.dsbench` JSON files; computes Hanna SPMs (MRB, RMSE, FAC2, MG, VG) with pass/fail per metric. Available via `Dispersion → Validate against Benchmarks…` (UI) or `DisperSim3D.CLI --validate <file-or-dir>` (CI-friendly). Ships with 4 starter benchmarks under `benchmarks/`.
 - **Monitor points** sampling concentration in real time
 - **Gas detector optimization** via Set Covering Problem (Vianna 2019), with both greedy and exact Balas branch-and-bound solvers, Cardinal or Moore neighborhoods, and on-demand result loading from saved CFD cases
 - **Detection time** scoring per detector

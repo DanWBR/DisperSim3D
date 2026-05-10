@@ -1,0 +1,59 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "Gauss-D-smoketest",
+  "citation": "Pasquill-Gifford-Turner sigma table (used by DisperSim's GaussianPlumeEngine via PasquillGiffordCoefficients.ComputeSigma); ground-level continuous release.",
+  "description": "Self-consistency regression test of GaussianPlumeEngine. Observed values were CAPTURED from the engine's own output on a known reference build, so the test catches future changes in the engine. Run it after touching anything in Core/GaussianPlumeEngine.cs or Core/PasquillGiffordCoefficients.cs.",
+
+  "source": {
+    "name": "ground-level point source",
+    "gas": {
+      "name": "tracer",
+      "molarMass": 0.029,
+      "lfl": 0.05,
+      "ufl": 0.15,
+      "isCryogenic": false
+    },
+    "position": [0, 0, 0],
+    "releaseRateKgPerS": 1.0,
+    "releaseDurationS": 600,
+    "stackDiameterM": 0,
+    "exitTemperatureK": 293.15,
+    "exitVelocityMPerS": 0
+  },
+
+  "meteo": {
+    "windSpeed": 5.0,
+    "windDirectionDeg": 270,
+    "stability": "D",
+    "ambientTemperature": 293.15,
+    "ambientPressure": 101325,
+    "windMeasurementHeightM": 10,
+    "roughnessLengthM": 0.03
+  },
+
+  "domain": {
+    "sizeM": 2500,
+    "gridResolution": 80,
+    "durationS": 300,
+    "timeStepS": 1.0
+  },
+
+  "solver": "GaussianPlume",
+  "concentrationKind": "FinalSnapshot",
+  "unit": "KgPerM3",
+
+  "sensors": [
+    { "name": "x100",  "position": [100,  0, 0.5], "measuredKgM3": 0.00228717 },
+    { "name": "x500",  "position": [500,  0, 0.5], "measuredKgM3": 0.000129805 },
+    { "name": "x1000", "position": [1000, 0, 0.5], "measuredKgM3": 3.76489e-5 },
+    { "name": "x2000", "position": [2000, 0, 0.5], "measuredKgM3": 1.0918e-5 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.05, "max": 0.05 },
+    "RMSE": { "max": 0.10 },
+    "FAC2": { "min": 0.95,  "max": 2.0 },
+    "MG":   { "min": 0.95,  "max": 1.05 },
+    "VG":   { "max": 1.10 }
+  }
+}

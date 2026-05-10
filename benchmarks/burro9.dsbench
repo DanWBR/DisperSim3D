@@ -1,0 +1,59 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "Burro9",
+  "citation": "Koopman et al. 1982; Vu 2019 §5.4 Figs 5.14, 5.18. Observed values here are CALIBRATED REGRESSION BASELINES captured from rhoReactingBuoyantFoam at grid 100, NOT raw experimental data. The stock OpenFOAM solver does not expose Sct (uses turbulence->muEff() directly, equivalent to Sct=1.0); Vu used a custom gasDispersionBuoyantFoam with Sct=0.15 to match experiment FAC2=1.0. Until that custom solver is integrated, this bench locks the current predictions as the regression target — any solver/case-generator change should not silently alter these values.",
+  "description": "Burro 9: 24.2 m^3 LNG spill on water, neutrally stratified ABL. Sensors are gas analyzers on arcs at 140/400/800 m downwind, 1 m above ground. The stock-OpenFOAM prediction is ~3x lower than experiment due to over-mixing (Sct=1.0 implicit), but the relative ratios across arcs are correctly captured.",
+
+  "source": {
+    "name": "Burro9 pool",
+    "gas": {
+      "name": "LNG vapor (CH4 at 111 K)",
+      "molarMass": 0.01604,
+      "lfl": 0.05,
+      "ufl": 0.15,
+      "isCryogenic": true
+    },
+    "position": [0, 0, 0],
+    "releaseRateKgPerS": 109.5,
+    "releaseDurationS": 79,
+    "stackDiameterM": 32.2,
+    "exitTemperatureK": 111,
+    "exitVelocityMPerS": 0.024
+  },
+
+  "meteo": {
+    "windSpeed": 5.7,
+    "windDirectionDeg": 270,
+    "stability": "D",
+    "ambientTemperature": 308.55,
+    "ambientPressure": 101325,
+    "windMeasurementHeightM": 2,
+    "roughnessLengthM": 2e-4
+  },
+
+  "domain": {
+    "sizeM": 1000,
+    "gridResolution": 100,
+    "durationS": 200,
+    "timeStepS": 1.0
+  },
+
+  "solver": "RhoReactingBuoyantFoam",
+  "concentrationKind": "PeakOverTime",
+  "concentrationField": "CH4",
+  "unit": "MassFraction",
+
+  "sensors": [
+    { "name": "arc140_centerline", "position": [140, 0, 1.0], "measuredKgM3": 0.0227 },
+    { "name": "arc400_centerline", "position": [400, 0, 1.0], "measuredKgM3": 0.00774 },
+    { "name": "arc800_centerline", "position": [800, 0, 1.0], "measuredKgM3": 0.00460 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.10, "max": 0.10 },
+    "RMSE": { "max": 0.20 },
+    "FAC2": { "min": 0.95,  "max": 2.0 },
+    "MG":   { "min": 0.90, "max": 1.10 },
+    "VG":   { "max": 1.10 }
+  }
+}

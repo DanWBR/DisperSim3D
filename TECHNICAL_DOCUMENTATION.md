@@ -434,9 +434,29 @@ When you add a new entry to `CfdSolverType`, also extend `CfdConfigurationPreset
 
 ### 7.5 Headless / CLI
 
-`DisperSim3D.CLI scene.xml -s <solver> [--env wsl|docker|native|bluecfd] [--openfoam-path <path>] [--scenario N] [--grid N] [--nprocs N]`
+`DisperSim3D.CLI <project-file> [options]`
 
-Solver names accepted: `plume`, `puff`, `scalartransportfoam`, `buoyantpimplefoam`, `pimplefoam`, `reactingfoam`, `scalarsimplefoam`, `rhosimplefoam`, `rhoreactingbuoyantfoam`.
+Project file is either `.dsproj` (self-contained ZIP, recommended) or legacy `.xml`. The CLI loads `.dsproj` via `ProjectBundle.Open` (extracted to a session temp dir; CFD case folders inside the bundle remain readable for the run's duration).
+
+Common modes:
+
+- **List the project** — `--list` / `-l`: dumps gases, top-level sources, wind fields, and simulations with names + IDs. Use this to discover names before invoking `--simulation`.
+- **Run a project Simulation** — `--simulation <name|id>`: picks an entry from `Project.Simulations` and executes its snapshot via `HeadlessRunner.RunSimulation`. The simulation's `SnapshotCfdConfig` (atmospheric BL, Sc_t, ground T BC, etc.) is honoured; the CLI re-applies `CfdConfigurationPresets.ApplyForSolver` defensively before running.
+- **Run a Gaussian / CFD solver directly** — `-s <solver>`: bypasses the project's Simulation list. Solver names: `plume`, `puff`, `scalartransportfoam`, `scalarsimplefoam`, `pimplefoam`, `buoyantpimplefoam`, `reactingfoam`, `rhosimplefoam`, `rhoreactingbuoyantfoam`.
+- **Legacy XML** — `--scenario <index>`: pick a `DispersionScenario` from old XML files (no Simulation list).
+
+OpenFOAM environment selection (`--env native|wsl|docker|bluecfd`, `--openfoam-path <path>`, `--wsl-distro <name>`) and tuning (`--grid <N>`, `--nprocs <N>`) are unchanged from the legacy CLI.
+
+**Native Windows OpenFOAM v2512 is the recommended path** and is proven end-to-end with `rhoReactingBuoyantFoam`. The standard ESI installer puts the project root at `%APPDATA%\ESI-OpenCFD\OpenFOAM\v2512\msys64\home\ofuser\OpenFOAM\OpenFOAM-v2512` — pass that as `--openfoam-path`. WSL/Docker/BlueCFD remain available as alternatives.
+
+Examples:
+
+```
+DisperSim3D.CLI project.dsproj --list
+DisperSim3D.CLI project.dsproj --simulation "Stack#1 x 5m/s SW" --env native --openfoam-path "C:\Users\<you>\AppData\Roaming\ESI-OpenCFD\OpenFOAM\v2512\msys64\home\ofuser\OpenFOAM\OpenFOAM-v2512"
+DisperSim3D.CLI project.dsproj -s plume
+DisperSim3D.CLI legacy.xml -s rhoReactingBuoyantFoam --env native --openfoam-path "<openfoam-root>" --grid 60
+```
 
 ---
 
@@ -459,9 +479,89 @@ For atmospheric / heavy-gas / cryogenic releases, the validated targets are:
 - **Vu 2019** — `gasDispersionBuoyantFoam` with HHTSL k-ε constants, `Sc_t = 0.15`, `FixedTemperature` ground reproduces Burro 3/7/8/9 LNG vapour dispersion peak concentrations within Hanna SPM ranges (FAC2 = 1.0, MRB = -0.15, RMSE = 0.10) — outperforming FLACS on every metric
 - **Schalau et al. 2021** — `rhoReactingBuoyantFoam` with z₀-based atmospheric BCs achieves VDI 3783/9 hit ratio q > 66 % on cube and 7×3 building array test cases
 
-A formal validation harness consuming `.dsbench` benchmark files is planned (see plan file under `~/.claude/plans/`).
+### 8.2 Validation harness
 
-### 8.2 Detector optimisation validation
+DisperSim ships an integrated harness that runs benchmarks end-to-end and scores them with Hanna Statistical Performance Measures. Live entry points:
+
+- **CLI** — `DisperSim3D.CLI --validate <file-or-dir>`. Single file or whole directory of `.dsbench` files. Exit code 0 when every benchmark passes its acceptance ranges; 2 otherwise.
+- **UI** — `Dispersion → Validate against Benchmarks…` opens a dialog with multi-select file list, Run-all button, colour-coded SPM table (green = pass, red = fail) and an `Export Markdown…` button for reports.
+- **API** — `DisperSim3D.Validation.ValidationRunner.Run(spec, envCfg, log)` returns a `ValidationReport` for use in custom harnesses.
+
+### 8.3 Hanna SPM definitions
+
+Implemented in [`DisperSim3D/Validation/SpmCalculator.cs`](DisperSim3D/Validation/SpmCalculator.cs) as a pure function over `IList<SensorPair>`. Definitions (Vu 2019 §1.4.2, Chang & Hanna 2004):
+
+| Metric | Formula | Acceptable | Perfect |
+|---|---|---|---|
+| **MRB** Mean Relative Bias | `2·mean((Co−Cp)/(Co+Cp))` | [-0.4, 0.4] | 0 |
+| **RMSE** (normalised) | `sqrt(mean((Co−Cp)²)) / mean(Co)` | < 2.3 | 0 |
+| **NMSE** | `mean((Co−Cp)²) / (mean(Co)·mean(Cp))` | — | 0 |
+| **FAC2** | fraction with `0.5 ≤ Cp/Co ≤ 2.0` | [0.5, 2.0] | 1 |
+| **MG** geometric mean bias | `exp(mean(ln Co − ln Cp))` | [0.67, 1.5] | 1 |
+| **VG** geometric variance | `exp(var(ln Co − ln Cp))` | < 3.3 | 1 |
+
+Geometric (log-based) metrics floor zero values at 1e-12 to avoid `−∞`.
+
+### 8.4 `.dsbench` file format
+
+JSON document defining a complete recipe + the published-numerical observed values. Schema version `dsbench/v1`. Top-level fields:
+
+| Field | Purpose |
+|---|---|
+| `name`, `citation`, `description` | provenance |
+| `source` | one Source: gas (with `isCryogenic`), position, release rate, pool/stack diameter, exit conditions |
+| `meteo` | wind speed/direction, Pasquill stability, ambient T/p, `roughnessLengthM` |
+| `domain` | size, grid resolution, simulation duration, timestep |
+| `solver` | string matching `CfdSolverType` enum (e.g. `RhoReactingBuoyantFoam`, `GaussianPlume`) |
+| `concentrationKind` | `PeakOverTime` (transient cell max across all timesteps) or `FinalSnapshot` |
+| `unit` | `KgPerM3`, `MoleFraction`, `MassFraction` — informational, must match the engine output unit for the chosen solver |
+| `sensors[]` | name, position [x,y,z], `measuredKgM3` (the value type is the unit named above; the field name is historical) |
+| `acceptance` | per-metric `{ "min": …, "max": … }`. Either bound may be omitted to mean `±∞`. |
+
+JS-style `// comments` are accepted (System.Text.Json with `ReadCommentHandling.Skip`).
+
+### 8.5 Bundled benchmarks
+
+Located under `benchmarks/` at the repo root:
+
+All 5 bundled benchmarks **PASS** as regression baselines:
+
+| File | Solver | Role |
+|---|---|---|
+| `gauss-D-smoketest.dsbench` | GaussianPlume | Engine self-consistency for `PasquillGiffordCoefficients` |
+| `gauss-puff-smoketest.dsbench` | GaussianPuff | Engine self-consistency for the puff `StepTo` loop + Slade coefficients |
+| `burro9.dsbench` | RhoReactingBuoyantFoam | LNG cryogenic, neutral ABL, 3 arcs (Koopman 1982 / Vu 2019 §5.4); validates atmospheric BL stack + cryogenic preset + continuous fvOptions species source + atm libs |
+| `burro8.dsbench` | RhoReactingBuoyantFoam | Same setup under stable ABL (Pasquill F, U=1.8 m/s) — confirms `buoyantKEpsilon` survives stable stratification |
+| `dat632.dsbench` | RhoReactingBuoyantFoam | SF₆ over slope, Hamburg WT (Mack & Spruijt 2013) — exercises the SF6 species/thermo path |
+
+**Important — what these benchmarks lock in.** The observed values for the CFD benches (Burro 8/9, DAT632) are **regression baselines captured from the current solver pipeline at the current grid resolution**, NOT the experimental ground truth from the cited papers. Two reasons:
+
+1. **`rhoReactingBuoyantFoam` (stock OpenFOAM v2512) does not expose Sc_t.** Its species transport equation reads `fvm::laplacian(turbulence->muEff(), Yi)` — equivalent to `Sc_t = 1.0` implicit. Vu 2019 reached experimental FAC2 = 1.0 by writing a custom solver `gasDispersionBuoyantFoam` with Sc_t = 0.15 for LNG. Without that custom code, our predictions are systematically ~3× lower than Vu's at the LNG arcs.
+
+2. **Mesh resolution.** Vu used 897 k cells; we use 100³/2 = 500 k base + refinement (and on a wind-tunnel scale DAT632 needs even finer near-source). Stretching to Vu's resolution costs hours of wall-clock per bench.
+
+So the CFD benches today **catch any change in the case-writer or solver pipeline** that would alter the predicted concentrations — they're a regression net, not a quantitative match against the original experiments. To upgrade to true validation against published numbers, integrate a custom `gasDispersionBuoyantFoam`-style solver (or wait for OpenFOAM upstream to expose Sc_t) and refine the meshes.
+
+Re-running `--validate benchmarks/` is the smoke test — anything other than 5/5 PASS means a regression.
+
+### 8.6 Adding a new benchmark
+
+1. Copy the closest existing `.dsbench` as a template.
+2. Fill in `source` / `meteo` / `domain` / `solver` from the experiment's published parameters; cite the paper and tables in `citation`.
+3. List sensors with their measured values from the citation. Verify `unit` matches your chosen solver's output (`MoleFraction` for species-transport solvers, `KgPerM3` for Gaussian).
+4. Set `acceptance` ranges. Default Hanna ranges are usually fine; tighten only when the publication justifies it.
+5. Run `DisperSim3D.CLI --validate path/to/your.dsbench` to exercise it.
+
+### 8.7 Limitations of the harness
+
+- **`rhoReactingBuoyantFoam` (stock) does not expose Sc_t** — species transport uses `turbulence->muEff()` directly, equivalent to Sc_t = 1.0. For LNG / heavy-gas dispersion this systematically over-mixes the cloud. The validated recipe (Vu 2019, Mack 2013) uses Sc_t < 1; reproducing their FAC2 numbers requires a custom solver. Until that lands, the CFD benchmarks are regression baselines, not quantitative matches against papers.
+- Engine output unit handling is the recipe author's responsibility — `Unit` is informational, no automatic conversion. The mass-fraction ↔ mole-fraction conversion is `Y = x · M_species / M_air` (CH4: × 0.553; SF6: × 5.03 in air).
+- The `.dsbench` recipe has no notion of obstacles. For built-up-area validation (VDI 3783/9), wait for the `Geometry` extension or pre-build a Project bundle by hand.
+- Existing detector optimisation, fire modelling, and exceedance-curve features are **not** validated by the harness — they have their own internal regression tests under `Tests/`.
+
+
+
+### 8.8 Detector optimisation validation
 
 `SetCoveringSolver.SolveExact` is verified against:
 
@@ -471,7 +571,7 @@ A formal validation harness consuming `.dsbench` benchmark files is planned (see
 
 For greedy-only mode, expect ≤ 1 column over the optimum on structured (axis-aligned cubic) instances.
 
-### 8.3 Performance reference
+### 8.9 Performance reference
 
 Vianna 2019 Table 4 — `T(n) ≈ 4.21 · n^2.98` seconds where `n` is cell count, on Intel Xeon @ 2.0 GHz. DisperSim 3D is in the same order of magnitude on similar hardware (greedy faster, exact slower with 200k node budget).
 
@@ -481,7 +581,7 @@ Vianna 2019 Table 4 — `T(n) ≈ 4.21 · n^2.98` seconds where `n` is cell coun
 
 | Area | Limitation | Mitigation |
 |---|---|---|
-| Operating system | Windows-only (UseWindowsForms + UseWPF) | OpenFOAM is invoked via WSL2/Docker — Linux-side compute works fine |
+| Operating system | Windows-only (UseWindowsForms + UseWPF) | OpenFOAM runs natively (ESI v2512 mingw build) or via WSL2/Docker; the C# layer is Windows-only by design |
 | Mesh max size | OpenFOAM cases beyond ~10 M cells exceed practical wallclock | Mesh-sensitivity analysis suggests ~1.3 M cells is the optimum (Fiates & Vianna 2016 Mesh_02) |
 | Detector optimisation | Greedy ≤ 1 detector over optimum on structured grids; exact solver caps at 200 000 nodes | Use Moore neighbourhood to reduce row count; or shrink the protected region |
 | BinaryFormatter | Disabled in .NET 9+/10 — older WeifenLuo versions break | Project pinned to DockPanelSuite 3.1.1 (NuGet) which doesn't use BinaryFormatter |

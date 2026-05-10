@@ -1,0 +1,59 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "Burro8",
+  "citation": "Koopman et al. 1982; Vu 2019 §5.4.4 Figure 5.17. Observed values are CALIBRATED REGRESSION BASELINES from rhoReactingBuoyantFoam (stock, Sct=1.0) at grid 100, NOT raw experimental data — see burro9 for the same caveat.",
+  "description": "Burro 8: most stable ABL of the series (Pasquill F, U=1.8 m/s). Confirms the buoyantKEpsilon model survives stable stratification + low wind. Same Sct=1.0 limitation as Burro9 means stock-OpenFOAM under-predicts ~3-4x vs experiment.",
+
+  "source": {
+    "name": "Burro8 pool",
+    "gas": {
+      "name": "LNG vapor (CH4 at 111 K)",
+      "molarMass": 0.01604,
+      "lfl": 0.05,
+      "ufl": 0.15,
+      "isCryogenic": true
+    },
+    "position": [0, 0, 0],
+    "releaseRateKgPerS": 116.4,
+    "releaseDurationS": 107,
+    "stackDiameterM": 29.9,
+    "exitTemperatureK": 111,
+    "exitVelocityMPerS": 0.024
+  },
+
+  "meteo": {
+    "windSpeed": 1.8,
+    "windDirectionDeg": 270,
+    "stability": "F",
+    "ambientTemperature": 306.25,
+    "ambientPressure": 101325,
+    "windMeasurementHeightM": 2,
+    "roughnessLengthM": 2e-4
+  },
+
+  "domain": {
+    "sizeM": 1000,
+    "gridResolution": 100,
+    "durationS": 300,
+    "timeStepS": 1.0
+  },
+
+  "solver": "RhoReactingBuoyantFoam",
+  "concentrationKind": "PeakOverTime",
+  "concentrationField": "CH4",
+  "unit": "MassFraction",
+
+  "sensors": [
+    { "name": "arc057_centerline", "position": [57,  0, 1.0], "measuredKgM3": 0.01965 },
+    { "name": "arc140_centerline", "position": [140, 0, 1.0], "measuredKgM3": 0.00747 },
+    { "name": "arc400_centerline", "position": [400, 0, 1.0], "measuredKgM3": 0.00383 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.10, "max": 0.10 },
+    "RMSE": { "max": 0.20 },
+    "FAC2": { "min": 0.95,  "max": 2.0 },
+    "MG":   { "min": 0.90, "max": 1.10 },
+    "VG":   { "max": 1.10 }
+  }
+}

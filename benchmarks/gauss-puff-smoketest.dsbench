@@ -1,0 +1,58 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "Gauss-Puff-smoketest",
+  "citation": "Slade (1968) instantaneous puff coefficients (used by DisperSim's GaussianPuffEngine via PasquillGiffordCoefficients.GetPuffCoefficients); ground-level continuous release stepped to t=300s.",
+  "description": "Self-consistency regression test of GaussianPuffEngine. Observed values were CAPTURED from the engine's PeakOverTime output on a known reference build, so the test catches future changes in the puff engine (puff schedule, advection, Slade dispersion) and the StepTo loop. Same source/meteo as gauss-D-smoketest but with the transient puff solver.",
+
+  "source": {
+    "name": "ground-level point source",
+    "gas": {
+      "name": "tracer",
+      "molarMass": 0.029,
+      "lfl": 0.05,
+      "ufl": 0.15,
+      "isCryogenic": false
+    },
+    "position": [0, 0, 0],
+    "releaseRateKgPerS": 1.0,
+    "releaseDurationS": 300,
+    "stackDiameterM": 0,
+    "exitTemperatureK": 293.15,
+    "exitVelocityMPerS": 0
+  },
+
+  "meteo": {
+    "windSpeed": 5.0,
+    "windDirectionDeg": 270,
+    "stability": "D",
+    "ambientTemperature": 293.15,
+    "ambientPressure": 101325,
+    "windMeasurementHeightM": 10,
+    "roughnessLengthM": 0.03
+  },
+
+  "domain": {
+    "sizeM": 2500,
+    "gridResolution": 80,
+    "durationS": 300,
+    "timeStepS": 5.0
+  },
+
+  "solver": "GaussianPuff",
+  "concentrationKind": "PeakOverTime",
+  "unit": "KgPerM3",
+
+  "sensors": [
+    { "name": "x100",  "position": [100,  0, 0.5], "measuredKgM3": 0.001227 },
+    { "name": "x500",  "position": [500,  0, 0.5], "measuredKgM3": 0.0001258 },
+    { "name": "x1000", "position": [1000, 0, 0.5], "measuredKgM3": 2.175e-06 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.05, "max": 0.05 },
+    "RMSE": { "max": 0.10 },
+    "FAC2": { "min": 0.95,  "max": 2.0 },
+    "MG":   { "min": 0.95,  "max": 1.05 },
+    "VG":   { "max": 1.10 }
+  }
+}

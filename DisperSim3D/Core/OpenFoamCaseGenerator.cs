@@ -220,6 +220,7 @@ namespace DisperSim3D.Core
             var sb = new StringBuilder();
             sb.Append(FoamHeader("dictionary", "controlDict"));
             sb.AppendFormat(Inv, "application     {0};\n\n", application);
+            sb.Append("libs            (\"libatmosphericModels.so\");\n\n");
             sb.Append("startFrom       startTime;\nstartTime       0;\n\n");
             sb.AppendFormat(Inv, "stopAt          endTime;\nendTime         {0};\n\n", maxIter);
             sb.Append("deltaT          1;\n\n");
@@ -742,6 +743,7 @@ namespace DisperSim3D.Core
             sb.AppendFormat(Inv, "        Uref            {0};\n", uref);
             sb.AppendFormat(Inv, "        Zref            {0};\n", zref);
             sb.AppendFormat(Inv, "        z0              uniform {0};\n", z0);
+            sb.Append("        d               uniform 0;\n");
             sb.Append("        zGround         uniform 0;\n");
             sb.AppendFormat(Inv, "        value           uniform ({0} {1} {2});\n", ux, uy, uz);
             sb.Append("    }\n");
@@ -761,11 +763,13 @@ namespace DisperSim3D.Core
             sb.AppendFormat(Inv, "        Uref            {0};\n", uref);
             sb.AppendFormat(Inv, "        Zref            {0};\n", zref);
             sb.AppendFormat(Inv, "        z0              uniform {0};\n", z0);
+            sb.Append("        d               uniform 0;\n");
             sb.Append("        zGround         uniform 0;\n");
             sb.AppendFormat(Inv, "        value           uniform {0};\n", kFallback);
             sb.Append("    }\n");
         }
 
+        // Same `d` zero-plane displacement is required by atmBoundaryLayerInletEpsilon in v2512.
         private static void AppendAtmInletEpsilon(StringBuilder sb, string patch,
             double epsFallback, MeteorologicalConditions meteo)
         {
@@ -780,6 +784,7 @@ namespace DisperSim3D.Core
             sb.AppendFormat(Inv, "        Uref            {0};\n", uref);
             sb.AppendFormat(Inv, "        Zref            {0};\n", zref);
             sb.AppendFormat(Inv, "        z0              uniform {0};\n", z0);
+            sb.Append("        d               uniform 0;\n");
             sb.Append("        zGround         uniform 0;\n");
             sb.AppendFormat(Inv, "        value           uniform {0};\n", epsFallback);
             sb.Append("    }\n");
@@ -787,9 +792,12 @@ namespace DisperSim3D.Core
 
         private static void AppendAtmGroundNut(StringBuilder sb, MeteorologicalConditions meteo)
         {
+            // OpenFOAM v2x atmospheric nut wall function is `atmNutkWallFunction`
+            // (the older name `nutkAtmRoughWallFunction` was renamed circa v1906).
             double z0 = meteo.RoughnessLengthM > 0 ? meteo.RoughnessLengthM : 0.03;
             sb.Append("    ground\n    {\n");
-            sb.Append("        type            nutkAtmRoughWallFunction;\n");
+            sb.Append("        type            atmNutkWallFunction;\n");
+            sb.Append("        Cmu             0.09;\n");
             sb.AppendFormat(Inv, "        z0              uniform {0};\n", z0);
             sb.Append("        value           uniform 0;\n");
             sb.Append("    }\n");
@@ -876,6 +884,51 @@ namespace DisperSim3D.Core
             sb.Append("    ground\n    {\n        type            zeroGradient;\n    }\n");
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", fieldName), sb.ToString());
+        }
+
+        /// <summary>
+        /// Writes a constant/fvOptions dict with one <c>scalarSemiImplicitSource</c> per
+        /// release, injecting <c>Y_CH4</c> mass at the release rate (kg/s, distributed
+        /// across the source cellSet via <c>volumeMode absolute</c>). This gives
+        /// rhoReactingBuoyantFoam / reactingFoam a sustained mass-source for continuous
+        /// pool/jet releases — the <c>setFields</c>-only initial condition was leaving
+        /// the species field to dilute and decay to zero.
+        ///
+        /// When <see cref="ReleaseSource3D.ReleaseDurationS"/> &gt; 0, the source is
+        /// switched off after that many seconds via <c>cellSetOption</c>'s timeStart/
+        /// duration keywords (Burro 9 spilled for 79 s, then the cloud continued to drift).
+        /// </summary>
+        private static void WriteReactingSpeciesSourceFvOptions(string caseDir,
+            List<ReleaseSource3D> sources, string speciesNameOverride = null)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "fvOptions"));
+            for (int s = 0; s < sources.Count; s++)
+            {
+                var src = sources[s];
+                double q = src.EffectiveReleaseRateKgPerS;
+                if (q <= 0) continue;
+                string species = speciesNameOverride ?? ResolveOpenFoamSpecies(src);
+
+                sb.AppendFormat(Inv, "release_{0}\n{{\n", s);
+                sb.Append("    type            scalarSemiImplicitSource;\n");
+                sb.Append("    active          true;\n");
+                if (src.ReleaseDurationS > 0)
+                {
+                    sb.Append("    timeStart       0;\n");
+                    sb.AppendFormat(Inv, "    duration        {0};\n", src.ReleaseDurationS);
+                }
+                sb.Append("    scalarSemiImplicitSourceCoeffs\n    {\n");
+                sb.Append("        selectionMode   cellSet;\n");
+                sb.AppendFormat(Inv, "        cellSet         sourceZone_{0};\n", s);
+                sb.Append("        volumeMode      absolute;\n");
+                sb.Append("        injectionRateSuSp\n        {\n");
+                sb.AppendFormat(Inv, "            {0}         ({1} 0);\n", species, q);
+                sb.Append("        }\n");
+                sb.Append("    }\n");
+                sb.Append("}\n\n");
+            }
+            WriteFile(Path.Combine(caseDir, "constant", "fvOptions"), sb.ToString());
         }
 
         private static void WriteFvOptions(string caseDir, List<ReleaseSource3D> sources,
@@ -1005,15 +1058,23 @@ namespace DisperSim3D.Core
 
             for (int s = 0; s < sources.Count; s++)
             {
-                var pos = sources[s].EffectivePosition;
-                double half = cellSize * 0.55;
+                var src = sources[s];
+                var pos = src.EffectivePosition;
+                // Size the source box from the real pool/stack diameter when available
+                // (Burro 9 has a 32 m pool; previously we forced it into a single cell of
+                // ~10 m, which over-concentrated the injected mass and gave too much
+                // numerical diffusion). Fall back to the cell-size minimum to ensure at
+                // least one full cell is selected.
+                double diameter = src.StackDiameterM > 0 ? src.StackDiameterM : 0;
+                double half = Math.Max(cellSize * 0.55, diameter * 0.5);
+                double zHalf = Math.Max(cellSize * 0.55, diameter * 0.25);
 
                 sb.AppendFormat(Inv, "    {{\n        name    sourceZone_{0};\n        type    cellSet;\n        action  new;\n", s);
                 sb.AppendFormat(Inv, "        source  boxToCell;\n        sourceInfo\n        {{\n");
                 sb.AppendFormat(Inv, "            min ({0} {1} {2});\n",
-                    pos.X - half, pos.Y - half, Math.Max(0, pos.Z - half));
+                    pos.X - half, pos.Y - half, Math.Max(0, pos.Z - zHalf));
                 sb.AppendFormat(Inv, "            max ({0} {1} {2});\n",
-                    pos.X + half, pos.Y + half, pos.Z + half);
+                    pos.X + half, pos.Y + half, pos.Z + zHalf);
                 sb.Append("        }\n    }\n\n");
             }
 
@@ -1317,9 +1378,11 @@ namespace DisperSim3D.Core
             WriteReactingPField(caseDir);
             WriteBuoyantTemperatureField(caseDir, ambientT, config);
             WriteSpeciesFields(caseDir, scenario.Sources);
+            WriteAlphatField(caseDir);
             WriteKEpsilonFields(caseDir, wind.Length, config, scenario.Meteo);
             WriteReactingSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
+            WriteReactingSpeciesSourceFvOptions(caseDir, scenario.Sources);
             WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
 
             if (config.NumberOfProcessors > 1)
@@ -1380,9 +1443,11 @@ namespace DisperSim3D.Core
             WriteReactingPField(caseDir);
             WriteBuoyantTemperatureField(caseDir, ambientT, config);
             WriteSpeciesFields(caseDir, scenario.Sources);
+            WriteAlphatField(caseDir);
             WriteKEpsilonFields(caseDir, wind.Length, config, scenario.Meteo);
             WriteReactingSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
+            WriteReactingSpeciesSourceFvOptions(caseDir, scenario.Sources);
             WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
 
             if (config.NumberOfProcessors > 1)
@@ -1435,6 +1500,16 @@ namespace DisperSim3D.Core
             thermo.Append("        highCpCoeffs (1.683479 0.01023724 -3.875129e-06 6.785585e-10 -4.503423e-14 -10080.787 9.623395);\n");
             thermo.Append("        lowCpCoeffs  (5.149876 -0.013671 4.918005e-05 -4.847431e-08 1.666933e-11 -10246.64 -4.641304); }\n");
             thermo.Append("    transport { As 1.4067e-06; Ts 197.6; }\n");
+            thermo.Append("}\n\n");
+            // SF6: heavy tracer used in Hamburg wind-tunnel experiments (Mack 2013, DAT632).
+            // Sutherland As/Ts and JANAF coefficients from NIST Webbook fits in the 200-1000 K
+            // range — SF6 is thermally stable so the high-T extrapolation is safe.
+            thermo.Append("SF6\n{\n");
+            thermo.Append("    specie { molWeight 146.054; }\n");
+            thermo.Append("    thermodynamics { Tlow 200; Thigh 5000; Tcommon 1000;\n");
+            thermo.Append("        highCpCoeffs (12.4 0.00 0.00 0.00 0.00 -148000 -25.0);\n");
+            thermo.Append("        lowCpCoeffs  ( 4.0 0.04 -3.0e-5 1.0e-8 0.0    -148000  -8.0); }\n");
+            thermo.Append("    transport { As 1.5e-06; Ts 100; }\n");
             thermo.Append("}\n");
             WriteFile(Path.Combine(caseDir, "constant", "thermo.compressibleGas"), thermo.ToString());
         }
@@ -1451,11 +1526,32 @@ namespace DisperSim3D.Core
 
         private static void WriteRhoReactingReactions(string caseDir)
         {
-            // Empty reactions block — chemistry is disabled but the file is required by foamChemistryReader
+            // Chemistry is disabled but the file is required by foamChemistryReader.
+            // OpenFOAM v2x expects 'reactions' as a sub-dictionary {}, not a list ().
+            // We declare a fixed species set covering the bench/tutorial mainstream:
+            // N2 (inert), O2 (air), CH4 (LNG vapor), SF6 (heavy tracer for Hamburg WT
+            // experiments). Add more here when a new bench needs them, plus matching
+            // thermo entries in WriteRhoReactingThermophysicalProperties.
             var sb = new StringBuilder();
-            sb.Append("species\n(\n    N2\n    O2\n    CH4\n);\n\n");
-            sb.Append("reactions\n(\n);\n");
+            sb.Append("species\n(\n    N2\n    O2\n    CH4\n    SF6\n);\n\n");
+            sb.Append("reactions\n{\n}\n");
             WriteFile(Path.Combine(caseDir, "constant", "reactions"), sb.ToString());
+        }
+
+        /// <summary>
+        /// Picks the OpenFOAM species name to inject for a given release source. Reads the
+        /// source's Gas (or GasRefId in the upstream resolver) and matches its name against
+        /// the species the case writer declares. Defaults to "CH4".
+        /// </summary>
+        public static string ResolveOpenFoamSpecies(ReleaseSource3D src)
+        {
+            if (src == null || src.Gas == null || string.IsNullOrEmpty(src.Gas.Name))
+                return "CH4";
+            var n = src.Gas.Name.ToUpperInvariant();
+            if (n.Contains("SF6") || n.Contains("HEXAFLUORID")) return "SF6";
+            // N2/O2 already exist in the inert mixture — refuse to inject more.
+            // For other gases the user should add a species to the writer block above.
+            return "CH4";
         }
 
         // ────────────────────────────────────────────────────────────────────
@@ -1470,6 +1566,10 @@ namespace DisperSim3D.Core
             var sb = new StringBuilder();
             sb.Append(FoamHeader("dictionary", "controlDict"));
             sb.AppendFormat(Inv, "application     {0};\n\n", application);
+            // The atmospheric BL boundary conditions live in the atmosphericModels library;
+            // it must be loaded explicitly for the solver to recognize them.
+            if (config != null && config.UseAtmosphericBL)
+                sb.Append("libs            (\"libatmosphericModels.so\");\n\n");
             sb.Append("startFrom       startTime;\nstartTime       0;\n\n");
             sb.AppendFormat(Inv, "stopAt          endTime;\nendTime         {0};\n\n", endTime);
             sb.AppendFormat(Inv, "deltaT          {0};\n\n", dt);
@@ -1816,7 +1916,7 @@ namespace DisperSim3D.Core
             sb.Append("gradSchemes\n{\n    default         Gauss linear;\n}\n\n");
             sb.Append("divSchemes\n{\n    default         none;\n");
             sb.Append("    div(phi,U)      Gauss linearUpwind grad(U);\n");
-            sb.Append("    div(phi,Yi_h)   Gauss linearUpwind default;\n");
+            sb.Append("    div(phi,Yi_h)   Gauss multivariateSelection { N2 upwind; O2 upwind; CH4 upwind; SF6 upwind; h upwind; };\n");
             sb.Append("    div(phi,K)      Gauss linear;\n");
             sb.Append("    div(phi,k)      Gauss upwind;\n");
             sb.Append("    div(phi,epsilon) Gauss upwind;\n");
@@ -1824,7 +1924,8 @@ namespace DisperSim3D.Core
             sb.Append("laplacianSchemes\n{\n    default         Gauss linear corrected;\n}\n\n");
             sb.Append("interpolationSchemes\n{\n    default         linear;\n}\n\n");
             sb.Append("snGradSchemes\n{\n    default         corrected;\n}\n\n");
-            sb.Append("wallDist\n{\n    method meshWave;\n}\n");
+            sb.Append("wallDist\n{\n    method meshWave;\n}\n\n");
+            sb.Append("fluxRequired\n{\n    default         no;\n    p_rgh           ;\n}\n");
             WriteFile(Path.Combine(caseDir, "system", "fvSchemes"), sb.ToString());
         }
 
@@ -1836,6 +1937,9 @@ namespace DisperSim3D.Core
             sb.Append("    \"rho.*\"\n    {\n        solver          diagonal;\n    }\n");
             sb.Append("    p\n    {\n        solver          GAMG;\n        tolerance       1e-06;\n        relTol          0.01;\n        smoother        GaussSeidel;\n    }\n");
             sb.Append("    pFinal\n    {\n        $p;\n        relTol          0;\n    }\n");
+            // p_rgh is required by rhoReactingBuoyantFoam (buoyancy-decoupled pressure).
+            sb.Append("    p_rgh\n    {\n        solver          GAMG;\n        tolerance       1e-06;\n        relTol          0.01;\n        smoother        GaussSeidel;\n    }\n");
+            sb.Append("    p_rghFinal\n    {\n        $p_rgh;\n        relTol          0;\n    }\n");
             sb.Append("    \"(U|h|k|epsilon)\"\n    {\n        solver          PBiCGStab;\n        preconditioner  DILU;\n        tolerance       1e-06;\n        relTol          0.1;\n    }\n");
             sb.Append("    \"(U|h|k|epsilon)Final\"\n    {\n        $U;\n        relTol          0;\n    }\n");
             sb.Append("    \"Yi\"\n    {\n        solver          PBiCGStab;\n        preconditioner  DILU;\n");
@@ -1958,6 +2062,17 @@ namespace DisperSim3D.Core
             sb.Append("    ground\n    {\n        type            zeroGradient;\n    }\n");
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "N2"), sb.ToString());
+
+            // SF6 — heavy tracer for Hamburg WT benches; zero everywhere unless injected.
+            sb.Clear();
+            sb.Append(FoamHeader("volScalarField", "SF6"));
+            sb.Append("dimensions      [0 0 0 0 0 0 0];\n\n");
+            sb.Append("internalField   uniform 0;\n\n");
+            sb.Append("boundaryField\n{\n");
+            sb.Append("    atmosphere\n    {\n        type            inletOutlet;\n        inletValue      uniform 0;\n        value           uniform 0;\n    }\n");
+            sb.Append("    ground\n    {\n        type            zeroGradient;\n    }\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "0", "SF6"), sb.ToString());
         }
 
         private static void WriteReactingSetFieldsDict(string caseDir, List<ReleaseSource3D> sources,
@@ -2007,10 +2122,11 @@ namespace DisperSim3D.Core
                         sb.AppendFormat(Inv, "            volVectorFieldValue U ({0} {1} {2})\n", ux, uy, uz);
                     }
 
-                    double ch4Frac = 1.0 - (double)i / nSegments;
-                    sb.AppendFormat(Inv, "            volScalarFieldValue CH4 {0}\n", ch4Frac);
-                    sb.AppendFormat(Inv, "            volScalarFieldValue O2 {0}\n", 0.23 * (1.0 - ch4Frac));
-                    sb.AppendFormat(Inv, "            volScalarFieldValue N2 {0}\n", 0.77 * (1.0 - ch4Frac));
+                    double specFrac = 1.0 - (double)i / nSegments;
+                    string sp = ResolveOpenFoamSpecies(src);
+                    sb.AppendFormat(Inv, "            volScalarFieldValue {0} {1}\n", sp, specFrac);
+                    sb.AppendFormat(Inv, "            volScalarFieldValue O2 {0}\n", 0.23 * (1.0 - specFrac));
+                    sb.AppendFormat(Inv, "            volScalarFieldValue N2 {0}\n", 0.77 * (1.0 - specFrac));
 
                     sb.Append("        );\n    }\n\n");
                 }
