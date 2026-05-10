@@ -1146,7 +1146,8 @@ namespace DisperSim3D.Core
         }
 
         private static void WriteRefinementDicts(string caseDir, List<ReleaseSource3D> sources,
-            double cellSize, List<Models.BoundingBox> obstacles)
+            double cellSize, List<Models.BoundingBox> obstacles,
+            MeteorologicalConditions meteo = null, double domainHalfExtentM = 0)
         {
             int srcCount = sources != null ? sources.Count : 0;
             int obsCount = obstacles != null ? obstacles.Count : 0;
@@ -1155,6 +1156,26 @@ namespace DisperSim3D.Core
 
             double coarseRadius = cellSize * 8;
             double fineRadius = cellSize * 3;
+
+            // Plume corridor parameters: only level 0 (the outer/coarser refinement) gets the
+            // long downstream strip; level 1 stays focused on the source for high resolution
+            // where the jet/pool is most concentrated. The corridor follows the wind vector
+            // for `corridorLengthM` and is sized via Pasquill-Gifford σ at the corridor end —
+            // 4σ wide and 4σ tall captures > 99 % of a Gaussian plume's mass.
+            bool wantCorridor = meteo != null && domainHalfExtentM > 0 && srcCount > 0;
+            double corridorLengthM = 0, corridorHalfWidthM = 0, corridorHeightM = 0;
+            double windDx = 0, windDy = 0;
+            if (wantCorridor)
+            {
+                corridorLengthM = 1.8 * domainHalfExtentM;          // span most of the downwind half
+                var sigma = PasquillGiffordCoefficients.ComputeSigma(corridorLengthM, meteo.StabilityClass);
+                corridorHalfWidthM = Math.Max(2.0 * sigma.sigmaY, 4 * cellSize);
+                corridorHeightM    = Math.Max(2.0 * sigma.sigmaZ, 4 * cellSize);
+                var w = meteo.WindVector;
+                double mag = Math.Sqrt(w.X * w.X + w.Y * w.Y);
+                if (mag > 1e-6) { windDx = w.X / mag; windDy = w.Y / mag; }
+                else            { windDx = 1; windDy = 0; }
+            }
 
             for (int level = 0; level < 2; level++)
             {
@@ -1179,6 +1200,40 @@ namespace DisperSim3D.Core
                         pos.X + radius, pos.Y + radius, pos.Z + radius);
                     sb.Append("        }\n    }\n\n");
                     firstAction = false;
+
+                    // Plume-footprint refinement (level 0 only): instead of a single uniform
+                    // corridor strip, lay down a sequence of progressively-wider boxes along
+                    // the wind trajectory, each sized to the Pasquill σ at its downwind
+                    // distance — a "Gaussian cone" that refines exactly where the plume
+                    // exists, narrow near source and wide far field. ~6× fewer refined cells
+                    // than a worst-case corridor for the same plume capture.
+                    if (level == 0 && wantCorridor)
+                    {
+                        double[] downwind = { 0.05, 0.10, 0.20, 0.40, 0.70, 1.00 };
+                        for (int seg = 0; seg < downwind.Length; seg++)
+                        {
+                            double dStart = (seg == 0 ? 0 : downwind[seg - 1]) * corridorLengthM;
+                            double dEnd   = downwind[seg] * corridorLengthM;
+                            double dMid   = 0.5 * (dStart + dEnd);
+                            var sig = PasquillGiffordCoefficients.ComputeSigma(Math.Max(dMid, 1.0), meteo.StabilityClass);
+                            double halfWy = Math.Max(2.0 * sig.sigmaY, 4 * cellSize);
+                            double halfWz = Math.Max(2.0 * sig.sigmaZ, 4 * cellSize);
+                            double sx = pos.X + windDx * dStart;
+                            double ex = pos.X + windDx * dEnd;
+                            double sy = pos.Y + windDy * dStart;
+                            double ey = pos.Y + windDy * dEnd;
+                            double xMin = Math.Min(sx, ex) - halfWy;
+                            double xMax = Math.Max(sx, ex) + halfWy;
+                            double yMin = Math.Min(sy, ey) - halfWy;
+                            double yMax = Math.Max(sy, ey) + halfWy;
+                            double zMax = Math.Max(pos.Z + 2 * halfWz, pos.Z + 4 * cellSize);
+                            sb.AppendFormat(Inv, "    {{\n        name    refineZone;\n        type    cellSet;\n        action  add;\n");
+                            sb.Append("        source  boxToCell;\n        sourceInfo\n        {\n");
+                            sb.AppendFormat(Inv, "            min ({0} {1} {2});\n", xMin, yMin, 0.0);
+                            sb.AppendFormat(Inv, "            max ({0} {1} {2});\n", xMax, yMax, zMax);
+                            sb.Append("        }\n    }\n\n");
+                        }
+                    }
                 }
 
                 if (obsCount > 0)
@@ -1383,7 +1438,8 @@ namespace DisperSim3D.Core
             WriteReactingSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
             WriteReactingSpeciesSourceFvOptions(caseDir, scenario.Sources);
-            WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
+            WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null,
+                scenario.Meteo, scenario.DomainSizeM);
 
             if (config.NumberOfProcessors > 1)
                 WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
@@ -1448,7 +1504,8 @@ namespace DisperSim3D.Core
             WriteReactingSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
             WriteReactingSpeciesSourceFvOptions(caseDir, scenario.Sources);
-            WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
+            WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null,
+                scenario.Meteo, scenario.DomainSizeM);
 
             if (config.NumberOfProcessors > 1)
                 WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
