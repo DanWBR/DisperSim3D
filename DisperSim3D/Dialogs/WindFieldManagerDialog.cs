@@ -112,6 +112,9 @@ namespace DisperSim3D.Dialogs
             {
                 SaveCurrent();
                 var wf = new WindFieldScenario { Name = "Wind Field " + (Scenarios.Count + 1) };
+                if (wf.CfdConfig == null) wf.CfdConfig = new CfdConfiguration();
+                DisperSim3D.Core.CfdConfigurationPresets.ApplyForSolver(
+                    wf.CfdConfig, CfdSolverType.ScalarSimpleFoam, null, wf.Meteo);
                 Scenarios.Add(wf);
                 RefreshList();
                 _list.SelectedIndex = Scenarios.Count - 1;

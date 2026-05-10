@@ -1,4 +1,6 @@
-﻿namespace DisperSim3D.Models
+﻿using System.ComponentModel;
+
+namespace DisperSim3D.Models
 {
     /// <summary>
     /// Stores the configuration parameters for a CFD (OpenFOAM) dispersion simulation.
@@ -62,6 +64,40 @@
         /// <summary>Gets or sets a value indicating whether the 3D wind field is used as the advection velocity.</summary>
         public bool UseWindField { get; set; }
 
+        // ─── Atmospheric Boundary Layer (Mack & Spruijt 2013, Vu 2019, Schalau 2021) ───
+
+        [Category("Atmospheric")]
+        [Description("Master switch. When true: log-law inlet (atmBoundaryLayerInletVelocity), z0-based ground wall functions (nutkAtmRoughWallFunction), HHTSL k-eps constants.")]
+        public bool UseAtmosphericBL { get; set; }
+
+        [Category("Atmospheric")]
+        [Description("Turbulent Schmidt number Sc_t. Default 0.7. Use 0.3 for dense gas, 0.15 for cryogenic LNG (Vu 2019 §5.4).")]
+        public double TurbulentSchmidtNumber { get; set; }
+
+        [Category("Atmospheric")]
+        [Description("Turbulent Prandtl number Pr_t. Default 0.85.")]
+        public double TurbulentPrandtlNumber { get; set; }
+
+        [Category("Atmospheric")]
+        [Description("Buoyancy coefficient C_eps3 in the epsilon equation. Null = OpenFOAM default tanh formulation. Mack & Spruijt 2013 recommend -0.33 for heavy gas.")]
+        public double? BuoyancyEpsCoefficient { get; set; }
+
+        [Category("Atmospheric")]
+        [Description("k-epsilon sigma_eps constant. Default 1.3 (OpenFOAM standard). Use 1.167 for horizontally homogeneous ABL (Vu 2019 §3.2.2).")]
+        public double KEpsilonSigmaEpsilon { get; set; }
+
+        [Category("Atmospheric")]
+        [Description("Thermal boundary condition applied to the ground patch. Adiabatic for non-cryogenic; FixedTemperature for LNG.")]
+        public GroundThermalBoundary GroundThermalBC { get; set; }
+
+        [Category("Atmospheric")]
+        [Description("Ground temperature (K) used when GroundThermalBC = FixedTemperature.")]
+        public double GroundTemperatureK { get; set; }
+
+        [Category("Atmospheric")]
+        [Description("Ground heat flux (W/m^2, into the gas) used when GroundThermalBC = FixedFlux.")]
+        public double GroundHeatFluxWPerM2 { get; set; }
+
         /// <summary>
         /// Initializes a new instance of the <see cref="CfdConfiguration"/> class with default solver parameters.
         /// </summary>
@@ -89,6 +125,16 @@
             UseGaussianSubgrid = true;
             SubgridMarginFactor = 1.5;
             UseWindField = true;
+
+            // Atmospheric defaults — backward-compatible (off until preset turns it on)
+            UseAtmosphericBL = false;
+            TurbulentSchmidtNumber = 0.7;
+            TurbulentPrandtlNumber = 0.85;
+            BuoyancyEpsCoefficient = null;
+            KEpsilonSigmaEpsilon = 1.3;
+            GroundThermalBC = GroundThermalBoundary.Adiabatic;
+            GroundTemperatureK = 293.15;
+            GroundHeatFluxWPerM2 = 0;
         }
     }
 }

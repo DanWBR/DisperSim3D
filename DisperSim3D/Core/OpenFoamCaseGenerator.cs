@@ -103,8 +103,8 @@ namespace DisperSim3D.Core
             WriteFvSolution(caseDir, config);
             WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
             WriteTransportProperties(caseDir, effectiveDT);
-            WriteUField(caseDir, wind.X, wind.Y, wind.Z);
-            WriteTField(caseDir);
+            WriteUField(caseDir, wind.X, wind.Y, wind.Z, config, scenario.Meteo);
+            WriteTField(caseDir, config);
             WriteFvOptions(caseDir, scenario.Sources, xMin, xMax, yMin, yMax, zMax, cellSize, nx, ny, nz);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
             WriteJetSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
@@ -151,8 +151,8 @@ namespace DisperSim3D.Core
             WriteSteadyFvSolution(caseDir, config);
             WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
             WriteTransportProperties(caseDir, effectiveDT);
-            WriteUField(caseDir, wind.X, wind.Y, wind.Z);
-            WriteTField(caseDir);
+            WriteUField(caseDir, wind.X, wind.Y, wind.Z, config, scenario.Meteo);
+            WriteTField(caseDir, config);
             WriteFvOptions(caseDir, scenario.Sources, xMin, xMax, yMin, yMax, zMax, cellSize, nx, ny, nz);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
             WriteJetSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
@@ -199,9 +199,9 @@ namespace DisperSim3D.Core
             WriteSimpleFoamScalarFvSolution(caseDir, config);
             WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
             WriteSimpleFoamScalarTransportProperties(caseDir, effectiveDT);
-            WriteUField(caseDir, wind.X, wind.Y, wind.Z);
+            WriteUField(caseDir, wind.X, wind.Y, wind.Z, config, scenario.Meteo);
             WritePField(caseDir);
-            WriteTField(caseDir);
+            WriteTField(caseDir, config);
             WriteFvOptions(caseDir, scenario.Sources, xMin, xMax, yMin, yMax, zMax, cellSize, nx, ny, nz);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
             WriteSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
@@ -431,7 +431,7 @@ namespace DisperSim3D.Core
             WriteWindFvSolution(caseDir);
             WriteWindTransportProperties(caseDir);
             WriteWindTurbulenceProperties(caseDir);
-            WriteUField(caseDir, wind.X, wind.Y, wind.Z);
+            WriteUField(caseDir, wind.X, wind.Y, wind.Z, config, scenario.Meteo);
             WritePField(caseDir);
 
             if (obstacles != null && obstacles.Count > 0)
@@ -696,20 +696,163 @@ namespace DisperSim3D.Core
             WriteFile(Path.Combine(caseDir, "constant", "transportProperties"), sb.ToString());
         }
 
-        private static void WriteUField(string caseDir, double ux, double uy, double uz)
+        private static void WriteUField(string caseDir, double ux, double uy, double uz,
+            CfdConfiguration cfd = null, MeteorologicalConditions meteo = null)
         {
             var sb = new StringBuilder();
             sb.Append(FoamHeader("volVectorField", "U"));
             sb.Append("dimensions      [0 1 -1 0 0 0 0];\n\n");
             sb.AppendFormat(Inv, "internalField   uniform ({0} {1} {2});\n\n", ux, uy, uz);
             sb.Append("boundaryField\n{\n");
-            sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform ({0} {1} {2});\n    }}\n", ux, uy, uz);
+            if (cfd != null && cfd.UseAtmosphericBL && meteo != null)
+            {
+                AppendAtmInletU(sb, "atmosphere", ux, uy, uz, meteo);
+            }
+            else
+            {
+                sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform ({0} {1} {2});\n    }}\n", ux, uy, uz);
+            }
             sb.Append("    ground\n    {\n        type            fixedValue;\n        value           uniform (0 0 0);\n    }\n");
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "U"), sb.ToString());
         }
 
-        private static void WriteTField(string caseDir)
+        // ── Atmospheric BL helpers (Mack & Spruijt 2013, Vu 2019, Schalau 2021) ──
+
+        /// <summary>
+        /// Emits an atmBoundaryLayerInletVelocity patch for U. The flow direction is taken
+        /// from the meteo wind vector (already projected into the wind transport convention);
+        /// Uref/Zref/z0 come from MeteorologicalConditions.
+        /// </summary>
+        private static void AppendAtmInletU(StringBuilder sb, string patch,
+            double ux, double uy, double uz, MeteorologicalConditions meteo)
+        {
+            double speed = Math.Sqrt(ux * ux + uy * uy + uz * uz);
+            double dx = speed > 1e-9 ? ux / speed : 1;
+            double dy = speed > 1e-9 ? uy / speed : 0;
+            double dz = 0; // horizontal flow direction; z is the "up" axis
+            double uref = meteo.WindSpeed > 0 ? meteo.WindSpeed : speed;
+            double zref = meteo.WindMeasurementHeightM > 0 ? meteo.WindMeasurementHeightM : 10.0;
+            double z0 = meteo.RoughnessLengthM > 0 ? meteo.RoughnessLengthM : 0.03;
+
+            sb.AppendFormat(Inv, "    {0}\n    {{\n", patch);
+            sb.Append("        type            atmBoundaryLayerInletVelocity;\n");
+            sb.AppendFormat(Inv, "        flowDir         ({0} {1} {2});\n", dx, dy, dz);
+            sb.Append("        zDir            (0 0 1);\n");
+            sb.AppendFormat(Inv, "        Uref            {0};\n", uref);
+            sb.AppendFormat(Inv, "        Zref            {0};\n", zref);
+            sb.AppendFormat(Inv, "        z0              uniform {0};\n", z0);
+            sb.Append("        zGround         uniform 0;\n");
+            sb.AppendFormat(Inv, "        value           uniform ({0} {1} {2});\n", ux, uy, uz);
+            sb.Append("    }\n");
+        }
+
+        private static void AppendAtmInletK(StringBuilder sb, string patch,
+            double kFallback, MeteorologicalConditions meteo)
+        {
+            double uref = meteo.WindSpeed > 0 ? meteo.WindSpeed : 5.0;
+            double zref = meteo.WindMeasurementHeightM > 0 ? meteo.WindMeasurementHeightM : 10.0;
+            double z0 = meteo.RoughnessLengthM > 0 ? meteo.RoughnessLengthM : 0.03;
+
+            sb.AppendFormat(Inv, "    {0}\n    {{\n", patch);
+            sb.Append("        type            atmBoundaryLayerInletK;\n");
+            sb.Append("        flowDir         (1 0 0);\n");
+            sb.Append("        zDir            (0 0 1);\n");
+            sb.AppendFormat(Inv, "        Uref            {0};\n", uref);
+            sb.AppendFormat(Inv, "        Zref            {0};\n", zref);
+            sb.AppendFormat(Inv, "        z0              uniform {0};\n", z0);
+            sb.Append("        zGround         uniform 0;\n");
+            sb.AppendFormat(Inv, "        value           uniform {0};\n", kFallback);
+            sb.Append("    }\n");
+        }
+
+        private static void AppendAtmInletEpsilon(StringBuilder sb, string patch,
+            double epsFallback, MeteorologicalConditions meteo)
+        {
+            double uref = meteo.WindSpeed > 0 ? meteo.WindSpeed : 5.0;
+            double zref = meteo.WindMeasurementHeightM > 0 ? meteo.WindMeasurementHeightM : 10.0;
+            double z0 = meteo.RoughnessLengthM > 0 ? meteo.RoughnessLengthM : 0.03;
+
+            sb.AppendFormat(Inv, "    {0}\n    {{\n", patch);
+            sb.Append("        type            atmBoundaryLayerInletEpsilon;\n");
+            sb.Append("        flowDir         (1 0 0);\n");
+            sb.Append("        zDir            (0 0 1);\n");
+            sb.AppendFormat(Inv, "        Uref            {0};\n", uref);
+            sb.AppendFormat(Inv, "        Zref            {0};\n", zref);
+            sb.AppendFormat(Inv, "        z0              uniform {0};\n", z0);
+            sb.Append("        zGround         uniform 0;\n");
+            sb.AppendFormat(Inv, "        value           uniform {0};\n", epsFallback);
+            sb.Append("    }\n");
+        }
+
+        private static void AppendAtmGroundNut(StringBuilder sb, MeteorologicalConditions meteo)
+        {
+            double z0 = meteo.RoughnessLengthM > 0 ? meteo.RoughnessLengthM : 0.03;
+            sb.Append("    ground\n    {\n");
+            sb.Append("        type            nutkAtmRoughWallFunction;\n");
+            sb.AppendFormat(Inv, "        z0              uniform {0};\n", z0);
+            sb.Append("        value           uniform 0;\n");
+            sb.Append("    }\n");
+        }
+
+        /// <summary>
+        /// Emits the ground T patch per <see cref="GroundThermalBoundary"/>: zeroGradient
+        /// (adiabatic), fixedValue (fixed temperature, recommended for LNG per Vu 2019), or
+        /// fixedGradient (fixed flux).
+        /// </summary>
+        /// <summary>
+        /// Writes a non-fatal advisory to a `LOG_atmospheric.txt` file inside the case dir
+        /// when the ground-adjacent mesh cell is smaller than z0. nutkAtmRoughWallFunction
+        /// becomes ill-conditioned in that regime (Schalau 2021 §1, Vu 2019 §6.3).
+        /// </summary>
+        private static void WriteMeshVsRoughnessAdvisory(string caseDir, double cellSizeM,
+            CfdConfiguration cfd, MeteorologicalConditions meteo)
+        {
+            if (cfd == null || !cfd.UseAtmosphericBL || meteo == null) return;
+            double z0 = meteo.RoughnessLengthM;
+            if (z0 <= 0) return;
+
+            var sb = new StringBuilder();
+            sb.AppendFormat(Inv, "z0 = {0} m\nground-adjacent cell size = {1} m\n", z0, cellSizeM);
+            if (cellSizeM < z0)
+            {
+                sb.AppendLine();
+                sb.AppendLine("WARNING: ground-adjacent cell size is smaller than z0.");
+                sb.AppendLine("nutkAtmRoughWallFunction is undefined for cell midpoint < z0.");
+                sb.AppendFormat(Inv, "Recommended minimum cell size: {0} m (~2 * z0).\n", 2 * z0);
+            }
+            else if (cellSizeM < 2 * z0)
+            {
+                sb.AppendLine();
+                sb.AppendLine("ADVISORY: ground-adjacent cell size is close to z0.");
+                sb.AppendFormat(Inv, "Consider refining to >= {0} m for stable wall-function behavior.\n", 2 * z0);
+            }
+            try { WriteFile(Path.Combine(caseDir, "LOG_atmospheric.txt"), sb.ToString()); }
+            catch { /* non-fatal */ }
+        }
+
+        private static void AppendGroundT(StringBuilder sb, CfdConfiguration cfd)
+        {
+            if (cfd == null || cfd.GroundThermalBC == GroundThermalBoundary.Adiabatic)
+            {
+                sb.Append("    ground\n    {\n        type            zeroGradient;\n    }\n");
+                return;
+            }
+            if (cfd.GroundThermalBC == GroundThermalBoundary.FixedTemperature)
+            {
+                sb.AppendFormat(Inv, "    ground\n    {{\n        type            fixedValue;\n        value           uniform {0};\n    }}\n",
+                    cfd.GroundTemperatureK);
+                return;
+            }
+            // FixedFlux — gradient gradient = q" / (k_thermal). Use ~0.026 W/m/K (air) as
+            // a safe estimate; user can override q" directly. dT/dz = q"/k.
+            double k_air = 0.026;
+            double grad = cfd.GroundHeatFluxWPerM2 / k_air;
+            sb.AppendFormat(Inv, "    ground\n    {{\n        type            fixedGradient;\n        gradient        uniform {0};\n    }}\n",
+                grad);
+        }
+
+        private static void WriteTField(string caseDir, CfdConfiguration cfd = null)
         {
             var sb = new StringBuilder();
             sb.Append(FoamHeader("volScalarField", "T"));
@@ -717,7 +860,7 @@ namespace DisperSim3D.Core
             sb.Append("internalField   uniform 0;\n\n");
             sb.Append("boundaryField\n{\n");
             sb.Append("    atmosphere\n    {\n        type            inletOutlet;\n        inletValue      uniform 0;\n        value           uniform 0;\n    }\n");
-            sb.Append("    ground\n    {\n        type            zeroGradient;\n    }\n");
+            AppendGroundT(sb, cfd);
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "T"), sb.ToString());
         }
@@ -1047,11 +1190,11 @@ namespace DisperSim3D.Core
             WritePimpleFvSolution(caseDir, config);
             WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
             WritePimpleTransportProperties(caseDir, effectiveDT);
-            WriteTurbulenceProperties(caseDir, false);
-            WriteUField(caseDir, wind.X, wind.Y, wind.Z);
+            WriteTurbulenceProperties(caseDir, false, config);
+            WriteUField(caseDir, wind.X, wind.Y, wind.Z, config, scenario.Meteo);
             WritePField(caseDir);
-            WriteTField(caseDir);
-            WriteKEpsilonFields(caseDir, wind.Length);
+            WriteTField(caseDir, config);
+            WriteKEpsilonFields(caseDir, wind.Length, config, scenario.Meteo);
             WriteFvOptions(caseDir, scenario.Sources, xMin, xMax, yMin, yMax, zMax, cellSize, nx, ny, nz);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
             WriteJetSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
@@ -1104,17 +1247,17 @@ namespace DisperSim3D.Core
             WriteBuoyantFvSchemes(caseDir, config);
             WriteBuoyantFvSolution(caseDir, config);
             WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
-            WriteBuoyantTransportProperties(caseDir, effectiveDT);
+            WriteBuoyantTransportProperties(caseDir, effectiveDT, config);
             WriteBuoyantThermophysicalProperties(caseDir, ambientT);
-            WriteTurbulenceProperties(caseDir, false);
+            WriteTurbulenceProperties(caseDir, false, config);
             WriteGravity(caseDir);
-            WriteBuoyantUField(caseDir, wind.X, wind.Y, wind.Z);
+            WriteBuoyantUField(caseDir, wind.X, wind.Y, wind.Z, config, scenario.Meteo);
             WriteBuoyantPField(caseDir);
             WriteBuoyantPRghField(caseDir);
-            WriteBuoyantTemperatureField(caseDir, ambientT);
+            WriteBuoyantTemperatureField(caseDir, ambientT, config);
             WriteAlphatField(caseDir);
             WritePassiveScalarField(caseDir, "s");
-            WriteKEpsilonFields(caseDir, wind.Length);
+            WriteKEpsilonFields(caseDir, wind.Length, config, scenario.Meteo);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
             WriteJetSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
             WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
@@ -1167,14 +1310,14 @@ namespace DisperSim3D.Core
             WriteReactingThermophysicalProperties(caseDir);
             WriteReactingChemistryProperties(caseDir);
             WriteReactingCombustionProperties(caseDir);
-            WriteTurbulenceProperties(caseDir, true);
+            WriteTurbulenceProperties(caseDir, true, config);
             WriteGravity(caseDir);
-            WriteBuoyantUField(caseDir, wind.X, wind.Y, wind.Z);
+            WriteBuoyantUField(caseDir, wind.X, wind.Y, wind.Z, config, scenario.Meteo);
             WriteBuoyantPRghField(caseDir);
             WriteReactingPField(caseDir);
-            WriteBuoyantTemperatureField(caseDir, ambientT);
+            WriteBuoyantTemperatureField(caseDir, ambientT, config);
             WriteSpeciesFields(caseDir, scenario.Sources);
-            WriteKEpsilonFields(caseDir, wind.Length);
+            WriteKEpsilonFields(caseDir, wind.Length, config, scenario.Meteo);
             WriteReactingSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
             WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
@@ -1230,20 +1373,22 @@ namespace DisperSim3D.Core
             WriteRhoReactingChemistryProperties(caseDir);
             WriteReactingCombustionProperties(caseDir);
             WriteRhoReactingReactions(caseDir);
-            WriteTurbulenceProperties(caseDir, true);
+            WriteTurbulenceProperties(caseDir, true, config);
             WriteGravity(caseDir);
-            WriteBuoyantUField(caseDir, wind.X, wind.Y, wind.Z);
+            WriteBuoyantUField(caseDir, wind.X, wind.Y, wind.Z, config, scenario.Meteo);
             WriteBuoyantPRghField(caseDir);
             WriteReactingPField(caseDir);
-            WriteBuoyantTemperatureField(caseDir, ambientT);
+            WriteBuoyantTemperatureField(caseDir, ambientT, config);
             WriteSpeciesFields(caseDir, scenario.Sources);
-            WriteKEpsilonFields(caseDir, wind.Length);
+            WriteKEpsilonFields(caseDir, wind.Length, config, scenario.Meteo);
             WriteReactingSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
             WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);
 
             if (config.NumberOfProcessors > 1)
                 WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
+
+            WriteMeshVsRoughnessAdvisory(caseDir, cellSize, config, scenario.Meteo);
 
             return caseDir;
         }
@@ -1419,24 +1564,48 @@ namespace DisperSim3D.Core
             WriteFile(Path.Combine(caseDir, "constant", "transportProperties"), sb.ToString());
         }
 
-        private static void WriteTurbulenceProperties(string caseDir, bool compressible)
+        private static void WriteTurbulenceProperties(string caseDir, bool compressible,
+            CfdConfiguration cfd = null)
         {
             var sb = new StringBuilder();
             sb.Append(FoamHeader("dictionary", "turbulenceProperties"));
-            if (compressible)
+            sb.Append("simulationType  RAS;\n\n");
+            sb.Append("RAS\n{\n");
+            // When buoyancy treatment is requested for the eps-equation (Mack & Spruijt
+            // -0.33 recipe), use the buoyantKEpsilon model from the atmosphericModels lib.
+            bool useBuoyantModel = compressible && cfd != null
+                && cfd.UseAtmosphericBL
+                && cfd.BuoyancyEpsCoefficient.HasValue;
+            string modelName = useBuoyantModel ? "buoyantKEpsilon" : "kEpsilon";
+            sb.AppendFormat(Inv, "    RASModel        {0};\n    turbulence      on;\n    printCoeffs     on;\n", modelName);
+
+            if (cfd != null && cfd.UseAtmosphericBL)
             {
-                sb.Append("simulationType  RAS;\n\n");
-                sb.Append("RAS\n{\n    RASModel        kEpsilon;\n    turbulence      on;\n    printCoeffs     on;\n}\n");
+                double sigmaEps = cfd.KEpsilonSigmaEpsilon > 0 ? cfd.KEpsilonSigmaEpsilon : 1.3;
+                if (useBuoyantModel)
+                {
+                    sb.Append("    buoyantKEpsilonCoeffs\n    {\n");
+                    sb.Append("        Cmu             0.09;\n        C1              1.44;\n        C2              1.92;\n");
+                    sb.Append("        sigmak          1.0;\n");
+                    sb.AppendFormat(Inv, "        sigmaEps        {0};\n", sigmaEps);
+                    sb.AppendFormat(Inv, "        Ceps3           {0};\n", cfd.BuoyancyEpsCoefficient.Value);
+                    sb.Append("    }\n");
+                }
+                else
+                {
+                    sb.Append("    kEpsilonCoeffs\n    {\n");
+                    sb.Append("        Cmu             0.09;\n        C1              1.44;\n        C2              1.92;\n");
+                    sb.Append("        sigmak          1.0;\n");
+                    sb.AppendFormat(Inv, "        sigmaEps        {0};\n", sigmaEps);
+                    sb.Append("    }\n");
+                }
             }
-            else
-            {
-                sb.Append("simulationType  RAS;\n\n");
-                sb.Append("RAS\n{\n    RASModel        kEpsilon;\n    turbulence      on;\n    printCoeffs     on;\n}\n");
-            }
+            sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "constant", "turbulenceProperties"), sb.ToString());
         }
 
-        private static void WriteKEpsilonFields(string caseDir, double windSpeed)
+        private static void WriteKEpsilonFields(string caseDir, double windSpeed,
+            CfdConfiguration cfd = null, MeteorologicalConditions meteo = null)
         {
             double U = Math.Max(windSpeed, 0.5);
             double I = 0.05;
@@ -1444,13 +1613,15 @@ namespace DisperSim3D.Core
             double epsilon = 0.09 * k * k / (0.1 * k / U + 1e-10);
             if (epsilon < 1e-6) epsilon = 1e-4;
             double nut = 0.09 * k * k / epsilon;
+            bool atm = cfd != null && cfd.UseAtmosphericBL && meteo != null;
 
             var sb = new StringBuilder();
             sb.Append(FoamHeader("volScalarField", "k"));
             sb.Append("dimensions      [0 2 -2 0 0 0 0];\n\n");
             sb.AppendFormat(Inv, "internalField   uniform {0};\n\n", k);
             sb.Append("boundaryField\n{\n");
-            sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform {0};\n    }}\n", k);
+            if (atm) AppendAtmInletK(sb, "atmosphere", k, meteo);
+            else sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform {0};\n    }}\n", k);
             sb.Append("    ground\n    {\n        type            kqRWallFunction;\n        value           uniform 0;\n    }\n");
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "k"), sb.ToString());
@@ -1460,7 +1631,8 @@ namespace DisperSim3D.Core
             sb.Append("dimensions      [0 2 -3 0 0 0 0];\n\n");
             sb.AppendFormat(Inv, "internalField   uniform {0};\n\n", epsilon);
             sb.Append("boundaryField\n{\n");
-            sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform {0};\n    }}\n", epsilon);
+            if (atm) AppendAtmInletEpsilon(sb, "atmosphere", epsilon, meteo);
+            else sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform {0};\n    }}\n", epsilon);
             sb.Append("    ground\n    {\n        type            epsilonWallFunction;\n        value           uniform 0;\n    }\n");
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "epsilon"), sb.ToString());
@@ -1471,7 +1643,8 @@ namespace DisperSim3D.Core
             sb.AppendFormat(Inv, "internalField   uniform {0};\n\n", nut);
             sb.Append("boundaryField\n{\n");
             sb.Append("    atmosphere\n    {\n        type            calculated;\n        value           uniform 0;\n    }\n");
-            sb.Append("    ground\n    {\n        type            nutkWallFunction;\n        value           uniform 0;\n    }\n");
+            if (atm) AppendAtmGroundNut(sb, meteo);
+            else sb.Append("    ground\n    {\n        type            nutkWallFunction;\n        value           uniform 0;\n    }\n");
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "nut"), sb.ToString());
         }
@@ -1528,11 +1701,17 @@ namespace DisperSim3D.Core
             WriteFile(Path.Combine(caseDir, "system", "fvSolution"), sb.ToString());
         }
 
-        private static void WriteBuoyantTransportProperties(string caseDir, double diffusivity)
+        private static void WriteBuoyantTransportProperties(string caseDir, double diffusivity,
+            CfdConfiguration cfd = null)
         {
             var sb = new StringBuilder();
             sb.Append(FoamHeader("dictionary", "transportProperties"));
             sb.AppendFormat(Inv, "DT              {0};\n", diffusivity);
+            if (cfd != null && cfd.UseAtmosphericBL)
+            {
+                sb.AppendFormat(Inv, "Sct             {0};\n", cfd.TurbulentSchmidtNumber);
+                sb.AppendFormat(Inv, "Prt             {0};\n", cfd.TurbulentPrandtlNumber);
+            }
             WriteFile(Path.Combine(caseDir, "constant", "transportProperties"), sb.ToString());
         }
 
@@ -1557,14 +1736,18 @@ namespace DisperSim3D.Core
             WriteFile(Path.Combine(caseDir, "constant", "thermophysicalProperties"), sb.ToString());
         }
 
-        private static void WriteBuoyantUField(string caseDir, double ux, double uy, double uz)
+        private static void WriteBuoyantUField(string caseDir, double ux, double uy, double uz,
+            CfdConfiguration cfd = null, MeteorologicalConditions meteo = null)
         {
             var sb = new StringBuilder();
             sb.Append(FoamHeader("volVectorField", "U"));
             sb.Append("dimensions      [0 1 -1 0 0 0 0];\n\n");
             sb.AppendFormat(Inv, "internalField   uniform ({0} {1} {2});\n\n", ux, uy, uz);
             sb.Append("boundaryField\n{\n");
-            sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform ({0} {1} {2});\n    }}\n", ux, uy, uz);
+            if (cfd != null && cfd.UseAtmosphericBL && meteo != null)
+                AppendAtmInletU(sb, "atmosphere", ux, uy, uz, meteo);
+            else
+                sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform ({0} {1} {2});\n    }}\n", ux, uy, uz);
             sb.Append("    ground\n    {\n        type            noSlip;\n    }\n");
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "U"), sb.ToString());
@@ -1596,7 +1779,8 @@ namespace DisperSim3D.Core
             WriteFile(Path.Combine(caseDir, "0", "p_rgh"), sb.ToString());
         }
 
-        private static void WriteBuoyantTemperatureField(string caseDir, double ambientT)
+        private static void WriteBuoyantTemperatureField(string caseDir, double ambientT,
+            CfdConfiguration cfd = null)
         {
             var sb = new StringBuilder();
             sb.Append(FoamHeader("volScalarField", "T"));
@@ -1604,7 +1788,7 @@ namespace DisperSim3D.Core
             sb.AppendFormat(Inv, "internalField   uniform {0};\n\n", ambientT);
             sb.Append("boundaryField\n{\n");
             sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform {0};\n    }}\n", ambientT);
-            sb.Append("    ground\n    {\n        type            zeroGradient;\n    }\n");
+            AppendGroundT(sb, cfd);
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "T"), sb.ToString());
         }
@@ -1873,12 +2057,12 @@ namespace DisperSim3D.Core
             WriteRhoSimpleFvSolution(caseDir, config);
             WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
             WriteRhoSimpleThermophysicalProperties(caseDir, ambientT, effectiveDT);
-            WriteTurbulenceProperties(caseDir, true);
-            WriteBuoyantUField(caseDir, wind.X, wind.Y, wind.Z);
+            WriteTurbulenceProperties(caseDir, true, config);
+            WriteBuoyantUField(caseDir, wind.X, wind.Y, wind.Z, config, scenario.Meteo);
             WriteRhoSimplePField(caseDir);
-            WriteBuoyantTemperatureField(caseDir, ambientT);
+            WriteBuoyantTemperatureField(caseDir, ambientT, config);
             WritePassiveScalarField(caseDir, "s");
-            WriteKEpsilonFields(caseDir, wind.Length);
+            WriteKEpsilonFields(caseDir, wind.Length, config, scenario.Meteo);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
             WriteSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
             WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null);

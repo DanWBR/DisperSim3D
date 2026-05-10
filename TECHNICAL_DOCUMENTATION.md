@@ -126,6 +126,41 @@ Solvers (Core/)                          External pipeline
 
 The `RhoReactingBuoyantFoam` recipe follows Fiates & Vianna (2016): `chemistryThermo rho`, `chemistry off`, `combustionModel none`, `heRhoThermo` with `reactingMixture`. Reactions are declared but the species block is stripped of all kinetic data.
 
+### 3.3.1 Atmospheric Boundary Layer treatment
+
+**Files**: [`Core/CfdConfigurationPresets.cs`](DisperSim3D/Core/CfdConfigurationPresets.cs), [`Core/OpenFoamCaseGenerator.cs`](DisperSim3D/Core/OpenFoamCaseGenerator.cs), [`Models/CfdConfiguration.cs`](DisperSim3D/Models/CfdConfiguration.cs).
+
+When `CfdConfiguration.UseAtmosphericBL = true` (default for every CFD solver via `CfdConfigurationPresets.ApplyForSolver`), the case writer emits a validated atmospheric configuration based on three published references:
+
+- **Mack & Spruijt 2013** — heavy gas in `reactingFoam`, recommends `C_ε3 = -0.33` constant in the ε-equation buoyancy term (instead of OpenFOAM's default `tanh|u·g/...|`) and `Sc_t = 0.7`.
+- **Tran Le Vu 2019** — LNG vapor in custom `gasDispersionBuoyantFoam`, validates HHTSL k-ε constants with `σ_ε = 1.167` (vs default 1.3), `Sc_t = 0.3` for dense gas, `Sc_t = 0.15` for cryogenic LNG, fixed-temperature ground BC for cryogenic releases.
+- **Schalau et al. 2021** — wind around obstacles in `rhoReactingBuoyantFoam`, atmospheric inlet via stock OpenFOAM `atmBoundaryLayerInlet*` BCs, ground roughness via `nutkAtmRoughWallFunction(z₀)`.
+
+DisperSim ships the **stock OpenFOAM v2512 BCs** subset of these recipes (no custom C++):
+
+| Field | Inlet patch (atmospheric on) | Ground patch (atmospheric on) |
+|---|---|---|
+| U | `atmBoundaryLayerInletVelocity` (Uref / Zref / z₀ from MeteorologicalConditions) | `noSlip` (compressible) / `fixedValue (0 0 0)` (incompressible) |
+| k | `atmBoundaryLayerInletK` | `kqRWallFunction` |
+| ε | `atmBoundaryLayerInletEpsilon` | `epsilonWallFunction` |
+| ν_t | `calculated` | `nutkAtmRoughWallFunction(z₀)` |
+| T | `inletOutlet` / `fixedValue` | configurable: `Adiabatic` (default), `FixedTemperature` (LNG), `FixedFlux` |
+
+`constant/turbulenceProperties` gets a `kEpsilonCoeffs { sigmaEps 1.167; ... }` block when atmospheric mode is on. When `BuoyancyEpsCoefficient` is non-null and the solver is buoyant, the RAS model is switched to `buoyantKEpsilon` and the coeffs block carries `Ceps3 -0.33`. `transportProperties` gets `Sct` and `Prt` keywords.
+
+Per-solver presets (configurable in code via `CfdConfigurationPresets`):
+
+| Solver | UseAtmBL | Sc_t | C_ε3 | σ_ε | Ground T BC |
+|---|---|---|---|---|---|
+| Gaussian Plume / Puff | n/a | n/a | n/a | n/a | n/a |
+| ScalarTransportFoam(Steady) | true | 0.7 | – | 1.3 | Adiabatic |
+| ScalarSimpleFoam / PimpleFoam / RhoSimpleFoam | true | – | – | 1.167 | Adiabatic |
+| BuoyantPimpleFoam / ReactingFoam / **RhoReactingBuoyantFoam** | true | 0.7 | -0.33 | 1.167 | Adiabatic |
+
+When the source's gas (`GasLibraryItem.IsCryogenic = true`) flags cryogenic LNG behaviour, the preset further bumps Sc_t to 0.15 and switches the ground BC to `FixedTemperature` at the ambient air temperature (Vu 2019 §5.4).
+
+The case writer also emits a `LOG_atmospheric.txt` advisory inside the case directory when the ground-adjacent cell size is smaller than (or close to) `z₀` — a regime where `nutkAtmRoughWallFunction` is ill-conditioned. This is non-fatal; recommended minimum cell ≈ `2·z₀`.
+
 ### 3.4 High-pressure leak — Birch & Schefer expanded source
 
 **File**: [`Core/HighPressureLeakModel.cs`](DisperSim3D/Core/HighPressureLeakModel.cs)
@@ -327,7 +362,11 @@ Per the recipe in Fiates & Vianna 2016 §2 (`OpenFoamCaseGenerator.Write*Boundar
 | Wall | (0 0 0) | calculated | fixedFluxPressure | zeroGradient | zeroGradient | kqRWallFunction | epsilon/omegaWallFunction |
 | Open | pressureInletOutletVelocity | calculated | totalPressure | inletOutlet | inletOutlet | inletOutlet | inletOutlet |
 | Wind (inlet) | fixedValue (uniform wind) | calculated | zeroGradient | fixedValue | fixedValue (air composition) | fixedValue | fixedValue |
+| Wind (atmospheric) | atmBoundaryLayerInletVelocity | calculated | zeroGradient | fixedValue | fixedValue | atmBoundaryLayerInletK | atmBoundaryLayerInletEpsilon |
+| Ground (atmospheric) | noSlip | – | fixedFluxPressure | per `GroundThermalBC` | zeroGradient | kqRWallFunction | epsilon/`nutkAtmRoughWallFunction(z₀)` |
 | Leak | fixedValue (jet vector) | calculated | zeroGradient | fixedValue | fixedValue (released species = 1) | fixedValue | fixedValue |
+
+When `CfdConfiguration.UseAtmosphericBL` is true (default for every CFD solver per `CfdConfigurationPresets`), the atmospheric rows above replace the corresponding plain "Wind/Wall" rows. `constant/turbulenceProperties` then carries either `kEpsilonCoeffs { sigmaEps 1.167 ... }` or, when buoyancy treatment is requested, `RAS { RASModel buoyantKEpsilon; buoyantKEpsilonCoeffs { Ceps3 -0.33 ... } }`. `constant/transportProperties` carries `Sct` and `Prt` keywords.
 
 ### 6.3 Solver pipeline
 
@@ -389,6 +428,10 @@ public double MyProperty { get; set; }
 
 Read-only values use `[ReadOnly(true)]`. Hidden runtime caches use `[Browsable(false)]` and/or `[XmlIgnore]`.
 
+### 7.4.1 Atmospheric defaults for new solvers
+
+When you add a new entry to `CfdSolverType`, also extend `CfdConfigurationPresets.ApplyForSolver` with a `case` arm that seeds the appropriate atmospheric defaults (Sc_t, σ_ε, C_ε3, ground BC). Look at the existing `RhoReactingBuoyantFoam` case as the reference recipe — it is the most-validated configuration. The cryogenic override at the bottom of `ApplyForSolver` reads `GasLibraryItem.IsCryogenic` and bumps Sc_t / GroundT BC for LNG vapour clouds; new solvers that handle temperature should respect the same flag.
+
 ### 7.5 Headless / CLI
 
 `DisperSim3D.CLI scene.xml -s <solver> [--env wsl|docker|native|bluecfd] [--openfoam-path <path>] [--scenario N] [--grid N] [--nprocs N]`
@@ -409,6 +452,14 @@ The CFD pipeline reproduces the test cases of:
 - **Fiates & Vianna (2016)** — full 416×488×77 m offshore platform with 5 leak directions × 4 wind directions, comparison against ANSYS-CFX
 
 Expected agreement (per Fiates & Vianna 2016): within 10 % of experimental data on jet centreline; within 20 % of commercial-CFD results on cloud volume; 7 % difference on the largest cloud case.
+
+For atmospheric / heavy-gas / cryogenic releases, the validated targets are:
+
+- **Mack & Spruijt 2013** — `reactingFoam` with `Sc_t = 0.7` and `C_ε3 = -0.33` reproduces Hamburg WT dataset DAT632 (SF₆ over 8.6° slope) within 8 / 8 sensors at FAC2 and matches Fluent's solution on a CO₂ release in atmospheric boundary layer over hilly terrain (8821 kg/s)
+- **Vu 2019** — `gasDispersionBuoyantFoam` with HHTSL k-ε constants, `Sc_t = 0.15`, `FixedTemperature` ground reproduces Burro 3/7/8/9 LNG vapour dispersion peak concentrations within Hanna SPM ranges (FAC2 = 1.0, MRB = -0.15, RMSE = 0.10) — outperforming FLACS on every metric
+- **Schalau et al. 2021** — `rhoReactingBuoyantFoam` with z₀-based atmospheric BCs achieves VDI 3783/9 hit ratio q > 66 % on cube and 7×3 building array test cases
+
+A formal validation harness consuming `.dsbench` benchmark files is planned (see plan file under `~/.claude/plans/`).
 
 ### 8.2 Detector optimisation validation
 
@@ -436,6 +487,9 @@ Vianna 2019 Table 4 — `T(n) ≈ 4.21 · n^2.98` seconds where `n` is cell coun
 | BinaryFormatter | Disabled in .NET 9+/10 — older WeifenLuo versions break | Project pinned to DockPanelSuite 3.1.1 (NuGet) which doesn't use BinaryFormatter |
 | HP leak chemistry | Birch expanded source assumes ideal-gas, single-species | Multi-component HP leaks would need a real isentropic flash; out of scope |
 | Wind field | Steady simpleFoam — no diurnal cycle, no terrain thermals | Multiple wind fields per project allow scenario sweeps |
+| Atmospheric stratification | Only neutral stratification supported (stock OpenFOAM `atmBoundaryLayerInlet*` BCs assume neutral) | For stable / unstable runs, use a Gaussian solver (Pasquill class is honoured) or extend with Monin-Obukhov-aware inlet BCs |
+| Schalau 2021 power-law inlet | Not implemented (would require custom wall functions / `codedFixedValue`) | Stock log-law via `atmBoundaryLayerInlet*` covers most use cases; revisit if built-up cases require it |
+| Mesh vs z₀ check | Advisory only, written to `LOG_atmospheric.txt` in the case dir; no UI warning yet | Inspect the case folder's `LOG_atmospheric.txt` before interpreting results |
 | WPF/WinForms interop | ElementHost-hosted controls have separate input-routing; some keyboard shortcuts may not propagate | Use menu items / right-click for all critical actions |
 
 ---
@@ -467,6 +521,14 @@ Vianna 2019 Table 4 — `T(n) ≈ 4.21 · n^2.98` seconds where `n` is cell coun
 12. **Briggs, G.A.** (1969, 1971, 1975). Plume rise correlations for buoyant and momentum sources.
 
 13. **OpenFOAM Foundation / ESI** — OpenFOAM v2306+ / v2512 user guide, https://www.openfoam.com/documentation
+
+14. **Mack, A., Spruijt, M.P.N.** (2013). *Validation of OpenFoam for heavy gas dispersion applications*. Journal of Hazardous Materials, 262, 504–516. https://doi.org/10.1016/j.jhazmat.2013.08.065
+
+15. **Tran Le Vu** (2019). *On numerical modelling of atmospheric gas dispersion using CFD approach*. PhD thesis, Nanyang Technological University, Singapore. (Validated `gasDispersionBuoyantFoam` against Burro LNG vapour dispersion field tests, outperforming FLACS on all SPMs.)
+
+16. **Schalau, S., Habib, A., Michel, S.** (2021). *Atmospheric Wind Field Modelling with OpenFOAM for Near-Ground Gas Dispersion*. Atmosphere, 12 (8), 933. https://doi.org/10.3390/atmos12080933
+
+17. **VDI 3783/9** (2017). *Environmental Meteorology — Prognostic Microscale Wind Field Models — Evaluation for Flow around Buildings and Obstacles*. Beuth Verlag, Berlin.
 
 14. **HelixToolkit.Wpf** — https://github.com/helix-toolkit/helix-toolkit (MIT)
 

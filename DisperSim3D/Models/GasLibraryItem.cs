@@ -36,6 +36,10 @@ namespace DisperSim3D.Models
         [Description("Multi-component mixture definition (used when Kind = Mixture).")]
         public GasMixture Mixture { get; set; }
 
+        [Category("Behavior")]
+        [Description("Mark this gas as cryogenic (e.g. LNG vapour at ~111 K). Triggers CFD presets: Sc_t=0.15 and FixedTemperature ground BC, per Vu 2019 §5.4.")]
+        public bool IsCryogenic { get; set; }
+
         [XmlIgnore]
         [Browsable(false)]
         public bool IsMixture => Kind == GasLibraryItemKind.Mixture;

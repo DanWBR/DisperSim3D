@@ -48,6 +48,16 @@ Choose a solver per simulation:
 
 Automatic mesh generation with snappyHexMesh, building/obstacle refinement zones, and proper handling of v2512 `topoSetDict` syntax. Default `MaxCourantNumber = 10` and `wallDist meshWave` follow Fiates & Vianna recommendations.
 
+**Atmospheric Boundary Layer treatment** is enabled by default (per-solver presets via `CfdConfigurationPresets`):
+
+- Log-law inlet (`atmBoundaryLayerInletVelocity`/`...InletK`/`...InletEpsilon`) with `Uref`/`Zref`/`z₀` from `MeteorologicalConditions`
+- Rough ground via `nutkAtmRoughWallFunction(z₀)`
+- HHTSL k-ε constants (`σ_ε = 1.167`, Vu 2019)
+- Buoyant k-ε model with `C_ε3 = -0.33` for heavy-gas runs (Mack & Spruijt 2013)
+- Configurable turbulent Schmidt number `Sc_t` (default 0.7; auto 0.15 when source gas is flagged cryogenic — Vu 2019 §5.4)
+- Selectable ground thermal BC: `Adiabatic` (default), `FixedTemperature` (recommended for LNG), `FixedFlux`
+- Mesh-vs-`z₀` advisory written to `LOG_atmospheric.txt` in each generated case
+
 ### Visualization
 
 - **Isosurfaces** via Marching Cubes, colored by threshold
@@ -208,6 +218,9 @@ See [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md) for the full schema
 - Fiates, J. & Vianna, S. S. V. (2016). *Numerical modelling of gas dispersion using OpenFOAM.* Process Safety and Environmental Protection.
 - Vianna, S. S. V. et al. (2019). *Optimal allocation of gas detectors as a Set Covering Problem.* Computers & Chemical Engineering.
 - Birch, A. D., Hughes, D. J., & Swaffield, F. (1987). *Velocity decay of high pressure jets.* Combustion Science and Technology.
+- Mack, A. & Spruijt, M. P. N. (2013). *Validation of OpenFoam for heavy gas dispersion applications.* Journal of Hazardous Materials.
+- Tran, L. V. (2019). *On numerical modelling of atmospheric gas dispersion using CFD approach.* PhD thesis, Nanyang Technological University.
+- Schalau, S., Habib, A. & Michel, S. (2021). *Atmospheric Wind Field Modelling with OpenFOAM for Near-Ground Gas Dispersion.* Atmosphere, 12(8), 933.
 - TNO Yellow Book — *Methods for the Calculation of Physical Effects.*
 
 ---

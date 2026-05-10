@@ -468,6 +468,8 @@ namespace DisperSim3D.Controls
                 {
                     _editor.ShowWindFieldArrows(wfSel, silent: true);
                 }
+                // SolverType change → user can manually invoke
+                // "Apply atmospheric defaults" from the simulation context menu in the tree.
                 _editor.RefreshViewport();
             };
 
@@ -1272,10 +1274,53 @@ namespace DisperSim3D.Controls
             {
                 if (dlg.ShowDialog() == DialogResult.OK && dlg.Result != null)
                 {
-                    _editor.Scene.Simulations.Add(dlg.Result);
-                    UpdateStatus("Simulation created: " + dlg.Result.Name);
+                    var sim = dlg.Result;
+                    if (sim.SnapshotCfdConfig == null)
+                        sim.SnapshotCfdConfig = new CfdConfiguration();
+                    var gas = ResolveGasForSimulation(sim);
+                    var meteo = ResolveMeteoForSimulation(sim);
+                    CfdConfigurationPresets.ApplyForSolver(sim.SnapshotCfdConfig, sim.SolverType, gas, meteo);
+                    _editor.Scene.Simulations.Add(sim);
+                    UpdateStatus("Simulation created: " + sim.Name);
                 }
             }
+        }
+
+        private GasLibraryItem ResolveGasForSimulation(Simulation sim)
+        {
+            if (sim == null || string.IsNullOrEmpty(sim.SourceId)) return null;
+            var src = _editor.Scene.TopLevelSources.FirstOrDefault(s => s.Id == sim.SourceId);
+            if (src == null || string.IsNullOrEmpty(src.GasRefId)) return null;
+            return _editor.Scene.GasLibrary.FirstOrDefault(g => g.Id == src.GasRefId);
+        }
+
+        private MeteorologicalConditions ResolveMeteoForSimulation(Simulation sim)
+        {
+            if (sim != null && sim.SnapshotMeteo != null) return sim.SnapshotMeteo;
+            if (sim != null && !string.IsNullOrEmpty(sim.WindFieldId))
+            {
+                var wf = _editor.Scene.WindFieldScenarios.FirstOrDefault(w => w.Id == sim.WindFieldId);
+                if (wf != null) return wf.Meteo;
+            }
+            return _editor.Scene.GeneralSettings != null
+                ? _editor.Scene.GeneralSettings.DefaultMeteo
+                : null;
+        }
+
+        private void OfferAtmosphericPresetReapply(Simulation sim)
+        {
+            if (sim == null || sim.SnapshotCfdConfig == null) return;
+            var result = MessageBox.Show(
+                "Apply validated atmospheric defaults for " + sim.SolverType + "?\n\n" +
+                "Yes overrides Sc_t, sigma_eps, Ceps3, ground BC and atmospheric BL switch.\n" +
+                "No keeps your current CFD settings.",
+                "Atmospheric defaults",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (result != DialogResult.Yes) return;
+            var gas = ResolveGasForSimulation(sim);
+            var meteo = ResolveMeteoForSimulation(sim);
+            CfdConfigurationPresets.ApplyForSolver(sim.SnapshotCfdConfig, sim.SolverType, gas, meteo);
+            _propertyGrid.Refresh();
         }
 
         private void DoEditSimulation(string id)

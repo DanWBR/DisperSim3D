@@ -46,6 +46,10 @@ namespace DisperSim3D.Models
         [Description("If true, uses the urban shear-exponent table; otherwise rural.")]
         public bool IsUrbanTerrain { get; set; }
 
+        [Category("Wind")]
+        [Description("Aerodynamic roughness length z0 (m). Drives log-law inlet and rough-wall functions in CFD. Typical: 2e-4 (water), 0.03 (open grass), 0.10 (cropland), 0.30 (suburban), 1.0 (urban/forest).")]
+        public double RoughnessLengthM { get; set; }
+
         /// <summary>
         /// Gets the horizontal wind transport velocity vector at the reference measurement height.
         /// WindDirectionDeg follows meteorological convention (direction wind comes FROM),
@@ -129,6 +133,7 @@ namespace DisperSim3D.Models
             WindMeasurementHeightM = 10.0;
             WindShearExponent = -1;
             IsUrbanTerrain = false;
+            RoughnessLengthM = 0.03; // open grass / rural default
         }
     }
 }

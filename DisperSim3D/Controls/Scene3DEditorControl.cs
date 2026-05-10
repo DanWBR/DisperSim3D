@@ -2495,7 +2495,8 @@ namespace DisperSim3D.Controls
                     new System.Xml.Linq.XAttribute("WindDir", s.DefaultMeteo.WindDirectionDeg.ToString(inv)),
                     new System.Xml.Linq.XAttribute("Stability", s.DefaultMeteo.StabilityClass.ToString()),
                     new System.Xml.Linq.XAttribute("Temp", s.DefaultMeteo.AmbientTemperature.ToString(inv)),
-                    new System.Xml.Linq.XAttribute("Pressure", s.DefaultMeteo.AmbientPressure.ToString(inv))) : null);
+                    new System.Xml.Linq.XAttribute("Pressure", s.DefaultMeteo.AmbientPressure.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("Roughness", s.DefaultMeteo.RoughnessLengthM.ToString(inv))) : null);
         }
 
         private System.Xml.Linq.XElement SerializeGasLibrary(System.Globalization.CultureInfo inv)
@@ -2510,6 +2511,7 @@ namespace DisperSim3D.Controls
                             new System.Xml.Linq.XAttribute("Id", g.Id ?? ""),
                             new System.Xml.Linq.XAttribute("Name", g.Name ?? ""),
                             new System.Xml.Linq.XAttribute("Kind", "Mixture"),
+                            new System.Xml.Linq.XAttribute("Cryogenic", g.IsCryogenic ? "1" : "0"),
                             new System.Xml.Linq.XElement("Mixture",
                                 g.Mixture.Components.Select(c =>
                                     new System.Xml.Linq.XElement("Component",
@@ -2524,6 +2526,7 @@ namespace DisperSim3D.Controls
                         new System.Xml.Linq.XAttribute("Id", g.Id ?? ""),
                         new System.Xml.Linq.XAttribute("Name", g.Name ?? ""),
                         new System.Xml.Linq.XAttribute("Kind", "Pure"),
+                        new System.Xml.Linq.XAttribute("Cryogenic", g.IsCryogenic ? "1" : "0"),
                         new System.Xml.Linq.XAttribute("MolarMass", gp.MolarMass.ToString(inv)),
                         new System.Xml.Linq.XAttribute("LFL", gp.LFL.ToString(inv)),
                         new System.Xml.Linq.XAttribute("IDLH", gp.IDLH.ToString(inv)),
@@ -2597,7 +2600,9 @@ namespace DisperSim3D.Controls
                         new System.Xml.Linq.XAttribute("WindDir", s.SnapshotMeteo.WindDirectionDeg.ToString(inv)),
                         new System.Xml.Linq.XAttribute("Stability", s.SnapshotMeteo.StabilityClass.ToString()),
                         new System.Xml.Linq.XAttribute("Temp", s.SnapshotMeteo.AmbientTemperature.ToString(inv)),
-                        new System.Xml.Linq.XAttribute("Pressure", s.SnapshotMeteo.AmbientPressure.ToString(inv))) : null)));
+                        new System.Xml.Linq.XAttribute("Pressure", s.SnapshotMeteo.AmbientPressure.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("Roughness", s.SnapshotMeteo.RoughnessLengthM.ToString(inv))) : null,
+                    SerializeAtmosphericCfd(s.SnapshotCfdConfig, inv))));
         }
 
         private System.Xml.Linq.XElement SerializeWindFieldScenarios(System.Globalization.CultureInfo inv)
@@ -2619,7 +2624,52 @@ namespace DisperSim3D.Controls
                             new System.Xml.Linq.XAttribute("WindDir", wf.Meteo.WindDirectionDeg.ToString(inv)),
                             new System.Xml.Linq.XAttribute("Stability", wf.Meteo.StabilityClass.ToString()),
                             new System.Xml.Linq.XAttribute("Temp", wf.Meteo.AmbientTemperature.ToString(inv)),
-                            new System.Xml.Linq.XAttribute("Pressure", wf.Meteo.AmbientPressure.ToString(inv))))));
+                            new System.Xml.Linq.XAttribute("Pressure", wf.Meteo.AmbientPressure.ToString(inv)),
+                            new System.Xml.Linq.XAttribute("Roughness", wf.Meteo.RoughnessLengthM.ToString(inv))),
+                        SerializeAtmosphericCfd(wf.CfdConfig, inv))));
+        }
+
+        /// <summary>
+        /// Emits the atmospheric CFD block (UseAtmosphericBL, Sct, Prt, Ceps3, sigmaEps,
+        /// GroundThermalBC + values). Returns null when cfd is null so the caller can pass
+        /// it directly to XElement constructor without conditionals.
+        /// </summary>
+        private System.Xml.Linq.XElement SerializeAtmosphericCfd(
+            CfdConfiguration cfd, System.Globalization.CultureInfo inv)
+        {
+            if (cfd == null) return null;
+            var el = new System.Xml.Linq.XElement("Cfd",
+                new System.Xml.Linq.XAttribute("AtmBL", cfd.UseAtmosphericBL ? "1" : "0"),
+                new System.Xml.Linq.XAttribute("Sct", cfd.TurbulentSchmidtNumber.ToString(inv)),
+                new System.Xml.Linq.XAttribute("Prt", cfd.TurbulentPrandtlNumber.ToString(inv)),
+                new System.Xml.Linq.XAttribute("SigmaEps", cfd.KEpsilonSigmaEpsilon.ToString(inv)),
+                new System.Xml.Linq.XAttribute("GroundBC", cfd.GroundThermalBC.ToString()),
+                new System.Xml.Linq.XAttribute("GroundT", cfd.GroundTemperatureK.ToString(inv)),
+                new System.Xml.Linq.XAttribute("GroundQ", cfd.GroundHeatFluxWPerM2.ToString(inv)));
+            if (cfd.BuoyancyEpsCoefficient.HasValue)
+                el.Add(new System.Xml.Linq.XAttribute("Ceps3", cfd.BuoyancyEpsCoefficient.Value.ToString(inv)));
+            return el;
+        }
+
+        /// <summary>Reads the &lt;Cfd&gt; child of <paramref name="parent"/> into <paramref name="cfd"/>.</summary>
+        private void DeserializeAtmosphericCfd(System.Xml.Linq.XElement parent,
+            CfdConfiguration cfd, System.Globalization.CultureInfo inv)
+        {
+            if (parent == null || cfd == null) return;
+            var el = parent.Element("Cfd");
+            if (el == null) return;
+            cfd.UseAtmosphericBL = ((string)el.Attribute("AtmBL") ?? "0") == "1";
+            cfd.TurbulentSchmidtNumber = double.Parse((string)el.Attribute("Sct") ?? "0.7", inv);
+            cfd.TurbulentPrandtlNumber = double.Parse((string)el.Attribute("Prt") ?? "0.85", inv);
+            cfd.KEpsilonSigmaEpsilon = double.Parse((string)el.Attribute("SigmaEps") ?? "1.3", inv);
+            GroundThermalBoundary gbc;
+            if (Enum.TryParse((string)el.Attribute("GroundBC") ?? "Adiabatic", out gbc))
+                cfd.GroundThermalBC = gbc;
+            cfd.GroundTemperatureK = double.Parse((string)el.Attribute("GroundT") ?? "293.15", inv);
+            cfd.GroundHeatFluxWPerM2 = double.Parse((string)el.Attribute("GroundQ") ?? "0", inv);
+            var ceps3Attr = (string)el.Attribute("Ceps3");
+            cfd.BuoyancyEpsCoefficient = string.IsNullOrEmpty(ceps3Attr) ? (double?)null
+                : double.Parse(ceps3Attr, inv);
         }
 
         private System.Xml.Linq.XElement SerializeDispersionScenarios(System.Globalization.CultureInfo inv)
@@ -2647,7 +2697,8 @@ namespace DisperSim3D.Controls
                     new System.Xml.Linq.XAttribute("WindDir", sc.Meteo.WindDirectionDeg.ToString(inv)),
                     new System.Xml.Linq.XAttribute("Stability", sc.Meteo.StabilityClass.ToString()),
                     new System.Xml.Linq.XAttribute("Temp", sc.Meteo.AmbientTemperature.ToString(inv)),
-                    new System.Xml.Linq.XAttribute("Pressure", sc.Meteo.AmbientPressure.ToString(inv))),
+                    new System.Xml.Linq.XAttribute("Pressure", sc.Meteo.AmbientPressure.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("Roughness", sc.Meteo.RoughnessLengthM.ToString(inv))),
 
                 new System.Xml.Linq.XElement("Sources",
                     sc.Sources.Select(src =>
@@ -2749,7 +2800,8 @@ namespace DisperSim3D.Controls
                     StabilityClass = (PasquillStabilityClass)Enum.Parse(typeof(PasquillStabilityClass),
                         (string)mEl.Attribute("Stability") ?? "D"),
                     AmbientTemperature = double.Parse((string)mEl.Attribute("Temp") ?? "293.15", inv),
-                    AmbientPressure = double.Parse((string)mEl.Attribute("Pressure") ?? "101325", inv)
+                    AmbientPressure = double.Parse((string)mEl.Attribute("Pressure") ?? "101325", inv),
+                    RoughnessLengthM = double.Parse((string)mEl.Attribute("Roughness") ?? "0.03", inv)
                 };
             }
             fs.GeneralSettings = s;
@@ -2765,7 +2817,8 @@ namespace DisperSim3D.Controls
                 var item = new GasLibraryItem
                 {
                     Id = (string)ge.Attribute("Id") ?? Guid.NewGuid().ToString(),
-                    Name = (string)ge.Attribute("Name") ?? "Gas"
+                    Name = (string)ge.Attribute("Name") ?? "Gas",
+                    IsCryogenic = ((string)ge.Attribute("Cryogenic") ?? "0") == "1"
                 };
                 string kind = (string)ge.Attribute("Kind") ?? "Pure";
                 if (kind == "Mixture")
@@ -2912,9 +2965,12 @@ namespace DisperSim3D.Controls
                         StabilityClass = (PasquillStabilityClass)Enum.Parse(typeof(PasquillStabilityClass),
                             (string)snapMeteoEl.Attribute("Stability") ?? "D"),
                         AmbientTemperature = double.Parse((string)snapMeteoEl.Attribute("Temp") ?? "293.15", inv),
-                        AmbientPressure = double.Parse((string)snapMeteoEl.Attribute("Pressure") ?? "101325", inv)
+                        AmbientPressure = double.Parse((string)snapMeteoEl.Attribute("Pressure") ?? "101325", inv),
+                        RoughnessLengthM = double.Parse((string)snapMeteoEl.Attribute("Roughness") ?? "0.03", inv)
                     };
                 }
+                if (sim.SnapshotCfdConfig == null) sim.SnapshotCfdConfig = new CfdConfiguration();
+                DeserializeAtmosphericCfd(se, sim.SnapshotCfdConfig, inv);
                 fs.Simulations.Add(sim);
             }
         }
@@ -2955,9 +3011,12 @@ namespace DisperSim3D.Controls
                         StabilityClass = (PasquillStabilityClass)Enum.Parse(typeof(PasquillStabilityClass),
                             (string)mEl.Attribute("Stability") ?? "D"),
                         AmbientTemperature = double.Parse((string)mEl.Attribute("Temp") ?? "293.15", inv),
-                        AmbientPressure = double.Parse((string)mEl.Attribute("Pressure") ?? "101325", inv)
+                        AmbientPressure = double.Parse((string)mEl.Attribute("Pressure") ?? "101325", inv),
+                        RoughnessLengthM = double.Parse((string)mEl.Attribute("Roughness") ?? "0.03", inv)
                     };
                 }
+                if (wf.CfdConfig == null) wf.CfdConfig = new CfdConfiguration();
+                DeserializeAtmosphericCfd(wfEl, wf.CfdConfig, inv);
                 fs.WindFieldScenarios.Add(wf);
             }
         }
@@ -3014,7 +3073,8 @@ namespace DisperSim3D.Controls
                     StabilityClass = (PasquillStabilityClass)Enum.Parse(typeof(PasquillStabilityClass),
                         (string)meteoEl.Attribute("Stability") ?? "D"),
                     AmbientTemperature = double.Parse((string)meteoEl.Attribute("Temp") ?? "293.15", inv),
-                    AmbientPressure = double.Parse((string)meteoEl.Attribute("Pressure") ?? "101325", inv)
+                    AmbientPressure = double.Parse((string)meteoEl.Attribute("Pressure") ?? "101325", inv),
+                    RoughnessLengthM = double.Parse((string)meteoEl.Attribute("Roughness") ?? "0.03", inv)
                 };
             }
 
