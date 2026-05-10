@@ -1,16 +1,16 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
     <OutputType>WinExe</OutputType>
-    <RootNamespace>TestApp</RootNamespace>
-    <AssemblyName>TestApp</AssemblyName>
+    <RootNamespace>DisperSim3D</RootNamespace>
+    <AssemblyName>DisperSim3D</AssemblyName>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Title>TestApp</Title>
-    <Description>Test application for DisperSim 3D</Description>
-    <Copyright>Copyright 2026</Copyright>
+    <Description>DisperSim3D Application</Description>
+    <Copyright>Copyright 2026 Daniel Wagner Oliveira de Medeiros</Copyright>
     <Version>1.0.0</Version>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
