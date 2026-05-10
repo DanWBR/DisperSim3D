@@ -3,7 +3,7 @@ using System.ComponentModel;
 using System.Windows.Media.Media3D;
 using DisperSim3D.Models;
 
-namespace TestApp.PropertyAdapters
+namespace DisperSim3D.App.PropertyAdapters
 {
     public class DecorationPropertyAdapter
     {

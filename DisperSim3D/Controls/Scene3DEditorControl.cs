@@ -54,6 +54,7 @@ namespace DisperSim3D.Controls
         private System.Windows.Media.Media3D.ModelVisual3D _windArrowVisual;
         private System.Windows.Media.Media3D.ModelVisual3D _windFieldArrowsVisual;
         private AnimatedArrowField _windFieldArrowField;
+        private AnimatedStreamlineField _windFieldStreamlineField;
         private System.Windows.Threading.DispatcherTimer _windFieldAnimTimer;
         private double _windFieldAnimTimeS;
 
@@ -407,8 +408,16 @@ namespace DisperSim3D.Controls
                 return;
             }
 
-            double domain = wfScenario.DomainSizeM;
-            double height = wfScenario.DomainHeightM > 0 ? wfScenario.DomainHeightM : domain;
+            double cfdDomain = wfScenario.DomainSizeM;
+            // Clip the visualisation to a smaller AABB around the origin (the CFD domain
+            // may be 1 km+ but the user's scene of interest is typically tens of metres).
+            // 0 = no clipping, fall back to full CFD extent.
+            double domain = wfScenario.DisplayExtentM > 0
+                ? Math.Min(wfScenario.DisplayExtentM, cfdDomain)
+                : cfdDomain;
+            double height = wfScenario.DomainHeightM > 0
+                ? Math.Min(wfScenario.DomainHeightM, domain)
+                : domain;
 
             int nx = Math.Max(2, wfScenario.ArrowsPerAxis);
             int nz = Math.Max(1, wfScenario.ArrowVerticalLayers);
@@ -433,31 +442,65 @@ namespace DisperSim3D.Controls
                 catch { }
             }
 
-            _windFieldArrowField = WindFieldVisual.Build(field,
-                -domain, domain, -domain, domain, height,
-                nx, nx, nz,
-                arrowColor,
-                wfScenario.ArrowLengthFactor > 0 ? wfScenario.ArrowLengthFactor : 0.30,
-                wfScenario.ArrowThicknessFactor > 0 ? wfScenario.ArrowThicknessFactor : 0.025,
-                wfScenario.ArrowOpacity > 0 ? wfScenario.ArrowOpacity : 0.55,
-                wfScenario.ArrowAnimated);
-            if (_windFieldArrowsVisual == null)
+            // Dispatch by display mode. Streamlines path uses Helix LinesVisual3D —
+            // built ONCE, then animation modulates only Color (no per-frame mesh
+            // rebuild). Arrows path kept for back-compat.
+            bool useStreamlines = wfScenario.DisplayMode == WindFieldDisplayMode.Streamlines;
+
+            // Tear down any previous streamline visuals before re-build (the timer below
+            // expects a stable visual list).
+            if (_windFieldStreamlineField != null)
             {
-                _windFieldArrowsVisual = new System.Windows.Media.Media3D.ModelVisual3D();
-                _viewport.Children.Add(_windFieldArrowsVisual);
+                _windFieldStreamlineField.RemoveFrom(_viewport);
+                _windFieldStreamlineField = null;
+            }
+
+            if (useStreamlines)
+            {
+                _windFieldStreamlineField = WindFieldStreamlineVisual.Build(field,
+                    -domain, domain, -domain, domain, height,
+                    wfScenario.StreamlineCount > 0 ? wfScenario.StreamlineCount : 256,
+                    wfScenario.StreamlineVerticalLayers > 0 ? wfScenario.StreamlineVerticalLayers : 1,
+                    wfScenario.StreamlineThicknessFactor > 0 ? wfScenario.StreamlineThicknessFactor : 0.025,
+                    wfScenario.StreamlineAnimated);
+                _windFieldStreamlineField.AddTo(_viewport);
+                _windFieldArrowField = null;
+                if (_windFieldArrowsVisual != null)
+                {
+                    _viewport.Children.Remove(_windFieldArrowsVisual);
+                    _windFieldArrowsVisual = null;
+                }
+            }
+            else
+            {
+                _windFieldArrowField = WindFieldVisual.Build(field,
+                    -domain, domain, -domain, domain, height,
+                    nx, nx, nz,
+                    arrowColor,
+                    wfScenario.ArrowLengthFactor > 0 ? wfScenario.ArrowLengthFactor : 0.30,
+                    wfScenario.ArrowThicknessFactor > 0 ? wfScenario.ArrowThicknessFactor : 0.025,
+                    wfScenario.ArrowOpacity > 0 ? wfScenario.ArrowOpacity : 0.55,
+                    wfScenario.ArrowAnimated);
+                if (_windFieldArrowsVisual == null)
+                {
+                    _windFieldArrowsVisual = new System.Windows.Media.Media3D.ModelVisual3D();
+                    _viewport.Children.Add(_windFieldArrowsVisual);
+                }
+                _windFieldArrowsVisual.Content = _windFieldArrowField.BuildVisual(0);
             }
             _windFieldAnimTimeS = 0;
-            _windFieldArrowsVisual.Content = _windFieldArrowField.BuildVisual(0);
 
             if (_windFieldAnimTimer == null)
             {
                 _windFieldAnimTimer = new System.Windows.Threading.DispatcherTimer();
-                _windFieldAnimTimer.Interval = TimeSpan.FromMilliseconds(50);
+                _windFieldAnimTimer.Interval = TimeSpan.FromMilliseconds(80);
                 _windFieldAnimTimer.Tick += (s, e) =>
                 {
-                    if (_windFieldArrowsVisual == null || _windFieldArrowField == null) return;
-                    _windFieldAnimTimeS += 0.05;
-                    _windFieldArrowsVisual.Content = _windFieldArrowField.BuildVisual(_windFieldAnimTimeS);
+                    _windFieldAnimTimeS += 0.08;
+                    if (_windFieldStreamlineField != null)
+                        _windFieldStreamlineField.Animate(_windFieldAnimTimeS); // O(N) colour-only
+                    else if (_windFieldArrowField != null && _windFieldArrowsVisual != null)
+                        _windFieldArrowsVisual.Content = _windFieldArrowField.BuildVisual(_windFieldAnimTimeS);
                 };
             }
             _windFieldAnimTimer.Start();
@@ -470,6 +513,11 @@ namespace DisperSim3D.Controls
                 _viewport.Children.Remove(_windFieldArrowsVisual);
                 _windFieldArrowsVisual = null;
             }
+            if (_windFieldStreamlineField != null)
+            {
+                _windFieldStreamlineField.RemoveFrom(_viewport);
+                _windFieldStreamlineField = null;
+            }
             _windFieldArrowField = null;
             if (_windFieldAnimTimer != null)
             {
@@ -478,7 +526,8 @@ namespace DisperSim3D.Controls
             }
         }
 
-        public bool IsWindFieldArrowsVisible => _windFieldArrowsVisual != null;
+        public bool IsWindFieldArrowsVisible =>
+            _windFieldArrowsVisual != null || _windFieldStreamlineField != null;
 
         public void StopDispersion()
         {

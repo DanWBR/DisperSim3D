@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Windows.Forms;
 using DisperSim3D.Models;
 
-namespace TestApp.Dialogs
+namespace DisperSim3D.App.Dialogs
 {
     public class ThresholdsDialog : Form
     {

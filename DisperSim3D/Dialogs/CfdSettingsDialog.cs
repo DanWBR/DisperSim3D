@@ -29,6 +29,15 @@ namespace DisperSim3D.Dialogs
         private NumericUpDown _nudPurgeWrite;
         private CheckBox _chkSubgrid;
         private TextBox _txtSubgridMargin;
+        // Atmospheric BL block
+        private CheckBox _chkAtmBL;
+        private TextBox _txtSct;
+        private TextBox _txtPrt;
+        private TextBox _txtSigmaEps;
+        private TextBox _txtCeps3;
+        private ComboBox _cmbGroundBC;
+        private TextBox _txtGroundT;
+        private TextBox _txtGroundQ;
         private CheckBox _chkWindField;
         private Button _btnOk;
         private Button _btnCancel;
@@ -450,6 +459,91 @@ namespace DisperSim3D.Dialogs
             layout.Controls.Add(purgePanel, 1, row++);
 
             // --- Optimization section ---
+            AddSectionHeader(layout, row++, "Atmospheric Boundary Layer");
+            AddDescription(layout, ref row,
+                "Validated defaults for atmospheric / heavy-gas / cryogenic CFD (Mack & Spruijt 2013, Vu 2019, Schalau 2021). " +
+                "Per-solver presets are applied automatically via CfdConfigurationPresets; these fields override them.");
+
+            _chkAtmBL = new CheckBox
+            {
+                Text = "Use atmospheric BL inlet + rough-wall functions",
+                AutoSize = true,
+                Checked = Result.UseAtmosphericBL,
+                Margin = new Padding(0, 6, 0, 0)
+            };
+            _tip.SetToolTip(_chkAtmBL,
+                "When on: U/k/eps inlet uses atmBoundaryLayerInlet* (log-law from z0),\n" +
+                "ground uses atmNutkWallFunction(z0), and turbulenceProperties\n" +
+                "carries kEpsilonCoeffs with the modified sigma_eps.\n" +
+                "Off: uniform inlet wind, smooth-wall functions (default OpenFOAM).");
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.SetColumnSpan(_chkAtmBL, 2);
+            layout.Controls.Add(_chkAtmBL, 0, row++);
+
+            AddLabel(layout, row, "Sc_t (turb Schmidt):");
+            _txtSct = new TextBox { Width = (int)(80 * dpi),
+                Text = Result.TurbulentSchmidtNumber.ToString("G4", System.Globalization.CultureInfo.InvariantCulture) };
+            _tip.SetToolTip(_txtSct,
+                "Turbulent Schmidt number for species transport.\n" +
+                "Defaults: 0.7 (passive scalar), 0.3 (dense gas), 0.15 (cryogenic LNG; Vu 2019).\n" +
+                "NOTE: stock rhoReactingBuoyantFoam ignores this — value is written to\n" +
+                "transportProperties for solvers that read it (buoyantPimpleFoam etc).");
+            layout.Controls.Add(_txtSct, 1, row++);
+
+            AddLabel(layout, row, "Pr_t (turb Prandtl):");
+            _txtPrt = new TextBox { Width = (int)(80 * dpi),
+                Text = Result.TurbulentPrandtlNumber.ToString("G4", System.Globalization.CultureInfo.InvariantCulture) };
+            _tip.SetToolTip(_txtPrt, "Turbulent Prandtl number for thermal transport. Default 0.85.");
+            layout.Controls.Add(_txtPrt, 1, row++);
+
+            AddLabel(layout, row, "sigma_eps:");
+            _txtSigmaEps = new TextBox { Width = (int)(80 * dpi),
+                Text = Result.KEpsilonSigmaEpsilon.ToString("G4", System.Globalization.CultureInfo.InvariantCulture) };
+            _tip.SetToolTip(_txtSigmaEps,
+                "k-epsilon sigma_eps constant. OpenFOAM default 1.3.\n" +
+                "Vu 2019 derives 1.167 for horizontally-homogeneous ABL (HHTSL).");
+            layout.Controls.Add(_txtSigmaEps, 1, row++);
+
+            AddLabel(layout, row, "Ceps3 (buoyancy):");
+            _txtCeps3 = new TextBox { Width = (int)(80 * dpi),
+                Text = Result.BuoyancyEpsCoefficient.HasValue
+                    ? Result.BuoyancyEpsCoefficient.Value.ToString("G4", System.Globalization.CultureInfo.InvariantCulture)
+                    : "" };
+            _tip.SetToolTip(_txtCeps3,
+                "Buoyancy term coefficient C_eps3 in the epsilon equation.\n" +
+                "Empty = OpenFOAM default tanh formulation.\n" +
+                "Mack & Spruijt 2013 recommend -0.33 constant for heavy gas.\n" +
+                "When set, RAS model switches to buoyantKEpsilon.");
+            layout.Controls.Add(_txtCeps3, 1, row++);
+
+            AddLabel(layout, row, "Ground thermal BC:");
+            _cmbGroundBC = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Width = (int)(180 * dpi)
+            };
+            _cmbGroundBC.Items.Add("Adiabatic");
+            _cmbGroundBC.Items.Add("FixedTemperature");
+            _cmbGroundBC.Items.Add("FixedFlux");
+            _cmbGroundBC.SelectedItem = Result.GroundThermalBC.ToString();
+            _tip.SetToolTip(_cmbGroundBC,
+                "Adiabatic: zero heat flux (default for non-cryogenic).\n" +
+                "FixedTemperature: ground at GroundT (recommended for LNG, Vu 2019).\n" +
+                "FixedFlux: ground emits GroundQ W/m^2 into the gas.");
+            layout.Controls.Add(_cmbGroundBC, 1, row++);
+
+            AddLabel(layout, row, "Ground T (K):");
+            _txtGroundT = new TextBox { Width = (int)(80 * dpi),
+                Text = Result.GroundTemperatureK.ToString("G6", System.Globalization.CultureInfo.InvariantCulture) };
+            _tip.SetToolTip(_txtGroundT, "Ground temperature when GroundBC = FixedTemperature.");
+            layout.Controls.Add(_txtGroundT, 1, row++);
+
+            AddLabel(layout, row, "Ground q\" (W/m²):");
+            _txtGroundQ = new TextBox { Width = (int)(80 * dpi),
+                Text = Result.GroundHeatFluxWPerM2.ToString("G6", System.Globalization.CultureInfo.InvariantCulture) };
+            _tip.SetToolTip(_txtGroundQ, "Ground heat flux into the gas when GroundBC = FixedFlux.");
+            layout.Controls.Add(_txtGroundQ, 1, row++);
+
             AddSectionHeader(layout, row++, "Optimization");
             AddDescription(layout, ref row,
                 "Speed-up options that pre-compute plume bounds or wind fields before the main CFD run.");
@@ -667,6 +761,27 @@ namespace DisperSim3D.Dialogs
             if (double.TryParse(_txtSubgridMargin.Text, System.Globalization.NumberStyles.Float, inv, out margin))
                 Result.SubgridMarginFactor = Math.Max(1.0, Math.Min(3.0, margin));
             Result.UseWindField = _chkWindField.Checked;
+
+            // Atmospheric BL block
+            Result.UseAtmosphericBL = _chkAtmBL.Checked;
+            double dv;
+            if (double.TryParse(_txtSct.Text, System.Globalization.NumberStyles.Float, inv, out dv) && dv > 0)
+                Result.TurbulentSchmidtNumber = dv;
+            if (double.TryParse(_txtPrt.Text, System.Globalization.NumberStyles.Float, inv, out dv) && dv > 0)
+                Result.TurbulentPrandtlNumber = dv;
+            if (double.TryParse(_txtSigmaEps.Text, System.Globalization.NumberStyles.Float, inv, out dv) && dv > 0)
+                Result.KEpsilonSigmaEpsilon = dv;
+            if (string.IsNullOrWhiteSpace(_txtCeps3.Text))
+                Result.BuoyancyEpsCoefficient = null;
+            else if (double.TryParse(_txtCeps3.Text, System.Globalization.NumberStyles.Float, inv, out dv))
+                Result.BuoyancyEpsCoefficient = dv;
+            DisperSim3D.Models.GroundThermalBoundary gbc;
+            if (Enum.TryParse((string)_cmbGroundBC.SelectedItem ?? "Adiabatic", out gbc))
+                Result.GroundThermalBC = gbc;
+            if (double.TryParse(_txtGroundT.Text, System.Globalization.NumberStyles.Float, inv, out dv) && dv > 0)
+                Result.GroundTemperatureK = dv;
+            if (double.TryParse(_txtGroundQ.Text, System.Globalization.NumberStyles.Float, inv, out dv))
+                Result.GroundHeatFluxWPerM2 = dv;
 
             var type = GetSelectedType();
             string path = _txtPath.Text.Trim();

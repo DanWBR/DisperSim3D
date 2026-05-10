@@ -3,8 +3,8 @@
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
     <OutputType>WinExe</OutputType>
-    <RootNamespace>DisperSim3D</RootNamespace>
-    <AssemblyName>DisperSim3D</AssemblyName>
+    <RootNamespace>DisperSim3D.App</RootNamespace>
+    <AssemblyName>DisperSim3D.App</AssemblyName>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
@@ -14,10 +14,6 @@
     <Version>1.0.0</Version>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="HelixToolkit.Wpf" Version="3.1.2" />
-  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DisperSim3D\DisperSim3D.csproj" />

@@ -2,7 +2,7 @@ using DisperSim3D.Core;
 using DisperSim3D.Models;
 using System;
 
-namespace TestApp
+namespace DisperSim3D
 {
     static class GpTest
     {

@@ -15,6 +15,15 @@ namespace DisperSim3D.Models
         Failed
     }
 
+    /// <summary>How the wind field is rendered in the 3D viewport.</summary>
+    public enum WindFieldDisplayMode
+    {
+        /// <summary>Discrete arrows on a regular grid (legacy mode).</summary>
+        Arrows = 0,
+        /// <summary>Continuous streamlines coloured by local wind speed (blue → red).</summary>
+        Streamlines = 1
+    }
+
     /// <summary>
     /// A scenario that pre-computes a 3D steady-state wind field via CFD (simpleFoam),
     /// to be referenced by one or more <see cref="DispersionScenario"/> instances.
@@ -86,6 +95,30 @@ namespace DisperSim3D.Models
         [Description("Whether arrows pulse/animate over time.")]
         public bool ArrowAnimated { get; set; }
 
+        [Category("Visualization")]
+        [Description("How the wind field is drawn: discrete Arrows (legacy) or continuous Streamlines coloured blue→red by speed.")]
+        public WindFieldDisplayMode DisplayMode { get; set; }
+
+        [Category("Visualization")]
+        [Description("Number of streamlines to seed across the domain (only used when DisplayMode = Streamlines).")]
+        public int StreamlineCount { get; set; }
+
+        [Category("Visualization")]
+        [Description("Vertical layers of streamline seeds (only when DisplayMode = Streamlines). 1 = ground level only.")]
+        public int StreamlineVerticalLayers { get; set; }
+
+        [Category("Visualization")]
+        [Description("Streamline tube thickness as a fraction of the smaller horizontal cell size (default 0.04).")]
+        public double StreamlineThicknessFactor { get; set; }
+
+        [Category("Visualization")]
+        [Description("Whether streamlines animate the brightness pulse flowing along the line.")]
+        public bool StreamlineAnimated { get; set; }
+
+        [Category("Visualization")]
+        [Description("Half-extent (m) of the visualised wind region. The CFD domain may be much larger (km), but the streamlines/arrows are clipped to this AABB around the origin so they stay near the scene of interest. 0 = use the full CFD domain.")]
+        public double DisplayExtentM { get; set; }
+
         [Category("Bundling")]
         [Description("How the OpenFOAM case is packed into a .dsproj bundle. ResultsOnly = small, FullCase = re-runnable after extraction.")]
         public BundleEmbedMode EmbedMode { get; set; } = BundleEmbedMode.ResultsOnly;
@@ -108,6 +141,13 @@ namespace DisperSim3D.Models
             ArrowLengthFactor = 0.30;
             ArrowThicknessFactor = 0.025;
             ArrowAnimated = true;
+
+            DisplayMode = WindFieldDisplayMode.Streamlines;
+            StreamlineCount = 256;
+            StreamlineVerticalLayers = 1;
+            StreamlineThicknessFactor = 0.025;
+            StreamlineAnimated = true;
+            DisplayExtentM = 50.0;
         }
     }
 }

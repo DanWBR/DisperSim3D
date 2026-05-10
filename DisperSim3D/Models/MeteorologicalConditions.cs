@@ -8,6 +8,7 @@ namespace DisperSim3D.Models
     /// Represents the meteorological conditions used in a gas dispersion simulation,
     /// including wind profile, atmospheric stability, and ambient state.
     /// </summary>
+    [System.ComponentModel.TypeConverter(typeof(System.ComponentModel.ExpandableObjectConverter))]
     public class MeteorologicalConditions
     {
         [Category("Wind")]

@@ -2,7 +2,7 @@ using System;
 using System.Windows.Forms;
 using DisperSim3D.Models;
 
-namespace TestApp.Dialogs
+namespace DisperSim3D.App.Dialogs
 {
     public class MeteorologicalDialog : Form
     {

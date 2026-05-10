@@ -5,7 +5,7 @@ using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using HelixToolkit.Wpf;
 
-namespace TestApp.Dialogs
+namespace DisperSim3D.App.Dialogs
 {
     public class ImportModelDialog : Form
     {

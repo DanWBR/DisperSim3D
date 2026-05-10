@@ -1,7 +1,7 @@
 using DisperSim3D.Controls;
 using System.Windows.Forms;
 
-namespace TestApp
+namespace DisperSim3D.App
 {
     public partial class MainForm : Form
     {

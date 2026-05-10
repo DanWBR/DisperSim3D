@@ -5,6 +5,7 @@ namespace DisperSim3D.Models
     /// <summary>
     /// Stores the configuration parameters for a CFD (OpenFOAM) dispersion simulation.
     /// </summary>
+    [TypeConverter(typeof(ExpandableObjectConverter))]
     public class CfdConfiguration
     {
         /// <summary>Gets or sets the detected OpenFOAM runtime environment type.</summary>

@@ -120,7 +120,9 @@ namespace DisperSim3D.Controls
                 new ToolStripSeparator(),
                 new ToolStripMenuItem("Import 3D Model...", Img("icons8-import.png"), (s, e) => DoImport3D()),
                 new ToolStripSeparator(),
-                new ToolStripMenuItem("Batch Export Images...", Img("icons8-export.png"), (s, e) => DoBatchExport())
+                new ToolStripMenuItem("Batch Export Images...", Img("icons8-export.png"), (s, e) => DoBatchExport()),
+                new ToolStripSeparator(),
+                new ToolStripMenuItem("E&xit", Img("cross.png"), (s, e) => DoExit())
             });
 
             // --- Edit menu ---
@@ -779,6 +781,15 @@ namespace DisperSim3D.Controls
             if (MessageBox.Show("Clear the entire scene?", "Confirm",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                 ClearScene();
+        }
+
+        private void DoExit()
+        {
+            // Close the host form if any (TestApp wraps the panel in a Form); otherwise
+            // fall back to terminating the application loop.
+            var form = this.FindForm();
+            if (form != null) form.Close();
+            else Application.Exit();
         }
 
         private void DoImport3D()

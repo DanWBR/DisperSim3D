@@ -1,7 +1,7 @@
 using System;
 using System.Windows.Forms;
 
-namespace TestApp
+namespace DisperSim3D.App
 {
     static class Program
     {

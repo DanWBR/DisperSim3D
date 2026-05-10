@@ -1,4 +1,4 @@
-namespace TestApp
+namespace DisperSim3D.App
 {
     partial class MainForm
     {
