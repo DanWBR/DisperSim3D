@@ -30,6 +30,13 @@ namespace DisperSim3D.Core
             if (wf == null) return null;
             if (wf.WindField != null) return wf.WindField;
             if (wf.Status != WindFieldStatus.Ready) return null;
+            // FluidX3D-generated wind fields save windfield.bin to their CasePath; try
+            // that loader first, then fall back to the OpenFOAM case reader.
+            if (wf.UseFluidX3D)
+            {
+                var fx = FluidX3DWindFieldRunner.LoadFromCase(wf);
+                if (fx != null) return fx;
+            }
             return WindFieldRunner.LoadFromCase(wf);
         }
 

@@ -20,8 +20,17 @@
 #define EQUILIBRIUM_BOUNDARIES // enables fixing the velocity/density by marking cells with TYPE_E; can be used for inflow/outflow; does not reflect shock waves
 //#define MOVING_BOUNDARIES // enables moving solids: set solid cells to TYPE_S and set their velocity u unequal to zero
 //#define SURFACE // enables free surface LBM: mark fluid cells with TYPE_F; at initialization the TYPE_I interface and TYPE_G gas domains will automatically be completed; allocates an extra 12 Bytes/cell
-#define TEMPERATURE // enables temperature extension; set fixed-temperature cells with TYPE_T (similar to EQUILIBRIUM_BOUNDARIES); allocates an extra 32 (FP32) or 18 (FP16) Bytes/cell
-#define SUBGRID // enables Smagorinsky-Lilly subgrid turbulence LES model to keep simulations with very large Reynolds number stable
+// TEMPERATURE enabled — used as a passive scalar tracer for dispersion (T-ambient=1.0,
+// T-source>1.0; concentration = T-1.0). Wind runs initialize T=1.0 everywhere to avoid
+// the previously-observed blow-up: leaving T=0 on the host caused the thermal DDFs to
+// initialize to f_eq(0) which produced negative collisional pressure and clamped every
+// velocity at ±c_s. Always call fx3d_initial_temperature(handle, 1.0f) BEFORE run().
+#define TEMPERATURE
+// SUBGRID disabled: with voxelized AABB obstacles (sharp staircase corners), Smagorinsky's
+// strain-rate-based eddy viscosity blew up locally, the DDFs went negative, and the
+// FluidX3D safety clamp pinned every interior cell at u = ±c_s = ±0.5774 lattice u/step.
+// At Re_grid ~ 200 we don't need LES anyway — the BGK collision is stable on its own.
+//#define SUBGRID
 //#define PARTICLES // enables particles with immersed-boundary method (for 2-way coupling also activate VOLUME_FORCE and FORCE_FIELD; only supported in single-GPU)
 
 //#define INTERACTIVE_GRAPHICS // enable interactive graphics; start/pause the simulation by pressing P; either Windows or Linux X11 desktop must be available; on Linux: change to "compile on Linux with X11" command in make.sh

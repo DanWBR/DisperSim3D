@@ -31,6 +31,29 @@ namespace DisperSim3D.Core
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern void fx3d_set_outlet_x(ulong h);
 
+        /// <summary>Free-stream boundary on all four lateral faces — preferred for
+        /// atmospheric wind fields where the wind direction can be arbitrary.</summary>
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void fx3d_set_lateral_free_stream(ulong h, float ux, float uy, float uz);
+
+        /// <summary>Pre-fill every non-solid cell with a uniform velocity — start the LBM
+        /// from a free-stream state instead of zero, so wakes around obstacles develop quickly.</summary>
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void fx3d_initial_uniform(ulong h, float ux, float uy, float uz);
+
+        /// <summary>Force-flush host buffers (flags, u, rho, T) to the GPU before run().
+        /// FluidX3D auto-transfers on first run(), but on Windows with TEMPERATURE +
+        /// EQUILIBRIUM_BOUNDARIES we've observed the device memory remaining uninitialized
+        /// in some cases, leading to LBM blow-up that pegs all velocities at ±c_s.</summary>
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void fx3d_commit_to_device(ulong h);
+
+        /// <summary>Initialize every cell's T field to <paramref name="t"/>. MUST be
+        /// called before run() when TEMPERATURE is enabled in the DLL — default T=0
+        /// makes the thermal LBM blow up. Use 1.0f for ambient runs.</summary>
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void fx3d_initial_temperature(ulong h, float t);
+
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern void fx3d_set_z_boundaries(ulong h);
 

@@ -78,19 +78,28 @@ namespace DisperSim3D.Dialogs
                 ShowAlways = true
             };
 
-            var layout = new TableLayoutPanel
+            // Outer grid: two side-by-side columns (sections) + a button row spanning both.
+            var outer = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
+                RowCount = 2,
                 AutoSize = true,
                 Margin = new Padding((int)(12 * dpi)),
-                Padding = new Padding((int)(12 * dpi)),
-                CellBorderStyle = TableLayoutPanelCellBorderStyle.None
+                Padding = new Padding((int)(12 * dpi))
             };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(140 * dpi)));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            outer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            outer.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            // Left column = OpenFOAM Environment + Solver Settings.
+            var layout = NewColumn(dpi);
+            // Right column = Atmospheric Boundary Layer + Optimization.
+            var rightCol = NewColumn(dpi);
 
             int row = 0;
+            int rRow = 0;
 
             // --- Environment section ---
             AddSectionHeader(layout, row++, "OpenFOAM Environment");
@@ -458,9 +467,9 @@ namespace DisperSim3D.Dialogs
             }, 1, 0);
             layout.Controls.Add(purgePanel, 1, row++);
 
-            // --- Optimization section ---
-            AddSectionHeader(layout, row++, "Atmospheric Boundary Layer");
-            AddDescription(layout, ref row,
+            // --- Atmospheric Boundary Layer section (right column) ---
+            AddSectionHeader(rightCol, rRow++, "Atmospheric Boundary Layer");
+            AddDescription(rightCol, ref rRow,
                 "Validated defaults for atmospheric / heavy-gas / cryogenic CFD (Mack & Spruijt 2013, Vu 2019, Schalau 2021). " +
                 "Per-solver presets are applied automatically via CfdConfigurationPresets; these fields override them.");
 
@@ -476,11 +485,11 @@ namespace DisperSim3D.Dialogs
                 "ground uses atmNutkWallFunction(z0), and turbulenceProperties\n" +
                 "carries kEpsilonCoeffs with the modified sigma_eps.\n" +
                 "Off: uniform inlet wind, smooth-wall functions (default OpenFOAM).");
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.SetColumnSpan(_chkAtmBL, 2);
-            layout.Controls.Add(_chkAtmBL, 0, row++);
+            rightCol.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            rightCol.SetColumnSpan(_chkAtmBL, 2);
+            rightCol.Controls.Add(_chkAtmBL, 0, rRow++);
 
-            AddLabel(layout, row, "Sc_t (turb Schmidt):");
+            AddLabel(rightCol, rRow, "Sc_t (turb Schmidt):");
             _txtSct = new TextBox { Width = (int)(80 * dpi),
                 Text = Result.TurbulentSchmidtNumber.ToString("G4", System.Globalization.CultureInfo.InvariantCulture) };
             _tip.SetToolTip(_txtSct,
@@ -488,23 +497,23 @@ namespace DisperSim3D.Dialogs
                 "Defaults: 0.7 (passive scalar), 0.3 (dense gas), 0.15 (cryogenic LNG; Vu 2019).\n" +
                 "NOTE: stock rhoReactingBuoyantFoam ignores this — value is written to\n" +
                 "transportProperties for solvers that read it (buoyantPimpleFoam etc).");
-            layout.Controls.Add(_txtSct, 1, row++);
+            rightCol.Controls.Add(_txtSct, 1, rRow++);
 
-            AddLabel(layout, row, "Pr_t (turb Prandtl):");
+            AddLabel(rightCol, rRow, "Pr_t (turb Prandtl):");
             _txtPrt = new TextBox { Width = (int)(80 * dpi),
                 Text = Result.TurbulentPrandtlNumber.ToString("G4", System.Globalization.CultureInfo.InvariantCulture) };
             _tip.SetToolTip(_txtPrt, "Turbulent Prandtl number for thermal transport. Default 0.85.");
-            layout.Controls.Add(_txtPrt, 1, row++);
+            rightCol.Controls.Add(_txtPrt, 1, rRow++);
 
-            AddLabel(layout, row, "sigma_eps:");
+            AddLabel(rightCol, rRow, "sigma_eps:");
             _txtSigmaEps = new TextBox { Width = (int)(80 * dpi),
                 Text = Result.KEpsilonSigmaEpsilon.ToString("G4", System.Globalization.CultureInfo.InvariantCulture) };
             _tip.SetToolTip(_txtSigmaEps,
                 "k-epsilon sigma_eps constant. OpenFOAM default 1.3.\n" +
                 "Vu 2019 derives 1.167 for horizontally-homogeneous ABL (HHTSL).");
-            layout.Controls.Add(_txtSigmaEps, 1, row++);
+            rightCol.Controls.Add(_txtSigmaEps, 1, rRow++);
 
-            AddLabel(layout, row, "Ceps3 (buoyancy):");
+            AddLabel(rightCol, rRow, "Ceps3 (buoyancy):");
             _txtCeps3 = new TextBox { Width = (int)(80 * dpi),
                 Text = Result.BuoyancyEpsCoefficient.HasValue
                     ? Result.BuoyancyEpsCoefficient.Value.ToString("G4", System.Globalization.CultureInfo.InvariantCulture)
@@ -514,9 +523,9 @@ namespace DisperSim3D.Dialogs
                 "Empty = OpenFOAM default tanh formulation.\n" +
                 "Mack & Spruijt 2013 recommend -0.33 constant for heavy gas.\n" +
                 "When set, RAS model switches to buoyantKEpsilon.");
-            layout.Controls.Add(_txtCeps3, 1, row++);
+            rightCol.Controls.Add(_txtCeps3, 1, rRow++);
 
-            AddLabel(layout, row, "Ground thermal BC:");
+            AddLabel(rightCol, rRow, "Ground thermal BC:");
             _cmbGroundBC = new ComboBox
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
@@ -530,22 +539,23 @@ namespace DisperSim3D.Dialogs
                 "Adiabatic: zero heat flux (default for non-cryogenic).\n" +
                 "FixedTemperature: ground at GroundT (recommended for LNG, Vu 2019).\n" +
                 "FixedFlux: ground emits GroundQ W/m^2 into the gas.");
-            layout.Controls.Add(_cmbGroundBC, 1, row++);
+            rightCol.Controls.Add(_cmbGroundBC, 1, rRow++);
 
-            AddLabel(layout, row, "Ground T (K):");
+            AddLabel(rightCol, rRow, "Ground T (K):");
             _txtGroundT = new TextBox { Width = (int)(80 * dpi),
                 Text = Result.GroundTemperatureK.ToString("G6", System.Globalization.CultureInfo.InvariantCulture) };
             _tip.SetToolTip(_txtGroundT, "Ground temperature when GroundBC = FixedTemperature.");
-            layout.Controls.Add(_txtGroundT, 1, row++);
+            rightCol.Controls.Add(_txtGroundT, 1, rRow++);
 
-            AddLabel(layout, row, "Ground q\" (W/m²):");
+            AddLabel(rightCol, rRow, "Ground q\" (W/m²):");
             _txtGroundQ = new TextBox { Width = (int)(80 * dpi),
                 Text = Result.GroundHeatFluxWPerM2.ToString("G6", System.Globalization.CultureInfo.InvariantCulture) };
             _tip.SetToolTip(_txtGroundQ, "Ground heat flux into the gas when GroundBC = FixedFlux.");
-            layout.Controls.Add(_txtGroundQ, 1, row++);
+            rightCol.Controls.Add(_txtGroundQ, 1, rRow++);
 
-            AddSectionHeader(layout, row++, "Optimization");
-            AddDescription(layout, ref row,
+            // --- Optimization section (right column) ---
+            AddSectionHeader(rightCol, rRow++, "Optimization");
+            AddDescription(rightCol, ref rRow,
                 "Speed-up options that pre-compute plume bounds or wind fields before the main CFD run.");
 
             _chkSubgrid = new CheckBox
@@ -563,11 +573,11 @@ namespace DisperSim3D.Dialogs
                 "Disable if the plume estimate doesn't match the CFD result\n" +
                 "(e.g., complex terrain or recirculation zones).");
             _chkSubgrid.CheckedChanged += (s, e) => _txtSubgridMargin.Enabled = _chkSubgrid.Checked;
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.SetColumnSpan(_chkSubgrid, 2);
-            layout.Controls.Add(_chkSubgrid, 0, row++);
+            rightCol.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            rightCol.SetColumnSpan(_chkSubgrid, 2);
+            rightCol.Controls.Add(_chkSubgrid, 0, rRow++);
 
-            AddLabel(layout, row, "Subgrid Margin:");
+            AddLabel(rightCol, rRow, "Subgrid Margin:");
             var marginPanel = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1,
@@ -594,7 +604,7 @@ namespace DisperSim3D.Dialogs
                 Text = "factor (1.0-3.0)", AutoSize = true,
                 Margin = new Padding(4, 4, 0, 0), ForeColor = Color.Gray
             }, 1, 0);
-            layout.Controls.Add(marginPanel, 1, row++);
+            rightCol.Controls.Add(marginPanel, 1, rRow++);
 
             _chkWindField = new CheckBox
             {
@@ -610,19 +620,13 @@ namespace DisperSim3D.Dialogs
                 "instead of uniform wind, producing more realistic\n" +
                 "dispersion around buildings and equipment.\n" +
                 "Requires OpenFOAM to be available.");
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.SetColumnSpan(_chkWindField, 2);
-            layout.Controls.Add(_chkWindField, 0, row++);
+            rightCol.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            rightCol.SetColumnSpan(_chkWindField, 2);
+            rightCol.Controls.Add(_chkWindField, 0, rRow++);
 
-            // --- Buttons ---
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            row++;
-
-            // --- Buttons ---
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            var sep = new Label { Height = (int)(16 * dpi) };
-            layout.SetColumnSpan(sep, 2);
-            layout.Controls.Add(sep, 0, row++);
+            // Assemble: columns side-by-side, then a button row spanning both columns.
+            outer.Controls.Add(layout,   0, 0);
+            outer.Controls.Add(rightCol, 1, 0);
 
             var btnTable = new TableLayoutPanel
             {
@@ -630,7 +634,7 @@ namespace DisperSim3D.Dialogs
                 ColumnCount = 3,
                 RowCount = 1,
                 AutoSize = true,
-                Margin = new Padding(0),
+                Margin = new Padding(0, (int)(12 * dpi), 0, 0),
                 Padding = new Padding(4)
             };
             btnTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -643,12 +647,31 @@ namespace DisperSim3D.Dialogs
             btnTable.Controls.Add(new Label(), 0, 0);
             btnTable.Controls.Add(_btnCancel, 1, 0);
             btnTable.Controls.Add(_btnOk, 2, 0);
-            layout.SetColumnSpan(btnTable, 2);
-            layout.Controls.Add(btnTable, 0, row++);
+            outer.SetColumnSpan(btnTable, 2);
+            outer.Controls.Add(btnTable, 0, 1);
 
-            this.Controls.Add(layout);
+            this.Controls.Add(outer);
             this.AcceptButton = _btnOk;
             this.CancelButton = _btnCancel;
+        }
+
+        /// <summary>
+        /// Creates a column TableLayoutPanel with the conventional 140-px label column + stretchy
+        /// field column used throughout this dialog. Used by <see cref="BuildUI"/> for both sides.
+        /// </summary>
+        private static TableLayoutPanel NewColumn(float dpi)
+        {
+            var col = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                ColumnCount = 2,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Margin = new Padding(0, 0, (int)(12 * dpi), 0)
+            };
+            col.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(140 * dpi)));
+            col.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            return col;
         }
 
         private void LoadFromConfig()
@@ -942,7 +965,8 @@ namespace DisperSim3D.Dialogs
             // 
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(576, 612);
+            AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            ClientSize = new Size(1024, 510);
             Name = "CfdSettingsDialog";
             Load += CfdSettingsDialog_Load;
             ResumeLayout(false);

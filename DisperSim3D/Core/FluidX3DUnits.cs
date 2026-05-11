@@ -37,7 +37,11 @@ namespace DisperSim3D.Core
             DomainHeightM = domainHeightM;
             Nx = nx; Ny = ny; Nz = nz;
             InletUSi = inletUSi;
-            InletULat = Math.Min(0.08, Math.Max(0.005, inletULat));
+            // Conservative default: 0.02 lattice u/step ≈ Mach 0.035 over c_s. Anything
+            // above 0.05 starts pushing the BGK collision toward its compressibility error;
+            // with obstacle wakes adding local fluctuations, 0.05 was hitting the safety
+            // clamp at ±c_s.
+            InletULat = Math.Min(0.05, Math.Max(0.005, inletULat));
 
             DxSi = (2.0 * domainHalfM) / nx;
             DtSi = DxSi * InletULat / inletUSi;

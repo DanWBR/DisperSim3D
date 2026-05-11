@@ -394,7 +394,12 @@ namespace DisperSim3D.Controls
 
             WindField3D field = wfScenario.WindField;
             if (field == null && wfScenario.Status == WindFieldStatus.Ready)
-                field = WindFieldRunner.LoadFromCase(wfScenario);
+            {
+                if (wfScenario.UseFluidX3D)
+                    field = FluidX3DWindFieldRunner.LoadFromCase(wfScenario);
+                if (field == null)
+                    field = WindFieldRunner.LoadFromCase(wfScenario);
+            }
 
             if (field == null)
             {

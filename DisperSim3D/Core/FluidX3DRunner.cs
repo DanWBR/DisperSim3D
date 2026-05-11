@@ -95,17 +95,22 @@ namespace DisperSim3D.Core
 
                     try
                     {
-                        FluidX3DBridge.fx3d_set_z_boundaries(_handle);
-                        FluidX3DBridge.fx3d_set_inlet_x(_handle,
+                        // 4-face lateral free-stream (same as wind runner). Single inlet
+                        // doesn't work for arbitrary wind direction.
+                        FluidX3DBridge.fx3d_set_lateral_free_stream(_handle,
                             units.ULattice(wind.X), units.ULattice(wind.Y), units.ULattice(wind.Z));
-                        FluidX3DBridge.fx3d_set_outlet_x(_handle);
+                        FluidX3DBridge.fx3d_set_z_boundaries(_handle);
 
-                        // Source: one cell-radius sphere at the first source position.
+                        // T-as-tracer mapping: ambient T = 1.0 everywhere, release-source
+                        // cells held at T = 2.0 (TYPE_T). Concentration is recovered as
+                        // T - 1.0 (so 0.0 = clean, 1.0 = pure release plume).
+                        FluidX3DBridge.fx3d_initial_temperature(_handle, 1.0f);
+
                         if (scenario.Sources != null && scenario.Sources.Count > 0)
                         {
                             var src = scenario.Sources[0];
                             var (cx, cy, cz) = units.SiToLattice(src.Position.X, src.Position.Y, src.Position.Z);
-                            FluidX3DBridge.fx3d_set_source_sphere(_handle, cx, cy, cz, 2u, 1.0f);
+                            FluidX3DBridge.fx3d_set_source_sphere(_handle, cx, cy, cz, 2u, 2.0f);
                         }
 
                         // Pre-roll: let wind develop for ~1500 LBM steps before scoring concentration
@@ -150,13 +155,18 @@ namespace DisperSim3D.Core
 
                             FluidX3DBridge.fx3d_read_temperature(_handle, tBuf);
 
+                            // Subtract ambient T=1.0 to convert tracer back to concentration ∈ [0,1].
                             var field = new double[nx, ny, nz];
                             for (int k = 0; k < nz; k++)
                             {
                                 for (int j = 0; j < ny; j++)
                                 {
                                     int rowBase = (k * ny + j) * nx;
-                                    for (int i = 0; i < nx; i++) field[i, j, k] = tBuf[rowBase + i];
+                                    for (int i = 0; i < nx; i++)
+                                    {
+                                        double c = tBuf[rowBase + i] - 1.0;
+                                        field[i, j, k] = c > 0 ? c : 0.0;
+                                    }
                                 }
                             }
 

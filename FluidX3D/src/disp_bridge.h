@@ -35,6 +35,33 @@ FX3D_API void fx3d_set_inlet_x(uint64_t h, float ux, float uy, float uz);
 // Mark outlet plane x=Nx-1 cells as TYPE_E with zero velocity, density 1.0.
 FX3D_API void fx3d_set_outlet_x(uint64_t h);
 
+// Mark all four lateral faces (x=0, x=Nx-1, y=0, y=Ny-1) as TYPE_E with the
+// given free-stream velocity and density 1.0. Use this for atmospheric wind
+// fields where the direction is arbitrary — flow enters through whichever face
+// faces upwind and exits the opposite side automatically.
+FX3D_API void fx3d_set_lateral_free_stream(uint64_t h, float ux, float uy, float uz);
+
+// Pre-populate every cell (regardless of flag) with the given velocity and
+// density 1.0. Call AFTER the BC + obstacle setup but BEFORE run(); this gives
+// the LBM a uniform initial condition and lets obstacles develop wake patterns
+// in O(100) steps instead of waiting O(domain-crossings) for momentum to diffuse
+// from the boundary.
+FX3D_API void fx3d_initial_uniform(uint64_t h, float ux, float uy, float uz);
+
+// Force-copy host-side flags, u, and rho buffers to the GPU. FluidX3D normally
+// does this on the first lbm.run() call, but mixing custom setters with several
+// extension flags (TEMPERATURE, EQUILIBRIUM_BOUNDARIES) has been observed to
+// leave uninitialized device memory — calling this explicitly before run()
+// guarantees the initialize kernel sees the values we set on the host.
+FX3D_API void fx3d_commit_to_device(uint64_t h);
+
+// Initialize every cell's temperature field to the given value. MUST be called
+// before run() whenever TEMPERATURE is compiled in — leaving T=0 (the default
+// host buffer state) makes the thermal LBM diverge instantly and clamps the
+// velocity field at ±c_s. Use T=1.0 for ambient/inert runs; release-source
+// cells get higher T via fx3d_set_source_sphere.
+FX3D_API void fx3d_initial_temperature(uint64_t h, float t);
+
 // Mark ground (z=0) cells as TYPE_S and top (z=Nz-1) as TYPE_E (open top).
 FX3D_API void fx3d_set_z_boundaries(uint64_t h);
 

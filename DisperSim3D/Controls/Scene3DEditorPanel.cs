@@ -1626,6 +1626,21 @@ namespace DisperSim3D.Controls
             foreach (var deco in fs.Decorations)
                 if (deco.BoundingBox != null) obstacles.Add(deco.BoundingBox);
 
+            // FluidX3D path: pre-compute per-mesh world-space AABBs on the UI thread, since
+            // Model3DGroup is a WPF DependencyObject and the BackgroundWorker can't touch it
+            // (cross-thread access throws). We walk the model children here and pass plain
+            // value-typed BoundingBoxes to the runner.
+            System.Collections.Generic.List<BoundingBox> fluidObstacles = null;
+            if (wf.UseFluidX3D)
+            {
+                fluidObstacles = new System.Collections.Generic.List<BoundingBox>();
+                foreach (var deco in fs.Decorations)
+                {
+                    var boxes = Core.FluidX3DObstacleVoxelizer.ExtractWorldAabbs(deco);
+                    fluidObstacles.AddRange(boxes);
+                }
+            }
+
             var dpiF = this.DeviceDpi / 96f;
             var dlg = new System.Windows.Forms.Form
             {
@@ -1667,11 +1682,14 @@ namespace DisperSim3D.Controls
             var worker = new System.ComponentModel.BackgroundWorker { WorkerReportsProgress = true };
             worker.DoWork += (s, e) =>
             {
-                // FluidX3D path: GPU LBM, no OpenFOAM environment, no obstacles list flattening.
+                // FluidX3D path: GPU LBM, no OpenFOAM environment. The AABB list was
+                // built on the UI thread above — passing it as plain BoundingBoxes keeps
+                // the runner thread-safe.
                 if (wf.UseFluidX3D)
                 {
                     var fx = new FluidX3DWindFieldRunner();
-                    fx.Run(wf, obstacles, (frac, msg) => worker.ReportProgress((int)(frac * 100), msg));
+                    fx.Run(wf, fluidObstacles,
+                        (frac, msg) => worker.ReportProgress((int)(frac * 100), msg));
                     return;
                 }
                 var runner = new WindFieldRunner(_editor.CfdEnvironment);
