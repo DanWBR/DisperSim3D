@@ -4636,7 +4636,7 @@ namespace DisperSim3D.Controls
                     {
                         var mat = Core.MaterialHelper.CreateMaterial(
                             deco.MaterialType, deco.MaterialColor, deco.SpecularPower, deco.Opacity);
-                        Core.MaterialHelper.ApplyToModel(deco.Model3D, mat);
+                        Core.MaterialHelper.ApplyToModel(deco.Model3D, mat, deco.MaterialType);
                     }
 
                     var visual = new System.Windows.Media.Media3D.ModelVisual3D

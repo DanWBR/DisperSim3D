@@ -1,4 +1,5 @@
-﻿using System.Windows.Media;
+﻿using System;
+using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using DisperSim3D.Models;
 
@@ -23,6 +24,26 @@ namespace DisperSim3D.Core
             byte a = (byte)(opacity * 255);
             var baseColor = Color.FromArgb(a, color.R, color.G, color.B);
             var baseBrush = new SolidColorBrush(baseColor);
+
+            // Procedural textured industrial materials — rust, galvanised, brushed,
+            // painted, concrete. All return a tiled DrawingBrush; UV generation in
+            // ApplyToModel handles the wrap.
+            if (DecorationTextureRenderer.NeedsUV(type))
+            {
+                var texBrush = DecorationTextureRenderer.BuildBrush(type, color);
+                var group = new MaterialGroup();
+                group.Children.Add(new DiffuseMaterial(texBrush));
+                // Metals get a specular pass so highlights still pop; concrete gets none.
+                if (type != MaterialType3D.Concrete)
+                {
+                    double sp = type == MaterialType3D.BrushedMetal ? Math.Max(specularPower, 30)
+                              : type == MaterialType3D.RustedMetal ? Math.Min(specularPower, 15)
+                              : specularPower;
+                    group.Children.Add(new SpecularMaterial(
+                        new SolidColorBrush(Color.FromArgb(180, 220, 220, 230)), sp));
+                }
+                return group;
+            }
 
             switch (type)
             {
@@ -70,17 +91,28 @@ namespace DisperSim3D.Core
         /// <param name="material">The material to assign. If <c>null</c>, the method returns immediately.</param>
         public static void ApplyToModel(Model3DGroup model, Material material)
         {
+            ApplyToModel(model, material, MaterialType3D.Matte);
+        }
+
+        /// <summary>Overload that knows the material type so it can generate UVs on
+        /// the fly for procedural textures (cylindrical projection — see
+        /// <see cref="DecorationTextureRenderer.GenerateCylindricalUVs"/>).</summary>
+        public static void ApplyToModel(Model3DGroup model, Material material, MaterialType3D type)
+        {
             if (model == null || material == null) return;
+            bool needsUV = DecorationTextureRenderer.NeedsUV(type);
             foreach (var child in model.Children)
             {
                 if (child is GeometryModel3D gm)
                 {
+                    if (needsUV && gm.Geometry is MeshGeometry3D mesh)
+                        DecorationTextureRenderer.GenerateCylindricalUVs(mesh);
                     gm.Material = material;
                     gm.BackMaterial = material;
                 }
                 else if (child is Model3DGroup childGroup)
                 {
-                    ApplyToModel(childGroup, material);
+                    ApplyToModel(childGroup, material, type);
                 }
             }
         }

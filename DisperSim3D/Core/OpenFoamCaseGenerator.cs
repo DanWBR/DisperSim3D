@@ -306,8 +306,8 @@ namespace DisperSim3D.Core
         {
             string scheme = config.NumericalScheme ?? "linearUpwind";
             string divT = scheme == "linearUpwind"
-                ? "bounded Gauss linearUpwind grad(T)"
-                : "bounded Gauss " + scheme;
+                ? "Gauss linearUpwind grad(T)"
+                : "Gauss " + scheme;
 
             var sb = new StringBuilder();
             sb.Append(FoamHeader("dictionary", "fvSchemes"));
@@ -316,7 +316,7 @@ namespace DisperSim3D.Core
             sb.Append("    grad(p)         Gauss linear;\n");
             sb.Append("    grad(U)         cellLimited Gauss linear 1;\n}\n\n");
             sb.Append("divSchemes\n{\n    default         none;\n");
-            sb.Append("    div(phi,U)      bounded Gauss linearUpwind grad(U);\n");
+            sb.Append("    div(phi,U)      Gauss linearUpwind grad(U);\n");
             sb.AppendFormat("    div(phi,T)      {0};\n", divT);
             sb.Append("    div((nuEff*dev2(T(grad(U))))) Gauss linear;\n}\n\n");
             sb.Append("laplacianSchemes\n{\n    default         Gauss linear corrected;\n}\n\n");
@@ -475,7 +475,7 @@ namespace DisperSim3D.Core
             sb.Append("ddtSchemes\n{\n    default         steadyState;\n}\n\n");
             sb.Append("gradSchemes\n{\n    default         Gauss linear;\n    grad(p)         Gauss linear;\n    grad(U)         cellLimited Gauss linear 1;\n}\n\n");
             sb.Append("divSchemes\n{\n    default         none;\n");
-            sb.Append("    div(phi,U)      bounded Gauss linearUpwind grad(U);\n");
+            sb.Append("    div(phi,U)      Gauss linearUpwind grad(U);\n");
             sb.Append("    div((nuEff*dev2(T(grad(U))))) Gauss linear;\n}\n\n");
             sb.Append("laplacianSchemes\n{\n    default         Gauss linear corrected;\n}\n\n");
             sb.Append("interpolationSchemes\n{\n    default         linear;\n}\n\n");
@@ -921,7 +921,8 @@ namespace DisperSim3D.Core
         /// duration keywords (Burro 9 spilled for 79 s, then the cloud continued to drift).
         /// </summary>
         private static void WriteReactingSpeciesSourceFvOptions(string caseDir,
-            List<ReleaseSource3D> sources, string speciesNameOverride = null)
+            List<ReleaseSource3D> sources, string speciesNameOverride = null,
+            bool compressible = false)
         {
             var sb = new StringBuilder();
             sb.Append(FoamHeader("dictionary", "fvOptions"));
@@ -932,23 +933,80 @@ namespace DisperSim3D.Core
                 if (q <= 0) continue;
                 string species = speciesNameOverride ?? ResolveOpenFoamSpecies(src);
 
-                sb.AppendFormat(Inv, "release_{0}\n{{\n", s);
-                sb.Append("    type            scalarSemiImplicitSource;\n");
-                sb.Append("    active          true;\n");
-                if (src.ReleaseDurationS > 0)
+                if (compressible)
                 {
-                    sb.Append("    timeStart       0;\n");
-                    sb.AppendFormat(Inv, "    duration        {0};\n", src.ReleaseDurationS);
+                    // OpenFOAM v2512 ESI in this build doesn't ship massSource (it's not in
+                    // the valid fvOption types list). Fall back to scalarSemiImplicitSource
+                    // on the species, PLUS a complementary scalarSemiImplicitSource on the
+                    // enthalpy h so the energy added with the injected mass roughly tracks
+                    // the gas at injection temperature. The continuity equation still has
+                    // a small mass imbalance (Yi grows without rho growing) but it's much
+                    // smaller than what massSource was meant to fix when the schemes are
+                    // upwind-stabilised below.
+                    sb.AppendFormat(Inv, "release_{0}\n{{\n", s);
+                    sb.Append("    type            scalarSemiImplicitSource;\n");
+                    sb.Append("    active          true;\n");
+                    if (src.ReleaseDurationS > 0)
+                    {
+                        sb.Append("    timeStart       0;\n");
+                        sb.AppendFormat(Inv, "    duration        {0};\n", src.ReleaseDurationS);
+                    }
+                    sb.Append("    scalarSemiImplicitSourceCoeffs\n    {\n");
+                    sb.Append("        selectionMode   cellSet;\n");
+                    sb.AppendFormat(Inv, "        cellSet         sourceZone_{0};\n", s);
+                    sb.Append("        volumeMode      absolute;\n");
+                    sb.Append("        injectionRateSuSp\n        {\n");
+                    sb.AppendFormat(Inv, "            {0}         ({1} 0);\n", species, q);
+                    sb.Append("        }\n");
+                    sb.Append("    }\n");
+                    sb.Append("}\n\n");
+
+                    // Enthalpy source: q * Cp * (T_inj - T_ref). Cp_CH4 ~ 2.2 kJ/kg/K at 300K;
+                    // air ~ 1.0 kJ/kg/K. Use Cp_mix ~ 1.5 kJ/kg/K as an average — order-of-
+                    // magnitude correct, prevents the energy equation from being driven by
+                    // mass injection at zero h (which is what produces the cold-jet cells
+                    // hitting T=200 K immediately).
+                    double Tj = src.ExitTemperatureK > 0 ? src.ExitTemperatureK : 293.15;
+                    double hSrc = q * 1500.0 * Tj; // J/s
+                    sb.AppendFormat(Inv, "release_{0}_h\n{{\n", s);
+                    sb.Append("    type            scalarSemiImplicitSource;\n");
+                    sb.Append("    active          true;\n");
+                    if (src.ReleaseDurationS > 0)
+                    {
+                        sb.Append("    timeStart       0;\n");
+                        sb.AppendFormat(Inv, "    duration        {0};\n", src.ReleaseDurationS);
+                    }
+                    sb.Append("    scalarSemiImplicitSourceCoeffs\n    {\n");
+                    sb.Append("        selectionMode   cellSet;\n");
+                    sb.AppendFormat(Inv, "        cellSet         sourceZone_{0};\n", s);
+                    sb.Append("        volumeMode      absolute;\n");
+                    sb.Append("        injectionRateSuSp\n        {\n");
+                    sb.AppendFormat(Inv, "            h         ({0} 0);\n", hSrc);
+                    sb.Append("        }\n");
+                    sb.Append("    }\n");
+                    sb.Append("}\n\n");
                 }
-                sb.Append("    scalarSemiImplicitSourceCoeffs\n    {\n");
-                sb.Append("        selectionMode   cellSet;\n");
-                sb.AppendFormat(Inv, "        cellSet         sourceZone_{0};\n", s);
-                sb.Append("        volumeMode      absolute;\n");
-                sb.Append("        injectionRateSuSp\n        {\n");
-                sb.AppendFormat(Inv, "            {0}         ({1} 0);\n", species, q);
-                sb.Append("        }\n");
-                sb.Append("    }\n");
-                sb.Append("}\n\n");
+                else
+                {
+                    // Incompressible / passive-scalar — original scalarSemiImplicitSource path.
+                    sb.AppendFormat(Inv, "release_{0}\n{{\n", s);
+                    sb.Append("    type            scalarSemiImplicitSource;\n");
+                    sb.Append("    active          true;\n");
+                    if (src.ReleaseDurationS > 0)
+                    {
+                        sb.Append("    timeStart       0;\n");
+                        sb.AppendFormat(Inv, "    duration        {0};\n", src.ReleaseDurationS);
+                    }
+                    sb.Append("    scalarSemiImplicitSourceCoeffs\n    {\n");
+                    sb.Append("        selectionMode   cellSet;\n");
+                    sb.AppendFormat(Inv, "        cellSet         sourceZone_{0};\n", s);
+                    sb.Append("        volumeMode      absolute;\n");
+                    sb.Append("        injectionRateSuSp\n        {\n");
+                    sb.AppendFormat(Inv, "            {0}         ({1} 0);\n", species, q);
+                    sb.Append("        }\n");
+                    sb.Append("    }\n");
+                    sb.Append("}\n\n");
+                }
             }
             WriteFile(Path.Combine(caseDir, "constant", "fvOptions"), sb.ToString());
         }
@@ -1459,7 +1517,7 @@ namespace DisperSim3D.Core
             WriteKEpsilonFields(caseDir, wind.Length, config, scenario.Meteo);
             WriteReactingSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
-            WriteReactingSpeciesSourceFvOptions(caseDir, scenario.Sources);
+            WriteReactingSpeciesSourceFvOptions(caseDir, scenario.Sources, compressible: false);
             WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null,
                 scenario.Meteo, scenario.DomainSizeM);
 
@@ -1498,7 +1556,29 @@ namespace DisperSim3D.Core
             var wind = scenario.Meteo.WindVector;
             double cellSize = Math.Max((xMax - xMin) / nx, (yMax - yMin) / ny);
             double endTime = scenario.SimulationDurationS;
-            double dt = Math.Max(scenario.TimeStepS, cellSize / (Math.Max(wind.Length, 1.0) * 10));
+
+            // The initial dt MUST respect the CFL of the FASTEST velocity in the domain
+            // — which for a sonic HP-leak source is the choked-jet velocity (300–500 m/s),
+            // not the ambient wind. PIMPLE adjustTimeStep will refine after step 1, but
+            // the very first step is taken at this dt and a single CFL>>1 in a source
+            // cell is enough to send rho negative, T to the 200/5000 K clamps, and the
+            // continuity error to 1e+13 (exactly the failure mode we just saw).
+            double maxV = Math.Max(wind.Length, 1.0);
+            if (scenario.Sources != null)
+            {
+                foreach (var s in scenario.Sources)
+                {
+                    if (s == null) continue;
+                    double ve = s.ComputedExitVelocity;
+                    if (ve > maxV) maxV = ve;
+                }
+            }
+            // Target CFL = 0.3 in the worst-case cell. User TimeStepS is a CAP, not
+            // a floor — we honour it only if it's already smaller than the CFL bound.
+            double dtCfl = 0.3 * cellSize / maxV;
+            double dt = Math.Min(Math.Max(scenario.TimeStepS, 1e-4), dtCfl);
+            if (dt > dtCfl) dt = dtCfl;
+
             double writeInterval = config.WriteIntervalS > 0
                 ? config.WriteIntervalS
                 : Math.Max(endTime / 20.0, dt);
@@ -1525,7 +1605,7 @@ namespace DisperSim3D.Core
             WriteKEpsilonFields(caseDir, wind.Length, config, scenario.Meteo);
             WriteReactingSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
             WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
-            WriteReactingSpeciesSourceFvOptions(caseDir, scenario.Sources);
+            WriteReactingSpeciesSourceFvOptions(caseDir, scenario.Sources, compressible: true);
             WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null,
                 scenario.Meteo, scenario.DomainSizeM);
 
@@ -1997,14 +2077,17 @@ namespace DisperSim3D.Core
             // cases where T/rho/Yi all change quickly together.
             sb.Append("gradSchemes\n{\n    default         cellLimited Gauss linear 1;\n}\n\n");
             sb.Append("divSchemes\n{\n    default         none;\n");
-            // `bounded` prefix on every advected quantity — drops to upwind locally when the
-            // higher-order scheme would create an out-of-bounds value. Without this, a single
-            // cell on rank 4 can produce NaN and crash the whole MPI job.
-            sb.Append("    div(phi,U)      bounded Gauss linearUpwind grad(U);\n");
-            sb.Append("    div(phi,Yi_h)   bounded Gauss multivariateSelection { N2 upwind; O2 upwind; CH4 upwind; SF6 upwind; h upwind; };\n");
-            sb.Append("    div(phi,K)      bounded Gauss linear;\n");
-            sb.Append("    div(phi,k)      bounded Gauss upwind;\n");
-            sb.Append("    div(phi,epsilon) bounded Gauss upwind;\n");
+            // OpenFOAM v2512 ESI ships neither the `bounded` convection wrapper NOR the
+            // massSource fvOption. Without massSource, scalarSemiImplicitSource creates a
+            // small mass imbalance (Yi grows without rho); pure upwind is the only scheme
+            // robust enough to absorb that imbalance without explosion. limitedLinear and
+            // linearUpwind both let the imbalance amplify until the solver aborts (which
+            // is what the user just hit, three times).
+            sb.Append("    div(phi,U)      Gauss upwind;\n");
+            sb.Append("    div(phi,Yi_h)   Gauss multivariateSelection { N2 upwind; O2 upwind; CH4 upwind; SF6 upwind; h upwind; };\n");
+            sb.Append("    div(phi,K)      Gauss upwind;\n");
+            sb.Append("    div(phi,k)      Gauss upwind;\n");
+            sb.Append("    div(phi,epsilon) Gauss upwind;\n");
             sb.Append("    div(((rho*nuEff)*dev2(T(grad(U))))) Gauss linear;\n}\n\n");
             sb.Append("laplacianSchemes\n{\n    default         Gauss linear corrected;\n}\n\n");
             sb.Append("interpolationSchemes\n{\n    default         linear;\n}\n\n");
@@ -2291,8 +2374,8 @@ namespace DisperSim3D.Core
         {
             string scheme = config.NumericalScheme ?? "linearUpwind";
             string divS = scheme == "linearUpwind"
-                ? "bounded Gauss linearUpwind grad(s)"
-                : "bounded Gauss " + scheme;
+                ? "Gauss linearUpwind grad(s)"
+                : "Gauss " + scheme;
 
             var sb = new StringBuilder();
             sb.Append(FoamHeader("dictionary", "fvSchemes"));
@@ -2300,14 +2383,14 @@ namespace DisperSim3D.Core
             sb.Append("gradSchemes\n{\n    default         Gauss linear;\n");
             sb.Append("    grad(U)         cellLimited Gauss linear 1;\n}\n\n");
             sb.Append("divSchemes\n{\n    default         none;\n");
-            sb.Append("    div(phi,U)      bounded Gauss linearUpwind grad(U);\n");
+            sb.Append("    div(phi,U)      Gauss linearUpwind grad(U);\n");
             sb.AppendFormat("    div(phi,s)      {0};\n", divS);
-            sb.Append("    div(phi,e)      bounded Gauss linearUpwind default;\n");
-            sb.Append("    div(phi,h)      bounded Gauss linearUpwind default;\n");
-            sb.Append("    div(phi,K)      bounded Gauss linear;\n");
-            sb.Append("    div(phi,Ekp)    bounded Gauss linear;\n");
-            sb.Append("    div(phi,k)      bounded Gauss upwind;\n");
-            sb.Append("    div(phi,epsilon) bounded Gauss upwind;\n");
+            sb.Append("    div(phi,e)      Gauss linearUpwind default;\n");
+            sb.Append("    div(phi,h)      Gauss linearUpwind default;\n");
+            sb.Append("    div(phi,K)      Gauss linear;\n");
+            sb.Append("    div(phi,Ekp)    Gauss linear;\n");
+            sb.Append("    div(phi,k)      Gauss upwind;\n");
+            sb.Append("    div(phi,epsilon) Gauss upwind;\n");
             sb.Append("    div(((rho*nuEff)*dev2(T(grad(U))))) Gauss linear;\n}\n\n");
             sb.Append("laplacianSchemes\n{\n    default         Gauss linear corrected;\n}\n\n");
             sb.Append("interpolationSchemes\n{\n    default         linear;\n}\n\n");
