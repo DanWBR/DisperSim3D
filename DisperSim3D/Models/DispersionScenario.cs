@@ -45,6 +45,13 @@ namespace DisperSim3D.Models
         public double TimeStepS { get; set; }
 
         /// <summary>
+        /// Number of equally-spaced snapshots to write between t=0 (exclusive) and
+        /// <see cref="SimulationDurationS"/> (inclusive). FluidX3D dispersion uses this
+        /// to compute writeInterval = duration / SnapshotCount. Default 20.
+        /// </summary>
+        public int SnapshotCount { get; set; } = 20;
+
+        /// <summary>
         /// Gets or sets the simulation domain size in meters.
         /// </summary>
         public double DomainSizeM { get; set; }

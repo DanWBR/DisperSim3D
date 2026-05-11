@@ -155,6 +155,7 @@ namespace DisperSim3D.Core
                     SnapshotGridResolution = int.Parse((string)se.Attribute("GridRes") ?? "40", inv),
                     SnapshotDurationS = double.Parse((string)se.Attribute("Duration") ?? "300", inv),
                     SnapshotTimeStepS = double.Parse((string)se.Attribute("TimeStep") ?? "0.5", inv),
+                    SnapshotCount = int.Parse((string)se.Attribute("SnapshotCount") ?? "20", inv),
                     CasePath = (string)se.Attribute("CasePath") ?? "",
                     MaxConcentration = double.Parse((string)se.Attribute("MaxC") ?? "0", inv)
                 };

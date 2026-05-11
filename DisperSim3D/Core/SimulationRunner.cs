@@ -63,6 +63,7 @@ namespace DisperSim3D.Core
                 Meteo = sim.SnapshotMeteo,
                 SimulationDurationS = sim.SnapshotDurationS,
                 TimeStepS = sim.SnapshotTimeStepS,
+                SnapshotCount = sim.SnapshotCount > 0 ? sim.SnapshotCount : 20,
                 DomainSizeM = sim.SnapshotDomainSizeM,
                 GridResolution = sim.SnapshotGridResolution,
                 SolverType = sim.SolverType,

@@ -20,6 +20,7 @@ namespace DisperSim3D.Dialogs
         private NumericUpDown nudTimeStep;
         private NumericUpDown nudDomain;
         private NumericUpDown nudGrid;
+        private NumericUpDown nudSnapCount;
 
         public Simulation Result { get; private set; }
 
@@ -107,6 +108,10 @@ namespace DisperSim3D.Dialogs
             nudDomain = MakeNud(10m, 100000m, (decimal)defaultDomain, 0);
             DialogHelpers.AddRowWithHelp(table, ref row, "Domain Half-Size (m):", nudDomain,
                 "Half-extent of the simulation box.");
+
+            nudSnapCount = MakeNud(2m, 1000m, 20m, 0);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Snapshot Count:", nudSnapCount,
+                "Number of concentration snapshots written between t=0 and t=duration. Higher = smoother playback, more disk. Default 20.");
 
             nudGrid = MakeNud(10m, 500m, (decimal)defaultGrid, 0);
             DialogHelpers.AddRowWithHelp(table, ref row, "Grid Resolution:", nudGrid,
@@ -204,7 +209,8 @@ namespace DisperSim3D.Dialogs
                 SnapshotDurationS = (double)nudDuration.Value,
                 SnapshotTimeStepS = (double)nudTimeStep.Value,
                 SnapshotDomainSizeM = (double)nudDomain.Value,
-                SnapshotGridResolution = (int)nudGrid.Value
+                SnapshotGridResolution = (int)nudGrid.Value,
+                SnapshotCount = (int)nudSnapCount.Value
             };
         }
 

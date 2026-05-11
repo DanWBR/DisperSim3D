@@ -76,7 +76,9 @@ namespace DisperSim3D.Core
                     double domain = scenario.DomainSizeM;
                     double height = wf?.DomainHeightM > 0 ? wf.DomainHeightM : domain;
                     double duration = scenario.SimulationDurationS;
-                    double writeInterval = Math.Max(scenario.SimulationDurationS / 20.0, 1.0);
+                    int snapCount = scenario.SnapshotCount > 0 ? scenario.SnapshotCount : 20;
+                    double writeInterval = Math.Max(scenario.SimulationDurationS / snapCount,
+                        scenario.SimulationDurationS / 1000.0); // hard cap at 1000 snapshots
 
                     Report(0.05, "FluidX3D dispersion: initialising tracer engine...");
 

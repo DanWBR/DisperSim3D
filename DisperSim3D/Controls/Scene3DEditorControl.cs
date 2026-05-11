@@ -2775,6 +2775,7 @@ namespace DisperSim3D.Controls
                     new System.Xml.Linq.XAttribute("GridRes", s.SnapshotGridResolution.ToString(inv)),
                     new System.Xml.Linq.XAttribute("Duration", s.SnapshotDurationS.ToString(inv)),
                     new System.Xml.Linq.XAttribute("TimeStep", s.SnapshotTimeStepS.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("SnapshotCount", s.SnapshotCount.ToString(inv)),
                     new System.Xml.Linq.XAttribute("CasePath", s.CasePath ?? ""),
                     new System.Xml.Linq.XAttribute("EmbedMode", s.EmbedMode.ToString()),
                     new System.Xml.Linq.XAttribute("MaxC", s.MaxConcentration.ToString(inv)),
@@ -3174,6 +3175,7 @@ namespace DisperSim3D.Controls
                     SnapshotGridResolution = int.Parse((string)se.Attribute("GridRes") ?? "40", inv),
                     SnapshotDurationS = double.Parse((string)se.Attribute("Duration") ?? "300", inv),
                     SnapshotTimeStepS = double.Parse((string)se.Attribute("TimeStep") ?? "0.5", inv),
+                    SnapshotCount = int.Parse((string)se.Attribute("SnapshotCount") ?? "20", inv),
                     CasePath = (string)se.Attribute("CasePath") ?? "",
                     MaxConcentration = double.Parse((string)se.Attribute("MaxC") ?? "0", inv)
                 };

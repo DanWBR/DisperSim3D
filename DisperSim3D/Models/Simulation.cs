@@ -93,6 +93,10 @@ namespace DisperSim3D.Models
         public double SnapshotTimeStepS { get; set; }
 
         [Category("Snapshot")]
+        [Description("Number of concentration snapshots written across the simulation duration. Higher = smoother playback, more disk. Default 20.")]
+        public int SnapshotCount { get; set; } = 20;
+
+        [Category("Snapshot")]
         [Description("Concentration thresholds used by the run for visualization and alerting.")]
         public List<DispersionThreshold> SnapshotThresholds { get; set; }
 
