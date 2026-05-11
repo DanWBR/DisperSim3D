@@ -471,6 +471,11 @@ namespace DisperSim3D.Controls
                 {
                     _editor.ShowWindFieldArrows(wfSel, silent: true);
                 }
+                if (_propertyGrid.SelectedObject is DisperSim3D.Models.View)
+                {
+                    _editor.RefreshViews();
+                    RefreshProjectTree();
+                }
                 // SolverType change → user can manually invoke
                 // "Apply atmospheric defaults" from the simulation context menu in the tree.
                 _editor.RefreshViewport();
@@ -810,7 +815,7 @@ namespace DisperSim3D.Controls
                     return;
                 }
 
-                using (var importDlg = new ImportModelDialog(model, fileDlg.FileName))
+                using (var importDlg = new ImportModelDialog(model, fileDlg.FileName, _editor.GroundSize))
                 {
                     if (importDlg.ShowDialog() == DialogResult.OK)
                     {
@@ -1041,6 +1046,18 @@ namespace DisperSim3D.Controls
                 case ProjectTreeAction.OpenSimulationCase:
                     DoOpenSimulationCase(e.ItemId);
                     break;
+                case ProjectTreeAction.AddView:
+                    DoAddView();
+                    break;
+                case ProjectTreeAction.EditView:
+                    DoEditView(e.ItemId);
+                    break;
+                case ProjectTreeAction.DuplicateView:
+                    DoDuplicateView(e.ItemId);
+                    break;
+                case ProjectTreeAction.DeleteView:
+                    DoDeleteView(e.ItemId);
+                    break;
             }
             RefreshProjectTree();
         }
@@ -1125,6 +1142,14 @@ namespace DisperSim3D.Controls
                             if (s.Id == src.Id) s.IsVisible = e.Visible;
                     _editor.RefreshViewport();
                     UpdateStatus((e.Visible ? "Showing" : "Hidden") + " source: " + src.Name);
+                    break;
+
+                case ProjectTreeTarget.View:
+                    var v = scene.Views.FirstOrDefault(x => x.Id == e.ItemId);
+                    if (v == null) return;
+                    v.IsVisible = e.Visible;
+                    _editor.RefreshViews();
+                    UpdateStatus((e.Visible ? "Showing" : "Hidden") + " view: " + v.Name);
                     break;
 
                 default:
@@ -1340,6 +1365,62 @@ namespace DisperSim3D.Controls
             var sim = _editor.Scene.Simulations.FirstOrDefault(s => s.Id == id);
             if (sim == null) return;
             _propertyGrid.SelectedObject = sim;
+        }
+
+        private void DoAddView()
+        {
+            using (var dlg = new Dialogs.ViewEditorDialog(_editor.Scene))
+            {
+                if (dlg.ShowDialog() == DialogResult.OK && dlg.Result != null)
+                {
+                    _editor.Scene.Views.Add(dlg.Result);
+                    _editor.RefreshViews();
+                    UpdateStatus("Added view: " + dlg.Result.Name);
+                }
+            }
+        }
+
+        private void DoEditView(string id)
+        {
+            var v = _editor.Scene.Views.FirstOrDefault(x => x.Id == id);
+            if (v == null) return;
+            _propertyGrid.SelectedObject = v;
+        }
+
+        private void DoDuplicateView(string id)
+        {
+            var v = _editor.Scene.Views.FirstOrDefault(x => x.Id == id);
+            if (v == null) return;
+            var copy = new DisperSim3D.Models.View
+            {
+                Name = v.Name + " (copy)",
+                Kind = v.Kind,
+                SimulationId = v.SimulationId,
+                FieldProperty = v.FieldProperty,
+                TimeMode = v.TimeMode,
+                SpecificTimeS = v.SpecificTimeS,
+                IsVisible = v.IsVisible,
+                Opacity = v.Opacity,
+                IsoValue = v.IsoValue,
+                IsoColor = v.IsoColor,
+                PlanePosition = v.PlanePosition,
+                ColorMap = v.ColorMap,
+                MinValue = v.MinValue,
+                MaxValue = v.MaxValue,
+                SampleResolution = v.SampleResolution
+            };
+            _editor.Scene.Views.Add(copy);
+            _editor.RefreshViews();
+        }
+
+        private void DoDeleteView(string id)
+        {
+            var v = _editor.Scene.Views.FirstOrDefault(x => x.Id == id);
+            if (v == null) return;
+            if (MessageBox.Show("Delete view '" + v.Name + "'?", "Confirm",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            _editor.Scene.Views.Remove(v);
+            _editor.RefreshViews();
         }
 
         private void DoDeleteSimulation(string id)

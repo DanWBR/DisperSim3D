@@ -438,8 +438,10 @@ namespace DisperSim3D.Core
             if (obstacles != null && obstacles.Count > 0)
                 WriteWindObstacles(caseDir, obstacles);
 
-            double windCellSize = Math.Max((xMax - xMin) / nx, (yMax - yMin) / ny);
-            WriteRefinementDicts(caseDir, scenario.Sources, windCellSize, obstacles);
+            // Intentionally NOT writing refinement dicts here. The wind result is sampled onto
+            // a regular nx*ny*nz grid in OpenFoamResultReader.ReadWindField, which compares the
+            // U-field cell count to the structured-grid count. A refined mesh would have a
+            // different (larger) count and the reader would bail with "no U field could be read".
 
             if (config.NumberOfProcessors > 1)
                 WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
@@ -540,6 +542,12 @@ namespace DisperSim3D.Core
                     "            max ({4} {5} {6});\n        }}\n    }}\n\n",
                     i, box.Min.X, box.Min.Y, Math.Max(0, box.Min.Z),
                     box.Max.X, box.Max.Y, box.Max.Z);
+                // explicitPorositySource needs a cellZone, not a cellSet — promote
+                // the freshly-created cellSet to a cellZone of the same name.
+                sb.AppendFormat(Inv,
+                    "    {{\n        name    obstacle_{0};\n        type    cellZoneSet;\n        action  new;\n" +
+                    "        source  setToCellZone;\n        sourceInfo\n        {{\n" +
+                    "            set obstacle_{0};\n        }}\n    }}\n\n", i);
             }
             sb.Append(");\n");
             WriteFile(Path.Combine(caseDir, "system", "topoSetDict"), sb.ToString());
@@ -569,16 +577,20 @@ namespace DisperSim3D.Core
                 fvo.AppendFormat(Inv, "obstacle_{0}\n{{\n", i);
                 fvo.Append("    type            explicitPorositySource;\n    active          true;\n\n");
                 fvo.Append("    explicitPorositySourceCoeffs\n    {\n");
-                fvo.AppendFormat(Inv, "        selectionMode   cellSet;\n        cellSet         obstacle_{0};\n", i);
+                fvo.AppendFormat(Inv, "        selectionMode   cellZone;\n        cellZone        obstacle_{0};\n", i);
                 fvo.Append("        type            DarcyForchheimer;\n");
                 fvo.Append("        DarcyForchheimerCoeffs\n        {\n");
-                fvo.Append("            d   (1e10 1e10 1e10);\n");
-                fvo.Append("            f   (0 0 0);\n");
+                // Darcy + Forchheimer coefficients — Darcy alone with a high d destabilises
+                // SIMPLE around iter ~200-400 because the linear damping is unbounded. Pair a
+                // moderate Darcy (1e4) with a strong Forchheimer (50) so the quadratic term
+                // self-limits at large |U| — this is the classic atmospheric-obstacle recipe.
+                fvo.Append("            d   (1e4 1e4 1e4);\n");
+                fvo.Append("            f   (50 50 50);\n");
                 fvo.Append("            coordinateSystem\n            {\n");
                 fvo.Append("                type    cartesian;\n");
                 fvo.Append("                origin  (0 0 0);\n");
-                fvo.Append("                coordinateRotation\n                {\n");
-                fvo.Append("                    type    axesRotation;\n");
+                fvo.Append("                rotation\n                {\n");
+                fvo.Append("                    type    axes;\n");
                 fvo.Append("                    e1      (1 0 0);\n");
                 fvo.Append("                    e2      (0 1 0);\n");
                 fvo.Append("                }\n            }\n");

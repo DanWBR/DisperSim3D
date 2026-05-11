@@ -479,10 +479,37 @@ namespace DisperSim3D.Core
                 }
             }
 
-            _currentProcess.WaitForExit(600000);
+            const int timeoutMs = 30 * 60 * 1000; // 30 min — large meshes / many ranks can be slow
+            if (!_currentProcess.WaitForExit(timeoutMs))
+            {
+                try { _currentProcess.Kill(); } catch { }
+                throw new Exception(command + " timed out after " + (timeoutMs / 60000) + " min");
+            }
             if (_currentProcess.ExitCode != 0)
             {
                 string err = stderrBuilder.ToString().Trim();
+                if (string.IsNullOrEmpty(err))
+                {
+                    // mpiexec swallows rank stderr — try to surface the OpenFOAM log if present.
+                    try
+                    {
+                        string solver = command.TrimStart().Split(' ')[0];
+                        if (solver == "mpiexec" || solver == "mpirun")
+                        {
+                            // mpiexec -np N solver -parallel → solver is at index 3
+                            var parts = command.Split(' ');
+                            if (parts.Length > 3) solver = parts[3];
+                        }
+                        var logPath = System.IO.Path.Combine(_casePath, "log." + solver);
+                        if (System.IO.File.Exists(logPath))
+                        {
+                            var allLines = System.IO.File.ReadAllLines(logPath);
+                            int n = Math.Min(40, allLines.Length);
+                            err = string.Join("\n", allLines, allLines.Length - n, n);
+                        }
+                    }
+                    catch { }
+                }
                 throw new Exception(command + " failed (exit " + _currentProcess.ExitCode + "): " + err);
             }
             _currentProcess = null;
@@ -569,10 +596,27 @@ namespace DisperSim3D.Core
             var timeRegex = new Regex(@"^Time\s*=\s*([\d.eE+-]+)", RegexOptions.Compiled);
             var residualRegex = new Regex(@"Solving for (\w+).*Final residual\s*=\s*([\d.eE+-]+)", RegexOptions.Compiled);
 
+            // Mirror everything to log.<solver> so we can diagnose failures even when
+            // mpiexec swallows rank output. Solver name = first non-mpi token.
+            string solverName = command.TrimStart().Split(' ')[0];
+            if (solverName == "mpiexec" || solverName == "mpirun")
+            {
+                var parts = command.Split(' ');
+                if (parts.Length > 3) solverName = parts[3];
+            }
+            string solverLogPath = System.IO.Path.Combine(_casePath, "log." + solverName);
+            System.IO.StreamWriter logWriter = null;
+            try { logWriter = new System.IO.StreamWriter(solverLogPath, false) { AutoFlush = true }; }
+            catch { /* non-fatal: keep running without on-disk log */ }
+
             var stderrBuilder = new System.Text.StringBuilder();
             _currentProcess.ErrorDataReceived += (s, ev) =>
             {
-                if (ev.Data != null) stderrBuilder.AppendLine(ev.Data);
+                if (ev.Data != null)
+                {
+                    stderrBuilder.AppendLine(ev.Data);
+                    try { logWriter?.WriteLine("[stderr] " + ev.Data); } catch { }
+                }
             };
             _currentProcess.BeginErrorReadLine();
 
@@ -581,6 +625,7 @@ namespace DisperSim3D.Core
             {
                 string line = _currentProcess.StandardOutput.ReadLine();
                 if (line == null) continue;
+                try { logWriter?.WriteLine(line); } catch { }
 
                 var timeMatch = timeRegex.Match(line);
                 if (timeMatch.Success)
@@ -603,11 +648,39 @@ namespace DisperSim3D.Core
                         lastResidual = resMatch.Groups[2].Value;
                 }
             }
+            try { logWriter?.Dispose(); } catch { }
 
-            _currentProcess.WaitForExit(600000);
+            const int timeoutMs = 30 * 60 * 1000; // 30 min — large meshes / many ranks can be slow
+            if (!_currentProcess.WaitForExit(timeoutMs))
+            {
+                try { _currentProcess.Kill(); } catch { }
+                throw new Exception(command + " timed out after " + (timeoutMs / 60000) + " min");
+            }
             if (_currentProcess.ExitCode != 0)
             {
                 string err = stderrBuilder.ToString().Trim();
+                if (string.IsNullOrEmpty(err))
+                {
+                    // mpiexec swallows rank stderr — try to surface the OpenFOAM log if present.
+                    try
+                    {
+                        string solver = command.TrimStart().Split(' ')[0];
+                        if (solver == "mpiexec" || solver == "mpirun")
+                        {
+                            // mpiexec -np N solver -parallel → solver is at index 3
+                            var parts = command.Split(' ');
+                            if (parts.Length > 3) solver = parts[3];
+                        }
+                        var logPath = System.IO.Path.Combine(_casePath, "log." + solver);
+                        if (System.IO.File.Exists(logPath))
+                        {
+                            var allLines = System.IO.File.ReadAllLines(logPath);
+                            int n = Math.Min(40, allLines.Length);
+                            err = string.Join("\n", allLines, allLines.Length - n, n);
+                        }
+                    }
+                    catch { }
+                }
                 throw new Exception(command + " failed (exit " + _currentProcess.ExitCode + "): " + err);
             }
             _currentProcess = null;

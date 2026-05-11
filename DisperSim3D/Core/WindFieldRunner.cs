@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using DisperSim3D.Models;
 
 namespace DisperSim3D.Core
@@ -70,7 +71,30 @@ namespace DisperSim3D.Core
                 if (windField == null)
                 {
                     windScenario.Status = WindFieldStatus.Failed;
-                    windScenario.StatusMessage = "simpleFoam completed but no U field could be read";
+                    var diag = new System.Text.StringBuilder();
+                    diag.Append("simpleFoam completed but no U field could be read. Case root: ");
+                    try
+                    {
+                        var rootTimes = System.IO.Directory.GetDirectories(caseDir)
+                            .Select(System.IO.Path.GetFileName)
+                            .Where(n => double.TryParse(n, System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.InvariantCulture, out _))
+                            .ToArray();
+                        diag.Append(rootTimes.Length == 0 ? "(no time dirs)" : string.Join(",", rootTimes));
+                        var procDirs = System.IO.Directory.GetDirectories(caseDir, "processor*");
+                        diag.Append(". Processor dirs: ").Append(procDirs.Length);
+                        if (procDirs.Length > 0)
+                        {
+                            var procTimes = System.IO.Directory.GetDirectories(procDirs[0])
+                                .Select(System.IO.Path.GetFileName)
+                                .Where(n => double.TryParse(n, System.Globalization.NumberStyles.Float,
+                                    System.Globalization.CultureInfo.InvariantCulture, out _))
+                                .ToArray();
+                            diag.Append(" (processor0 times: ").Append(string.Join(",", procTimes)).Append(")");
+                        }
+                    }
+                    catch (Exception ex) { diag.Append(" [diag failed: ").Append(ex.Message).Append("]"); }
+                    windScenario.StatusMessage = diag.ToString();
                     return false;
                 }
 

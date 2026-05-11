@@ -28,9 +28,12 @@ namespace DisperSim3D.Dialogs
         public double RotZ => (double)nudRotZ.Value;
         public double ModelScale => (double)nudScale.Value;
 
-        public ImportModelDialog(Model3DGroup model, string fileName)
+        private double _groundSize = 200.0;
+
+        public ImportModelDialog(Model3DGroup model, string fileName, double groundSize = 200.0)
         {
             _model = model;
+            _groundSize = groundSize > 0 ? groundSize : 200.0;
             BuildUI(fileName);
             UpdatePreview();
         }
@@ -50,7 +53,10 @@ namespace DisperSim3D.Dialogs
 
             var bounds = _model.Bounds;
             double maxExt = Math.Max(bounds.SizeX, Math.Max(bounds.SizeY, bounds.SizeZ));
-            double defaultScale = maxExt > 0.001 ? 5.0 / maxExt : 1.0;
+            // Default to filling ~40 % of the editor grid — typical sweet spot for an
+            // imported plant/refinery layout. User can dial up or down with the slider.
+            double targetSize = _groundSize * 0.4;
+            double defaultScale = maxExt > 0.001 ? targetSize / maxExt : 1.0;
 
             var splitContainer = new SplitContainer
             {
@@ -230,19 +236,23 @@ namespace DisperSim3D.Dialogs
                 ShowViewCube = true,
                 CameraRotationMode = CameraRotationMode.Turntable
             };
-            _previewViewport.Camera.Position = new Point3D(10, 10, 8);
-            _previewViewport.Camera.LookDirection = new Vector3D(-10, -10, -8);
+            // Camera distance and grid size mirror the editor's ground plane so the preview
+            // shows the model at its true relative scale (a model that fills the dialog
+            // grid will fill the editor grid too — they are the same ground reference).
+            double camDist = _groundSize * 0.7;
+            _previewViewport.Camera.Position = new Point3D(camDist, camDist, camDist * 0.8);
+            _previewViewport.Camera.LookDirection = new Vector3D(-camDist, -camDist, -camDist * 0.8);
             _previewViewport.Camera.UpDirection = new Vector3D(0, 0, 1);
 
             _previewViewport.Children.Add(new DefaultLights());
 
             var grid = new GridLinesVisual3D
             {
-                Width = 40,
-                Length = 40,
-                MinorDistance = 1,
-                MajorDistance = 5,
-                Thickness = 0.01,
+                Width = _groundSize,
+                Length = _groundSize,
+                MinorDistance = Math.Max(1, _groundSize / 40),
+                MajorDistance = Math.Max(5, _groundSize / 8),
+                Thickness = _groundSize * 0.0001,
                 Fill = Brushes.LightGray
             };
             _previewViewport.Children.Add(grid);

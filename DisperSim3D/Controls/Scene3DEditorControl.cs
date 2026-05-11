@@ -63,6 +63,7 @@ namespace DisperSim3D.Controls
         private FireSource _pendingFireTemplate;
         private GasDetector3D _pendingDetectorTemplate;
         private Dictionary<string, double[]> _hpLeakProfiles = new Dictionary<string, double[]>();
+        private Dictionary<string, ModelVisual3D> _viewVisuals = new Dictionary<string, ModelVisual3D>();
 
         private GridLinesVisual3D _gridVisual;
         private System.Windows.Media.Media3D.ModelVisual3D _groundPlaneVisual;
@@ -2521,6 +2522,7 @@ namespace DisperSim3D.Controls
                     SerializeTopLevelSources(inv),
                     SerializeWindFieldScenarios(inv),
                     SerializeSimulations(inv),
+                    SerializeViews(inv),
                     SerializeDispersionScenarios(inv),
                     SerializeMonitorPoints(inv),
                     SerializeWindRose(inv),
@@ -2654,6 +2656,61 @@ namespace DisperSim3D.Controls
                         new System.Xml.Linq.XAttribute("Pressure", s.SnapshotMeteo.AmbientPressure.ToString(inv)),
                         new System.Xml.Linq.XAttribute("Roughness", s.SnapshotMeteo.RoughnessLengthM.ToString(inv))) : null,
                     SerializeAtmosphericCfd(s.SnapshotCfdConfig, inv))));
+        }
+
+        private System.Xml.Linq.XElement SerializeViews(System.Globalization.CultureInfo inv)
+        {
+            if (_scene.Views == null || _scene.Views.Count == 0) return null;
+            return new System.Xml.Linq.XElement("Views",
+                _scene.Views.Select(v => new System.Xml.Linq.XElement("View",
+                    new System.Xml.Linq.XAttribute("Id", v.Id ?? ""),
+                    new System.Xml.Linq.XAttribute("Name", v.Name ?? ""),
+                    new System.Xml.Linq.XAttribute("Kind", v.Kind.ToString()),
+                    new System.Xml.Linq.XAttribute("SimulationId", v.SimulationId ?? ""),
+                    new System.Xml.Linq.XAttribute("FieldProperty", v.FieldProperty.ToString()),
+                    new System.Xml.Linq.XAttribute("TimeMode", v.TimeMode.ToString()),
+                    new System.Xml.Linq.XAttribute("SpecificTime", v.SpecificTimeS.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("IsVisible", v.IsVisible.ToString()),
+                    new System.Xml.Linq.XAttribute("Opacity", v.Opacity.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("IsoValue", v.IsoValue.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("IsoColor", v.IsoColor.ToString()),
+                    new System.Xml.Linq.XAttribute("PlanePosition", v.PlanePosition.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("ColorMap", v.ColorMap.ToString()),
+                    new System.Xml.Linq.XAttribute("MinValue", v.MinValue.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("MaxValue", v.MaxValue.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("SampleResolution", v.SampleResolution.ToString(inv)))));
+        }
+
+        private void DeserializeViews(System.Xml.Linq.XElement root,
+            System.Globalization.CultureInfo inv, Scene3D scene)
+        {
+            scene.Views.Clear();
+            var el = root.Element("Views");
+            if (el == null) return;
+            foreach (var ve in el.Elements("View"))
+            {
+                var v = new DisperSim3D.Models.View
+                {
+                    Id = (string)ve.Attribute("Id") ?? Guid.NewGuid().ToString(),
+                    Name = (string)ve.Attribute("Name") ?? "View",
+                    SimulationId = (string)ve.Attribute("SimulationId") ?? ""
+                };
+                if (Enum.TryParse((string)ve.Attribute("Kind") ?? "Isosurface", out ViewKind k)) v.Kind = k;
+                if (Enum.TryParse((string)ve.Attribute("FieldProperty") ?? "Concentration", out ViewFieldProperty fp)) v.FieldProperty = fp;
+                if (Enum.TryParse((string)ve.Attribute("TimeMode") ?? "PeakOverTime", out ViewTimeMode tm)) v.TimeMode = tm;
+                v.SpecificTimeS = double.Parse((string)ve.Attribute("SpecificTime") ?? "0", inv);
+                v.IsVisible = bool.Parse((string)ve.Attribute("IsVisible") ?? "True");
+                v.Opacity = double.Parse((string)ve.Attribute("Opacity") ?? "0.5", inv);
+                v.IsoValue = double.Parse((string)ve.Attribute("IsoValue") ?? "0.05", inv);
+                try { v.IsoColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString((string)ve.Attribute("IsoColor") ?? "#FF00FFFF"); }
+                catch { v.IsoColor = System.Windows.Media.Colors.Cyan; }
+                v.PlanePosition = double.Parse((string)ve.Attribute("PlanePosition") ?? "1", inv);
+                if (Enum.TryParse((string)ve.Attribute("ColorMap") ?? "Jet", out ColorMapName cm)) v.ColorMap = cm;
+                v.MinValue = double.Parse((string)ve.Attribute("MinValue") ?? "0", inv);
+                v.MaxValue = double.Parse((string)ve.Attribute("MaxValue") ?? "0", inv);
+                v.SampleResolution = int.Parse((string)ve.Attribute("SampleResolution") ?? "80", inv);
+                scene.Views.Add(v);
+            }
         }
 
         private System.Xml.Linq.XElement SerializeWindFieldScenarios(System.Globalization.CultureInfo inv)
@@ -3717,6 +3774,7 @@ namespace DisperSim3D.Controls
                 DeserializeTopLevelSources(root, inv, fs);
                 DeserializeWindFieldScenarios(root, inv, fs);
                 DeserializeSimulations(root, inv, fs);
+                DeserializeViews(root, inv, fs);
                 DeserializeDispersionScenario(root, inv, fs);
 
                 LegacyProjectMigrator.MigrateInPlace(fs);
@@ -4192,6 +4250,53 @@ namespace DisperSim3D.Controls
         public void RefreshViewport()
         {
             UpdateViewport();
+            RefreshViews();
+        }
+
+        /// <summary>
+        /// Rebuilds visuals for all visible <see cref="View"/>s in the scene. Called whenever
+        /// the Views collection or any View property changes. Removed/hidden views have their
+        /// visual stripped from the viewport; new/edited views get a fresh visual.
+        /// </summary>
+        public void RefreshViews()
+        {
+            if (_viewport == null || _scene == null) return;
+
+            var keep = new HashSet<string>();
+            foreach (var view in _scene.Views)
+            {
+                if (!view.IsVisible) continue;
+                var sim = _scene.Simulations.FirstOrDefault(s => s.Id == view.SimulationId);
+                if (sim == null || sim.Status != SimulationStatus.Completed) continue;
+
+                ModelVisual3D vis = null;
+                try { vis = ViewRenderer.BuildVisual(view, sim, _scene); }
+                catch { vis = null; }
+                if (vis == null) continue;
+
+                if (_viewVisuals.TryGetValue(view.Id, out var oldVis))
+                    _viewport.Children.Remove(oldVis);
+                _viewport.Children.Add(vis);
+                _viewVisuals[view.Id] = vis;
+                keep.Add(view.Id);
+            }
+
+            // Remove visuals for views that are no longer visible / present.
+            var toRemove = _viewVisuals.Keys.Where(k => !keep.Contains(k)).ToList();
+            foreach (var k in toRemove)
+            {
+                _viewport.Children.Remove(_viewVisuals[k]);
+                _viewVisuals.Remove(k);
+            }
+        }
+
+        /// <summary>Strips every View visual from the viewport (used on project unload).</summary>
+        public void RemoveAllViews()
+        {
+            if (_viewport == null) return;
+            foreach (var v in _viewVisuals.Values)
+                _viewport.Children.Remove(v);
+            _viewVisuals.Clear();
         }
 
         private void UpdateGroundPlane()

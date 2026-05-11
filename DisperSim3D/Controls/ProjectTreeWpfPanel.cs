@@ -141,6 +141,27 @@ namespace DisperSim3D.Controls
             }
             root.Items.Add(sims);
 
+            var views = MakeNode("Views", NodeKind.ViewsRoot, null,
+                bold: true, glyph: "◈", count: _scene.Views.Count, isContainer: true);
+            foreach (var v in _scene.Views)
+            {
+                var pinnedSim = _scene.Simulations.FirstOrDefault(s => s.Id == v.SimulationId);
+                bool simReady = pinnedSim != null && pinnedSim.Status == SimulationStatus.Completed;
+                Brush statusBrush = simReady ? Brushes.SeaGreen
+                    : pinnedSim == null ? Brushes.Crimson : Brushes.DarkOrange;
+                string statusText = pinnedSim == null ? "No sim"
+                    : simReady ? pinnedSim.Name : pinnedSim.Status.ToString();
+                string glyph = v.Kind == ViewKind.Isosurface ? "◯" : "▭";
+                string label = string.Format("{0}  [{1}]", v.Name, v.Kind);
+                views.Items.Add(MakeNode(label, NodeKind.ViewItem, v.Id,
+                    glyph: glyph,
+                    statusText: statusText,
+                    statusBrush: statusBrush,
+                    showCheckBox: true,
+                    isChecked: v.IsVisible));
+            }
+            root.Items.Add(views);
+
             var monitors = MakeNode("Monitors", NodeKind.MonitorsRoot, null,
                 bold: true, glyph: "⦿", count: _scene.MonitorPoints.Count, isContainer: true);
             foreach (var m in _scene.MonitorPoints)
@@ -250,6 +271,7 @@ namespace DisperSim3D.Controls
                 case NodeKind.SourceItem: return ProjectTreeAction.EditSource;
                 case NodeKind.WindFieldItem: return ProjectTreeAction.EditWindField;
                 case NodeKind.SimulationItem: return ProjectTreeAction.EditSimulation;
+                case NodeKind.ViewItem: return ProjectTreeAction.EditView;
                 case NodeKind.MonitorItem: return ProjectTreeAction.EditMonitor;
                 case NodeKind.DetectorItem: return ProjectTreeAction.EditDetector;
                 default: return null;
@@ -387,6 +409,13 @@ namespace DisperSim3D.Controls
                     AddItem("Edit...", ProjectTreeAction.EditSimulation);
                     AddItem("Delete", ProjectTreeAction.DeleteSimulation);
                     break;
+                case NodeKind.ViewsRoot:
+                    AddItem("Add View...", ProjectTreeAction.AddView); break;
+                case NodeKind.ViewItem:
+                    AddItem("Edit...", ProjectTreeAction.EditView);
+                    AddItem("Duplicate", ProjectTreeAction.DuplicateView);
+                    AddItem("Delete", ProjectTreeAction.DeleteView);
+                    break;
                 case NodeKind.MonitorsRoot:
                     AddItem("Add Monitor Point...", ProjectTreeAction.AddMonitor); break;
                 case NodeKind.MonitorItem:
@@ -428,6 +457,7 @@ namespace DisperSim3D.Controls
                 case NodeKind.SourceItem: return _scene.TopLevelSources.FirstOrDefault(s => s.Id == tref.ItemId);
                 case NodeKind.WindFieldItem: return _scene.WindFieldScenarios.FirstOrDefault(w => w.Id == tref.ItemId);
                 case NodeKind.SimulationItem: return _scene.Simulations.FirstOrDefault(s => s.Id == tref.ItemId);
+                case NodeKind.ViewItem: return _scene.Views.FirstOrDefault(v => v.Id == tref.ItemId);
                 case NodeKind.MonitorItem: return _scene.MonitorPoints.FirstOrDefault(m => m.Name == tref.ItemId);
                 case NodeKind.DetectorItem: return _scene.GasDetectors.FirstOrDefault(d => d.Id == tref.ItemId);
                 default: return null;
@@ -445,6 +475,7 @@ namespace DisperSim3D.Controls
                 case NodeKind.SourceItem: return ((ReleaseSource3D)selected).Name;
                 case NodeKind.WindFieldItem: return ((WindFieldScenario)selected).Name;
                 case NodeKind.SimulationItem: return ((Simulation)selected).Name;
+                case NodeKind.ViewItem: return ((View)selected).Name;
                 case NodeKind.MonitorItem: return ((MonitorPoint3D)selected).Name;
                 case NodeKind.DetectorItem: return ((GasDetector3D)selected).Name;
                 default: return null;
@@ -460,6 +491,7 @@ namespace DisperSim3D.Controls
                 case NodeKind.SourceItem: target = ProjectTreeTarget.Source; break;
                 case NodeKind.WindFieldItem: target = ProjectTreeTarget.WindField; break;
                 case NodeKind.SimulationItem: target = ProjectTreeTarget.Simulation; break;
+                case NodeKind.ViewItem: target = ProjectTreeTarget.View; break;
                 case NodeKind.MonitorItem: target = ProjectTreeTarget.Monitor; break;
                 case NodeKind.DetectorItem: target = ProjectTreeTarget.Detector; break;
                 default: return;
@@ -484,6 +516,7 @@ namespace DisperSim3D.Controls
             SourcesRoot, SourceItem,
             WindFieldsRoot, WindFieldItem,
             SimulationsRoot, SimulationItem,
+            ViewsRoot, ViewItem,
             MonitorsRoot, MonitorItem,
             DetectorsRoot, DetectorItem
         }
@@ -510,6 +543,7 @@ namespace DisperSim3D.Controls
         AddWindField, EditWindField, RunWindField, OpenWindFieldCase, DeleteWindField, OpenWindFieldManager,
         AddSimulation, EditSimulation, RunSimulation, RerunSimulation,
         ViewSimulationResults, OpenSimulationCase, DeleteSimulation,
+        AddView, EditView, DuplicateView, DeleteView,
         AddMonitor, EditMonitor, DeleteMonitor,
         AddDetector, EditDetector, DeleteDetector
     }
@@ -528,6 +562,7 @@ namespace DisperSim3D.Controls
         Source,
         WindField,
         Simulation,
+        View,
         Monitor,
         Detector
     }

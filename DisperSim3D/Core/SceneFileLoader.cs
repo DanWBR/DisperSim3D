@@ -50,6 +50,7 @@ namespace DisperSim3D.Core
             DeserializeTopLevelSources(root, inv, scene);
             DeserializeWindFieldScenarios(root, inv, scene);
             DeserializeSimulations(root, inv, scene);
+            DeserializeViews(root, inv, scene);
             DeserializeDispersionScenarios(root, inv, scene);
             LegacyProjectMigrator.MigrateInPlace(scene);
             DeserializeMonitorPoints(root, inv, scene);
@@ -257,6 +258,37 @@ namespace DisperSim3D.Core
                 if (mEl != null) wf.Meteo = ParseMeteo(mEl, inv);
                 wf.CfdConfig = ParseAtmosphericCfd(wfEl, inv);
                 scene.WindFieldScenarios.Add(wf);
+            }
+        }
+
+        private static void DeserializeViews(XElement root, CultureInfo inv, Scene3D scene)
+        {
+            scene.Views.Clear();
+            var el = root.Element("Views");
+            if (el == null) return;
+            foreach (var ve in el.Elements("View"))
+            {
+                var v = new DisperSim3D.Models.View
+                {
+                    Id = (string)ve.Attribute("Id") ?? Guid.NewGuid().ToString(),
+                    Name = (string)ve.Attribute("Name") ?? "View",
+                    SimulationId = (string)ve.Attribute("SimulationId") ?? ""
+                };
+                if (Enum.TryParse((string)ve.Attribute("Kind") ?? "Isosurface", out ViewKind k)) v.Kind = k;
+                if (Enum.TryParse((string)ve.Attribute("FieldProperty") ?? "Concentration", out ViewFieldProperty fp)) v.FieldProperty = fp;
+                if (Enum.TryParse((string)ve.Attribute("TimeMode") ?? "PeakOverTime", out ViewTimeMode tm)) v.TimeMode = tm;
+                v.SpecificTimeS = double.Parse((string)ve.Attribute("SpecificTime") ?? "0", inv);
+                v.IsVisible = bool.Parse((string)ve.Attribute("IsVisible") ?? "True");
+                v.Opacity = double.Parse((string)ve.Attribute("Opacity") ?? "0.5", inv);
+                v.IsoValue = double.Parse((string)ve.Attribute("IsoValue") ?? "0.05", inv);
+                try { v.IsoColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString((string)ve.Attribute("IsoColor") ?? "#FF00FFFF"); }
+                catch { v.IsoColor = System.Windows.Media.Colors.Cyan; }
+                v.PlanePosition = double.Parse((string)ve.Attribute("PlanePosition") ?? "1", inv);
+                if (Enum.TryParse((string)ve.Attribute("ColorMap") ?? "Jet", out ColorMapName cm)) v.ColorMap = cm;
+                v.MinValue = double.Parse((string)ve.Attribute("MinValue") ?? "0", inv);
+                v.MaxValue = double.Parse((string)ve.Attribute("MaxValue") ?? "0", inv);
+                v.SampleResolution = int.Parse((string)ve.Attribute("SampleResolution") ?? "80", inv);
+                scene.Views.Add(v);
             }
         }
 

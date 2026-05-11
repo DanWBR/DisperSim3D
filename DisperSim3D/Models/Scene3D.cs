@@ -119,6 +119,13 @@ namespace DisperSim3D.Models
         public List<Simulation> Simulations { get; set; }
 
         /// <summary>
+        /// Project-level result Views — first-class isosurfaces and contour planes pinned
+        /// to a Simulation. Renders independently of (and replaces, going forward) the
+        /// legacy DispersionScenario.Thresholds + ContourPlanes.
+        /// </summary>
+        public List<View> Views { get; set; }
+
+        /// <summary>
         /// Gets or sets the grid spacing in meters.
         /// </summary>
         public double GridSpacing { get; set; }
@@ -149,6 +156,7 @@ namespace DisperSim3D.Models
             GasLibrary = new List<GasLibraryItem>();
             TopLevelSources = new List<ReleaseSource3D>();
             Simulations = new List<Simulation>();
+            Views = new List<View>();
             GridSpacing = 5.0;
             SnapToGrid = true;
         }
