@@ -1,0 +1,61 @@
+// disp_bridge.h — C ABI exposed by FluidX3D.dll for DisperSim 3D.
+// All coordinates are in LBM lattice cells (uint, in [0..N-1]); the C# side
+// is responsible for SI <-> lattice unit conversion via FluidX3DUnits.
+#pragma once
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifdef _WIN32
+#define FX3D_API __declspec(dllexport)
+#else
+#define FX3D_API
+#endif
+
+// Progress callback: called from inside fx3d_run between sub-runs. Returning
+// non-zero from the callback asks the run to stop early (best-effort).
+typedef int (*fx3d_progress_cb)(uint32_t steps_done, uint32_t steps_total);
+
+// Create an LBM instance. Returns an opaque handle (>0 on success, 0 on failure).
+// nu/alpha/beta are LBM lattice units. gx/gy/gz are lattice force per volume.
+FX3D_API uint64_t fx3d_create(uint32_t Nx, uint32_t Ny, uint32_t Nz,
+                              float nu, float gx, float gy, float gz,
+                              float alpha, float beta);
+
+// Mark every cell whose centre falls inside the AABB as TYPE_S (solid).
+FX3D_API void fx3d_set_box_solid(uint64_t h,
+                                 uint32_t xmin, uint32_t ymin, uint32_t zmin,
+                                 uint32_t xmax, uint32_t ymax, uint32_t zmax);
+
+// Mark inlet plane x=0 cells as TYPE_E with given velocity and density 1.0.
+FX3D_API void fx3d_set_inlet_x(uint64_t h, float ux, float uy, float uz);
+
+// Mark outlet plane x=Nx-1 cells as TYPE_E with zero velocity, density 1.0.
+FX3D_API void fx3d_set_outlet_x(uint64_t h);
+
+// Mark ground (z=0) cells as TYPE_S and top (z=Nz-1) as TYPE_E (open top).
+FX3D_API void fx3d_set_z_boundaries(uint64_t h);
+
+// Set a sphere of cells around (cx,cy,cz) with radius (cells) as TYPE_T fixed
+// temperature — used as a release-source tracer when TEMPERATURE is enabled.
+FX3D_API void fx3d_set_source_sphere(uint64_t h,
+                                     uint32_t cx, uint32_t cy, uint32_t cz,
+                                     uint32_t radius, float temperature);
+
+// Advance the LBM by 'steps'. Calls progress_cb every chunk (~steps/20).
+// Returns 0 on success, non-zero on cancel/error.
+FX3D_API int fx3d_run(uint64_t h, uint32_t steps, fx3d_progress_cb cb);
+
+// Copy velocity / temperature from device to host into caller-owned arrays
+// of size Nx*Ny*Nz (index = x + Nx*(y + Ny*z)).
+FX3D_API void fx3d_read_velocity(uint64_t h, float* ux, float* uy, float* uz);
+FX3D_API void fx3d_read_temperature(uint64_t h, float* t);
+
+// Destroy the LBM instance and release GPU memory.
+FX3D_API void fx3d_destroy(uint64_t h);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif

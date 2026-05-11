@@ -476,6 +476,14 @@ namespace DisperSim3D.Controls
                     _editor.RefreshViews();
                     RefreshProjectTree();
                 }
+                // Any edit on an object whose label appears in the tree (project name,
+                // gas/source/sim names, …) should refresh the tree so it stays in sync.
+                var pvc = e2 as PropertyValueChangedEventArgs;
+                if ((pvc?.ChangedItem?.PropertyDescriptor?.Name == "Name")
+                    || _propertyGrid.SelectedObject is ProjectSettings)
+                {
+                    RefreshProjectTree();
+                }
                 // SolverType change → user can manually invoke
                 // "Apply atmospheric defaults" from the simulation context menu in the tree.
                 _editor.RefreshViewport();
@@ -1639,18 +1647,17 @@ namespace DisperSim3D.Controls
                 AutoSize = false
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * dpiF)));
             var lbl = new Label
             {
                 AutoSize = false, Dock = DockStyle.Fill,
-                Height = (int)(36 * dpiF),
                 TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
                 Text = "Starting..."
             };
             var pb = new ProgressBar
             {
-                Dock = DockStyle.Fill, Height = (int)(22 * dpiF),
+                Dock = DockStyle.Fill,
                 Minimum = 0, Maximum = 100
             };
             layout.Controls.Add(lbl, 0, 0);
@@ -1660,6 +1667,13 @@ namespace DisperSim3D.Controls
             var worker = new System.ComponentModel.BackgroundWorker { WorkerReportsProgress = true };
             worker.DoWork += (s, e) =>
             {
+                // FluidX3D path: GPU LBM, no OpenFOAM environment, no obstacles list flattening.
+                if (wf.UseFluidX3D)
+                {
+                    var fx = new FluidX3DWindFieldRunner();
+                    fx.Run(wf, obstacles, (frac, msg) => worker.ReportProgress((int)(frac * 100), msg));
+                    return;
+                }
                 var runner = new WindFieldRunner(_editor.CfdEnvironment);
                 runner.Run(wf, obstacles, (frac, msg) => worker.ReportProgress((int)(frac * 100), msg));
             };

@@ -25,7 +25,11 @@
         RhoSimpleFoam,
         /// <summary>OpenFOAM rhoReactingBuoyantFoam with combustion disabled — compressible, multi-species,
         /// buoyant transport. Universal dispersion solver covering subsonic and sonic releases (Fiates &amp; Vianna 2016).</summary>
-        RhoReactingBuoyantFoam
+        RhoReactingBuoyantFoam,
+        /// <summary>FluidX3D GPU Lattice-Boltzmann wind field — replaces simpleFoam for fast design-iteration wind runs.</summary>
+        FluidX3DWind,
+        /// <summary>FluidX3D GPU LBM transient dispersion with passive scalar tracer (T-field as concentration) and Boussinesq buoyancy.</summary>
+        FluidX3DDispersion
     }
 
     /// <summary>

@@ -2515,7 +2515,12 @@ namespace DisperSim3D.Controls
                                 new System.Xml.Linq.XAttribute("ClipEnabled", d.ClipEnabled.ToString()),
                                 new System.Xml.Linq.XAttribute("ClipAxis", d.ClipAxis.ToString()),
                                 new System.Xml.Linq.XAttribute("ClipValue", d.ClipValue.ToString(inv)),
-                                new System.Xml.Linq.XAttribute("ClipAbove", d.ClipAbove.ToString())))),
+                                new System.Xml.Linq.XAttribute("ClipAbove", d.ClipAbove.ToString()),
+                                new System.Xml.Linq.XAttribute("UseCustomMaterial", d.UseCustomMaterial.ToString()),
+                                new System.Xml.Linq.XAttribute("MaterialType", d.MaterialType.ToString()),
+                                new System.Xml.Linq.XAttribute("MaterialColor", d.MaterialColor.ToString()),
+                                new System.Xml.Linq.XAttribute("SpecularPower", d.SpecularPower.ToString(inv)),
+                                new System.Xml.Linq.XAttribute("Opacity", d.Opacity.ToString(inv))))),
 
                     SerializeGeneralSettings(inv),
                     SerializeGasLibrary(inv),
@@ -3762,6 +3767,18 @@ namespace DisperSim3D.Controls
                             deco.ClipValue = double.Parse((string)de.Attribute("ClipValue") ?? "0", inv);
                             deco.ClipAbove = bool.Parse((string)de.Attribute("ClipAbove") ?? "True");
                             deco.ApplyClip();
+                        }
+
+                        var useCustomAttr = (string)de.Attribute("UseCustomMaterial");
+                        if (useCustomAttr != null)
+                        {
+                            deco.UseCustomMaterial = bool.Parse(useCustomAttr);
+                            if (Enum.TryParse((string)de.Attribute("MaterialType") ?? "Matte", out MaterialType3D mt))
+                                deco.MaterialType = mt;
+                            try { deco.MaterialColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString((string)de.Attribute("MaterialColor") ?? "#FFD3D3D3"); }
+                            catch { }
+                            deco.SpecularPower = double.Parse((string)de.Attribute("SpecularPower") ?? "40", inv);
+                            deco.Opacity = double.Parse((string)de.Attribute("Opacity") ?? "1", inv);
                         }
 
                         deco.UpdateBoundingBox();

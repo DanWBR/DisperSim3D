@@ -485,15 +485,22 @@ namespace DisperSim3D.Core
             var sb = new StringBuilder();
             sb.Append(FoamHeader("dictionary", "fvSolution"));
             sb.Append("solvers\n{\n");
-            sb.Append("    p\n    {\n        solver          GAMG;\n        tolerance       1e-06;\n        relTol          0.1;\n        smoother        GaussSeidel;\n    }\n");
-            sb.Append("    U\n    {\n        solver          PBiCGStab;\n        preconditioner  DILU;\n        tolerance       1e-06;\n        relTol          0.1;\n    }\n");
+            // Tighter GAMG: agglomerate aggressively, smaller cellsInCoarsestLevel to keep
+            // pressure system well-posed near porosity cellZones (where it diverged before).
+            sb.Append("    p\n    {\n        solver          GAMG;\n        tolerance       1e-07;\n        relTol          0.01;\n");
+            sb.Append("        smoother        GaussSeidel;\n        nPreSweeps      0;\n        nPostSweeps     2;\n        cacheAgglomeration on;\n        nCellsInCoarsestLevel 10;\n        agglomerator    faceAreaPair;\n        mergeLevels     1;\n    }\n");
+            sb.Append("    U\n    {\n        solver          smoothSolver;\n        smoother        symGaussSeidel;\n        tolerance       1e-07;\n        relTol          0.01;\n        nSweeps         2;\n    }\n");
             sb.Append("}\n\n");
             sb.Append("SIMPLE\n{\n    nNonOrthogonalCorrectors 0;\n");
+            // consistent yes (SIMPLEC) lets us use a higher pressure relaxation safely;
+            // without porosity 0.3 was fine, but with porosity we need to back off further.
             sb.Append("    consistent      yes;\n\n");
-            sb.Append("    residualControl\n    {\n        p               1e-4;\n        U               1e-4;\n    }\n}\n\n");
+            sb.Append("    residualControl\n    {\n        p               1e-3;\n        U               1e-4;\n    }\n}\n\n");
             sb.Append("relaxationFactors\n{\n");
-            sb.Append("    fields\n    {\n        p               0.3;\n    }\n");
-            sb.Append("    equations\n    {\n        U               0.7;\n    }\n}\n");
+            // Conservative factors: SIMPLE with cellZone porosity is fragile, prefer slower
+            // but stable convergence over fast-and-divergent.
+            sb.Append("    fields\n    {\n        p               0.2;\n    }\n");
+            sb.Append("    equations\n    {\n        U               0.5;\n    }\n}\n");
             WriteFile(Path.Combine(caseDir, "system", "fvSolution"), sb.ToString());
         }
 
@@ -580,12 +587,11 @@ namespace DisperSim3D.Core
                 fvo.AppendFormat(Inv, "        selectionMode   cellZone;\n        cellZone        obstacle_{0};\n", i);
                 fvo.Append("        type            DarcyForchheimer;\n");
                 fvo.Append("        DarcyForchheimerCoeffs\n        {\n");
-                // Darcy + Forchheimer coefficients — Darcy alone with a high d destabilises
-                // SIMPLE around iter ~200-400 because the linear damping is unbounded. Pair a
-                // moderate Darcy (1e4) with a strong Forchheimer (50) so the quadratic term
-                // self-limits at large |U| — this is the classic atmospheric-obstacle recipe.
+                // Darcy + Forchheimer — moderate values that hold flow near zero without
+                // creating the pressure shock that destabilises GAMG. f=1 is plenty to damp
+                // the convective term; bigger values cause late-iteration divergence.
                 fvo.Append("            d   (1e4 1e4 1e4);\n");
-                fvo.Append("            f   (50 50 50);\n");
+                fvo.Append("            f   (1 1 1);\n");
                 fvo.Append("            coordinateSystem\n            {\n");
                 fvo.Append("                type    cartesian;\n");
                 fvo.Append("                origin  (0 0 0);\n");
@@ -1982,13 +1988,19 @@ namespace DisperSim3D.Core
             var sb = new StringBuilder();
             sb.Append(FoamHeader("dictionary", "fvSchemes"));
             sb.Append("ddtSchemes\n{\n    default         Euler;\n}\n\n");
-            sb.Append("gradSchemes\n{\n    default         Gauss linear;\n}\n\n");
+            // limited gradient prevents overshoots when a cell has a steep neighbour gradient
+            // (release source vs. ambient) — the cell-by-cell limiter is required by buoyant
+            // cases where T/rho/Yi all change quickly together.
+            sb.Append("gradSchemes\n{\n    default         cellLimited Gauss linear 1;\n}\n\n");
             sb.Append("divSchemes\n{\n    default         none;\n");
-            sb.Append("    div(phi,U)      Gauss linearUpwind grad(U);\n");
-            sb.Append("    div(phi,Yi_h)   Gauss multivariateSelection { N2 upwind; O2 upwind; CH4 upwind; SF6 upwind; h upwind; };\n");
-            sb.Append("    div(phi,K)      Gauss linear;\n");
-            sb.Append("    div(phi,k)      Gauss upwind;\n");
-            sb.Append("    div(phi,epsilon) Gauss upwind;\n");
+            // `bounded` prefix on every advected quantity — drops to upwind locally when the
+            // higher-order scheme would create an out-of-bounds value. Without this, a single
+            // cell on rank 4 can produce NaN and crash the whole MPI job.
+            sb.Append("    div(phi,U)      bounded Gauss linearUpwind grad(U);\n");
+            sb.Append("    div(phi,Yi_h)   bounded Gauss multivariateSelection { N2 upwind; O2 upwind; CH4 upwind; SF6 upwind; h upwind; };\n");
+            sb.Append("    div(phi,K)      bounded Gauss linear;\n");
+            sb.Append("    div(phi,k)      bounded Gauss upwind;\n");
+            sb.Append("    div(phi,epsilon) bounded Gauss upwind;\n");
             sb.Append("    div(((rho*nuEff)*dev2(T(grad(U))))) Gauss linear;\n}\n\n");
             sb.Append("laplacianSchemes\n{\n    default         Gauss linear corrected;\n}\n\n");
             sb.Append("interpolationSchemes\n{\n    default         linear;\n}\n\n");
@@ -2014,7 +2026,20 @@ namespace DisperSim3D.Core
             sb.Append("    \"Yi\"\n    {\n        solver          PBiCGStab;\n        preconditioner  DILU;\n");
             sb.AppendFormat(Inv, "        tolerance       {0};\n        relTol          0;\n    }}\n", config.SolverTolerance);
             sb.Append("}\n\n");
-            sb.Append("PIMPLE\n{\n    nOuterCorrectors 2;\n    nCorrectors     2;\n    nNonOrthogonalCorrectors 1;\n}\n");
+            // 3 outer + 2 inner correctors with momentum predictor — adds resistance to the
+            // T/rho coupling shock that crashed rank 4. residualControl lets PIMPLE bail out
+            // early once residuals are converged so the extra correctors cost little.
+            sb.Append("PIMPLE\n{\n    momentumPredictor yes;\n    nOuterCorrectors 3;\n    nCorrectors     2;\n    nNonOrthogonalCorrectors 1;\n");
+            sb.Append("    pRefCell        0;\n    pRefValue       0;\n");
+            sb.Append("    residualControl\n    {\n");
+            sb.Append("        U  { tolerance 1e-4; relTol 0; }\n");
+            sb.Append("        p_rgh { tolerance 1e-3; relTol 0; }\n");
+            sb.Append("        h  { tolerance 1e-3; relTol 0; }\n");
+            sb.Append("    }\n}\n\n");
+            // Relaxation factors — damping on U/h gives the buoyant coupling room to settle
+            // without the cell-local oscillation that killed the previous run.
+            sb.Append("relaxationFactors\n{\n    fields { rho 1.0; p_rgh 0.7; }\n");
+            sb.Append("    equations { U 0.7; h 0.7; \"(k|epsilon)\" 0.7; \"Yi.*\" 0.9; }\n}\n");
             WriteFile(Path.Combine(caseDir, "system", "fvSolution"), sb.ToString());
         }
 

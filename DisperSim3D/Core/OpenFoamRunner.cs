@@ -723,10 +723,27 @@ namespace DisperSim3D.Core
             string lastCourant = "";
             string lastDeltaT = "";
 
+            // Mirror stdout/stderr to log.<solver> in the case dir — mpiexec eats rank
+            // stderr, so this is our only diagnostic when a parallel solver crashes.
+            string solverName = command.TrimStart().Split(' ')[0];
+            if (solverName == "mpiexec" || solverName == "mpirun")
+            {
+                var parts = command.Split(' ');
+                if (parts.Length > 3) solverName = parts[3];
+            }
+            string solverLogPath = System.IO.Path.Combine(_casePath, "log." + solverName);
+            System.IO.StreamWriter logWriter = null;
+            try { logWriter = new System.IO.StreamWriter(solverLogPath, false) { AutoFlush = true }; }
+            catch { }
+
             var stderrBuilder = new System.Text.StringBuilder();
             _currentProcess.ErrorDataReceived += (s, ev) =>
             {
-                if (ev.Data != null) stderrBuilder.AppendLine(ev.Data);
+                if (ev.Data != null)
+                {
+                    stderrBuilder.AppendLine(ev.Data);
+                    try { logWriter?.WriteLine("[stderr] " + ev.Data); } catch { }
+                }
             };
             _currentProcess.BeginErrorReadLine();
 
@@ -734,6 +751,7 @@ namespace DisperSim3D.Core
             {
                 string line = _currentProcess.StandardOutput.ReadLine();
                 if (line == null) continue;
+                try { logWriter?.WriteLine(line); } catch { }
 
                 var timeMatch = timeRegex.Match(line);
                 if (timeMatch.Success)
@@ -790,10 +808,30 @@ namespace DisperSim3D.Core
                 }
             }
 
-            _currentProcess.WaitForExit(60000);
+            try { logWriter?.Dispose(); } catch { }
+
+            const int timeoutMs = 30 * 60 * 1000;
+            if (!_currentProcess.WaitForExit(timeoutMs))
+            {
+                try { _currentProcess.Kill(); } catch { }
+                throw new Exception(command + " timed out after " + (timeoutMs / 60000) + " min");
+            }
             if (_currentProcess.ExitCode != 0)
             {
                 string err = stderrBuilder.ToString().Trim();
+                if (string.IsNullOrEmpty(err))
+                {
+                    try
+                    {
+                        if (System.IO.File.Exists(solverLogPath))
+                        {
+                            var allLines = System.IO.File.ReadAllLines(solverLogPath);
+                            int n = Math.Min(40, allLines.Length);
+                            err = string.Join("\n", allLines, allLines.Length - n, n);
+                        }
+                    }
+                    catch { }
+                }
                 throw new Exception(command + " failed (exit " + _currentProcess.ExitCode + "): " + err);
             }
             _currentProcess = null;

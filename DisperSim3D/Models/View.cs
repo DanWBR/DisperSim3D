@@ -103,6 +103,7 @@ namespace DisperSim3D.Models
 
         [Category("Isosurface")]
         [Description("Surface colour for the isosurface.")]
+        [Editor(typeof(DisperSim3D.Controls.ColorPickerPropertyEditor), typeof(HandyControl.Controls.PropertyEditorBase))]
         public Color IsoColor { get; set; }
 
         // ── Contour-plane-specific ──

@@ -251,6 +251,10 @@ namespace DisperSim3D.Core
                     case CfdSolverType.RhoReactingBuoyantFoam:
                         await RunCfdAsync(job);
                         break;
+                    case CfdSolverType.FluidX3DWind:
+                    case CfdSolverType.FluidX3DDispersion:
+                        await RunFluidX3DAsync(job);
+                        break;
                 }
 
                 if (job.Status == SimulationJobStatus.Running)
@@ -491,6 +495,58 @@ namespace DisperSim3D.Core
                 job.ResultEntry = entry;
 
             }, job.Cts.Token);
+        }
+
+        private Task RunFluidX3DAsync(SimulationJob job)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+            var scenario = job.Scenario;
+            var config = job.CfdConfig ?? scenario.CfdConfig ?? new CfdConfiguration();
+            if (config.GridResolution > 0)
+                scenario.GridResolution = config.GridResolution;
+
+            var runner = new FluidX3DRunner();
+            runner.ProgressUpdated += (s, p) =>
+            {
+                if (p.Fraction >= 0) job.Progress = p.Fraction;
+                if (p.Step != null) job.StatusText = p.Step;
+                if (p.LogLine != null) job.LastLogLine = p.LogLine;
+                JobProgressUpdated?.Invoke(this, (job, p));
+            };
+            runner.Completed += (s, result) =>
+            {
+                var entry = new CfdSimulationEntry
+                {
+                    Name = job.Name,
+                    ScenarioName = scenario.Name,
+                    SolverType = "FluidX3D (GPU LBM)",
+                    CasePath = runner.CasePath ?? "",
+                    DurationS = scenario.SimulationDurationS,
+                    TimeStepCount = result.TimeSteps.Count,
+                    GridNx = result.GridNx, GridNy = result.GridNy, GridNz = result.GridNz,
+                    DomainSizeM = result.DomainSizeM,
+                    HasResults = result.IsLoaded
+                };
+                entry.Tag = result;
+                job.ResultEntry = entry;
+                tcs.TrySetResult(true);
+            };
+            runner.Failed += (s, msg) =>
+            {
+                job.Status = SimulationJobStatus.Failed;
+                job.StatusText = "FAILED: " + msg;
+                job.LastLogLine = msg;
+                tcs.TrySetException(new Exception(msg));
+            };
+
+            job.Cts.Token.Register(() =>
+            {
+                runner.Cancel();
+                tcs.TrySetCanceled();
+            });
+
+            runner.RunAsync(scenario, config, job.SolverType);
+            return tcs.Task;
         }
 
         private Task RunCfdAsync(SimulationJob job)

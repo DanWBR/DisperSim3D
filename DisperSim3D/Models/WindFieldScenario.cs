@@ -58,6 +58,10 @@ namespace DisperSim3D.Models
         [Description("CFD solver configuration (atmospheric BL, Sct, ground BC, etc.).")]
         public CfdConfiguration CfdConfig { get; set; }
 
+        [Category("Solver")]
+        [Description("Use FluidX3D GPU LBM solver instead of OpenFOAM simpleFoam for this wind field run. ~10–50x faster but limited to box-AABB obstacles.")]
+        public bool UseFluidX3D { get; set; }
+
         [Category("Result")]
         [Description("OpenFOAM case directory on disk (set after a successful run).")]
         public string CasePath { get; set; }

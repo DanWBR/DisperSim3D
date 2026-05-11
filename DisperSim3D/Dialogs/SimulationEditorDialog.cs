@@ -84,7 +84,9 @@ namespace DisperSim3D.Dialogs
                 "CFD Transient (buoyantPimpleFoam)",
                 "CFD Transient (reactingFoam)",
                 "CFD Steady (rhoSimpleFoam)",
-                "CFD Transient (rhoReactingBuoyantFoam) — universal"
+                "CFD Transient (rhoReactingBuoyantFoam) — universal",
+                "FluidX3D Wind (GPU LBM)",
+                "FluidX3D Dispersion (GPU LBM)"
             });
             cmbSolver.SelectedIndex = 0;
             DialogHelpers.AddRowWithHelp(table, ref row, "Solver:", cmbSolver,
@@ -188,6 +190,8 @@ namespace DisperSim3D.Dialogs
                 case 7: solverType = CfdSolverType.ReactingFoam; break;
                 case 8: solverType = CfdSolverType.RhoSimpleFoam; break;
                 case 9: solverType = CfdSolverType.RhoReactingBuoyantFoam; break;
+                case 10: solverType = CfdSolverType.FluidX3DWind; break;
+                case 11: solverType = CfdSolverType.FluidX3DDispersion; break;
             }
 
             Result = new Simulation

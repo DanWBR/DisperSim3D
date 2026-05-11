@@ -314,7 +314,121 @@ namespace DisperSim3D.Dialogs
             grid.CellContentClick += Grid_CellContentClick;
             grid.CellFormatting += Grid_CellFormatting;
 
+            // Double-click anywhere on a row → open a full-text details dialog with copy.
+            grid.CellDoubleClick += (s, e) =>
+            {
+                if (e.RowIndex < 0) return;
+                var clickedGrid = (DataGridView)s;
+                var job = clickedGrid.Rows[e.RowIndex].Tag as SimulationJob;
+                if (job != null) ShowJobDetailsDialog(job);
+            };
+
+            // Right-click context menu: Copy status + Show details.
+            var ctx = new ContextMenuStrip();
+            var miCopy = new ToolStripMenuItem("Copy status to clipboard");
+            miCopy.Click += (s, e) =>
+            {
+                if (grid.SelectedRows.Count == 0) return;
+                var job = grid.SelectedRows[0].Tag as SimulationJob;
+                if (job != null && !string.IsNullOrEmpty(job.StatusText))
+                {
+                    try { Clipboard.SetText(job.StatusText); } catch { }
+                }
+            };
+            var miDetails = new ToolStripMenuItem("View details...");
+            miDetails.Click += (s, e) =>
+            {
+                if (grid.SelectedRows.Count == 0) return;
+                var job = grid.SelectedRows[0].Tag as SimulationJob;
+                if (job != null) ShowJobDetailsDialog(job);
+            };
+            ctx.Items.Add(miDetails);
+            ctx.Items.Add(miCopy);
+            grid.MouseDown += (s, e) =>
+            {
+                if (e.Button != MouseButtons.Right) return;
+                var hit = grid.HitTest(e.X, e.Y);
+                if (hit.RowIndex >= 0)
+                {
+                    grid.ClearSelection();
+                    grid.Rows[hit.RowIndex].Selected = true;
+                    ctx.Show(grid, e.Location);
+                }
+            };
+
             return grid;
+        }
+
+        /// <summary>
+        /// Opens a modal dialog showing the full <see cref="SimulationJob.StatusText"/> in a
+        /// selectable, multi-line read-only text box with a Copy-to-clipboard button. The grid
+        /// row truncates long error messages, so this gives the user a way to read and copy them.
+        /// </summary>
+        private void ShowJobDetailsDialog(SimulationJob job)
+        {
+            using (var dlg = new Form
+            {
+                Text = "Simulation: " + (job.Name ?? ""),
+                StartPosition = FormStartPosition.CenterParent,
+                FormBorderStyle = FormBorderStyle.Sizable,
+                MinimizeBox = false, MaximizeBox = true,
+                ClientSize = new Size((int)(700 * _dpi), (int)(420 * _dpi)),
+                Padding = new Padding((int)(10 * _dpi))
+            })
+            {
+                var layout = new TableLayoutPanel
+                {
+                    Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3
+                };
+                layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+                layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+                layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+                layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+                var header = new Label
+                {
+                    Dock = DockStyle.Fill, AutoSize = true,
+                    Text = string.Format("{0}  |  Status: {1}  |  {2}",
+                        job.Name ?? "", job.Status,
+                        job.CompletedAt?.ToString("yyyy-MM-dd HH:mm") ?? ""),
+                    Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                    Padding = new Padding(0, 0, 0, (int)(6 * _dpi))
+                };
+                layout.Controls.Add(header, 0, 0);
+
+                var txt = new TextBox
+                {
+                    Dock = DockStyle.Fill,
+                    Multiline = true,
+                    ReadOnly = true,
+                    ScrollBars = ScrollBars.Both,
+                    WordWrap = false,
+                    Font = new Font("Consolas", 9f),
+                    Text = job.StatusText ?? "(no status text)"
+                };
+                layout.Controls.Add(txt, 0, 1);
+
+                var buttons = new FlowLayoutPanel
+                {
+                    Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
+                    AutoSize = true, Padding = new Padding(0, (int)(8 * _dpi), 0, 0)
+                };
+                var btnClose = new Button { Text = "Close", AutoSize = true, DialogResult = DialogResult.OK };
+                var btnCopy = new Button { Text = "Copy to Clipboard", AutoSize = true };
+                btnCopy.Click += (s, e) =>
+                {
+                    try { Clipboard.SetText(txt.Text); btnCopy.Text = "Copied!"; }
+                    catch { btnCopy.Text = "Copy failed"; }
+                };
+                buttons.Controls.Add(btnClose);
+                buttons.Controls.Add(btnCopy);
+                layout.Controls.Add(buttons, 0, 2);
+
+                dlg.AcceptButton = btnClose;
+                dlg.Controls.Add(layout);
+                txt.SelectionStart = 0; txt.SelectionLength = 0;
+                dlg.ShowDialog(this);
+            }
         }
 
         private Panel BuildStatusBar()

@@ -19,4 +19,14 @@
     <ProjectReference Include="..\DisperSim3D\DisperSim3D.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- FluidX3D.dll is built by FluidX3D/FluidX3D.vcxproj and lands in ../bin/.
+         Copy it next to the .exe so DllImport("FluidX3D.dll") resolves at runtime.
+         Marked CopyIfNewer + Visible=false so it doesn't clutter the IDE. -->
+    <None Include="..\bin\FluidX3D.dll" Condition="Exists('..\bin\FluidX3D.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </None>
+  </ItemGroup>
+
 </Project>
