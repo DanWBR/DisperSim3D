@@ -20,12 +20,12 @@
 #define EQUILIBRIUM_BOUNDARIES // enables fixing the velocity/density by marking cells with TYPE_E; can be used for inflow/outflow; does not reflect shock waves
 //#define MOVING_BOUNDARIES // enables moving solids: set solid cells to TYPE_S and set their velocity u unequal to zero
 //#define SURFACE // enables free surface LBM: mark fluid cells with TYPE_F; at initialization the TYPE_I interface and TYPE_G gas domains will automatically be completed; allocates an extra 12 Bytes/cell
-// TEMPERATURE enabled — used as a passive scalar tracer for dispersion (T-ambient=1.0,
-// T-source>1.0; concentration = T-1.0). Wind runs initialize T=1.0 everywhere to avoid
-// the previously-observed blow-up: leaving T=0 on the host caused the thermal DDFs to
-// initialize to f_eq(0) which produced negative collisional pressure and clamped every
-// velocity at ±c_s. Always call fx3d_initial_temperature(handle, 1.0f) BEFORE run().
-#define TEMPERATURE
+// TEMPERATURE permanently disabled in the shared DLL because activating it adds
+// numerical noise to the velocity field even when alpha=beta=0 (the thermal lattice's
+// collision-step coupling isn't fully decoupled from the velocity lattice in FluidX3D's
+// kernel). Dispersion is solved separately by a CPU-side advection-diffusion pass on
+// the saved wind field — see DispersionTracerEngine.cs.
+//#define TEMPERATURE
 // SUBGRID disabled: with voxelized AABB obstacles (sharp staircase corners), Smagorinsky's
 // strain-rate-based eddy viscosity blew up locally, the DDFs went negative, and the
 // FluidX3D safety clamp pinned every interior cell at u = ±c_s = ±0.5774 lattice u/step.

@@ -395,8 +395,9 @@ namespace DisperSim3D.Controls
             WindField3D field = wfScenario.WindField;
             if (field == null && wfScenario.Status == WindFieldStatus.Ready)
             {
-                if (wfScenario.UseFluidX3D)
-                    field = FluidX3DWindFieldRunner.LoadFromCase(wfScenario);
+                // Try FluidX3D's windfield.bin first (cheap, returns null if not present);
+                // fall back to OpenFOAM case reader for the legacy path.
+                field = FluidX3DWindFieldRunner.LoadFromCase(wfScenario);
                 if (field == null)
                     field = WindFieldRunner.LoadFromCase(wfScenario);
             }
@@ -1477,6 +1478,16 @@ namespace DisperSim3D.Controls
         public bool LoadCfdSimulation(CfdSimulationEntry entry)
         {
             if (entry == null) return false;
+
+            // FluidX3D (and any in-memory result producer) attaches the full OpenFoamResult
+            // — with snapshots already PreloadField'd — to entry.Tag. Use it directly
+            // instead of trying to read from a non-existent case directory.
+            if (entry.Tag is OpenFoamResult cached && cached.IsLoaded && cached.TimeSteps.Count > 0)
+            {
+                _cfdResult = cached;
+                StartCfdPlayback();
+                return true;
+            }
 
             if (entry.SolverType == "Gaussian Puff")
             {
@@ -2737,6 +2748,7 @@ namespace DisperSim3D.Controls
                         new System.Xml.Linq.XAttribute("Status", wf.Status.ToString()),
                         new System.Xml.Linq.XAttribute("CasePath", wf.CasePath ?? ""),
                         new System.Xml.Linq.XAttribute("EmbedMode", wf.EmbedMode.ToString()),
+                        new System.Xml.Linq.XAttribute("UseFluidX3D", wf.UseFluidX3D.ToString()),
                         new System.Xml.Linq.XElement("Meteo",
                             new System.Xml.Linq.XAttribute("WindSpeed", wf.Meteo.WindSpeed.ToString(inv)),
                             new System.Xml.Linq.XAttribute("WindDir", wf.Meteo.WindDirectionDeg.ToString(inv)),
@@ -3119,6 +3131,9 @@ namespace DisperSim3D.Controls
                 BundleEmbedMode wfEmbed;
                 if (Enum.TryParse((string)wfEl.Attribute("EmbedMode") ?? "ResultsOnly", out wfEmbed))
                     wf.EmbedMode = wfEmbed;
+                bool useFx;
+                if (bool.TryParse((string)wfEl.Attribute("UseFluidX3D") ?? "False", out useFx))
+                    wf.UseFluidX3D = useFx;
                 var mEl = wfEl.Element("Meteo");
                 if (mEl != null)
                 {

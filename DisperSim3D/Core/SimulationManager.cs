@@ -90,6 +90,8 @@ namespace DisperSim3D.Core
                 case CfdSolverType.ReactingFoam: solverLabel = "CFD reactingFoam"; break;
                 case CfdSolverType.RhoSimpleFoam: solverLabel = "CFD rhoSimpleFoam"; break;
                 case CfdSolverType.RhoReactingBuoyantFoam: solverLabel = "CFD rhoReactingBuoyantFoam"; break;
+                case CfdSolverType.FluidX3DWind: solverLabel = "CFD (FluidX3D) Wind"; break;
+                case CfdSolverType.FluidX3DDispersion: solverLabel = "CFD (FluidX3D) Dispersion"; break;
                 default: solverLabel = "CFD (OpenFOAM)"; break;
             }
 
@@ -515,11 +517,14 @@ namespace DisperSim3D.Core
             };
             runner.Completed += (s, result) =>
             {
+                string solverLabel = job.SolverType == CfdSolverType.FluidX3DWind
+                    ? "CFD (FluidX3D) Wind"
+                    : "CFD (FluidX3D) Dispersion";
                 var entry = new CfdSimulationEntry
                 {
                     Name = job.Name,
                     ScenarioName = scenario.Name,
-                    SolverType = "FluidX3D (GPU LBM)",
+                    SolverType = solverLabel,
                     CasePath = runner.CasePath ?? "",
                     DurationS = scenario.SimulationDurationS,
                     TimeStepCount = result.TimeSteps.Count,
@@ -545,7 +550,7 @@ namespace DisperSim3D.Core
                 tcs.TrySetCanceled();
             });
 
-            runner.RunAsync(scenario, config, job.SolverType);
+            runner.RunAsync(scenario, config, job.Scene, job.SolverType);
             return tcs.Task;
         }
 

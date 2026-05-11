@@ -254,6 +254,9 @@ namespace DisperSim3D.Core
                     if (Enum.TryParse(statusStr, out parsedStatus))
                         wf.Status = parsedStatus;
                 }
+                bool useFx;
+                if (bool.TryParse((string)wfEl.Attribute("UseFluidX3D") ?? "False", out useFx))
+                    wf.UseFluidX3D = useFx;
                 var mEl = wfEl.Element("Meteo");
                 if (mEl != null) wf.Meteo = ParseMeteo(mEl, inv);
                 wf.CfdConfig = ParseAtmosphericCfd(wfEl, inv);

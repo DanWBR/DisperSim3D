@@ -1,14 +1,19 @@
 using System;
 using System.ComponentModel;
+using System.Linq;
 using System.Threading;
 using DisperSim3D.Models;
 
 namespace DisperSim3D.Core
 {
     /// <summary>
-    /// FluidX3D-backed transient dispersion runner. Mirrors <see cref="OpenFoamRunner"/>'s
-    /// event surface (ProgressUpdated / Completed / Failed) so <c>SimulationManager.RunCfdAsync</c>
-    /// can dispatch to either implementation without other plumbing changes.
+    /// FluidX3D-backed transient dispersion. The wind field comes from a FluidX3D
+    /// GPU LBM run (or a loaded windfield.bin), and species transport runs on the
+    /// CPU using <see cref="DispersionTracerEngine"/>. FluidX3D's own TEMPERATURE
+    /// extension couples spuriously to the velocity lattice in this DLL's build,
+    /// so we keep that off and solve advection-diffusion ourselves.
+    /// Mirrors <see cref="OpenFoamRunner"/>'s event surface so
+    /// <c>SimulationManager.RunCfdAsync</c> dispatches without other changes.
     /// </summary>
     public class FluidX3DRunner
     {
@@ -16,7 +21,6 @@ namespace DisperSim3D.Core
         private string _casePath;
         private CancellationTokenSource _cts;
         private volatile bool _cancelled;
-        private ulong _handle;
 
         public event EventHandler<OpenFoamProgress> ProgressUpdated;
         public event EventHandler<OpenFoamResult> Completed;
@@ -29,14 +33,10 @@ namespace DisperSim3D.Core
         {
             _cancelled = true;
             try { _cts?.Cancel(); } catch { }
-            if (_handle != 0UL)
-            {
-                // The native run loop checks the progress callback's return value to bail out.
-                // It will see _cancelled via the callback closure and stop on the next chunk.
-            }
         }
 
         public void RunAsync(DispersionScenario scenario, CfdConfiguration config,
+            Scene3D scene,
             CfdSolverType solverType = CfdSolverType.FluidX3DDispersion)
         {
             if (IsRunning) return;
@@ -48,141 +48,106 @@ namespace DisperSim3D.Core
             {
                 try
                 {
-                    if (!FluidX3DBridge.IsAvailable())
+                    Report(0.02, "FluidX3D dispersion: resolving wind field...");
+
+                    // Resolve wind field. Prefer a pre-run one referenced by the scenario;
+                    // otherwise warn and bail. We do NOT run a fresh wind field here — that
+                    // would couple two solvers in one call. Encourage the user to run the
+                    // wind field first.
+                    var wf = WindFieldResolver.FindWindFieldScenario(scene, scenario);
+                    WindField3D wind = wf?.WindField;
+                    if (wind == null && wf != null && wf.UseFluidX3D)
+                        wind = FluidX3DWindFieldRunner.LoadFromCase(wf);
+                    if (wind == null && wf != null)
+                        wind = WindFieldRunner.LoadFromCase(wf);
+                    if (wind == null)
                     {
-                        Failed?.Invoke(this, "FluidX3D.dll missing or no OpenCL device available");
+                        Failed?.Invoke(this, "FluidX3D dispersion needs a Ready wind field; " +
+                            "run the associated Wind Field first (set UseFluidX3D=true to use the GPU solver).");
                         return;
                     }
-
-                    Report(0.01, "FluidX3D: preparing case...");
 
                     int nx = scenario.GridResolution;
                     int ny = scenario.GridResolution;
                     int nz = Math.Max(8, scenario.GridResolution / 2);
                     double domain = scenario.DomainSizeM;
-                    double height = domain; // wind-field height heuristic — caller can override later
+                    double height = wf?.DomainHeightM > 0 ? wf.DomainHeightM : domain;
                     double duration = scenario.SimulationDurationS;
                     double writeInterval = Math.Max(scenario.SimulationDurationS / 20.0, 1.0);
 
-                    var meteo = scenario.Meteo;
-                    var wind = meteo.WindVector;
-                    double speed = Math.Sqrt(wind.X * wind.X + wind.Y * wind.Y + wind.Z * wind.Z);
-                    if (speed < 1e-3) speed = 1e-3;
+                    Report(0.05, "FluidX3D dispersion: initialising tracer engine...");
 
-                    var units = new FluidX3DUnits(domain, height, nx, ny, nz, speed);
-                    float nuLat = units.NuLattice(1.5e-5);
-                    float gLat  = units.GLattice(-9.81);
+                    double diff = config?.DiffusivityM2PerS > 0 ? config.DiffusivityM2PerS : 1e-5;
+                    var src = scenario.Sources != null && scenario.Sources.Count > 0
+                        ? scenario.Sources[0] : null;
+                    double decay = src?.Gas != null && src.Gas.HalfLifeS > 0
+                        ? Math.Log(2.0) / src.Gas.HalfLifeS : 0.0;
 
-                    // Boussinesq β: a denser-than-air gas (Mw_gas > Mw_air) settles → negative
-                    // buoyancy proxy. β maps a fixed "tracer T = 1.0" inside the source to a
-                    // weight gradient roughly equal to (ρ_gas - ρ_air)/ρ_air. We use a small
-                    // value here; the source concentration is normalised to 1.0 inside the sphere.
-                    double mwAir = 28.96;
-                    double mwGas = scenario.Sources != null && scenario.Sources.Count > 0 && scenario.Sources[0].Gas != null
-                        ? scenario.Sources[0].Gas.MolarMass : 16.04;
-                    float betaLat = (float)((mwGas - mwAir) / mwAir * 0.001);
+                    var engine = new DispersionTracerEngine(wind, domain, height, nx, ny, nz,
+                        diff, decay);
 
-                    // Molecular diffusivity ~ 1e-5 m²/s for typical gases.
-                    float alphaLat = units.AlphaLattice(1e-5);
-
-                    _handle = FluidX3DBridge.fx3d_create((uint)nx, (uint)ny, (uint)nz,
-                        nuLat, 0f, 0f, gLat, alphaLat, betaLat);
-                    if (_handle == 0UL)
+                    if (src != null)
                     {
-                        Failed?.Invoke(this, "FluidX3D: fx3d_create failed");
-                        return;
+                        // Continuous release: clamp source cells to a normalised concentration of
+                        // 1.0 (post-processing rescales by mass flow rate if needed).
+                        // Radius scaled to at least ~5 cells so the marching-cubes renderer has
+                        // enough volume to extract an isosurface (1-2 cell-wide sources got
+                        // smoothed away by interpolation, making the source look invisible).
+                        double cellM = scenario.DomainSizeM * 2.0 / nx;
+                        double radiusM = Math.Max(5.0 * cellM, 8.0);
+                        engine.SetSphericalSource(src.Position.X, src.Position.Y, src.Position.Z,
+                            radiusM: radiusM, concentration: 1.0);
+                        Report(0.06, string.Format(
+                            "FluidX3D source: pos=({0:F1},{1:F1},{2:F1}) m, r={3:F1} m, cell={4:F2} m, domainHalf={5:F0} m",
+                            src.Position.X, src.Position.Y, src.Position.Z, radiusM, cellM, scenario.DomainSizeM));
                     }
 
-                    try
+                    // Marching timesteps. Use a CFL-respecting dt: dt <= cellSize / max|U|.
+                    double maxU = MaxWindSpeed(wind);
+                    if (maxU < 0.1) maxU = 0.1;
+                    double cellSize = Math.Min(engine.DxM, Math.Min(engine.DyM, engine.DzM));
+                    double dtMax = 0.5 * cellSize / maxU;
+                    double dtSnap = Math.Min(writeInterval, dtMax);
+                    int stepsPerSnap = Math.Max(1, (int)Math.Ceiling(writeInterval / dtMax));
+                    double dt = writeInterval / stepsPerSnap;
+
+                    int snapshots = (int)Math.Max(1, Math.Round(duration / writeInterval));
+
+                    var result = new OpenFoamResult
                     {
-                        // 4-face lateral free-stream (same as wind runner). Single inlet
-                        // doesn't work for arbitrary wind direction.
-                        FluidX3DBridge.fx3d_set_lateral_free_stream(_handle,
-                            units.ULattice(wind.X), units.ULattice(wind.Y), units.ULattice(wind.Z));
-                        FluidX3DBridge.fx3d_set_z_boundaries(_handle);
+                        GridNx = nx, GridNy = ny, GridNz = nz,
+                        DomainSizeM = domain,
+                        DomainXMin = -domain, DomainXMax = domain,
+                        DomainYMin = -domain, DomainYMax = domain,
+                        DomainZMax = height,
+                        IsLoaded = true
+                    };
 
-                        // T-as-tracer mapping: ambient T = 1.0 everywhere, release-source
-                        // cells held at T = 2.0 (TYPE_T). Concentration is recovered as
-                        // T - 1.0 (so 0.0 = clean, 1.0 = pure release plume).
-                        FluidX3DBridge.fx3d_initial_temperature(_handle, 1.0f);
-
-                        if (scenario.Sources != null && scenario.Sources.Count > 0)
-                        {
-                            var src = scenario.Sources[0];
-                            var (cx, cy, cz) = units.SiToLattice(src.Position.X, src.Position.Y, src.Position.Z);
-                            FluidX3DBridge.fx3d_set_source_sphere(_handle, cx, cy, cz, 2u, 2.0f);
-                        }
-
-                        // Pre-roll: let wind develop for ~1500 LBM steps before scoring concentration
-                        Report(0.05, "FluidX3D: developing wind field...");
-                        FluidX3DBridge.ProgressCallback prerollCb = (done, total) =>
-                        {
-                            Report(0.05 + 0.10 * done / total, "FluidX3D pre-roll " + done + "/" + total);
-                            return _cancelled ? 1 : 0;
-                        };
-                        int rc = FluidX3DBridge.fx3d_run(_handle, 1500u, prerollCb);
-                        if (rc != 0) { Failed?.Invoke(this, "FluidX3D pre-roll failed (" + rc + ")"); return; }
-
-                        // Transient: chunks corresponding to writeInterval SI seconds each.
-                        uint totalSteps = units.StepsForSeconds(duration);
-                        uint stepsPerSnap = Math.Max(10u, units.StepsForSeconds(writeInterval));
-                        int snapshots = (int)Math.Max(1, totalSteps / stepsPerSnap);
-
-                        var result = new OpenFoamResult
-                        {
-                            GridNx = nx, GridNy = ny, GridNz = nz,
-                            DomainSizeM = domain,
-                            DomainXMin = -domain, DomainXMax = domain,
-                            DomainYMin = -domain, DomainYMax = domain,
-                            DomainZMax = height,
-                            IsLoaded = true
-                        };
-
-                        var tBuf = new float[nx * ny * nz];
-
-                        for (int snap = 0; snap < snapshots; snap++)
+                    double simT = 0;
+                    for (int snap = 0; snap < snapshots; snap++)
+                    {
+                        if (_cancelled) break;
+                        for (int sub = 0; sub < stepsPerSnap; sub++)
                         {
                             if (_cancelled) break;
-                            int snapIndex = snap;
-                            FluidX3DBridge.ProgressCallback cb = (done, total) =>
-                            {
-                                double frac = 0.15 + 0.80 * (snapIndex + (double)done / total) / snapshots;
-                                Report(frac, "FluidX3D snap " + (snapIndex + 1) + "/" + snapshots);
-                                return _cancelled ? 1 : 0;
-                            };
-                            rc = FluidX3DBridge.fx3d_run(_handle, stepsPerSnap, cb);
-                            if (rc != 0) { Failed?.Invoke(this, "FluidX3D solver failed (" + rc + ")"); return; }
-
-                            FluidX3DBridge.fx3d_read_temperature(_handle, tBuf);
-
-                            // Subtract ambient T=1.0 to convert tracer back to concentration ∈ [0,1].
-                            var field = new double[nx, ny, nz];
-                            for (int k = 0; k < nz; k++)
-                            {
-                                for (int j = 0; j < ny; j++)
-                                {
-                                    int rowBase = (k * ny + j) * nx;
-                                    for (int i = 0; i < nx; i++)
-                                    {
-                                        double c = tBuf[rowBase + i] - 1.0;
-                                        field[i, j, k] = c > 0 ? c : 0.0;
-                                    }
-                                }
-                            }
-
-                            double tSi = (snap + 1) * writeInterval;
-                            result.TimeSteps.Add(tSi);
-                            result.PreloadField(tSi, field);
+                            engine.Step(dt);
+                            simT += dt;
                         }
 
-                        Report(0.99, "FluidX3D: completed");
-                        Completed?.Invoke(this, result);
+                        // Clone the field — engine reuses its internal buffer between steps.
+                        var current = engine.Snapshot();
+                        var snapField = new double[nx, ny, nz];
+                        Array.Copy(current, snapField, current.Length);
+
+                        result.TimeSteps.Add(simT);
+                        result.PreloadField(simT, snapField);
+
+                        double frac = 0.05 + 0.92 * (snap + 1) / snapshots;
+                        Report(frac, "FluidX3D dispersion snap " + (snap + 1) + "/" + snapshots);
                     }
-                    finally
-                    {
-                        try { FluidX3DBridge.fx3d_destroy(_handle); } catch { }
-                        _handle = 0UL;
-                    }
+
+                    Report(0.99, "FluidX3D dispersion: complete");
+                    Completed?.Invoke(this, result);
                 }
                 catch (Exception ex)
                 {
@@ -190,6 +155,40 @@ namespace DisperSim3D.Core
                 }
             };
             _worker.RunWorkerAsync();
+        }
+
+        // Legacy overload kept for the SimulationManager dispatch which doesn't have Scene.
+        public void RunAsync(DispersionScenario scenario, CfdConfiguration config,
+            CfdSolverType solverType = CfdSolverType.FluidX3DDispersion)
+        {
+            RunAsync(scenario, config, /*scene*/ null, solverType);
+        }
+
+        private static double MaxWindSpeed(WindField3D w)
+        {
+            // Sparse sample of the domain to estimate the peak speed for CFL sizing.
+            // 16³ ≈ 4k Interpolate calls — fast and good enough for picking dt.
+            const int n = 16;
+            double max = 0;
+            for (int k = 0; k < n; k++)
+            {
+                double tz = (k + 0.5) / n; // 0..1
+                double zSi = tz * 100.0; // domain-height guess; engine doesn't care about exact bound here
+                for (int j = 0; j < n; j++)
+                {
+                    double ty = (j + 0.5) / n;
+                    double ySi = -200.0 + ty * 400.0;
+                    for (int i = 0; i < n; i++)
+                    {
+                        double tx = (i + 0.5) / n;
+                        double xSi = -200.0 + tx * 400.0;
+                        var v = w.Interpolate(xSi, ySi, zSi);
+                        double mag = Math.Sqrt(v.X * v.X + v.Y * v.Y + v.Z * v.Z);
+                        if (mag > max) max = mag;
+                    }
+                }
+            }
+            return max;
         }
 
         private void Report(double fraction, string step)

@@ -2193,10 +2193,11 @@ namespace DisperSim3D.Controls
             }
             else if (isStopped)
             {
-                _cfdSimPanel.HidePlaybackControls();
-                if (!_cfdSimPanelUserVisible)
+                _cfdSimPanel?.HidePlaybackControls();
+                if (!_cfdSimPanelUserVisible && _cfdSimDock != null)
                     _cfdSimDock.DockState = DockState.Hidden;
-                _dispersionTimeLabel.Text = "";
+                if (_dispersionTimeLabel != null)
+                    _dispersionTimeLabel.Text = "";
             }
         }
 
