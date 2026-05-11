@@ -73,9 +73,13 @@ namespace DisperSim3D.Core
             double maxDt = cellSize / Math.Max(windSpeed, 0.5) * 0.5;
             double dt = Math.Min(scenario.TimeStepS, maxDt);
 
+            // SnapshotCount on the scenario (default 20) controls output cadence when
+            // CfdConfiguration.WriteIntervalS isn't explicitly set. WriteIntervalS still
+            // wins when non-zero so power users can pin the exact value.
+            int snapCount = scenario.SnapshotCount > 0 ? scenario.SnapshotCount : 20;
             double writeInterval = config.WriteIntervalS > 0
                 ? config.WriteIntervalS
-                : Math.Max(1.0, scenario.SimulationDurationS / 100.0);
+                : Math.Max(1.0, scenario.SimulationDurationS / snapCount);
 
             var wind = scenario.Meteo.WindVector;
 

@@ -392,7 +392,8 @@ namespace DisperSim3D.Core
                 double endTime = scenario.SimulationDurationS;
                 double dt = scenario.TimeStepS;
                 int totalSteps = (int)Math.Ceiling(endTime / dt);
-                int writeEvery = Math.Max(1, totalSteps / 100);
+                int snapCount = scenario.SnapshotCount > 0 ? scenario.SnapshotCount : 20;
+                int writeEvery = Math.Max(1, totalSteps / snapCount);
 
                 var engine = new GaussianPuffEngine();
                 engine.Initialize(scenario);
