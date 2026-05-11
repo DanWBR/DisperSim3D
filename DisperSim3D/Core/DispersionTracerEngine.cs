@@ -24,6 +24,7 @@ namespace DisperSim3D.Core
         public double DomainHeightM { get; }
 
         private readonly double[,,] _ux, _uy, _uz;
+        private readonly bool[,,] _blocked; // true = inside an obstacle, tracer stays 0 there
         private double[,,] _c;
         private double[,,] _cNext;
         private double _diffusivityM2PerS;
@@ -31,7 +32,8 @@ namespace DisperSim3D.Core
 
         public DispersionTracerEngine(WindField3D wind, double domainHalfM, double domainHeightM,
             int nx, int ny, int nz,
-            double diffusivityM2PerS, double decayPerS = 0.0)
+            double diffusivityM2PerS, double decayPerS = 0.0,
+            System.Collections.Generic.IList<BoundingBox> obstacles = null)
         {
             if (wind == null) throw new ArgumentNullException(nameof(wind));
             Nx = nx; Ny = ny; Nz = nz;
@@ -67,18 +69,72 @@ namespace DisperSim3D.Core
 
             _c = new double[nx, ny, nz];
             _cNext = new double[nx, ny, nz];
+
+            // Build obstacle mask — cells whose centre is inside any BBox stay at C=0.
+            // Without this, the tracer leaks through tank walls because the engine doesn't
+            // know about solid geometry (we never voxelised obstacles for the CPU path).
+            _blocked = new bool[nx, ny, nz];
+            if (obstacles != null)
+            {
+                foreach (var bb in obstacles)
+                {
+                    if (bb == null) continue;
+                    int i0 = Math.Max(0, (int)Math.Floor((bb.Min.X + domainHalfM) / DxM));
+                    int i1 = Math.Min(nx - 1, (int)Math.Ceiling((bb.Max.X + domainHalfM) / DxM));
+                    int j0 = Math.Max(0, (int)Math.Floor((bb.Min.Y + domainHalfM) / DyM));
+                    int j1 = Math.Min(ny - 1, (int)Math.Ceiling((bb.Max.Y + domainHalfM) / DyM));
+                    int k0 = Math.Max(0, (int)Math.Floor(Math.Max(0, bb.Min.Z) / DzM));
+                    int k1 = Math.Min(nz - 1, (int)Math.Ceiling(Math.Max(0, bb.Max.Z) / DzM));
+                    for (int k = k0; k <= k1; k++)
+                        for (int j = j0; j <= j1; j++)
+                            for (int i = i0; i <= i1; i++)
+                                _blocked[i, j, k] = true;
+                }
+            }
         }
 
         /// <summary>Sets a spherical source: cells within <paramref name="radiusM"/> of
-        /// (x,y,z) are clamped to <paramref name="concentration"/> at every step.</summary>
+        /// (x,y,z) are clamped to <paramref name="concentration"/> at every step. The
+        /// source also CARVES OUT a hole in the obstacle mask within the same sphere,
+        /// so a leak located inside an equipment AABB (very common — the leak IS the
+        /// equipment) can still vent into the surrounding atmosphere.</summary>
         public void SetSphericalSource(double xSi, double ySi, double zSi,
             double radiusM, double concentration)
         {
             _sourceX = xSi; _sourceY = ySi; _sourceZ = zSi;
             _sourceR = radiusM; _sourceC = concentration;
             _hasSource = true;
+            CarveSourceHoleInMask();
             // Initial seed at t=0.
             ApplySource();
+        }
+
+        /// <summary>Clears _blocked[i,j,k] for every cell within the source sphere — so
+        /// the post-step obstacle-mask pass doesn't immediately wipe out the tracer the
+        /// source just injected.</summary>
+        private void CarveSourceHoleInMask()
+        {
+            if (!_hasSource) return;
+            double r2 = _sourceR * _sourceR;
+            for (int k = 0; k < Nz; k++)
+            {
+                double z = (k + 0.5) * DzM;
+                double dz = z - _sourceZ;
+                if (dz * dz > r2) continue;
+                for (int j = 0; j < Ny; j++)
+                {
+                    double y = -DomainHalfM + (j + 0.5) * DyM;
+                    double dy = y - _sourceY;
+                    if (dy * dy + dz * dz > r2) continue;
+                    for (int i = 0; i < Nx; i++)
+                    {
+                        double x = -DomainHalfM + (i + 0.5) * DxM;
+                        double dx = x - _sourceX;
+                        if (dx * dx + dy * dy + dz * dz <= r2)
+                            _blocked[i, j, k] = false;
+                    }
+                }
+            }
         }
 
         private double _sourceX, _sourceY, _sourceZ, _sourceR, _sourceC;
@@ -102,6 +158,11 @@ namespace DisperSim3D.Core
                     {
                         double x = -DomainHalfM + (i + 0.5) * DxM;
                         double dx = x - _sourceX;
+                        // Source always injects, even into cells the obstacle mask would
+                        // block. A leak position frequently coincides with the equipment
+                        // bbox (it IS the equipment that's leaking) — masking it out
+                        // produced zero plume. The post-step mask still prevents the
+                        // tracer from accumulating elsewhere inside obstacles.
                         if (dx * dx + dy * dy + dz * dz <= r2)
                             _c[i, j, k] = _sourceC;
                     }
@@ -160,6 +221,14 @@ namespace DisperSim3D.Core
                             _c[i, j, k] *= k1;
                 });
             }
+
+            // Zero out obstacle cells — the tracer can't physically exist inside a solid.
+            Parallel.For(0, Nz, k =>
+            {
+                for (int j = 0; j < Ny; j++)
+                    for (int i = 0; i < Nx; i++)
+                        if (_blocked[i, j, k]) _c[i, j, k] = 0;
+            });
 
             // Re-impose the source each step (continuous release).
             ApplySource();

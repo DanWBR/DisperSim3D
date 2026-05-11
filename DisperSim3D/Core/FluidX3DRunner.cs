@@ -21,6 +21,7 @@ namespace DisperSim3D.Core
         private string _casePath;
         private CancellationTokenSource _cts;
         private volatile bool _cancelled;
+        private System.Collections.Generic.List<BoundingBox> _obstacles;
 
         public event EventHandler<OpenFoamProgress> ProgressUpdated;
         public event EventHandler<OpenFoamResult> Completed;
@@ -37,8 +38,10 @@ namespace DisperSim3D.Core
 
         public void RunAsync(DispersionScenario scenario, CfdConfiguration config,
             Scene3D scene,
+            System.Collections.Generic.List<BoundingBox> obstacles = null,
             CfdSolverType solverType = CfdSolverType.FluidX3DDispersion)
         {
+            _obstacles = obstacles;
             if (IsRunning) return;
             _cancelled = false;
             _cts = new CancellationTokenSource();
@@ -84,7 +87,7 @@ namespace DisperSim3D.Core
                         ? Math.Log(2.0) / src.Gas.HalfLifeS : 0.0;
 
                     var engine = new DispersionTracerEngine(wind, domain, height, nx, ny, nz,
-                        diff, decay);
+                        diff, decay, _obstacles);
 
                     if (src != null)
                     {
@@ -113,6 +116,16 @@ namespace DisperSim3D.Core
 
                     int snapshots = (int)Math.Max(1, Math.Round(duration / writeInterval));
 
+                    // Persist snapshots to disk so the result survives a save/reload of the
+                    // project, and so the .dsproj bundler can pick them up. One <time>.bin
+                    // per snapshot, written via the same OpenFoamResult.SaveBinaryField
+                    // helper the Gaussian Puff path uses — that way LoadCfdSimulation can
+                    // reuse its existing scan-the-directory path.
+                    _casePath = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                        "DisperSim3D_fx3d_sim_" + (scenario.Id ?? Guid.NewGuid().ToString("N")));
+                    try { System.IO.Directory.CreateDirectory(_casePath); }
+                    catch { _casePath = null; }
+
                     var result = new OpenFoamResult
                     {
                         GridNx = nx, GridNy = ny, GridNz = nz,
@@ -120,7 +133,8 @@ namespace DisperSim3D.Core
                         DomainXMin = -domain, DomainXMax = domain,
                         DomainYMin = -domain, DomainYMax = domain,
                         DomainZMax = height,
-                        IsLoaded = true
+                        IsLoaded = true,
+                        CaseDir = _casePath ?? ""
                     };
 
                     double simT = 0;
@@ -139,8 +153,26 @@ namespace DisperSim3D.Core
                         var snapField = new double[nx, ny, nz];
                         Array.Copy(current, snapField, current.Length);
 
-                        result.TimeSteps.Add(simT);
-                        result.PreloadField(simT, snapField);
+                        // Use exact-multiple time so TimeSteps = [15, 30, ..., 300] for
+                        // duration=300, writeInterval=15 — float accumulation of simT drifts
+                        // and the playback bar's max time ends up at 285 instead of 300.
+                        double tSi = (snap + 1) * writeInterval;
+                        result.TimeSteps.Add(tSi);
+                        result.PreloadField(tSi, snapField);
+
+                        // Write to disk for persistence — same .bin format as Gaussian Puff,
+                        // filename = <time>.bin so the existing scan path picks it up on reload.
+                        if (!string.IsNullOrEmpty(_casePath))
+                        {
+                            string binPath = System.IO.Path.Combine(_casePath,
+                                tSi.ToString("F3", System.Globalization.CultureInfo.InvariantCulture) + ".bin");
+                            try
+                            {
+                                OpenFoamResult.SaveBinaryField(binPath, snapField);
+                                result.TimeStepPaths[tSi] = binPath;
+                            }
+                            catch { /* persistence failure shouldn't fail the run */ }
+                        }
 
                         double frac = 0.05 + 0.92 * (snap + 1) / snapshots;
                         Report(frac, "FluidX3D dispersion snap " + (snap + 1) + "/" + snapshots);
@@ -161,7 +193,7 @@ namespace DisperSim3D.Core
         public void RunAsync(DispersionScenario scenario, CfdConfiguration config,
             CfdSolverType solverType = CfdSolverType.FluidX3DDispersion)
         {
-            RunAsync(scenario, config, /*scene*/ null, solverType);
+            RunAsync(scenario, config, /*scene*/ null, /*obstacles*/ null, solverType);
         }
 
         private static double MaxWindSpeed(WindField3D w)

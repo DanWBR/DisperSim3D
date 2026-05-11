@@ -104,6 +104,11 @@ namespace DisperSim3D.Models
         public ProjectSettings GeneralSettings { get; set; }
 
         /// <summary>
+        /// Per-project 3D environment toggles (sun, sky dome, ground texture).
+        /// </summary>
+        public EnvironmentSettings Environment { get; set; }
+
+        /// <summary>
         /// Project gas library — pure substances and mixtures, referenced by sources via <see cref="ReleaseSource3D.GasRefId"/>.
         /// </summary>
         public List<GasLibraryItem> GasLibrary { get; set; }
@@ -153,6 +158,7 @@ namespace DisperSim3D.Models
             CfdSimulations = new List<CfdSimulationEntry>();
             WindFieldScenarios = new List<WindFieldScenario>();
             GeneralSettings = new ProjectSettings();
+            Environment = new EnvironmentSettings();
             GasLibrary = new List<GasLibraryItem>();
             TopLevelSources = new List<ReleaseSource3D>();
             Simulations = new List<Simulation>();

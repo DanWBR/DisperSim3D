@@ -21,6 +21,31 @@ namespace DisperSim3D.Core
             if (string.IsNullOrEmpty(caseRoot) || !Directory.Exists(caseRoot))
                 yield break;
 
+            // FluidX3D wind fields drop a single windfield.bin at the case root — there's
+            // no OpenFOAM directory structure to enumerate. If we detect it, just bundle
+            // that file and exit; the rest of the OpenFOAM rules don't apply.
+            string fluidBin = Path.Combine(caseRoot, "windfield.bin");
+            if (File.Exists(fluidBin))
+            {
+                yield return fluidBin;
+                yield break;
+            }
+
+            // FluidX3D dispersion case: a flat directory of <time>.bin concentration
+            // snapshots, no OpenFOAM structure. Detected by absence of system/controlDict
+            // combined with presence of .bin files at the root. Just yield all .bin files.
+            bool hasControlDict = File.Exists(Path.Combine(caseRoot, "system", "controlDict"));
+            if (!hasControlDict)
+            {
+                var rootBins = Directory.EnumerateFiles(caseRoot, "*.bin",
+                    SearchOption.TopDirectoryOnly).ToList();
+                if (rootBins.Count > 0)
+                {
+                    foreach (var f in rootBins) yield return f;
+                    yield break;
+                }
+            }
+
             if (mode == BundleEmbedMode.FullCase)
             {
                 foreach (var f in EnumerateFullCase(caseRoot))

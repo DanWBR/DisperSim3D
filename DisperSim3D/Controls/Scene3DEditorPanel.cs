@@ -222,6 +222,8 @@ namespace DisperSim3D.Controls
                 new ToolStripSeparator(),
                 _miSnap, _miGround, _miVectors, _miWindArrows,
                 new ToolStripSeparator(),
+                new ToolStripMenuItem("Environment Settings...", null, (s, e) => DoShowEnvironmentSettings()),
+                new ToolStripSeparator(),
                 new ToolStripMenuItem("Project Tree", Img("application_view_columns.png"), (s, e) => ShowDockPanel(_projectTreeDock, DockState.DockLeft)),
                 new ToolStripMenuItem("Properties Panel", Img("table.png"), (s, e) => ShowDockPanel(_propertiesDock, DockState.DockRight)),
                 new ToolStripMenuItem("Add Item Panel", Img("add.png"), (s, e) => ToggleAddItemPanel(true)),
@@ -646,6 +648,10 @@ namespace DisperSim3D.Controls
             _viewportDock.PlaybackBar.SeekRequested += (s, fraction) =>
             {
                 _editor.SeekCfdPlayback(fraction);
+                // After a seek the underlying playback time/index changes but the bar's
+                // time label and slider position don't auto-refresh — push the new state
+                // to the UI explicitly so the user sees the result of their drag.
+                UpdatePlaybackBarState();
             };
 
             // --- DockPanel layout ---
@@ -1169,7 +1175,23 @@ namespace DisperSim3D.Controls
         private void ProjectTree_SelectionChanged(object sender, ProjectTreeSelectionEventArgs e)
         {
             if (e.Selected != null && _propertyGrid != null)
-                _propertyGrid.SelectedObject = e.Selected;
+            {
+                if (e.Selected is ReleaseSource3D selSrc)
+                {
+                    // Same curated view that the 3D-viewport click uses — keeps the property
+                    // set in the tree consistent with the one shown when picking the marker.
+                    _propertyGrid.SelectedObject = new PropertyAdapters.ReleaseSourcePropertyAdapter(selSrc, () =>
+                    {
+                        _editor.RefreshViewport();
+                        if (_propertiesDock != null)
+                            _propertiesDock.Text = "Properties - " + selSrc.Name;
+                    });
+                }
+                else
+                {
+                    _propertyGrid.SelectedObject = e.Selected;
+                }
+            }
             if (e.Selected is ReleaseSource3D src)
                 _editor.SelectedSource = src;
 
@@ -1211,6 +1233,16 @@ namespace DisperSim3D.Controls
             }
             else if (isRunning || isPaused)
             {
+                double cur = _editor.DispersionTimeS;
+                double tot = _editor.SimulationTotalDurationS;
+                bar.SetTimeText(string.Format("T = {0:F1} s / {1:F0} s", cur, tot));
+                bar.SetSliderEnabled(true);
+                if (tot > 0) bar.SetProgress(cur / tot);
+            }
+            else if (hasPlayable)
+            {
+                // Stopped but a result is loaded — keep the bar interactive so the user
+                // can scrub through frames after playback finishes / before pressing play.
                 double cur = _editor.DispersionTimeS;
                 double tot = _editor.SimulationTotalDurationS;
                 bar.SetTimeText(string.Format("T = {0:F1} s / {1:F0} s", cur, tot));
@@ -1300,7 +1332,7 @@ namespace DisperSim3D.Controls
         {
             var src = _editor.Scene.TopLevelSources.FirstOrDefault(s => s.Id == id);
             if (src == null) return;
-            _propertyGrid.SelectedObject = src;
+            ShowSourceProperties(src);
             UpdateStatus("Edit source via Properties panel");
         }
 
@@ -1373,6 +1405,12 @@ namespace DisperSim3D.Controls
             var sim = _editor.Scene.Simulations.FirstOrDefault(s => s.Id == id);
             if (sim == null) return;
             _propertyGrid.SelectedObject = sim;
+            if (_propertiesDock != null)
+            {
+                _propertiesDock.Text = "Properties - " + (sim.Name ?? "Simulation");
+                if (_propertiesDock.IsHidden) _propertiesDock.Show(_dockPanel);
+                else _propertiesDock.Activate();
+            }
         }
 
         private void DoAddView()
@@ -2100,6 +2138,29 @@ namespace DisperSim3D.Controls
             });
         }
 
+        private void DoShowEnvironmentSettings()
+        {
+            if (_editor?.Scene == null) return;
+            if (_editor.Scene.Environment == null)
+                _editor.Scene.Environment = new EnvironmentSettings();
+            // The PropertyGrid edits the live EnvironmentSettings; subscribe to property
+            // changes via a wrapper that calls ApplyEnvironment on every edit so the user
+            // sees the result immediately. HandyControl PropertyGrid raises PropertyChanged
+            // on the SelectedObject when an editor commits, so we use INotifyPropertyChanged
+            // — EnvironmentSettings doesn't implement it, so we just trigger refresh on
+            // every dispatcher idle while it's selected.
+            if (_propertiesDock != null) _propertiesDock.Text = "Properties - Environment";
+            _propertyGrid.SelectedObject = _editor.Scene.Environment;
+            // Hook a tick to refresh — PropertyGrid commits on focus loss / Enter.
+            _propertyGrid.LostFocus -= EnvPropChanged;
+            _propertyGrid.LostFocus += EnvPropChanged;
+        }
+
+        private void EnvPropChanged(object sender, EventArgs e)
+        {
+            try { _editor?.ApplyEnvironment(); } catch { }
+        }
+
         private void ShowSourceProperties(ReleaseSource3D source)
         {
             _propertiesDock.Text = "Properties - " + source.Name;
@@ -2146,14 +2207,18 @@ namespace DisperSim3D.Controls
             bool isSolving = state == DispersionSimulationState.SolvingCfd;
             bool isSteadyComplete = state == DispersionSimulationState.SteadyStateComplete;
 
-            _btnRun.Enabled = isStopped;
-            _btnPlay.Enabled = isPaused || (isStopped && _editor.CfdResult != null && _editor.CfdResult.IsLoaded);
-            _btnPause.Enabled = isRunning;
-            _btnStop.Enabled = !isStopped && !isSteadyComplete;
+            // Toolbar buttons + timer + label may not be wired yet when this fires from a
+            // tree-visibility event during early init (the Insert menu and viewport dock
+            // are built before the legacy playback toolbar). Guard every reference.
+            if (_btnRun != null)   _btnRun.Enabled = isStopped;
+            if (_btnPlay != null)  _btnPlay.Enabled = isPaused || (isStopped && _editor.CfdResult != null && _editor.CfdResult.IsLoaded);
+            if (_btnPause != null) _btnPause.Enabled = isRunning;
+            if (_btnStop != null)  _btnStop.Enabled = !isStopped && !isSteadyComplete;
 
             if (isSolving)
             {
-                _dispersionTimeLabel.Text = "CFD solving...";
+                if (_dispersionTimeLabel != null)
+                    _dispersionTimeLabel.Text = "CFD solving...";
             }
             else if (isRunning || isPaused)
             {
@@ -2168,8 +2233,9 @@ namespace DisperSim3D.Controls
                         {
                             double currentT = _editor.DispersionTimeS;
                             double totalT = _editor.SimulationTotalDurationS;
-                            _dispersionTimeLabel.Text = string.Format("T = {0:F1} s / {1:F0} s", currentT, totalT);
-                            _cfdSimPanel.UpdatePlaybackState(
+                            if (_dispersionTimeLabel != null)
+                                _dispersionTimeLabel.Text = string.Format("T = {0:F1} s / {1:F0} s", currentT, totalT);
+                            _cfdSimPanel?.UpdatePlaybackState(
                                 ds == DispersionSimulationState.Running, currentT, totalT);
 
                             var bar = _viewportDock?.PlaybackBar;
@@ -2189,13 +2255,18 @@ namespace DisperSim3D.Controls
             }
             else if (isSteadyComplete)
             {
-                _dispersionTimeLabel.Text = "Steady-state";
+                if (_dispersionTimeLabel != null)
+                    _dispersionTimeLabel.Text = "Steady-state";
             }
             else if (isStopped)
             {
                 _cfdSimPanel?.HidePlaybackControls();
-                if (!_cfdSimPanelUserVisible && _cfdSimDock != null)
-                    _cfdSimDock.DockState = DockState.Hidden;
+                try
+                {
+                    if (!_cfdSimPanelUserVisible && _cfdSimDock != null)
+                        _cfdSimDock.DockState = DockState.Hidden;
+                }
+                catch { }
                 if (_dispersionTimeLabel != null)
                     _dispersionTimeLabel.Text = "";
             }

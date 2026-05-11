@@ -16,18 +16,26 @@ namespace DisperSim3D.Core
     /// </summary>
     public static class ViewRenderer
     {
+        private static readonly string _logPath = Path.Combine(Path.GetTempPath(), "dispersim3d_view.log");
+        private static void LogView(string msg)
+        {
+            try { File.AppendAllText(_logPath, $"[{DateTime.Now:HH:mm:ss.fff}] {msg}\r\n"); } catch { }
+        }
+
         /// <summary>
         /// Builds a ModelVisual3D for the view, or null when the simulation is unresolved /
         /// not run / its case directory is missing. Caller adds to the viewport.
         /// </summary>
         public static ModelVisual3D BuildVisual(View view, Simulation sim, Scene3D scene)
         {
-            if (view == null || sim == null || string.IsNullOrEmpty(sim.CasePath)
-                || !Directory.Exists(sim.CasePath))
-                return null;
+            if (view == null || sim == null)
+            { LogView("[ViewRenderer] null view or sim"); return null; }
+            if (string.IsNullOrEmpty(sim.CasePath) || !Directory.Exists(sim.CasePath))
+            { LogView($"[ViewRenderer] missing CasePath: '{sim.CasePath}'"); return null; }
 
             string fieldName = ResolveFieldName(view.FieldProperty, sim);
-            if (string.IsNullOrEmpty(fieldName)) return null;
+            if (string.IsNullOrEmpty(fieldName))
+            { LogView("[ViewRenderer] fieldName null/empty"); return null; }
 
             int nx = sim.SnapshotGridResolution > 0 ? sim.SnapshotGridResolution : 60;
             int ny = nx;
@@ -37,10 +45,20 @@ namespace DisperSim3D.Core
             var result = OpenFoamResultReader.ReadResults(sim.CasePath, nx, ny, nz, half,
                 scalarFieldName: fieldName);
             if (result == null || !result.IsLoaded || result.TimeSteps.Count == 0)
-                return null;
+            {
+                // FluidX3D dispersion writes flat <time>.bin files at the case root rather
+                // than OpenFOAM-style time subdirectories. Detect that layout and rebuild
+                // an OpenFoamResult by hand so the rest of the rendering pipeline works.
+                result = TryLoadFlatBinCase(sim.CasePath, ref nx, ref ny, ref nz, half);
+                if (result == null || !result.IsLoaded || result.TimeSteps.Count == 0)
+                { LogView($"[ViewRenderer] no results at '{sim.CasePath}' (nx={nx})"); return null; }
+                LogView($"[ViewRenderer] flat-bin loaded: {result.TimeSteps.Count} ts, nx={nx} ny={ny} nz={nz}");
+            }
 
             var field = SelectField(result, view.TimeMode, view.SpecificTimeS);
-            if (field == null) return null;
+            if (field == null)
+            { LogView("[ViewRenderer] SelectField returned null"); return null; }
+            LogView($"[ViewRenderer] field {field.GetLength(0)}x{field.GetLength(1)}x{field.GetLength(2)}, building {view.Kind}");
 
             switch (view.Kind)
             {
@@ -53,6 +71,58 @@ namespace DisperSim3D.Core
                 default:
                     return null;
             }
+        }
+
+        private static Models.OpenFoamResult TryLoadFlatBinCase(string caseDir, ref int nx, ref int ny, ref int nz, double half)
+        {
+            if (string.IsNullOrEmpty(caseDir) || !Directory.Exists(caseDir)) return null;
+            string controlDict = Path.Combine(caseDir, "system", "controlDict");
+            if (File.Exists(controlDict)) return null;
+            var binFiles = Directory.GetFiles(caseDir, "*.bin", SearchOption.TopDirectoryOnly);
+            if (binFiles.Length == 0) return null;
+
+            // Infer grid from file size — FluidX3D dispersion uses ny=nx, nz=max(8, nx/2).
+            // sim.SnapshotGridResolution may be stale if the user reran with a different
+            // resolution, so trust the file. Sample the first .bin and search for nx.
+            try
+            {
+                long bytes = new FileInfo(binFiles[0]).Length;
+                long doubles = bytes / sizeof(double);
+                int bestNx = 0;
+                for (int candidate = 8; candidate <= 1024; candidate++)
+                {
+                    int cnz = Math.Max(8, candidate / 2);
+                    if ((long)candidate * candidate * cnz == doubles) { bestNx = candidate; break; }
+                }
+                if (bestNx > 0)
+                {
+                    nx = bestNx; ny = bestNx; nz = Math.Max(8, bestNx / 2);
+                }
+            }
+            catch { /* fall back to caller's nx/ny/nz */ }
+
+            var result = new Models.OpenFoamResult
+            {
+                GridNx = nx, GridNy = ny, GridNz = nz,
+                DomainSizeM = half,
+                DomainXMin = -half, DomainXMax = half,
+                DomainYMin = -half, DomainYMax = half,
+                DomainZMax = half,
+                CaseDir = caseDir
+            };
+            foreach (var f in binFiles)
+            {
+                string name = Path.GetFileNameWithoutExtension(f);
+                if (double.TryParse(name, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double t))
+                {
+                    result.TimeSteps.Add(t);
+                    result.TimeStepPaths[t] = f;
+                }
+            }
+            result.TimeSteps.Sort();
+            result.IsLoaded = result.TimeSteps.Count > 0;
+            return result;
         }
 
         // ── field resolution ──
@@ -223,22 +293,26 @@ namespace DisperSim3D.Core
         private static void GetSamplePosition(ViewKind kind, double planePos,
             double u, double v, double half, out double x, out double y, out double z)
         {
+            // Texcoord origin in WPF ImageBrush is top-left ((0,0)). The plane mesh
+            // assigns the TOP-LEFT texcoord to the y=+half (or z=+2half) corner. So we
+            // must flip the v parameter when converting back to world coords, otherwise
+            // the bitmap renders mirrored along the vertical axis of each plane.
             switch (kind)
             {
                 case ViewKind.ContourXY:
                     x = -half + u * 2 * half;
-                    y = -half + v * 2 * half;
+                    y = +half - v * 2 * half;
                     z = planePos;
                     break;
                 case ViewKind.ContourXZ:
                     x = -half + u * 2 * half;
                     y = planePos;
-                    z = v * 2 * half; // z >= 0
+                    z = 2 * half * (1 - v); // top of mesh is z=2half (v=0)
                     break;
                 case ViewKind.ContourYZ:
                     x = planePos;
                     y = -half + u * 2 * half;
-                    z = v * 2 * half;
+                    z = 2 * half * (1 - v);
                     break;
                 default:
                     x = y = z = 0;

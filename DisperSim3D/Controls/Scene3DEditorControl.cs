@@ -67,6 +67,9 @@ namespace DisperSim3D.Controls
 
         private GridLinesVisual3D _gridVisual;
         private System.Windows.Media.Media3D.ModelVisual3D _groundPlaneVisual;
+        private System.Windows.Media.Media3D.Visual3D _defaultLightsVisual;
+        private System.Windows.Media.Media3D.ModelVisual3D _envLightsVisual;
+        private System.Windows.Media.Media3D.ModelVisual3D _skyDomeVisual;
         private readonly List<Visual3D> _compassVisuals = new List<Visual3D>();
         private bool _showGroundPlane = true;
         private double _groundSize = 200;
@@ -249,8 +252,11 @@ namespace DisperSim3D.Controls
                 ZoomAroundMouseDownPoint = true
             };
 
-            // Adicionar iluminação
-            _viewport.Children.Add(new DefaultLights());
+            // Lighting + sky dome are rebuilt by ApplyEnvironment() once _scene is set;
+            // start with DefaultLights so the very first frame (before scene load) isn't
+            // pitch black.
+            _defaultLightsVisual = new DefaultLights();
+            _viewport.Children.Add(_defaultLightsVisual);
 
             // Adicionar grid
             _gridVisual = new GridLinesVisual3D
@@ -738,6 +744,17 @@ namespace DisperSim3D.Controls
                 return;
 
             var entry = job.ResultEntry;
+
+            // Remove any prior entry that targets the same Simulation — without this,
+            // re-running a Simulation leaves the stale entry from the previous session
+            // (with Tag=null after reload) in the list, and the visibility-checkbox
+            // lookup picks it instead of the fresh result.
+            _scene.CfdSimulations.RemoveAll(en =>
+                (!string.IsNullOrEmpty(en.Id) && en.Id == entry.Id) ||
+                (!string.IsNullOrEmpty(en.Name) && en.Name == entry.Name) ||
+                (!string.IsNullOrEmpty(en.ScenarioName) && en.ScenarioName == entry.ScenarioName
+                 && en.SolverType == entry.SolverType));
+
             _scene.CfdSimulations.Add(entry);
             CfdSolveCompleted?.Invoke(this, entry);
 
@@ -821,9 +838,16 @@ namespace DisperSim3D.Controls
             if (config == null)
                 config = scenario.CfdConfig ?? new CfdConfiguration();
 
+            // Per-triangle voxelization (UI-thread only — Model3DGroup is a WPF
+            // DependencyObject). Matches the wind-field path so the CPU dispersion
+            // engine sees the actual obstacle geometry instead of one giant AABB
+            // wrapping the whole imported model.
             var obstacles = new List<BoundingBox>();
             foreach (var deco in _scene.Decorations)
-                if (deco.BoundingBox != null) obstacles.Add(deco.BoundingBox);
+            {
+                var aabbs = FluidX3DObstacleVoxelizer.ExtractWorldAabbs(deco);
+                if (aabbs != null) obstacles.AddRange(aabbs);
+            }
 
             var hpProfiles = new Dictionary<string, double[]>();
             foreach (var src in scenario.Sources)
@@ -902,7 +926,10 @@ namespace DisperSim3D.Controls
         /// </summary>
         public async void SeekCfdPlayback(double fraction)
         {
-            if (!_cfdPlaybackActive || _cfdResult == null || _cfdResult.TimeSteps.Count == 0) return;
+            // Allow scrubbing whenever a result is loaded — even if playback isn't
+            // actively running. Previously the _cfdPlaybackActive check made the slider
+            // a no-op once auto-play finished or the user pressed Stop.
+            if (_cfdResult == null || _cfdResult.TimeSteps.Count == 0) return;
             if (_computingFrame) return;
 
             double firstTime = _cfdResult.TimeSteps[0];
@@ -1032,7 +1059,11 @@ namespace DisperSim3D.Controls
         {
             get
             {
-                if (_cfdPlaybackActive && _cfdResult != null && _cfdPlaybackIndex < _cfdResult.TimeSteps.Count)
+                // Return the current CFD playback time whenever a result is loaded —
+                // not just while playback is actively running. After Stop or auto-end,
+                // the slider's seek position should still be readable.
+                if (_cfdResult != null && _cfdResult.IsLoaded && _cfdResult.TimeSteps.Count > 0
+                    && _cfdPlaybackIndex >= 0 && _cfdPlaybackIndex < _cfdResult.TimeSteps.Count)
                     return _cfdResult.TimeSteps[_cfdPlaybackIndex];
                 return _dispersionEngine != null ? _dispersionEngine.CurrentTimeS : 0;
             }
@@ -1487,6 +1518,47 @@ namespace DisperSim3D.Controls
                 _cfdResult = cached;
                 StartCfdPlayback();
                 return true;
+            }
+
+            // Generic on-disk path for any solver that writes a flat directory of
+            // <time>.bin files (FluidX3D dispersion, Gaussian Puff with wind subgrid).
+            // Detected by the ABSENCE of an OpenFOAM controlDict + PRESENCE of .bin files.
+            if (!string.IsNullOrEmpty(entry.CasePath) && System.IO.Directory.Exists(entry.CasePath))
+            {
+                string controlDict = System.IO.Path.Combine(entry.CasePath, "system", "controlDict");
+                var rootBins = System.IO.Directory.GetFiles(entry.CasePath, "*.bin",
+                    System.IO.SearchOption.TopDirectoryOnly);
+                if (!System.IO.File.Exists(controlDict) && rootBins.Length > 0)
+                {
+                    var rebuilt = new OpenFoamResult
+                    {
+                        GridNx = entry.GridNx, GridNy = entry.GridNy, GridNz = entry.GridNz,
+                        DomainSizeM = entry.DomainSizeM,
+                        DomainXMin = -entry.DomainSizeM, DomainXMax = entry.DomainSizeM,
+                        DomainYMin = -entry.DomainSizeM, DomainYMax = entry.DomainSizeM,
+                        DomainZMax = entry.DomainSizeM,
+                        CaseDir = entry.CasePath
+                    };
+                    foreach (var binFile in rootBins)
+                    {
+                        string name = System.IO.Path.GetFileNameWithoutExtension(binFile);
+                        double t;
+                        if (double.TryParse(name, System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out t))
+                        {
+                            rebuilt.TimeSteps.Add(t);
+                            rebuilt.TimeStepPaths[t] = binFile;
+                        }
+                    }
+                    rebuilt.TimeSteps.Sort();
+                    rebuilt.IsLoaded = rebuilt.TimeSteps.Count > 0;
+                    if (rebuilt.IsLoaded)
+                    {
+                        _cfdResult = rebuilt;
+                        StartCfdPlayback();
+                        return true;
+                    }
+                }
             }
 
             if (entry.SolverType == "Gaussian Puff")
@@ -2539,6 +2611,7 @@ namespace DisperSim3D.Controls
                                 new System.Xml.Linq.XAttribute("Opacity", d.Opacity.ToString(inv))))),
 
                     SerializeGeneralSettings(inv),
+                    SerializeEnvironment(inv),
                     SerializeGasLibrary(inv),
                     SerializeTopLevelSources(inv),
                     SerializeWindFieldScenarios(inv),
@@ -2551,6 +2624,43 @@ namespace DisperSim3D.Controls
                     SerializeGasDetectors(inv),
                     SerializeCfdSimulations(inv, filePath)
                 ));
+        }
+
+        private System.Xml.Linq.XElement SerializeEnvironment(System.Globalization.CultureInfo inv)
+        {
+            var e = _scene.Environment;
+            if (e == null) return null;
+            return new System.Xml.Linq.XElement("Environment",
+                new System.Xml.Linq.XAttribute("UseSunLighting", e.UseSunLighting.ToString()),
+                new System.Xml.Linq.XAttribute("SunAzimuthDeg", e.SunAzimuthDeg.ToString(inv)),
+                new System.Xml.Linq.XAttribute("SunElevationDeg", e.SunElevationDeg.ToString(inv)),
+                new System.Xml.Linq.XAttribute("SunIntensity", e.SunIntensity.ToString(inv)),
+                new System.Xml.Linq.XAttribute("AmbientIntensity", e.AmbientIntensity.ToString(inv)),
+                new System.Xml.Linq.XAttribute("SkydomeEnabled", e.SkydomeEnabled.ToString()),
+                new System.Xml.Linq.XAttribute("SkyZenith", e.SkyZenithColor.ToString()),
+                new System.Xml.Linq.XAttribute("SkyHorizon", e.SkyHorizonColor.ToString()),
+                new System.Xml.Linq.XAttribute("Ground", e.Ground.ToString()),
+                new System.Xml.Linq.XAttribute("ShowGridOverlay", e.ShowGridOverlay.ToString()));
+        }
+
+        private void DeserializeEnvironment(System.Xml.Linq.XElement root, System.Globalization.CultureInfo inv, Scene3D fs)
+        {
+            var el = root.Element("Environment");
+            if (el == null) { fs.Environment = new EnvironmentSettings(); return; }
+            var e = new EnvironmentSettings();
+            bool b; double d;
+            if (bool.TryParse((string)el.Attribute("UseSunLighting"), out b)) e.UseSunLighting = b;
+            if (double.TryParse((string)el.Attribute("SunAzimuthDeg"), System.Globalization.NumberStyles.Float, inv, out d)) e.SunAzimuthDeg = d;
+            if (double.TryParse((string)el.Attribute("SunElevationDeg"), System.Globalization.NumberStyles.Float, inv, out d)) e.SunElevationDeg = d;
+            if (double.TryParse((string)el.Attribute("SunIntensity"), System.Globalization.NumberStyles.Float, inv, out d)) e.SunIntensity = d;
+            if (double.TryParse((string)el.Attribute("AmbientIntensity"), System.Globalization.NumberStyles.Float, inv, out d)) e.AmbientIntensity = d;
+            if (bool.TryParse((string)el.Attribute("SkydomeEnabled"), out b)) e.SkydomeEnabled = b;
+            try { e.SkyZenithColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString((string)el.Attribute("SkyZenith")); } catch { }
+            try { e.SkyHorizonColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString((string)el.Attribute("SkyHorizon")); } catch { }
+            GroundMaterial gm;
+            if (Enum.TryParse((string)el.Attribute("Ground") ?? "Grass", out gm)) e.Ground = gm;
+            if (bool.TryParse((string)el.Attribute("ShowGridOverlay"), out b)) e.ShowGridOverlay = b;
+            fs.Environment = e;
         }
 
         private System.Xml.Linq.XElement SerializeGeneralSettings(System.Globalization.CultureInfo inv)
@@ -2749,6 +2859,7 @@ namespace DisperSim3D.Controls
                         new System.Xml.Linq.XAttribute("CasePath", wf.CasePath ?? ""),
                         new System.Xml.Linq.XAttribute("EmbedMode", wf.EmbedMode.ToString()),
                         new System.Xml.Linq.XAttribute("UseFluidX3D", wf.UseFluidX3D.ToString()),
+                        new System.Xml.Linq.XAttribute("FluidX3DQuality", wf.FluidX3DQuality.ToString()),
                         new System.Xml.Linq.XElement("Meteo",
                             new System.Xml.Linq.XAttribute("WindSpeed", wf.Meteo.WindSpeed.ToString(inv)),
                             new System.Xml.Linq.XAttribute("WindDir", wf.Meteo.WindDirectionDeg.ToString(inv)),
@@ -3134,6 +3245,9 @@ namespace DisperSim3D.Controls
                 bool useFx;
                 if (bool.TryParse((string)wfEl.Attribute("UseFluidX3D") ?? "False", out useFx))
                     wf.UseFluidX3D = useFx;
+                FluidX3DQuality fxQual;
+                if (Enum.TryParse((string)wfEl.Attribute("FluidX3DQuality") ?? "Fast", out fxQual))
+                    wf.FluidX3DQuality = fxQual;
                 var mEl = wfEl.Element("Meteo");
                 if (mEl != null)
                 {
@@ -3563,7 +3677,14 @@ namespace DisperSim3D.Controls
                     if (!System.IO.Directory.Exists(destDir))
                         System.IO.Directory.CreateDirectory(destDir);
 
-                    if (entry.SolverType == "Gaussian Puff")
+                    // Gaussian Puff + FluidX3D dispersion both produce a flat directory of
+                    // <time>.bin concentration snapshots. Detect by absence of OpenFOAM
+                    // controlDict + presence of .bin files at root.
+                    bool hasFoamCtrl = System.IO.File.Exists(System.IO.Path.Combine(
+                        entry.CasePath, "system", "controlDict"));
+                    bool hasRootBins = System.IO.Directory.GetFiles(entry.CasePath, "*.bin",
+                        System.IO.SearchOption.TopDirectoryOnly).Length > 0;
+                    if (!hasFoamCtrl && hasRootBins)
                     {
                         foreach (var f in System.IO.Directory.GetFiles(entry.CasePath, "*.bin"))
                             System.IO.File.Copy(f, System.IO.Path.Combine(destDir,
@@ -3807,6 +3928,7 @@ namespace DisperSim3D.Controls
                 }
 
                 DeserializeGeneralSettings(root, inv, fs);
+                DeserializeEnvironment(root, inv, fs);
                 DeserializeGasLibrary(root, inv, fs);
                 DeserializeTopLevelSources(root, inv, fs);
                 DeserializeWindFieldScenarios(root, inv, fs);
@@ -3826,6 +3948,8 @@ namespace DisperSim3D.Controls
                 _snapToGrid = fs.SnapToGrid;
                 _gridSpacing = fs.GridSpacing;
                 SelectedDecoration = null;
+                if (_scene.Environment == null) _scene.Environment = new EnvironmentSettings();
+                ApplyEnvironment();
                 UpdateViewport();
             }
             catch (Exception ex)
@@ -4336,6 +4460,44 @@ namespace DisperSim3D.Controls
             _viewVisuals.Clear();
         }
 
+        /// <summary>Rebuilds Sun + sky-dome from <see cref="Scene3D.Environment"/> and
+        /// refreshes the ground plane. Called after project load and whenever the user
+        /// edits an EnvironmentSettings property.</summary>
+        public void ApplyEnvironment()
+        {
+            if (_viewport == null) return;
+            var env = _scene?.Environment;
+
+            // Lights — remove every prior lighting visual.
+            if (_defaultLightsVisual != null)
+            { _viewport.Children.Remove(_defaultLightsVisual); _defaultLightsVisual = null; }
+            if (_envLightsVisual != null)
+            { _viewport.Children.Remove(_envLightsVisual); _envLightsVisual = null; }
+
+            if (env != null && env.UseSunLighting)
+            {
+                _envLightsVisual = Core.EnvironmentRenderer.BuildLighting(env);
+                if (_envLightsVisual != null) _viewport.Children.Add(_envLightsVisual);
+            }
+            else
+            {
+                _defaultLightsVisual = new DefaultLights();
+                _viewport.Children.Add(_defaultLightsVisual);
+            }
+
+            // Sky dome.
+            if (_skyDomeVisual != null)
+            { _viewport.Children.Remove(_skyDomeVisual); _skyDomeVisual = null; }
+            if (env != null)
+            {
+                _skyDomeVisual = Core.EnvironmentRenderer.BuildSkyDome(env, _groundSize);
+                if (_skyDomeVisual != null) _viewport.Children.Add(_skyDomeVisual);
+            }
+
+            // Ground (texture may have changed).
+            UpdateGroundPlane();
+        }
+
         private void UpdateGroundPlane()
         {
             if (_viewport == null) return;
@@ -4364,25 +4526,12 @@ namespace DisperSim3D.Controls
             mesh.TextureCoordinates.Add(new System.Windows.Point(1, 1));
             mesh.TextureCoordinates.Add(new System.Windows.Point(0, 1));
 
-            int tiles = (int)(_groundSize / 5.0);
-            var drawingGroup = new System.Windows.Media.DrawingGroup();
-            var bgColor = System.Windows.Media.Color.FromRgb(180, 195, 170);
-            var lineColor = System.Windows.Media.Color.FromArgb(60, 100, 120, 90);
-            drawingGroup.Children.Add(new System.Windows.Media.GeometryDrawing(
-                new System.Windows.Media.SolidColorBrush(bgColor), null,
-                new System.Windows.Media.RectangleGeometry(new System.Windows.Rect(0, 0, tiles, tiles))));
-            var pen = new System.Windows.Media.Pen(new System.Windows.Media.SolidColorBrush(lineColor), 0.02);
-            for (int i = 0; i <= tiles; i++)
-            {
-                drawingGroup.Children.Add(new System.Windows.Media.GeometryDrawing(null, pen,
-                    new System.Windows.Media.LineGeometry(new System.Windows.Point(i, 0), new System.Windows.Point(i, tiles))));
-                drawingGroup.Children.Add(new System.Windows.Media.GeometryDrawing(null, pen,
-                    new System.Windows.Media.LineGeometry(new System.Windows.Point(0, i), new System.Windows.Point(tiles, i))));
-            }
-
-            var brush = new System.Windows.Media.DrawingBrush(drawingGroup);
-            brush.TileMode = System.Windows.Media.TileMode.None;
-            brush.Freeze();
+            var env = _scene?.Environment;
+            System.Windows.Media.Brush brush;
+            if (env != null)
+                brush = Core.EnvironmentRenderer.BuildGroundBrush(env.Ground, _groundSize, env.ShowGridOverlay);
+            else
+                brush = Core.EnvironmentRenderer.BuildGroundBrush(Models.GroundMaterial.Grid, _groundSize, false);
 
             var material = new System.Windows.Media.Media3D.DiffuseMaterial(brush);
 
@@ -4510,21 +4659,31 @@ namespace DisperSim3D.Controls
                 _viewport.Children.Remove(model);
             }
 
+            // Always prefer TopLevelSources for UI rendering — those are the authoritative
+            // user-edited sources. Running a simulation pushes a transient DispersionScenario
+            // onto the scene with a CLONE of the source; if we picked that up here, the
+            // marker would point at the snapshot taken at sim configuration time, not the
+            // current source position. Also: clones don't carry IsVisible / other UI-only
+            // flags, so showing them caused the marker to vanish after a run.
             var sourcesToRender = new List<ReleaseSource3D>();
-            if (_scene.DispersionScenario != null)
-                sourcesToRender.AddRange(_scene.DispersionScenario.Sources);
-            if (_scene.TopLevelSources != null)
+            if (_scene.TopLevelSources != null && _scene.TopLevelSources.Count > 0)
             {
-                foreach (var s in _scene.TopLevelSources)
-                    if (!sourcesToRender.Any(x => x.Id == s.Id))
-                        sourcesToRender.Add(s);
+                sourcesToRender.AddRange(_scene.TopLevelSources);
+            }
+            else if (_scene.DispersionScenario != null)
+            {
+                // Legacy scenes with no TopLevelSources still keep sources on the scenario.
+                sourcesToRender.AddRange(_scene.DispersionScenario.Sources);
             }
 
+            System.Diagnostics.Debug.WriteLine($"[UpdateViewport] sourcesToRender.Count={sourcesToRender.Count} TopLevel={_scene.TopLevelSources?.Count ?? -1} DispScenarioSrcs={_scene.DispersionScenario?.Sources?.Count ?? -1}");
             if (sourcesToRender.Count > 0)
             {
                 foreach (var source in sourcesToRender)
                 {
                     if (!source.IsVisible) continue;
+                    try
+                    {
                     var pos = source.EffectivePosition;
                     var dir = source.ReleaseDirection;
 
@@ -4532,7 +4691,7 @@ namespace DisperSim3D.Controls
 
                     var sphereMesh = new System.Windows.Media.Media3D.MeshGeometry3D();
                     int slices = 8, stacks = 6;
-                    double r = 1.0;
+                    double r = 1.5;
                     sphereMesh.Positions.Add(new Point3D(0, 0, r));
                     for (int s = 1; s < stacks; s++)
                     {
@@ -4582,9 +4741,13 @@ namespace DisperSim3D.Controls
                     }
 
                     var orangeBrush = new System.Windows.Media.SolidColorBrush(
-                        System.Windows.Media.Color.FromArgb(200, 255, 80, 0));
+                        System.Windows.Media.Color.FromArgb(255, 255, 80, 0));
                     orangeBrush.Freeze();
-                    var orangeMat = new System.Windows.Media.Media3D.DiffuseMaterial(orangeBrush);
+                    // MaterialGroup with both diffuse and emissive so the sphere is bright
+                    // even when partially occluded or unlit (e.g. inside an imported mesh).
+                    var orangeMat = new System.Windows.Media.Media3D.MaterialGroup();
+                    orangeMat.Children.Add(new System.Windows.Media.Media3D.DiffuseMaterial(orangeBrush));
+                    orangeMat.Children.Add(new System.Windows.Media.Media3D.EmissiveMaterial(orangeBrush));
 
                     group.Children.Add(new System.Windows.Media.Media3D.GeometryModel3D
                     {
@@ -4602,9 +4765,11 @@ namespace DisperSim3D.Controls
 
                     var arrowMesh = BuildDirectionArrow(pos, dir, arrowLen, shaftRadius, headRadius, headLen, shaftLen);
                     var redBrush = new System.Windows.Media.SolidColorBrush(
-                        System.Windows.Media.Color.FromArgb(220, 255, 30, 30));
+                        System.Windows.Media.Color.FromArgb(255, 255, 30, 30));
                     redBrush.Freeze();
-                    var redMat = new System.Windows.Media.Media3D.DiffuseMaterial(redBrush);
+                    var redMat = new System.Windows.Media.Media3D.MaterialGroup();
+                    redMat.Children.Add(new System.Windows.Media.Media3D.DiffuseMaterial(redBrush));
+                    redMat.Children.Add(new System.Windows.Media.Media3D.EmissiveMaterial(redBrush));
 
                     group.Children.Add(new System.Windows.Media.Media3D.GeometryModel3D
                     {
@@ -4613,10 +4778,46 @@ namespace DisperSim3D.Controls
                         BackMaterial = redMat
                     });
 
+                    // Vertical locator pole — a thin tall cylinder + marker sphere above the
+                    // tallest decoration. Without it, sources placed inside equipment AABBs
+                    // (very common — the leak IS at the equipment) are occluded by the mesh
+                    // and become invisible. The pole is always visible above the scene.
+                    double sceneTopZ = 0;
+                    foreach (var d in _scene.Decorations)
+                    {
+                        if (d.BoundingBox != null && d.BoundingBox.Max.Z > sceneTopZ)
+                            sceneTopZ = d.BoundingBox.Max.Z;
+                    }
+                    double poleTopZ = Math.Max(pos.Z + 15, sceneTopZ + 8);
+                    var poleMesh = BuildCylinder(
+                        new Point3D(pos.X, pos.Y, pos.Z),
+                        new Point3D(pos.X, pos.Y, poleTopZ),
+                        0.15, 12);
+                    group.Children.Add(new System.Windows.Media.Media3D.GeometryModel3D
+                    {
+                        Geometry = poleMesh,
+                        Material = orangeMat,
+                        BackMaterial = orangeMat
+                    });
+                    // Marker sphere at top of pole.
+                    var topSphereMesh = BuildSphere(2.0, 12, 8);
+                    group.Children.Add(new System.Windows.Media.Media3D.GeometryModel3D
+                    {
+                        Geometry = topSphereMesh,
+                        Material = orangeMat,
+                        BackMaterial = orangeMat,
+                        Transform = new System.Windows.Media.Media3D.TranslateTransform3D(pos.X, pos.Y, poleTopZ)
+                    });
+
                     var visual = new System.Windows.Media.Media3D.ModelVisual3D { Content = group };
                     visual.SetValue(System.Windows.FrameworkElement.TagProperty,
                         new Visual3DTag("ReleaseSource", source.Id));
                     _viewport.Children.Add(visual);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[UpdateViewport] EXCEPTION rendering src {source.Id}: {ex}");
+                    }
                 }
             }
 
@@ -4783,6 +4984,84 @@ namespace DisperSim3D.Controls
             foreach (var src in _scene.DispersionScenario.Sources)
                 if (src.Id == id) return src;
             return null;
+        }
+
+        private static MeshGeometry3D BuildCylinder(Point3D a, Point3D b, double radius, int segments)
+        {
+            var mesh = new MeshGeometry3D();
+            var axis = b - a;
+            if (axis.LengthSquared < 1e-10) return mesh;
+            axis.Normalize();
+            var up = Math.Abs(axis.Z) < 0.95 ? new Vector3D(0, 0, 1) : new Vector3D(1, 0, 0);
+            var right = Vector3D.CrossProduct(axis, up); right.Normalize();
+            up = Vector3D.CrossProduct(right, axis);
+            for (int i = 0; i < segments; i++)
+            {
+                double t1 = 2 * Math.PI * i / segments;
+                double t2 = 2 * Math.PI * ((i + 1) % segments) / segments;
+                var r1 = right * Math.Cos(t1) + up * Math.Sin(t1);
+                var r2 = right * Math.Cos(t2) + up * Math.Sin(t2);
+                var p0 = a + r1 * radius;
+                var p1 = a + r2 * radius;
+                var p2 = b + r1 * radius;
+                var p3 = b + r2 * radius;
+                int bIdx = mesh.Positions.Count;
+                mesh.Positions.Add(p0); mesh.Positions.Add(p1);
+                mesh.Positions.Add(p2); mesh.Positions.Add(p3);
+                mesh.TriangleIndices.Add(bIdx); mesh.TriangleIndices.Add(bIdx + 1); mesh.TriangleIndices.Add(bIdx + 2);
+                mesh.TriangleIndices.Add(bIdx + 1); mesh.TriangleIndices.Add(bIdx + 3); mesh.TriangleIndices.Add(bIdx + 2);
+            }
+            return mesh;
+        }
+
+        private static MeshGeometry3D BuildSphere(double r, int slices, int stacks)
+        {
+            var mesh = new MeshGeometry3D();
+            mesh.Positions.Add(new Point3D(0, 0, r));
+            for (int s = 1; s < stacks; s++)
+            {
+                double phi = Math.PI * s / stacks;
+                double sinP = Math.Sin(phi);
+                double cosP = Math.Cos(phi);
+                for (int sl = 0; sl < slices; sl++)
+                {
+                    double theta = 2 * Math.PI * sl / slices;
+                    mesh.Positions.Add(new Point3D(r * sinP * Math.Cos(theta), r * sinP * Math.Sin(theta), r * cosP));
+                }
+            }
+            mesh.Positions.Add(new Point3D(0, 0, -r));
+            int bottom = mesh.Positions.Count - 1;
+            for (int sl = 0; sl < slices; sl++)
+            {
+                int next = (sl + 1) % slices;
+                mesh.TriangleIndices.Add(0);
+                mesh.TriangleIndices.Add(1 + sl);
+                mesh.TriangleIndices.Add(1 + next);
+            }
+            for (int s = 0; s < stacks - 2; s++)
+            {
+                int row2 = 1 + s * slices;
+                int nextRow = 1 + (s + 1) * slices;
+                for (int sl = 0; sl < slices; sl++)
+                {
+                    int next = (sl + 1) % slices;
+                    mesh.TriangleIndices.Add(row2 + sl);
+                    mesh.TriangleIndices.Add(nextRow + sl);
+                    mesh.TriangleIndices.Add(nextRow + next);
+                    mesh.TriangleIndices.Add(row2 + sl);
+                    mesh.TriangleIndices.Add(nextRow + next);
+                    mesh.TriangleIndices.Add(row2 + next);
+                }
+            }
+            int lastRow2 = 1 + (stacks - 2) * slices;
+            for (int sl = 0; sl < slices; sl++)
+            {
+                int next = (sl + 1) % slices;
+                mesh.TriangleIndices.Add(bottom);
+                mesh.TriangleIndices.Add(lastRow2 + next);
+                mesh.TriangleIndices.Add(lastRow2 + sl);
+            }
+            return mesh;
         }
 
         private static MeshGeometry3D BuildDirectionArrow(

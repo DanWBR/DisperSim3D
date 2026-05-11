@@ -20,6 +20,9 @@ namespace DisperSim3D.Models
 
         [Category("Position")]
         [Description("3D position of the release in scene coordinates (m).")]
+        [TypeConverter(typeof(DisperSim3D.Core.Point3DStringConverter))]
+        [Editor(typeof(DisperSim3D.Controls.Point3DPropertyEditor),
+            typeof(HandyControl.Controls.PropertyEditorBase))]
         public Point3D Position { get; set; }
 
         [Category("Identity")]

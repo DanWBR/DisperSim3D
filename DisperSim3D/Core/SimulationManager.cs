@@ -550,7 +550,7 @@ namespace DisperSim3D.Core
                 tcs.TrySetCanceled();
             });
 
-            runner.RunAsync(scenario, config, job.Scene, job.SolverType);
+            runner.RunAsync(scenario, config, job.Scene, job.Obstacles, job.SolverType);
             return tcs.Task;
         }
 

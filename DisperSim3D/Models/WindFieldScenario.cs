@@ -15,6 +15,21 @@ namespace DisperSim3D.Models
         Failed
     }
 
+    /// <summary>Precision/quality preset for the FluidX3D GPU LBM wind-field solver.
+    /// Higher levels use a finer lattice grid AND more solver iterations, trading
+    /// runtime for accuracy. Numeric values are stable so XML deserialization survives.</summary>
+    public enum FluidX3DQuality
+    {
+        /// <summary>128³-ish grid, ~80 steps/cell. Sub-minute on RTX-class GPUs. Default.</summary>
+        Fast = 0,
+        /// <summary>192³-ish grid, ~100 steps/cell. A couple of minutes.</summary>
+        Balanced = 1,
+        /// <summary>256³-ish grid, ~120 steps/cell. Several minutes.</summary>
+        High = 2,
+        /// <summary>384³-ish grid, ~150 steps/cell. Many minutes; needs ≥8 GB VRAM.</summary>
+        Ultra = 3
+    }
+
     /// <summary>How the wind field is rendered in the 3D viewport.</summary>
     public enum WindFieldDisplayMode
     {
@@ -61,6 +76,10 @@ namespace DisperSim3D.Models
         [Category("Solver")]
         [Description("Use FluidX3D GPU LBM solver instead of OpenFOAM simpleFoam for this wind field run. ~10–50x faster but limited to box-AABB obstacles.")]
         public bool UseFluidX3D { get; set; }
+
+        [Category("Solver")]
+        [Description("FluidX3D precision preset. Fast (~128³, sub-minute) → Ultra (~384³, many minutes, needs ≥8 GB VRAM). Higher = finer grid + more iterations.")]
+        public FluidX3DQuality FluidX3DQuality { get; set; } = FluidX3DQuality.Fast;
 
         [Category("Result")]
         [Description("OpenFOAM case directory on disk (set after a successful run).")]

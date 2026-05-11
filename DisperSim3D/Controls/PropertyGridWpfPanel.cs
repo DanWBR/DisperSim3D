@@ -35,6 +35,22 @@ namespace DisperSim3D.Controls
 
             ApplyReadOnlyShading(_grid);
 
+            // HandyControl's PropertyGrid does not expose its own committed-value event,
+            // so we route commits through LostFocus + Enter on the inner editors. Both
+            // bubble up to the grid root. Fires more often than strictly necessary but
+            // RefreshViews is idempotent so it's fine.
+            _grid.AddHandler(System.Windows.UIElement.LostKeyboardFocusEvent,
+                new System.Windows.Input.KeyboardFocusChangedEventHandler((s, e) =>
+                {
+                    PropertyValueChanged?.Invoke(this, EventArgs.Empty);
+                }), true);
+            _grid.AddHandler(System.Windows.UIElement.KeyDownEvent,
+                new System.Windows.Input.KeyEventHandler((s, e) =>
+                {
+                    if (e.Key == System.Windows.Input.Key.Enter || e.Key == System.Windows.Input.Key.Tab)
+                        PropertyValueChanged?.Invoke(this, EventArgs.Empty);
+                }), true);
+
             _host = new ElementHost
             {
                 Dock = SwfDockStyle.Fill,

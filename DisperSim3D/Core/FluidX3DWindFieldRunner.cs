@@ -55,14 +55,20 @@ namespace DisperSim3D.Core
                 // LBM needs more cells than a finite-volume solver to give physically
                 // useful results. On a coarse 40³ grid the obstacle wakes simply can't
                 // be resolved — turbulence kernels need ~10 cells around any obstacle.
-                // Auto-bump the horizontal resolution to at least 128 cells (4× the
-                // user's OpenFOAM choice of 40), Z stays at ~half. RTX-class GPUs run
-                // 128³ ≈ 2M cells in well under a second per 100 steps.
-                const int FX3D_MIN_N = 128;
+                // Quality preset controls both the floor for nx/ny and the steps-per-cell
+                // multiplier below. Z stays at ~half of horizontal in all presets.
+                int qMin, qStepsPerCell;
+                switch (windScenario.FluidX3DQuality)
+                {
+                    case FluidX3DQuality.Balanced: qMin = 192; qStepsPerCell = 100; break;
+                    case FluidX3DQuality.High:     qMin = 256; qStepsPerCell = 120; break;
+                    case FluidX3DQuality.Ultra:    qMin = 384; qStepsPerCell = 150; break;
+                    default:                       qMin = 128; qStepsPerCell = 80;  break; // Fast
+                }
                 int requested = windScenario.GridResolution;
-                int nx = Math.Max(FX3D_MIN_N, requested * 4);
+                int nx = Math.Max(qMin, requested * 4);
                 int ny = nx;
-                int nz = Math.Max(64, nx / 2);
+                int nz = Math.Max(qMin / 2, nx / 2);
                 double domain = windScenario.DomainSizeM;
                 double height = windScenario.DomainHeightM > 0 ? windScenario.DomainHeightM : domain;
 
@@ -126,7 +132,7 @@ namespace DisperSim3D.Core
                     // the interior purely through the TYPE_E boundary cells — is what works.
 
                     // Surface parameters in the status so we can verify they reach the DLL.
-                    int steadySteps = Math.Max(2000, DefaultStepsPerCell * Math.Max(nx, ny));
+                    int steadySteps = Math.Max(2000, qStepsPerCell * Math.Max(nx, ny));
                     string logPath = System.IO.Path.Combine(
                         System.IO.Path.GetTempPath(), "fluidx3d_bridge.log");
                     windScenario.StatusMessage = string.Format(
