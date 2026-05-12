@@ -172,28 +172,32 @@ namespace DisperSim3D.Controls
                 })
             });
 
-            // --- Dispersion menu ---
-            var menuDispersion = new ToolStripMenuItem("&Dispersion");
-            menuDispersion.DropDownItems.AddRange(new ToolStripItem[] {
-                new ToolStripMenuItem("Manage Scenarios...", Img("icons8-layers.png"), (s, e) => DoManageScenarios()),
-                new ToolStripMenuItem("Manage Wind Fields...", Img("icons8-wind.png"), (s, e) => DoManageWindFields()),
+            // --- Simulate menu ---
+            // Replaces the old "Dispersion" menu. Legacy items that edited the
+            // single project-level DispersionScenario (Meteo, Gas Mixture, Wind
+            // Profile, Thresholds, Manage Scenarios) were removed — the new
+            // pipeline configures those per Source / Wind Field / Simulation / View.
+            var menuSimulate = new ToolStripMenuItem("&Simulate");
+            menuSimulate.DropDownItems.AddRange(new ToolStripItem[] {
+                // Run group
                 new ToolStripMenuItem("New Simulation...", Img("icons8-vector.png"), (s, e) => DoNewSimulation(null)),
+                new ToolStripMenuItem("Manage Wind Fields...", Img("icons8-wind.png"), (s, e) => DoManageWindFields()),
+                new ToolStripMenuItem("Simulation Manager...", Img("table.png"), (s, e) => DoShowSimulationManager()),
+                new ToolStripSeparator(),
+                // Tools group
+                new ToolStripMenuItem("Wind Rose...", Img("icons8-wind.png"), (s, e) => DoWindRose()),
                 new ToolStripMenuItem("Optimize Detector Placement...", Img("icons8-ecg.png"), (s, e) => DoOptimizeDetectors()),
                 new ToolStripMenuItem("Validate against Benchmarks...", Img("icons8-ecg.png"), (s, e) => DoValidateBenchmarks()),
                 new ToolStripSeparator(),
-                new ToolStripMenuItem("Meteorological Conditions...", Img("icons8-weather.png"), (s, e) => DoMeteo()),
-                new ToolStripMenuItem("Gas Mixture...", Img("icons8-test_tube.png"), (s, e) => DoGasMixture()),
-                new ToolStripMenuItem("Wind Rose...", Img("icons8-wind.png"), (s, e) => DoWindRose()),
-                new ToolStripMenuItem("Wind Profile...", Img("icons8-realtime.png"), (s, e) => DoTransientWind()),
-                new ToolStripMenuItem("Thresholds...", Img("icons8-slider.png"), (s, e) => DoThresholds()),
-                new ToolStripSeparator(),
-                new ToolStripMenuItem("CFD Settings (Application)...", Img("cog.png"), (s, e) => DoCfdSettings()),
-                new ToolStripMenuItem("DWSIM Settings (Application)...", Img("cog.png"), (s, e) => DoDwsimSettings()),
-                new ToolStripMenuItem("Simulation Manager...", Img("table.png"), (s, e) => DoShowSimulationManager()),
-                new ToolStripSeparator(),
+                // Results group
                 new ToolStripMenuItem("Exceedance Curves...", Img("icons8-combo_chart.png"), (s, e) => DoExceedanceCurves()),
                 new ToolStripMenuItem("Detector Results...", Img("icons8-scatter_plot.png"), (s, e) => DoShowDetectorResults()),
-                new ToolStripMenuItem("Export Monitor CSV...", Img("card_export.png"), (s, e) => DoExportMonitorCsv())
+                new ToolStripMenuItem("Export Monitor CSV...", Img("card_export.png"), (s, e) => DoExportMonitorCsv()),
+                new ToolStripSeparator(),
+                // Application-level settings group
+                new ToolStripMenuItem("CFD Settings (Application)...", Img("cog.png"), (s, e) => DoCfdSettings()),
+                new ToolStripMenuItem("DWSIM Settings (Application)...", Img("cog.png"), (s, e) => DoDwsimSettings()),
+                new ToolStripMenuItem("GPU & Performance Settings (Application)...", Img("cog.png"), (s, e) => DoGpuPerfSettings())
             });
 
             // --- View menu ---
@@ -232,7 +236,18 @@ namespace DisperSim3D.Controls
                 new ToolStripMenuItem("Monitors", Img("icons8-ecg.png"), (s, e) => ToggleMonitorPanel(true))
             });
 
-            _menuStrip.Items.AddRange(new ToolStripItem[] { menuFile, menuEdit, menuInsert, menuDispersion, menuView });
+            // --- Help menu ---
+            var menuHelp = new ToolStripMenuItem("&Help");
+            menuHelp.DropDownItems.AddRange(new ToolStripItem[] {
+                new ToolStripMenuItem("Online Documentation...", null,
+                    (s, e) => OpenUrl("https://github.com/DanWBR/dispersim3d")),
+                new ToolStripMenuItem("Report an Issue...", null,
+                    (s, e) => OpenUrl("https://github.com/DanWBR/dispersim3d/issues/new")),
+                new ToolStripSeparator(),
+                new ToolStripMenuItem("About DisperSim 3D...", null, (s, e) => DoAbout())
+            });
+
+            _menuStrip.Items.AddRange(new ToolStripItem[] { menuFile, menuEdit, menuInsert, menuSimulate, menuView, menuHelp });
 
             // === Simulation ToolStrip ===
             _simToolStrip = new ToolStrip
@@ -1053,6 +1068,33 @@ namespace DisperSim3D.Controls
                 case ProjectTreeAction.DeleteDetector:
                     DoDeleteDetector(e.ItemId);
                     break;
+                case ProjectTreeAction.AddDispersionStudy:
+                    DoAddDispersionStudy();
+                    break;
+                case ProjectTreeAction.EditDispersionStudy:
+                    DoEditDispersionStudy(e.ItemId);
+                    break;
+                case ProjectTreeAction.DuplicateDispersionStudy:
+                    DoDuplicateDispersionStudy(e.ItemId);
+                    break;
+                case ProjectTreeAction.DeleteDispersionStudy:
+                    DoDeleteDispersionStudy(e.ItemId);
+                    break;
+                case ProjectTreeAction.AddDetectorAllocation:
+                    DoAddDetectorAllocation();
+                    break;
+                case ProjectTreeAction.EditDetectorAllocation:
+                    DoEditDetectorAllocation(e.ItemId);
+                    break;
+                case ProjectTreeAction.RunDetectorAllocation:
+                    DoRunDetectorAllocation(e.ItemId);
+                    break;
+                case ProjectTreeAction.ApplyDetectorAllocation:
+                    DoApplyDetectorAllocation(e.ItemId);
+                    break;
+                case ProjectTreeAction.DeleteDetectorAllocation:
+                    DoDeleteDetectorAllocation(e.ItemId);
+                    break;
                 case ProjectTreeAction.EditGeometry:
                     DoEditGeometry(e.ItemId);
                     break;
@@ -1172,6 +1214,22 @@ namespace DisperSim3D.Controls
                     UpdateStatus((e.Visible ? "Showing" : "Hidden") + " view: " + v.Name);
                     break;
 
+                case ProjectTreeTarget.DispersionStudy:
+                    var st = scene.DispersionStudies?.FirstOrDefault(x => x.Id == e.ItemId);
+                    if (st == null) return;
+                    st.IsVisible = e.Visible;
+                    _editor.RefreshViewport();
+                    UpdateStatus((e.Visible ? "Showing" : "Hidden") + " study: " + st.Name);
+                    break;
+
+                case ProjectTreeTarget.DetectorAllocation:
+                    var al = scene.DetectorAllocations?.FirstOrDefault(x => x.Id == e.ItemId);
+                    if (al == null) return;
+                    al.IsVisible = e.Visible;
+                    _editor.RefreshViewport();
+                    UpdateStatus((e.Visible ? "Showing" : "Hidden") + " allocation: " + al.Name);
+                    break;
+
                 default:
                     UpdateStatus("Visibility toggle for " + e.Target + " not implemented yet");
                     break;
@@ -1222,7 +1280,10 @@ namespace DisperSim3D.Controls
             bool isSteadyComplete = state == DispersionSimulationState.SteadyStateComplete;
 
             bool hasPlayable = (_editor.CfdResult != null && _editor.CfdResult.IsLoaded);
-            bool show = isRunning || isPaused || isSolving || hasPlayable;
+            // Steady-state results have a single converged snapshot — playback timeline
+            // has no meaning. Hide the bar completely; the result is already displayed.
+            bool isSteadyResult = hasPlayable && _editor.CfdResult.IsSteadyState;
+            bool show = (isRunning || isPaused || isSolving || hasPlayable) && !isSteadyResult;
             bar.Visible = show;
             if (!show) return;
 
@@ -1587,6 +1648,150 @@ namespace DisperSim3D.Controls
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
             _editor.Scene.GasDetectors.Remove(d);
             _editor.RefreshViewport();
+        }
+
+        // ── Dispersion Studies ──
+
+        private void DoAddDispersionStudy()
+        {
+            using (var dlg = new Dialogs.DispersionStudyDialog(_editor.Scene))
+            {
+                if (dlg.ShowDialog() == DialogResult.OK && dlg.Result != null)
+                {
+                    _editor.Scene.DispersionStudies.Add(dlg.Result);
+                    UpdateStatus("Created dispersion study: " + dlg.Result.Name);
+                    RefreshProjectTree();
+                }
+            }
+        }
+
+        private void DoEditDispersionStudy(string id)
+        {
+            var st = _editor.Scene.DispersionStudies.FirstOrDefault(s => s.Id == id);
+            if (st == null) return;
+            using (var dlg = new Dialogs.DispersionStudyDialog(_editor.Scene, st))
+            {
+                if (dlg.ShowDialog() == DialogResult.OK)
+                {
+                    UpdateStatus("Study updated: " + st.Name);
+                    _editor.InvalidateStudyVisual(st.Id);
+                    _editor.RefreshViewport();
+                    RefreshProjectTree();
+                }
+            }
+        }
+
+        private void DoDuplicateDispersionStudy(string id)
+        {
+            var st = _editor.Scene.DispersionStudies.FirstOrDefault(s => s.Id == id);
+            if (st == null) return;
+            var copy = new DispersionStudy
+            {
+                Name = st.Name + " (copy)",
+                Description = st.Description,
+                DetectionQuantity = st.DetectionQuantity,
+                DetectionThreshold = st.DetectionThreshold,
+                SimulationIds = new System.Collections.Generic.List<string>(st.SimulationIds),
+                IsVisible = st.IsVisible
+            };
+            _editor.Scene.DispersionStudies.Add(copy);
+            RefreshProjectTree();
+        }
+
+        private void DoDeleteDispersionStudy(string id)
+        {
+            var st = _editor.Scene.DispersionStudies.FirstOrDefault(s => s.Id == id);
+            if (st == null) return;
+            // Warn if any allocation depends on this study.
+            var dependents = _editor.Scene.DetectorAllocations
+                .Where(a => a.DispersionStudyId == st.Id).ToList();
+            string msg = "Delete dispersion study '" + st.Name + "'?";
+            if (dependents.Count > 0)
+                msg += "\n\nWarning: " + dependents.Count
+                    + " Detector Allocation(s) reference this study and will become orphaned.";
+            if (MessageBox.Show(msg, "Confirm", MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question) != DialogResult.Yes) return;
+            _editor.Scene.DispersionStudies.Remove(st);
+            RefreshProjectTree();
+        }
+
+        // ── Detector Allocations ──
+
+        private void DoAddDetectorAllocation()
+        {
+            if (_editor.Scene.DispersionStudies.Count == 0)
+            {
+                MessageBox.Show("Create a Dispersion Study first.", "Detector Allocation",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            using (var dlg = new Dialogs.DetectorAllocationDialog(_editor.Scene))
+            {
+                if (dlg.ShowDialog() == DialogResult.OK && dlg.Result != null)
+                {
+                    _editor.Scene.DetectorAllocations.Add(dlg.Result);
+                    UpdateStatus("Created detector allocation: " + dlg.Result.Name);
+                    RefreshProjectTree();
+                }
+            }
+        }
+
+        private void DoEditDetectorAllocation(string id)
+        {
+            var a = _editor.Scene.DetectorAllocations.FirstOrDefault(x => x.Id == id);
+            if (a == null) return;
+            using (var dlg = new Dialogs.DetectorAllocationDialog(_editor.Scene, a))
+            {
+                if (dlg.ShowDialog() == DialogResult.OK)
+                {
+                    UpdateStatus("Allocation updated: " + a.Name);
+                    _editor.InvalidateAllocationVisual(a.Id);
+                    _editor.RefreshViewport();
+                    RefreshProjectTree();
+                }
+            }
+        }
+
+        private void DoRunDetectorAllocation(string id)
+        {
+            // Just opens the dialog — the user clicks Run there. Avoids running the
+            // greedy solver synchronously on the message-pump thread without feedback.
+            DoEditDetectorAllocation(id);
+        }
+
+        private void DoApplyDetectorAllocation(string id)
+        {
+            var a = _editor.Scene.DetectorAllocations.FirstOrDefault(x => x.Id == id);
+            if (a == null) return;
+            if (a.AllocatedPositions == null || a.AllocatedPositions.Count == 0)
+            {
+                MessageBox.Show("This allocation has no positions yet. Run it first.",
+                    "Apply allocation", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            int baseCount = _editor.Scene.GasDetectors.Count;
+            for (int i = 0; i < a.AllocatedPositions.Count; i++)
+            {
+                _editor.Scene.GasDetectors.Add(new GasDetector3D
+                {
+                    Name = a.Name + " #" + (i + 1),
+                    Position = a.AllocatedPositions[i]
+                });
+            }
+            int added = _editor.Scene.GasDetectors.Count - baseCount;
+            UpdateStatus("Applied: created " + added + " gas detectors from '" + a.Name + "'.");
+            _editor.RefreshViewport();
+            RefreshProjectTree();
+        }
+
+        private void DoDeleteDetectorAllocation(string id)
+        {
+            var a = _editor.Scene.DetectorAllocations.FirstOrDefault(x => x.Id == id);
+            if (a == null) return;
+            if (MessageBox.Show("Delete allocation '" + a.Name + "'?", "Confirm",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+            _editor.Scene.DetectorAllocations.Remove(a);
+            RefreshProjectTree();
         }
 
         private void DoEditGeometry(string id)
@@ -2113,6 +2318,42 @@ namespace DisperSim3D.Controls
                     UpdateStatus("DWSIM settings updated (" +
                         AppSettings.Instance.DwsimPropertyPackage + ")");
                 }
+            }
+        }
+
+        private void DoGpuPerfSettings()
+        {
+            using (var dlg = new Dialogs.GpuPerformanceSettingsDialog())
+            {
+                if (dlg.ShowDialog() == DialogResult.OK)
+                    UpdateStatus("GPU / performance settings updated (device " +
+                        AppSettings.Instance.PreferredComputeDeviceId + ")");
+            }
+        }
+
+        private void DoAbout()
+        {
+            using (var dlg = new Dialogs.AboutDialog())
+            {
+                dlg.ShowDialog(this);
+            }
+        }
+
+        private static void OpenUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return;
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Couldn't open URL:\n" + ex.Message, "DisperSim 3D",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 

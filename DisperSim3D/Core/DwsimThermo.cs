@@ -174,32 +174,16 @@ namespace DisperSim3D.Core
             if (_availableCompounds != null && _availableCompounds.Count > 0) return _availableCompounds;
             try
             {
-                // Need to create an Automation3 instance once so the compound catalog
-                // populates. Easiest path: call Flowsheet.Create which triggers Bootstrap.
-                var create = _flowsheetType.GetMethod("Create", BindingFlags.Public | BindingFlags.Static);
-                object fs;
-                try { fs = create.Invoke(null, new object[] { (string)"probe" }); }
-                catch (TargetInvocationException tie) { throw tie.InnerException ?? tie; }
+                // Try the Bootstrap.Automation path first.
+                System.Collections.IDictionary catalog = TryReadBootstrapCatalog();
 
-                // Try the Bootstrap.Automation static path first.
-                var bootstrapType = _fluentApi.GetType("DWSIM.Automation.FluentAPI.Bootstrap", throwOnError: false);
-                var autoProp = bootstrapType?.GetProperty("Automation",
-                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
-                var auto = autoProp?.GetValue(null);
-                System.Collections.IDictionary catalog =
-                    auto?.GetType().GetProperty("AvailableCompounds")?.GetValue(auto)
-                    as System.Collections.IDictionary;
-
-                // Fallback: read from the flowsheet's own catalog (FlowsheetBase mirrors
-                // Automation3.AvailableCompounds onto every newly-created flowsheet).
+                // Fallback: bypass Automation3 entirely and load the compound databases
+                // directly. Automation3's LoadItems() runs every property-package
+                // constructor in parallel tasks; if a single PP fails (CAPE-OPEN without
+                // registry, missing Plus addon, …), Task.WaitAll throws and aborts
+                // BEFORE the compound-loading section runs — leaving the catalog empty.
                 if (catalog == null || catalog.Count == 0)
-                {
-                    var innerProp = _flowsheetType.GetProperty("Inner",
-                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                    var inner = innerProp?.GetValue(fs);
-                    catalog = inner?.GetType().GetProperty("AvailableCompounds")?.GetValue(inner)
-                              as System.Collections.IDictionary;
-                }
+                    catalog = LoadCompoundsDirectly();
 
                 var list = new List<string>();
                 if (catalog != null)
@@ -208,20 +192,115 @@ namespace DisperSim3D.Core
                 _availableCompounds = list;
                 if (list.Count == 0)
                 {
-                    LastError = "DWSIM compound database is empty. Verify DWSIM.Thermodynamics.dll " +
-                                "and its embedded ChemSep/CoolProp/Biodiesel databases loaded — " +
-                                "missing dependency or wrong install path.";
+                    LastError = "DWSIM compound database is empty. Direct ChemSep load also " +
+                                "returned 0 — DWSIM.Thermodynamics.dll likely failed to bind " +
+                                "or its embedded chemsep1.xml / chemsep2.xml resources are missing.";
                 }
                 return list;
             }
             catch (Exception ex)
             {
-                // Drill to the deepest cause so the user sees the actual missing-DLL /
-                // FileNotFoundException name instead of a generic "object reference".
                 var root = ex;
                 while (root.InnerException != null) root = root.InnerException;
                 LastError = "AvailableCompounds: " + root.GetType().Name + " — " + root.Message;
                 return Array.Empty<string>();
+            }
+        }
+
+        /// <summary>Best-effort read of <c>Bootstrap.Automation.AvailableCompounds</c>.
+        /// Returns null on any exception (caller falls back to the direct DB load).</summary>
+        private static System.Collections.IDictionary TryReadBootstrapCatalog()
+        {
+            try
+            {
+                var create = _flowsheetType.GetMethod("Create", BindingFlags.Public | BindingFlags.Static);
+                object fs;
+                try { fs = create.Invoke(null, new object[] { (string)"probe" }); }
+                catch (TargetInvocationException tie) { throw tie.InnerException ?? tie; }
+
+                var bootstrapType = _fluentApi.GetType("DWSIM.Automation.FluentAPI.Bootstrap", false);
+                var autoProp = bootstrapType?.GetProperty("Automation",
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+                var auto = autoProp?.GetValue(null);
+                var catalog = auto?.GetType().GetProperty("AvailableCompounds")?.GetValue(auto)
+                              as System.Collections.IDictionary;
+                if (catalog != null && catalog.Count > 0) return catalog;
+
+                var innerProp = _flowsheetType.GetProperty("Inner",
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                var inner = innerProp?.GetValue(fs);
+                return inner?.GetType().GetProperty("AvailableCompounds")?.GetValue(inner)
+                       as System.Collections.IDictionary;
+            }
+            catch (Exception ex)
+            {
+                var root = ex;
+                while (root.InnerException != null) root = root.InnerException;
+                LastError = "Bootstrap.Automation: " + root.GetType().Name + " — " + root.Message;
+                return null;
+            }
+        }
+
+        /// <summary>Directly instantiate the DWSIM.Thermodynamics ChemSep database
+        /// provider, call <c>Load()</c> + <c>Transfer()</c>, and aggregate the returned
+        /// compounds into a fresh dictionary keyed by Name. We only use ChemSep — its
+        /// XML database is embedded in DWSIM.Thermodynamics.dll (no external files),
+        /// it ships ~470 industrial-relevant compounds, and skipping CoolProp/Biodiesel/
+        /// ChEDL avoids cascading failures from those providers' external dependencies.
+        /// Bypasses Automation3 entirely, so a property-package layer crash doesn't
+        /// block compound availability.</summary>
+        private static System.Collections.IDictionary LoadCompoundsDirectly()
+        {
+            try
+            {
+                // Locate DWSIM.Thermodynamics.dll. It was eagerly pre-loaded in Initialize;
+                // pick it up from AppDomain.CurrentDomain rather than path-probing.
+                var thermo = AppDomain.CurrentDomain.GetAssemblies()
+                    .FirstOrDefault(a => string.Equals(a.GetName().Name, "DWSIM.Thermodynamics",
+                        StringComparison.OrdinalIgnoreCase));
+                if (thermo == null) return null;
+
+                var dict = new System.Collections.Generic.Dictionary<string, object>(
+                    StringComparer.OrdinalIgnoreCase);
+                var t = thermo.GetType("DWSIM.Thermodynamics.Databases.ChemSep", throwOnError: false);
+                if (t == null)
+                {
+                    LastError = "DWSIM.Thermodynamics.Databases.ChemSep type not found.";
+                    return null;
+                }
+                object inst = Activator.CreateInstance(t);
+                t.GetMethod("Load", Type.EmptyTypes)?.Invoke(inst, null);
+                // VB.NET signature: Transfer(Optional ByVal CompName As String = "").
+                // From C# reflection that's a 1-arg method, NOT a no-arg one — so
+                // GetMethod with Type.EmptyTypes returns null. Look it up by name and
+                // pass the default value explicitly.
+                var transferMi = t.GetMethods()
+                    .FirstOrDefault(m => m.Name == "Transfer" && m.GetParameters().Length == 1);
+                object[] args = transferMi != null ? new object[] { "" } : null;
+                var arr = transferMi?.Invoke(inst, args) as System.Collections.IEnumerable;
+                if (arr != null)
+                {
+                    foreach (var cp in arr)
+                    {
+                        if (cp == null) continue;
+                        var n = cp.GetType().GetProperty("Name")?.GetValue(cp) as string;
+                        if (string.IsNullOrEmpty(n)) continue;
+                        if (!dict.ContainsKey(n)) dict[n] = cp;
+                    }
+                }
+                if (dict.Count > 0)
+                {
+                    _directDbCatalog = (System.Collections.IDictionary)dict;
+                    return _directDbCatalog;
+                }
+                return null;
+            }
+            catch (Exception ex)
+            {
+                var root = ex;
+                while (root.InnerException != null) root = root.InnerException;
+                LastError = "LoadCompoundsDirectly (ChemSep): " + root.GetType().Name + " — " + root.Message;
+                return null;
             }
         }
 
@@ -241,6 +320,12 @@ namespace DisperSim3D.Core
         private static readonly Dictionary<string, CompoundInfo> _compoundCache =
             new Dictionary<string, CompoundInfo>(StringComparer.OrdinalIgnoreCase);
 
+        // Direct-DB catalog (compound-name → ICompoundConstantProperties instance),
+        // populated by LoadCompoundsDirectly when Bootstrap.Automation fails to load.
+        // Used by GetCompoundInfo as a fallback so per-compound constants survive
+        // even when the Automation3 path is broken.
+        private static System.Collections.IDictionary _directDbCatalog;
+
         /// <summary>Looks up the constant properties of a single compound in DWSIM's
         /// catalog and returns them in SI. Result is cached. Returns null when the
         /// compound is unknown or DWSIM isn't initialised.</summary>
@@ -252,12 +337,16 @@ namespace DisperSim3D.Core
             {
                 // Ensure the catalog is loaded; AvailableCompounds primes Bootstrap.Automation.
                 if (_availableCompounds == null) AvailableCompounds();
+                // Try Bootstrap.Automation first.
+                System.Collections.IDictionary catalog = null;
                 var bootstrapType = _fluentApi.GetType("DWSIM.Automation.FluentAPI.Bootstrap", false);
                 var autoProp = bootstrapType?.GetProperty("Automation",
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
                 var auto = autoProp?.GetValue(null);
                 var availableProp = auto?.GetType().GetProperty("AvailableCompounds");
-                var catalog = availableProp?.GetValue(auto) as System.Collections.IDictionary;
+                catalog = availableProp?.GetValue(auto) as System.Collections.IDictionary;
+                // Fallback to the direct-DB catalog populated by LoadCompoundsDirectly.
+                if (catalog == null || catalog.Count == 0) catalog = _directDbCatalog;
                 if (catalog == null || !catalog.Contains(compoundName)) return null;
                 object cp = catalog[compoundName];
                 var ct = cp.GetType();
@@ -340,6 +429,9 @@ namespace DisperSim3D.Core
             _cachedStreamObj = null;
             _cachedStreamObjType = null;
             _cachedSelectedOrder = null;
+            _availableCompounds = null;
+            _directDbCatalog = null;
+            _compoundCache.Clear();
         }
 
         /// <summary>Runs a Peng-Robinson 1978 flash on the supplied mole-fraction mixture

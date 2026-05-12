@@ -118,7 +118,9 @@ namespace DisperSim3D.Dialogs
                 "CFD Steady (rhoSimpleFoam)",
                 "CFD Transient (rhoReactingBuoyantFoam) — universal",
                 "FluidX3D Wind (GPU LBM)",
-                "FluidX3D Dispersion (GPU LBM)"
+                "FluidX3D Dispersion (GPU LBM)",
+                "FluidX3D Fire (Hot Buoyant Plume)",
+                "FluidX3D Dispersion (Steady State)"
             });
             cmbSolver.SelectedIndex = 0;
             DialogHelpers.AddRowWithHelp(table, ref row, "Solver:", cmbSolver,
@@ -228,6 +230,8 @@ namespace DisperSim3D.Dialogs
                 case 9: solverType = CfdSolverType.RhoReactingBuoyantFoam; break;
                 case 10: solverType = CfdSolverType.FluidX3DWind; break;
                 case 11: solverType = CfdSolverType.FluidX3DDispersion; break;
+                case 12: solverType = CfdSolverType.FluidX3DFire; break;
+                case 13: solverType = CfdSolverType.FluidX3DDispersionSteady; break;
             }
 
             // Edit existing sim in place (preserves Id) when launched via the editing

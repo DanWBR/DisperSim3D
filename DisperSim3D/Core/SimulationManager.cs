@@ -245,6 +245,12 @@ namespace DisperSim3D.Core
                     case CfdSolverType.FluidX3DDispersion:
                         await RunFluidX3DAsync(job);
                         break;
+                    case CfdSolverType.FluidX3DFire:
+                        await RunFluidX3DFireAsync(job);
+                        break;
+                    case CfdSolverType.FluidX3DDispersionSteady:
+                        await RunFluidX3DSteadyAsync(job);
+                        break;
                 }
 
                 if (job.Status == SimulationJobStatus.Running)
@@ -538,6 +544,117 @@ namespace DisperSim3D.Core
             });
 
             runner.RunAsync(scenario, config, job.Scene, job.Obstacles, job.SolverType);
+            return tcs.Task;
+        }
+
+        /// <summary>Dispatch for <see cref="CfdSolverType.FluidX3DDispersionSteady"/>.
+        /// Runs <see cref="FluidX3DSteadyDispersionRunner"/> which iterates the CPU
+        /// tracer until the L2-relative cell-by-cell concentration delta between
+        /// successive convergence checks falls below tolerance (default 1e-3).
+        /// Produces a single converged snapshot.</summary>
+        private Task RunFluidX3DSteadyAsync(SimulationJob job)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+            var scenario = job.Scenario;
+            var config = job.CfdConfig ?? scenario.CfdConfig ?? new CfdConfiguration();
+            if (config.GridResolution > 0)
+                scenario.GridResolution = config.GridResolution;
+
+            var runner = new FluidX3DSteadyDispersionRunner();
+            runner.ProgressUpdated += (s, p) =>
+            {
+                if (p.Fraction >= 0) job.Progress = p.Fraction;
+                if (p.Step != null) job.StatusText = p.Step;
+                if (p.LogLine != null) job.LastLogLine = p.LogLine;
+                JobProgressUpdated?.Invoke(this, (job, p));
+            };
+            runner.Completed += (s, result) =>
+            {
+                string solverLabel = "[" + SolverCode.Of(job.SolverType) + "] " + SolverCode.DisplayName(job.SolverType);
+                var entry = new CfdSimulationEntry
+                {
+                    Name = job.Name,
+                    ScenarioName = scenario.Name,
+                    SolverType = solverLabel,
+                    CasePath = runner.CasePath ?? "",
+                    DurationS = scenario.SimulationDurationS,
+                    TimeStepCount = result.TimeSteps.Count,
+                    GridNx = result.GridNx, GridNy = result.GridNy, GridNz = result.GridNz,
+                    DomainSizeM = result.DomainSizeM,
+                    HasResults = result.IsLoaded
+                };
+                entry.Tag = result;
+                job.ResultEntry = entry;
+                tcs.TrySetResult(true);
+            };
+            runner.Failed += (s, msg) =>
+            {
+                job.Status = SimulationJobStatus.Failed;
+                job.StatusText = "FAILED: " + msg;
+                job.LastLogLine = msg;
+                tcs.TrySetException(new Exception(msg));
+            };
+            job.Cts.Token.Register(() =>
+            {
+                runner.Cancel();
+                tcs.TrySetCanceled();
+            });
+            runner.RunAsync(scenario, config, job.Scene, job.Obstacles);
+            return tcs.Task;
+        }
+
+        /// <summary>Dispatch for <see cref="CfdSolverType.FluidX3DFire"/>. Mirrors
+        /// <see cref="RunFluidX3DAsync"/> but uses <see cref="FluidX3DFireRunner"/>
+        /// (CPU dual-tracer T + smoke with Boussinesq buoyancy).</summary>
+        private Task RunFluidX3DFireAsync(SimulationJob job)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+            var scenario = job.Scenario;
+            var config = job.CfdConfig ?? scenario.CfdConfig ?? new CfdConfiguration();
+            if (config.GridResolution > 0)
+                scenario.GridResolution = config.GridResolution;
+
+            var runner = new FluidX3DFireRunner();
+            runner.ProgressUpdated += (s, p) =>
+            {
+                if (p.Fraction >= 0) job.Progress = p.Fraction;
+                if (p.Step != null) job.StatusText = p.Step;
+                if (p.LogLine != null) job.LastLogLine = p.LogLine;
+                JobProgressUpdated?.Invoke(this, (job, p));
+            };
+            runner.Completed += (s, result) =>
+            {
+                string solverLabel = "[" + SolverCode.Of(job.SolverType) + "] " + SolverCode.DisplayName(job.SolverType);
+                var entry = new CfdSimulationEntry
+                {
+                    Name = job.Name,
+                    ScenarioName = scenario.Name,
+                    SolverType = solverLabel,
+                    CasePath = runner.CasePath ?? "",
+                    DurationS = scenario.SimulationDurationS,
+                    TimeStepCount = result.TimeSteps.Count,
+                    GridNx = result.GridNx, GridNy = result.GridNy, GridNz = result.GridNz,
+                    DomainSizeM = result.DomainSizeM,
+                    HasResults = result.IsLoaded
+                };
+                entry.Tag = result;
+                job.ResultEntry = entry;
+                tcs.TrySetResult(true);
+            };
+            runner.Failed += (s, msg) =>
+            {
+                job.Status = SimulationJobStatus.Failed;
+                job.StatusText = "FAILED: " + msg;
+                job.LastLogLine = msg;
+                tcs.TrySetException(new Exception(msg));
+            };
+            job.Cts.Token.Register(() =>
+            {
+                runner.Cancel();
+                tcs.TrySetCanceled();
+            });
+
+            runner.RunAsync(scenario, config, job.Scene, job.Obstacles);
             return tcs.Task;
         }
 

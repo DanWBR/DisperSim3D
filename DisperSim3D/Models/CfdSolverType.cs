@@ -29,7 +29,11 @@
         /// <summary>FluidX3D GPU Lattice-Boltzmann wind field — replaces simpleFoam for fast design-iteration wind runs.</summary>
         FluidX3DWind,
         /// <summary>FluidX3D GPU LBM transient dispersion with passive scalar tracer (T-field as concentration) and Boussinesq buoyancy.</summary>
-        FluidX3DDispersion
+        FluidX3DDispersion,
+        /// <summary>FluidX3D wind field + CPU dual-tracer (temperature + smoke) with Boussinesq buoyancy — for jet/pool fire convective plume modelling. Radiation footprint is overlaid analytically via JetFireModel.</summary>
+        FluidX3DFire,
+        /// <summary>FluidX3D-driven CPU dispersion that runs until the concentration field stops changing (convergence detection). Writes one converged steady-state snapshot.</summary>
+        FluidX3DDispersionSteady
     }
 
     /// <summary>

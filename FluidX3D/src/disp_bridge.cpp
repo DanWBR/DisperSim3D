@@ -9,13 +9,17 @@
 
 #include "disp_bridge.h"
 #include "lbm.hpp"
+#include "opencl.hpp"
 #include <memory>
 #include <unordered_map>
 #include <mutex>
 #include <fstream>
 #include <cstdlib>
+#include <cstring>
 #include <chrono>
 #include <iomanip>
+#include <string>
+#include <vector>
 
 namespace {
     struct Bridge {
@@ -66,15 +70,35 @@ extern "C" {
 FX3D_API uint64_t fx3d_create(uint32_t Nx, uint32_t Ny, uint32_t Nz,
                               float nu, float gx, float gy, float gz,
                               float alpha, float beta) {
+    return fx3d_create_on_device(Nx, Ny, Nz, nu, gx, gy, gz, alpha, beta, -1);
+}
+
+FX3D_API uint64_t fx3d_create_on_device(uint32_t Nx, uint32_t Ny, uint32_t Nz,
+                                        float nu, float gx, float gy, float gz,
+                                        float alpha, float beta,
+                                        int32_t device_id) {
     {
-        char buf[256];
+        char buf[300];
         std::snprintf(buf, sizeof(buf),
-            "fx3d_create  N=(%u,%u,%u) nu=%.6g g=(%.4g,%.4g,%.4g) alpha=%.4g beta=%.4g  tau=%.4f",
-            Nx, Ny, Nz, nu, gx, gy, gz, alpha, beta, 3.0f * nu + 0.5f);
+            "fx3d_create_on_device  N=(%u,%u,%u) nu=%.6g g=(%.4g,%.4g,%.4g) alpha=%.4g beta=%.4g  tau=%.4f device=%d",
+            Nx, Ny, Nz, nu, gx, gy, gz, alpha, beta, 3.0f * nu + 0.5f, (int)device_id);
         log_line(buf);
     }
     try {
-        auto lbm = std::make_unique<LBM>(Nx, Ny, Nz, nu, gx, gy, gz, 0.0f, alpha, beta);
+        std::unique_ptr<LBM> lbm;
+        if (device_id < 0) {
+            // Default: smart selection (fastest by TFLOPS or matching multi-GPU).
+            lbm = std::make_unique<LBM>(Nx, Ny, Nz, nu, gx, gy, gz, 0.0f, alpha, beta);
+        } else {
+            // Explicit single-device pick. We seed FluidX3D's main_arguments
+            // (used by smart_device_selection) so the single-domain LBM constructor
+            // picks the requested device ID without us touching its internals.
+            extern std::vector<std::string> main_arguments;
+            main_arguments.clear();
+            main_arguments.push_back(std::to_string((uint32_t)device_id));
+            lbm = std::make_unique<LBM>(Nx, Ny, Nz, nu, gx, gy, gz, 0.0f, alpha, beta);
+            main_arguments.clear();
+        }
         auto& b = bridge();
         std::lock_guard<std::mutex> lock(b.mtx);
         uint64_t id = b.next_id++;
@@ -87,6 +111,72 @@ FX3D_API uint64_t fx3d_create(uint32_t Nx, uint32_t Ny, uint32_t Nz,
     } catch (...) {
         log_line("  -> UNKNOWN EXCEPTION");
         return 0ULL;
+    }
+}
+
+FX3D_API uint32_t fx3d_list_devices(char* buf, uint32_t max_bytes) {
+    {
+        char dbg[80];
+        std::snprintf(dbg, sizeof(dbg), "fx3d_list_devices  max_bytes=%u  buf=%p", max_bytes, (void*)buf);
+        log_line(dbg);
+    }
+    if (!buf || max_bytes == 0) {
+        log_line("  -> early return (null buf or zero max_bytes)");
+        return 0u;
+    }
+    try {
+        const auto& devices = get_devices(/*print_info=*/false);
+        {
+            char dbg[80];
+            std::snprintf(dbg, sizeof(dbg), "  get_devices() returned %zu device(s)", devices.size());
+            log_line(dbg);
+        }
+        std::string s;
+        s.reserve(64 + devices.size() * 200);
+        s += "[";
+        for (size_t i = 0; i < devices.size(); ++i) {
+            const auto& d = devices[i];
+            std::string name = d.name;
+            std::string vendor = d.vendor;
+            // Escape quotes/backslashes for safe JSON embedding.
+            auto esc = [](std::string& t) {
+                std::string out; out.reserve(t.size() + 8);
+                for (char c : t) {
+                    if (c == '"' || c == '\\') { out += '\\'; out += c; }
+                    else if ((unsigned char)c < 0x20) out += ' ';
+                    else out += c;
+                }
+                t = std::move(out);
+            };
+            esc(name); esc(vendor);
+            char tmp[400];
+            std::snprintf(tmp, sizeof(tmp),
+                "%s{\"id\":%u,\"name\":\"%s\",\"vendor\":\"%s\","
+                "\"memory_mb\":%u,\"tflops\":%.3f,\"compute_units\":%u,"
+                "\"clock_mhz\":%u,\"is_gpu\":%s}",
+                i == 0 ? "" : ",",
+                d.id, name.c_str(), vendor.c_str(),
+                d.memory, d.tflops, d.compute_units,
+                d.clock_frequency, d.is_gpu ? "true" : "false");
+            s += tmp;
+        }
+        s += "]";
+        uint32_t n = (uint32_t)s.size();
+        uint32_t copy_n = n < max_bytes ? n : max_bytes - 1u;
+        std::memcpy(buf, s.data(), copy_n);
+        buf[copy_n] = '\0';
+        {
+            char dbg[100];
+            std::snprintf(dbg, sizeof(dbg), "  -> returning %u bytes (copied %u)", n, copy_n);
+            log_line(dbg);
+        }
+        return n;
+    } catch (const std::exception& ex) {
+        log_line(std::string("fx3d_list_devices: std::exception ") + ex.what());
+        return 0u;
+    } catch (...) {
+        log_line("fx3d_list_devices: unknown exception");
+        return 0u;
     }
 }
 

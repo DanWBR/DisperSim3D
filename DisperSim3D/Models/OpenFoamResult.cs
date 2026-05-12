@@ -42,6 +42,11 @@ namespace DisperSim3D.Models
         /// <summary>Gets or sets a value indicating whether the result data has been loaded from disk.</summary>
         public bool IsLoaded { get; set; }
 
+        /// <summary>True when the underlying simulation is a steady-state run (only the
+        /// converged snapshot is meaningful — no playback timeline). Set by the
+        /// FluidX3D steady-state runner; consumed by the UI to hide the playback bar.</summary>
+        public bool IsSteadyState { get; set; }
+
         /// <summary>Gets or sets the path to the OpenFOAM case directory.</summary>
         public string CaseDir { get; set; }
 

@@ -39,6 +39,11 @@ namespace DisperSim3D.Core
         /// by <see cref="DwsimThermo.ComputeMixtureProperties"/>.</summary>
         public string DwsimPropertyPackage { get; set; } = "Peng-Robinson 1978 (PR78)";
 
+        /// <summary>Preferred OpenCL device ID for FluidX3D compute (LBM wind / GPU
+        /// voxelisation). -1 = auto (FluidX3D picks the fastest by TFLOPS).
+        /// IDs match <see cref="FluidX3DBridge.ListDevicesJson"/>.</summary>
+        public int PreferredComputeDeviceId { get; set; } = -1;
+
         private AppSettings()
         {
             string appDir = Path.Combine(
@@ -98,6 +103,14 @@ namespace DisperSim3D.Core
                     string pp = (string)dwsim.Attribute("PropertyPackage");
                     if (!string.IsNullOrEmpty(pp)) DwsimPropertyPackage = pp;
                 }
+                var gpu = root.Element("Gpu");
+                if (gpu != null)
+                {
+                    int id;
+                    if (int.TryParse((string)gpu.Attribute("PreferredComputeDeviceId") ?? "-1",
+                        System.Globalization.NumberStyles.Integer, Inv, out id))
+                        PreferredComputeDeviceId = id;
+                }
             }
             catch
             {
@@ -138,7 +151,10 @@ namespace DisperSim3D.Core
                         ),
                         new XElement("Dwsim",
                             new XAttribute("InstallPath", DwsimInstallPath ?? ""),
-                            new XAttribute("PropertyPackage", DwsimPropertyPackage ?? ""))
+                            new XAttribute("PropertyPackage", DwsimPropertyPackage ?? "")),
+                        new XElement("Gpu",
+                            new XAttribute("PreferredComputeDeviceId",
+                                PreferredComputeDeviceId.ToString(Inv)))
                     )
                 );
 

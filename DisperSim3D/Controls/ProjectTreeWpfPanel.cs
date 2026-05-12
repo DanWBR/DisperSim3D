@@ -177,6 +177,51 @@ namespace DisperSim3D.Controls
                     glyph: "⛝", showCheckBox: true, isChecked: d.Visible));
             root.Items.Add(detectors);
 
+            var studies = MakeNode("Dispersion Studies", NodeKind.DispersionStudiesRoot, null,
+                bold: true, glyph: "☁",
+                count: _scene.DispersionStudies?.Count ?? 0, isContainer: true);
+            if (_scene.DispersionStudies != null)
+            {
+                foreach (var st in _scene.DispersionStudies)
+                {
+                    int nSims = st.SimulationIds?.Count ?? 0;
+                    string unit = DisperSim3D.Core.FieldTransform.UnitFor(st.DetectionQuantity);
+                    string label = string.Format("{0}  [{1} sims, {2} ≥ {3} {4}]",
+                        st.Name, nSims, st.DetectionQuantity,
+                        st.DetectionThreshold.ToString("G4"), unit);
+                    studies.Items.Add(MakeNode(label, NodeKind.DispersionStudyItem, st.Id,
+                        glyph: "☁", showCheckBox: true, isChecked: st.IsVisible));
+                }
+            }
+            root.Items.Add(studies);
+
+            var allocs = MakeNode("Detector Allocation", NodeKind.DetectorAllocationsRoot, null,
+                bold: true, glyph: "▦",
+                count: _scene.DetectorAllocations?.Count ?? 0, isContainer: true);
+            if (_scene.DetectorAllocations != null)
+            {
+                foreach (var a in _scene.DetectorAllocations)
+                {
+                    var st = _scene.DispersionStudies?.FirstOrDefault(s => s.Id == a.DispersionStudyId);
+                    string studyName = st?.Name ?? "(no study)";
+                    int n = a.AllocatedPositions?.Count ?? 0;
+                    string statusText = a.Status == AllocationStatus.Completed
+                        ? a.AchievedCoveragePercent.ToString("F0") + "% / " + n + " det"
+                        : a.Status.ToString();
+                    Brush statusBrush =
+                        a.Status == AllocationStatus.Completed ? Brushes.SeaGreen :
+                        a.Status == AllocationStatus.Running   ? Brushes.DarkOrange :
+                        a.Status == AllocationStatus.Failed    ? Brushes.Crimson :
+                                                                 Brushes.Gray;
+                    string label = a.Name + "  → " + studyName;
+                    allocs.Items.Add(MakeNode(label, NodeKind.DetectorAllocationItem, a.Id,
+                        glyph: "▦",
+                        statusText: statusText, statusBrush: statusBrush,
+                        showCheckBox: true, isChecked: a.IsVisible));
+                }
+            }
+            root.Items.Add(allocs);
+
             _tree.Items.Add(root);
 
             if (expandedKeys.Count == 0)
@@ -275,6 +320,8 @@ namespace DisperSim3D.Controls
                 case NodeKind.ViewItem: return ProjectTreeAction.EditView;
                 case NodeKind.MonitorItem: return ProjectTreeAction.EditMonitor;
                 case NodeKind.DetectorItem: return ProjectTreeAction.EditDetector;
+                case NodeKind.DispersionStudyItem: return ProjectTreeAction.EditDispersionStudy;
+                case NodeKind.DetectorAllocationItem: return ProjectTreeAction.EditDetectorAllocation;
                 default: return null;
             }
         }
@@ -430,6 +477,23 @@ namespace DisperSim3D.Controls
                     AddItem("Edit...", ProjectTreeAction.EditDetector);
                     AddItem("Delete", ProjectTreeAction.DeleteDetector);
                     break;
+                case NodeKind.DispersionStudiesRoot:
+                    AddItem("New Dispersion Study...", ProjectTreeAction.AddDispersionStudy);
+                    break;
+                case NodeKind.DispersionStudyItem:
+                    AddItem("Edit...", ProjectTreeAction.EditDispersionStudy);
+                    AddItem("Duplicate", ProjectTreeAction.DuplicateDispersionStudy);
+                    AddItem("Delete", ProjectTreeAction.DeleteDispersionStudy);
+                    break;
+                case NodeKind.DetectorAllocationsRoot:
+                    AddItem("New Detector Allocation...", ProjectTreeAction.AddDetectorAllocation);
+                    break;
+                case NodeKind.DetectorAllocationItem:
+                    AddItem("Edit...", ProjectTreeAction.EditDetectorAllocation);
+                    AddItem("Run Allocation", ProjectTreeAction.RunDetectorAllocation);
+                    AddItem("Apply (create detectors)", ProjectTreeAction.ApplyDetectorAllocation);
+                    AddItem("Delete", ProjectTreeAction.DeleteDetectorAllocation);
+                    break;
             }
 
             return menu.Items.Count == 0 ? null : menu;
@@ -462,6 +526,10 @@ namespace DisperSim3D.Controls
                 case NodeKind.ViewItem: return _scene.Views.FirstOrDefault(v => v.Id == tref.ItemId);
                 case NodeKind.MonitorItem: return _scene.MonitorPoints.FirstOrDefault(m => m.Name == tref.ItemId);
                 case NodeKind.DetectorItem: return _scene.GasDetectors.FirstOrDefault(d => d.Id == tref.ItemId);
+                case NodeKind.DispersionStudyItem:
+                    return _scene.DispersionStudies?.FirstOrDefault(s => s.Id == tref.ItemId);
+                case NodeKind.DetectorAllocationItem:
+                    return _scene.DetectorAllocations?.FirstOrDefault(a => a.Id == tref.ItemId);
                 default: return null;
             }
         }
@@ -480,6 +548,8 @@ namespace DisperSim3D.Controls
                 case NodeKind.ViewItem: return ((View)selected).Name;
                 case NodeKind.MonitorItem: return ((MonitorPoint3D)selected).Name;
                 case NodeKind.DetectorItem: return ((GasDetector3D)selected).Name;
+                case NodeKind.DispersionStudyItem: return ((DispersionStudy)selected).Name;
+                case NodeKind.DetectorAllocationItem: return ((DetectorAllocation)selected).Name;
                 default: return null;
             }
         }
@@ -496,6 +566,8 @@ namespace DisperSim3D.Controls
                 case NodeKind.ViewItem: target = ProjectTreeTarget.View; break;
                 case NodeKind.MonitorItem: target = ProjectTreeTarget.Monitor; break;
                 case NodeKind.DetectorItem: target = ProjectTreeTarget.Detector; break;
+                case NodeKind.DispersionStudyItem: target = ProjectTreeTarget.DispersionStudy; break;
+                case NodeKind.DetectorAllocationItem: target = ProjectTreeTarget.DetectorAllocation; break;
                 default: return;
             }
             VisibilityChanged?.Invoke(this,
@@ -520,7 +592,9 @@ namespace DisperSim3D.Controls
             SimulationsRoot, SimulationItem,
             ViewsRoot, ViewItem,
             MonitorsRoot, MonitorItem,
-            DetectorsRoot, DetectorItem
+            DetectorsRoot, DetectorItem,
+            DispersionStudiesRoot, DispersionStudyItem,
+            DetectorAllocationsRoot, DetectorAllocationItem
         }
     }
 
@@ -547,7 +621,10 @@ namespace DisperSim3D.Controls
         ViewSimulationResults, OpenSimulationCase, DeleteSimulation,
         AddView, EditView, DuplicateView, DeleteView,
         AddMonitor, EditMonitor, DeleteMonitor,
-        AddDetector, EditDetector, DeleteDetector
+        AddDetector, EditDetector, DeleteDetector,
+        AddDispersionStudy, EditDispersionStudy, DuplicateDispersionStudy, DeleteDispersionStudy,
+        AddDetectorAllocation, EditDetectorAllocation, RunDetectorAllocation,
+        ApplyDetectorAllocation, DeleteDetectorAllocation
     }
 
     public class ProjectTreeActionEventArgs : EventArgs
@@ -566,7 +643,9 @@ namespace DisperSim3D.Controls
         Simulation,
         View,
         Monitor,
-        Detector
+        Detector,
+        DispersionStudy,
+        DetectorAllocation
     }
 
     public class ProjectTreeVisibilityEventArgs : EventArgs

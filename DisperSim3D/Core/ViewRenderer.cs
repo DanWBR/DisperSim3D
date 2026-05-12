@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -57,13 +58,16 @@ namespace DisperSim3D.Core
                     scalarFieldName: fieldName);
                 if (result == null || !result.IsLoaded || result.TimeSteps.Count == 0)
                 {
-                    // FluidX3D dispersion writes flat <time>.bin files at the case root rather
-                    // than OpenFOAM-style time subdirectories. Detect that layout and rebuild
-                    // an OpenFoamResult by hand so the rest of the rendering pipeline works.
-                    result = TryLoadFlatBinCase(sim.CasePath, ref nx, ref ny, ref nz, half);
+                    // FluidX3D dispersion / fire write flat <time>.bin files at the case
+                    // root rather than OpenFOAM-style time subdirectories. The fire runner
+                    // additionally writes <time>_T.bin for temperature; pick the right
+                    // suffix based on which field the View is requesting.
+                    bool wantTemperature = view.FieldProperty == ViewFieldProperty.Temperature;
+                    result = TryLoadFlatBinCase(sim.CasePath, ref nx, ref ny, ref nz, half,
+                        temperatureChannel: wantTemperature);
                     if (result == null || !result.IsLoaded || result.TimeSteps.Count == 0)
                     { LogView($"[ViewRenderer] no results at '{sim.CasePath}' (nx={nx})"); return null; }
-                    LogView($"[ViewRenderer] flat-bin loaded: {result.TimeSteps.Count} ts, nx={nx} ny={ny} nz={nz}");
+                    LogView($"[ViewRenderer] flat-bin loaded ({(wantTemperature ? "T" : "Y")}): {result.TimeSteps.Count} ts, nx={nx} ny={ny} nz={nz}");
                 }
 
                 field = SelectField(result, view.TimeMode, view.SpecificTimeS);
@@ -95,17 +99,33 @@ namespace DisperSim3D.Core
             }
         }
 
-        private static Models.OpenFoamResult TryLoadFlatBinCase(string caseDir, ref int nx, ref int ny, ref int nz, double half)
+        /// <summary>Reads a flat-bin case directory (FluidX3D dispersion / fire layout).
+        /// When <paramref name="temperatureChannel"/> is true, picks <c>{time}_T.bin</c>
+        /// files (fire runner output); otherwise picks plain <c>{time}.bin</c> files
+        /// (smoke / concentration). The grid resolution is inferred from the byte size
+        /// of the first matching file so a reload doesn't depend on a stale
+        /// <c>SnapshotGridResolution</c>.</summary>
+        private static Models.OpenFoamResult TryLoadFlatBinCase(string caseDir,
+            ref int nx, ref int ny, ref int nz, double half,
+            bool temperatureChannel = false)
         {
             if (string.IsNullOrEmpty(caseDir) || !Directory.Exists(caseDir)) return null;
             string controlDict = Path.Combine(caseDir, "system", "controlDict");
             if (File.Exists(controlDict)) return null;
-            var binFiles = Directory.GetFiles(caseDir, "*.bin", SearchOption.TopDirectoryOnly);
+
+            var allBin = Directory.GetFiles(caseDir, "*.bin", SearchOption.TopDirectoryOnly);
+            if (allBin.Length == 0) return null;
+
+            // Filter to the requested channel. _T.bin = temperature, plain .bin = species.
+            var binFiles = allBin.Where(p =>
+            {
+                bool isT = Path.GetFileNameWithoutExtension(p).EndsWith("_T",
+                    StringComparison.OrdinalIgnoreCase);
+                return temperatureChannel ? isT : !isT;
+            }).ToArray();
             if (binFiles.Length == 0) return null;
 
-            // Infer grid from file size — FluidX3D dispersion uses ny=nx, nz=max(8, nx/2).
-            // sim.SnapshotGridResolution may be stale if the user reran with a different
-            // resolution, so trust the file. Sample the first .bin and search for nx.
+            // Infer grid from file size — FluidX3D writers use ny=nx, nz=max(8, nx/2).
             try
             {
                 long bytes = new FileInfo(binFiles[0]).Length;
@@ -135,6 +155,8 @@ namespace DisperSim3D.Core
             foreach (var f in binFiles)
             {
                 string name = Path.GetFileNameWithoutExtension(f);
+                if (temperatureChannel && name.EndsWith("_T", StringComparison.OrdinalIgnoreCase))
+                    name = name.Substring(0, name.Length - 2);
                 if (double.TryParse(name, System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out double t))
                 {

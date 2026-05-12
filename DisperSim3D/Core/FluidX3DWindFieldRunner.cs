@@ -103,8 +103,10 @@ namespace DisperSim3D.Core
                 // not here. Adding gz here was driving spurious vertical motion.
                 float gLat = 0f;
 
-                ulong handle = FluidX3DBridge.fx3d_create((uint)nx, (uint)ny, (uint)nz,
-                    nuLat, 0f, 0f, gLat, 0f, 0f);
+                int deviceId = AppSettings.Instance.PreferredComputeDeviceId;
+                ulong handle = FluidX3DBridge.fx3d_create_on_device(
+                    (uint)nx, (uint)ny, (uint)nz,
+                    nuLat, 0f, 0f, gLat, 0f, 0f, deviceId);
                 if (handle == 0UL)
                 {
                     windScenario.Status = WindFieldStatus.Failed;

@@ -25,6 +25,73 @@ namespace DisperSim3D.Core
             uint xmin, uint ymin, uint zmin,
             uint xmax, uint ymax, uint zmax);
 
+        /// <summary>Creates an LBM with explicit OpenCL device selection.
+        /// device_id &lt; 0 = auto (fastest). device_id ≥ 0 picks the matching
+        /// entry from <see cref="ListDevicesJson"/>.</summary>
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern ulong fx3d_create_on_device(
+            uint Nx, uint Ny, uint Nz,
+            float nu, float gx, float gy, float gz,
+            float alpha, float beta,
+            int device_id);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        private static extern uint fx3d_list_devices(
+            [Out] byte[] buf, uint max_bytes);
+
+        /// <summary>Last error from <see cref="ListDevicesJson"/> — populated when the
+        /// call can't reach <c>fx3d_list_devices</c> (most often EntryPointNotFoundException
+        /// because the running process loaded an older FluidX3D.dll that doesn't export
+        /// the function — close the app and relaunch to pick up the new DLL).</summary>
+        public static string LastListDevicesError { get; private set; } = "";
+
+        /// <summary>Returns a JSON array describing every OpenCL device on this
+        /// machine (id, name, vendor, memory_mb, tflops, compute_units, clock_mhz,
+        /// is_gpu). Empty string on failure; check <see cref="LastListDevicesError"/>
+        /// for diagnostic text.</summary>
+        public static string ListDevicesJson()
+        {
+            LastListDevicesError = "";
+            if (!IsAvailable())
+            {
+                LastListDevicesError = "FluidX3D.dll not loadable (DllNotFound / no OpenCL device).";
+                return "";
+            }
+            // Two-call protocol: first call with small buffer to size; second to fetch.
+            var probe = new byte[2];
+            uint required = 0;
+            try { required = fx3d_list_devices(probe, (uint)probe.Length); }
+            catch (EntryPointNotFoundException)
+            {
+                LastListDevicesError =
+                    "fx3d_list_devices not exported by the loaded FluidX3D.dll. " +
+                    "The process is still holding an older copy in memory — close DisperSim3D " +
+                    "and relaunch so the new DLL gets loaded.";
+                return "";
+            }
+            catch (Exception ex)
+            {
+                LastListDevicesError = ex.GetType().Name + ": " + ex.Message;
+                return "";
+            }
+            if (required == 0)
+            {
+                LastListDevicesError = "fx3d_list_devices returned 0 (see %TEMP%/fluidx3d_bridge.log).";
+                return "";
+            }
+            int cap = (int)Math.Min(required + 16u, 1_000_000u);
+            var buf = new byte[cap];
+            try { fx3d_list_devices(buf, (uint)buf.Length); }
+            catch (Exception ex)
+            {
+                LastListDevicesError = "Second call: " + ex.GetType().Name + " " + ex.Message;
+                return "";
+            }
+            int n = Array.IndexOf<byte>(buf, 0);
+            if (n < 0) n = buf.Length;
+            return System.Text.Encoding.ASCII.GetString(buf, 0, n);
+        }
+
         /// <summary>GPU-accelerated triangle-mesh voxelization. Each array is laid out
         /// as [x0,y0,z0, x1,y1,z1, ...] in LATTICE coordinates and has length
         /// 3*triangleCount. FluidX3D's raycasting kernel is ~100× faster than the

@@ -31,8 +31,7 @@ C:\Users\danie\source\repos\DanWBR\DisperSim 3D\FluidX3D\src\lodepng.cpp(5315,43
 C:\Users\danie\source\repos\DanWBR\DisperSim 3D\FluidX3D\src\lodepng.cpp(5403,27): warning C4334: '<<': resultado de 32-bit shift convertido implicitamente para 64 bits (64-bit shift era pretendido?)
      Criando biblioteca C:\Users\danie\source\repos\DanWBR\DisperSim 3D\bin\FluidX3D.lib e objeto C:\Users\danie\source\repos\DanWBR\DisperSim 3D\bin\FluidX3D.exp
   Gerando código
-  936 of 2954 functions (31.7%) were compiled, the rest were copied from previous compilation.
-    247 functions were new in current compilation
-    414 functions had inline decision re-evaluated but remain unchanged
+  Previous IPDB not found, fall back to full compilation.
+  All 3061 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
   Finalizada a geração de código
   FluidX3D.vcxproj -> C:\Users\danie\source\repos\DanWBR\DisperSim 3D\bin\FluidX3D.dll

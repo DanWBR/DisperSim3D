@@ -131,6 +131,19 @@ namespace DisperSim3D.Models
         public List<View> Views { get; set; }
 
         /// <summary>
+        /// Curated collections of completed simulations whose final-snapshot cloud
+        /// volumes are treated as detection targets for downstream
+        /// <see cref="DetectorAllocation"/> blocks.
+        /// </summary>
+        public List<DispersionStudy> DispersionStudies { get; set; }
+
+        /// <summary>
+        /// Detector-placement results, each linked to one <see cref="DispersionStudy"/>.
+        /// Stores the allocated positions, achieved coverage, and per-cloud detection flags.
+        /// </summary>
+        public List<DetectorAllocation> DetectorAllocations { get; set; }
+
+        /// <summary>
         /// Gets or sets the grid spacing in meters.
         /// </summary>
         public double GridSpacing { get; set; }
@@ -163,6 +176,8 @@ namespace DisperSim3D.Models
             TopLevelSources = new List<ReleaseSource3D>();
             Simulations = new List<Simulation>();
             Views = new List<View>();
+            DispersionStudies = new List<DispersionStudy>();
+            DetectorAllocations = new List<DetectorAllocation>();
             GridSpacing = 5.0;
             SnapToGrid = true;
         }

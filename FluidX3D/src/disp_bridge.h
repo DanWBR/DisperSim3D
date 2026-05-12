@@ -24,6 +24,23 @@ FX3D_API uint64_t fx3d_create(uint32_t Nx, uint32_t Ny, uint32_t Nz,
                               float nu, float gx, float gy, float gz,
                               float alpha, float beta);
 
+// Same as fx3d_create but with explicit OpenCL device selection.
+// device_id < 0 = auto (fastest by TFLOPS); device_id >= 0 picks the
+// matching entry from get_devices() (see fx3d_list_devices).
+FX3D_API uint64_t fx3d_create_on_device(uint32_t Nx, uint32_t Ny, uint32_t Nz,
+                                        float nu, float gx, float gy, float gz,
+                                        float alpha, float beta,
+                                        int32_t device_id);
+
+// Fills buf with up to max_bytes of JSON describing every OpenCL device
+// available on this machine. JSON format:
+//   [{"id":0,"name":"...","vendor":"...","memory_mb":24576,"tflops":83.0,
+//     "compute_units":108,"clock_mhz":1980,"is_gpu":true},
+//    {"id":1, ...}]
+// Returns the number of bytes written (or required, when truncated).
+// On error returns 0.
+FX3D_API uint32_t fx3d_list_devices(char* buf, uint32_t max_bytes);
+
 // Mark every cell whose centre falls inside the AABB as TYPE_S (solid).
 FX3D_API void fx3d_set_box_solid(uint64_t h,
                                  uint32_t xmin, uint32_t ymin, uint32_t zmin,

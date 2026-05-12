@@ -64,6 +64,8 @@ namespace DisperSim3D.Controls
         private GasDetector3D _pendingDetectorTemplate;
         private Dictionary<string, double[]> _hpLeakProfiles = new Dictionary<string, double[]>();
         private Dictionary<string, ModelVisual3D> _viewVisuals = new Dictionary<string, ModelVisual3D>();
+        private Dictionary<string, ModelVisual3D> _studyVisuals = new Dictionary<string, ModelVisual3D>();
+        private Dictionary<string, ModelVisual3D> _allocationVisuals = new Dictionary<string, ModelVisual3D>();
 
         private GridLinesVisual3D _gridVisual;
         private System.Windows.Media.Media3D.ModelVisual3D _groundPlaneVisual;
@@ -1530,6 +1532,12 @@ namespace DisperSim3D.Controls
                     System.IO.SearchOption.TopDirectoryOnly);
                 if (!System.IO.File.Exists(controlDict) && rootBins.Length > 0)
                 {
+                    // FluidX3D Steady writes a single converged snapshot — detect that
+                    // either by the solver-type tag in the entry name OR by the on-disk
+                    // file count (1 bin file = steady).
+                    bool isSteady = (entry.SolverType?.IndexOf("FX3DDS", StringComparison.Ordinal) >= 0)
+                                 || (entry.Name?.IndexOf("FX3DDS", StringComparison.Ordinal) >= 0)
+                                 || rootBins.Length == 1;
                     var rebuilt = new OpenFoamResult
                     {
                         GridNx = entry.GridNx, GridNy = entry.GridNy, GridNz = entry.GridNz,
@@ -1537,6 +1545,7 @@ namespace DisperSim3D.Controls
                         DomainXMin = -entry.DomainSizeM, DomainXMax = entry.DomainSizeM,
                         DomainYMin = -entry.DomainSizeM, DomainYMax = entry.DomainSizeM,
                         DomainZMax = entry.DomainSizeM,
+                        IsSteadyState = isSteady,
                         CaseDir = entry.CasePath
                     };
                     foreach (var binFile in rootBins)
@@ -2622,6 +2631,8 @@ namespace DisperSim3D.Controls
                     SerializeWindFieldScenarios(inv),
                     SerializeSimulations(inv),
                     SerializeViews(inv),
+                    SerializeDispersionStudies(inv),
+                    SerializeDetectorAllocations(inv),
                     SerializeDispersionScenarios(inv),
                     SerializeMonitorPoints(inv),
                     SerializeWindRose(inv),
@@ -2848,6 +2859,140 @@ namespace DisperSim3D.Controls
                 v.MaxValue = double.Parse((string)ve.Attribute("MaxValue") ?? "0", inv);
                 v.SampleResolution = int.Parse((string)ve.Attribute("SampleResolution") ?? "80", inv);
                 scene.Views.Add(v);
+            }
+        }
+
+        private System.Xml.Linq.XElement SerializeDispersionStudies(System.Globalization.CultureInfo inv)
+        {
+            if (_scene.DispersionStudies == null || _scene.DispersionStudies.Count == 0) return null;
+            return new System.Xml.Linq.XElement("DispersionStudies",
+                _scene.DispersionStudies.Select(st => new System.Xml.Linq.XElement("Study",
+                    new System.Xml.Linq.XAttribute("Id", st.Id ?? ""),
+                    new System.Xml.Linq.XAttribute("Name", st.Name ?? ""),
+                    new System.Xml.Linq.XAttribute("Description", st.Description ?? ""),
+                    new System.Xml.Linq.XAttribute("DetectionQuantity", st.DetectionQuantity.ToString()),
+                    new System.Xml.Linq.XAttribute("DetectionThreshold", st.DetectionThreshold.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("CreatedAt", st.CreatedAt.ToString("o")),
+                    new System.Xml.Linq.XAttribute("IsVisible", st.IsVisible.ToString()),
+                    new System.Xml.Linq.XElement("Simulations",
+                        (st.SimulationIds ?? new List<string>()).Select(sid =>
+                            new System.Xml.Linq.XElement("Simulation", new System.Xml.Linq.XAttribute("Id", sid)))))));
+        }
+
+        private void DeserializeDispersionStudies(System.Xml.Linq.XElement root,
+            System.Globalization.CultureInfo inv, Scene3D scene)
+        {
+            scene.DispersionStudies.Clear();
+            var el = root.Element("DispersionStudies");
+            if (el == null) return;
+            foreach (var se in el.Elements("Study"))
+            {
+                var st = new DispersionStudy
+                {
+                    Id = (string)se.Attribute("Id") ?? Guid.NewGuid().ToString(),
+                    Name = (string)se.Attribute("Name") ?? "Study",
+                    Description = (string)se.Attribute("Description") ?? "",
+                    DetectionThreshold = double.Parse((string)se.Attribute("DetectionThreshold") ?? "50", inv),
+                    IsVisible = bool.Parse((string)se.Attribute("IsVisible") ?? "True")
+                };
+                if (Enum.TryParse((string)se.Attribute("DetectionQuantity") ?? "PercentLFL", out ViewFieldProperty dq))
+                    st.DetectionQuantity = dq;
+                if (DateTime.TryParse((string)se.Attribute("CreatedAt") ?? "", null,
+                    System.Globalization.DateTimeStyles.RoundtripKind, out DateTime ca))
+                    st.CreatedAt = ca;
+                var sims = se.Element("Simulations");
+                if (sims != null)
+                    foreach (var sx in sims.Elements("Simulation"))
+                        st.SimulationIds.Add((string)sx.Attribute("Id") ?? "");
+                scene.DispersionStudies.Add(st);
+            }
+        }
+
+        private System.Xml.Linq.XElement SerializeDetectorAllocations(System.Globalization.CultureInfo inv)
+        {
+            if (_scene.DetectorAllocations == null || _scene.DetectorAllocations.Count == 0) return null;
+            return new System.Xml.Linq.XElement("DetectorAllocations",
+                _scene.DetectorAllocations.Select(a => new System.Xml.Linq.XElement("Allocation",
+                    new System.Xml.Linq.XAttribute("Id", a.Id ?? ""),
+                    new System.Xml.Linq.XAttribute("Name", a.Name ?? ""),
+                    new System.Xml.Linq.XAttribute("DispersionStudyId", a.DispersionStudyId ?? ""),
+                    new System.Xml.Linq.XAttribute("Objective", a.Objective.ToString()),
+                    new System.Xml.Linq.XAttribute("TargetCoveragePercent", a.TargetCoveragePercent.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("MaxDetectors", a.MaxDetectors.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("DetectionRadiusM", a.DetectionRadiusM.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("MinZ", a.MinZ.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("MaxZ", a.MaxZ.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("CandidateNx", a.CandidateNx.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("CandidateNy", a.CandidateNy.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("CandidateNz", a.CandidateNz.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("UseExistingDetectors", a.UseExistingDetectors.ToString()),
+                    new System.Xml.Linq.XAttribute("Strategy", a.Strategy.ToString()),
+                    new System.Xml.Linq.XAttribute("AchievedCoveragePercent", a.AchievedCoveragePercent.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("Status", a.Status.ToString()),
+                    new System.Xml.Linq.XAttribute("StatusMessage", a.StatusMessage ?? ""),
+                    new System.Xml.Linq.XAttribute("RunAt", a.RunAt.ToString("o")),
+                    new System.Xml.Linq.XAttribute("IsVisible", a.IsVisible.ToString()),
+                    new System.Xml.Linq.XElement("Positions",
+                        (a.AllocatedPositions ?? new List<System.Windows.Media.Media3D.Point3D>()).Select(p =>
+                            new System.Xml.Linq.XElement("P",
+                                new System.Xml.Linq.XAttribute("X", p.X.ToString(inv)),
+                                new System.Xml.Linq.XAttribute("Y", p.Y.ToString(inv)),
+                                new System.Xml.Linq.XAttribute("Z", p.Z.ToString(inv))))),
+                    new System.Xml.Linq.XElement("Coverage",
+                        (a.PerCloudCovered ?? new Dictionary<string, bool>()).Select(kv =>
+                            new System.Xml.Linq.XElement("C",
+                                new System.Xml.Linq.XAttribute("SimId", kv.Key),
+                                new System.Xml.Linq.XAttribute("Covered", kv.Value.ToString())))))));
+        }
+
+        private void DeserializeDetectorAllocations(System.Xml.Linq.XElement root,
+            System.Globalization.CultureInfo inv, Scene3D scene)
+        {
+            scene.DetectorAllocations.Clear();
+            var el = root.Element("DetectorAllocations");
+            if (el == null) return;
+            foreach (var ae in el.Elements("Allocation"))
+            {
+                var a = new DetectorAllocation
+                {
+                    Id = (string)ae.Attribute("Id") ?? Guid.NewGuid().ToString(),
+                    Name = (string)ae.Attribute("Name") ?? "Allocation",
+                    DispersionStudyId = (string)ae.Attribute("DispersionStudyId") ?? "",
+                    TargetCoveragePercent = double.Parse((string)ae.Attribute("TargetCoveragePercent") ?? "100", inv),
+                    MaxDetectors = int.Parse((string)ae.Attribute("MaxDetectors") ?? "0", inv),
+                    DetectionRadiusM = double.Parse((string)ae.Attribute("DetectionRadiusM") ?? "5", inv),
+                    MinZ = double.Parse((string)ae.Attribute("MinZ") ?? "1.5", inv),
+                    MaxZ = double.Parse((string)ae.Attribute("MaxZ") ?? "3.0", inv),
+                    CandidateNx = int.Parse((string)ae.Attribute("CandidateNx") ?? "60", inv),
+                    CandidateNy = int.Parse((string)ae.Attribute("CandidateNy") ?? "60", inv),
+                    CandidateNz = int.Parse((string)ae.Attribute("CandidateNz") ?? "3", inv),
+                    UseExistingDetectors = bool.Parse((string)ae.Attribute("UseExistingDetectors") ?? "False"),
+                    AchievedCoveragePercent = double.Parse((string)ae.Attribute("AchievedCoveragePercent") ?? "0", inv),
+                    StatusMessage = (string)ae.Attribute("StatusMessage") ?? "",
+                    IsVisible = bool.Parse((string)ae.Attribute("IsVisible") ?? "True")
+                };
+                if (Enum.TryParse((string)ae.Attribute("Objective") ?? "CoverAll", out AllocationObjective ob)) a.Objective = ob;
+                if (Enum.TryParse((string)ae.Attribute("Strategy") ?? "GreedyMaxCoverage", out AllocationStrategy str)) a.Strategy = str;
+                if (Enum.TryParse((string)ae.Attribute("Status") ?? "Configured", out AllocationStatus stt)) a.Status = stt;
+                if (DateTime.TryParse((string)ae.Attribute("RunAt") ?? "", null,
+                    System.Globalization.DateTimeStyles.RoundtripKind, out DateTime ra))
+                    a.RunAt = ra;
+                var pos = ae.Element("Positions");
+                if (pos != null)
+                    foreach (var pe in pos.Elements("P"))
+                        a.AllocatedPositions.Add(new System.Windows.Media.Media3D.Point3D(
+                            double.Parse((string)pe.Attribute("X") ?? "0", inv),
+                            double.Parse((string)pe.Attribute("Y") ?? "0", inv),
+                            double.Parse((string)pe.Attribute("Z") ?? "0", inv)));
+                var cov = ae.Element("Coverage");
+                if (cov != null)
+                    foreach (var ce in cov.Elements("C"))
+                    {
+                        string sid = (string)ce.Attribute("SimId") ?? "";
+                        if (!string.IsNullOrEmpty(sid))
+                            a.PerCloudCovered[sid] = bool.Parse((string)ce.Attribute("Covered") ?? "False");
+                    }
+                scene.DetectorAllocations.Add(a);
             }
         }
 
@@ -3953,6 +4098,8 @@ namespace DisperSim3D.Controls
                 DeserializeWindFieldScenarios(root, inv, fs);
                 DeserializeSimulations(root, inv, fs);
                 DeserializeViews(root, inv, fs);
+                DeserializeDispersionStudies(root, inv, fs);
+                DeserializeDetectorAllocations(root, inv, fs);
                 DeserializeDispersionScenario(root, inv, fs);
 
                 LegacyProjectMigrator.MigrateInPlace(fs);
@@ -4431,6 +4578,7 @@ namespace DisperSim3D.Controls
         {
             UpdateViewport();
             RefreshViews();
+            RefreshStudiesAndAllocations();
         }
 
         /// <summary>
@@ -4496,6 +4644,93 @@ namespace DisperSim3D.Controls
             foreach (var v in _viewVisuals.Values)
                 _viewport.Children.Remove(v);
             _viewVisuals.Clear();
+            foreach (var v in _studyVisuals.Values)
+                _viewport.Children.Remove(v);
+            _studyVisuals.Clear();
+            foreach (var v in _allocationVisuals.Values)
+                _viewport.Children.Remove(v);
+            _allocationVisuals.Clear();
+        }
+
+        /// <summary>Rebuilds the cloud isosurfaces for every visible
+        /// <see cref="DispersionStudy"/> + the marker geometry for every visible
+        /// <see cref="DetectorAllocation"/>. Caches by Id — only re-renders entries
+        /// that aren't already present in the cache. Call after any edit to a study
+        /// or allocation, or when their visibility toggles.</summary>
+        public void RefreshStudiesAndAllocations()
+        {
+            if (_viewport == null || _scene == null) return;
+
+            // Studies.
+            var keepStudies = new HashSet<string>();
+            if (_scene.DispersionStudies != null)
+            {
+                foreach (var st in _scene.DispersionStudies)
+                {
+                    if (!st.IsVisible) continue;
+                    if (_studyVisuals.ContainsKey(st.Id))
+                    { keepStudies.Add(st.Id); continue; }
+                    ModelVisual3D vis = null;
+                    try { vis = Core.StudyAllocationRenderer.BuildStudyVisual(st, _scene); }
+                    catch { vis = null; }
+                    if (vis == null) continue;
+                    _viewport.Children.Add(vis);
+                    _studyVisuals[st.Id] = vis;
+                    keepStudies.Add(st.Id);
+                }
+            }
+            foreach (var k in _studyVisuals.Keys.Where(k => !keepStudies.Contains(k)).ToList())
+            {
+                _viewport.Children.Remove(_studyVisuals[k]);
+                _studyVisuals.Remove(k);
+            }
+
+            // Allocations.
+            var keepAllocs = new HashSet<string>();
+            if (_scene.DetectorAllocations != null)
+            {
+                foreach (var a in _scene.DetectorAllocations)
+                {
+                    if (!a.IsVisible) continue;
+                    if (_allocationVisuals.ContainsKey(a.Id))
+                    { keepAllocs.Add(a.Id); continue; }
+                    ModelVisual3D vis = null;
+                    try { vis = Core.StudyAllocationRenderer.BuildAllocationVisual(a, _scene); }
+                    catch { vis = null; }
+                    if (vis == null) continue;
+                    _viewport.Children.Add(vis);
+                    _allocationVisuals[a.Id] = vis;
+                    keepAllocs.Add(a.Id);
+                }
+            }
+            foreach (var k in _allocationVisuals.Keys.Where(k => !keepAllocs.Contains(k)).ToList())
+            {
+                _viewport.Children.Remove(_allocationVisuals[k]);
+                _allocationVisuals.Remove(k);
+            }
+        }
+
+        /// <summary>Drops the cached visual for a single study (called after the user
+        /// edits it — composition / threshold may have changed).</summary>
+        public void InvalidateStudyVisual(string studyId)
+        {
+            if (string.IsNullOrEmpty(studyId)) return;
+            if (_studyVisuals.TryGetValue(studyId, out var vis))
+            {
+                _viewport?.Children.Remove(vis);
+                _studyVisuals.Remove(studyId);
+            }
+        }
+
+        /// <summary>Drops the cached visual for a single allocation.</summary>
+        public void InvalidateAllocationVisual(string allocId)
+        {
+            if (string.IsNullOrEmpty(allocId)) return;
+            if (_allocationVisuals.TryGetValue(allocId, out var vis))
+            {
+                _viewport?.Children.Remove(vis);
+                _allocationVisuals.Remove(allocId);
+            }
         }
 
         /// <summary>Rebuilds Sun + sky-dome from <see cref="Scene3D.Environment"/> and
