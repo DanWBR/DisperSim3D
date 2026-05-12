@@ -172,7 +172,7 @@ FluidX3D/                          # Sibling C++ project — FluidX3D.dll
 ├── src/defines.hpp                # Feature flags (D3Q19 FP32, VOLUME_FORCE, SUBGRID, …)
 └── …                              # Upstream FluidX3D from ProjectPhysX
 DisperSim3D.CLI/                   # Headless batch runner (--list / --simulation / --validate)
-TestApp/                           # WinForms host that embeds the editor panel
+DisperSim3D.App/                   # WinForms host that embeds the editor panel
 docs/                              # GitHub Pages site (Jekyll + Just the Docs)
 DisperSim3D.sln
 ```

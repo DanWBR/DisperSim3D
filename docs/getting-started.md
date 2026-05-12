@@ -38,10 +38,10 @@ The solution contains:
 |---|---|---|
 | `DisperSim3D` | `net10.0-windows` library | Models, solvers, viewport, dialogs |
 | `DisperSim3D.CLI` | Console exe | Headless batch runner |
-| `TestApp` | WinForms exe | Standalone host that embeds the editor panel |
+| `DisperSim3D.App` | WinForms exe | Standalone host that embeds the editor panel |
 | `FluidX3D` | `FluidX3D.dll` | C++ GPU LBM bridge, auto-copied to C# output dirs |
 
-After a successful build, run **TestApp** (or the executable bundled in a
+After a successful build, run **DisperSim3D.App** (or the executable bundled in a
 release artifact) and you have the full GUI.
 
 ## First simulation — 5-minute walkthrough

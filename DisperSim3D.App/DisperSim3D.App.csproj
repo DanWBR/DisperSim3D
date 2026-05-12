@@ -8,7 +8,7 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
-    <Title>TestApp</Title>
+    <Title>DisperSim3D.App</Title>
     <Description>DisperSim3D Application</Description>
     <Copyright>Copyright 2026 Daniel Wagner Oliveira de Medeiros</Copyright>
     <Version>0.9.0</Version>

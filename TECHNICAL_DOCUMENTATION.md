@@ -43,7 +43,7 @@ DisperSim 3D is an open-source desktop application for simulating accidental gas
 |---|---|---|
 | `DisperSim3D` | Library (net10.0-windows) | Models, solvers, viewport, dialogs |
 | `DisperSim3D.CLI` | Console exe | Headless batch runner — reads XML, runs solver, prints summary |
-| `TestApp` | WinForms exe | Standalone UI host that embeds the editor panel |
+| `DisperSim3D.App` | WinForms exe | Standalone UI host that embeds the editor panel |
 
 ### 2.2 UI stack
 
@@ -57,7 +57,7 @@ DisperSim 3D is an open-source desktop application for simulating accidental gas
 
 ```
                       ┌────────────────────┐
-                      │       TestApp      │  ← entry point
+                      │ DisperSim3D.App    │  ← entry point
                       └──────────┬─────────┘
                                  │
                       ┌──────────▼─────────┐
@@ -477,7 +477,7 @@ Manual override available via the `ScenarioRisk.ConsMode = Manual` path.
 
 #### 3.9.6 Verification
 
-`TestApp/IogpTableTests.cs` is a self-checking class invoked via `DisperSim3D.App.exe --iogp-selftest`. It asserts:
+`DisperSim3D/Core/IogpTableTests.cs` is a self-checking class invoked via `DisperSim3D.App.exe --iogp-selftest`. It asserts:
 
 - 25 representative table cells across 15 of the 24 equipment types match the printed values in IOGP 434-01 v1.1 within 5% relative tolerance.
 - An aggregate inventory (50 m pipe + 12 flanges + 4 valves, all 6" / 10–50 mm) sums to the hand-calculated total `1.12 × 10⁻⁴` events/year.

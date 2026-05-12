@@ -929,8 +929,8 @@ namespace DisperSim3D.Controls
 
         private void DoExit()
         {
-            // Close the host form if any (TestApp wraps the panel in a Form); otherwise
-            // fall back to terminating the application loop.
+            // Close the host form if any (DisperSim3D.App wraps the panel in a Form);
+            // otherwise fall back to terminating the application loop.
             var form = this.FindForm();
             if (form != null) form.Close();
             else Application.Exit();
