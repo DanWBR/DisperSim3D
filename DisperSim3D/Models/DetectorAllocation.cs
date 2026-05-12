@@ -14,11 +14,21 @@ namespace DisperSim3D.Models
         CoverPercentage = 1
     }
 
-    /// <summary>Reserved — only Greedy is implemented today; placeholder for future
-    /// MILP / simulated-annealing strategies.</summary>
+    /// <summary>Optimisation strategy used by <see cref="DetectorAllocation"/>.</summary>
     public enum AllocationStrategy
     {
-        GreedyMaxCoverage = 0
+        /// <summary>Greedy maximum coverage — pick at each step the candidate that
+        /// covers the most still-uncovered clouds. Unweighted: every cloud counts
+        /// the same. This is the original behaviour shipped with the feature.</summary>
+        GreedyMaxCoverage = 0,
+
+        /// <summary>Greedy minimum residual risk (Rad et al. 2017): pick at each
+        /// step the candidate that maximises the sum of weighted risk it covers,
+        /// where each cloud carries a risk
+        /// `R_s = frequency_s · consequence_s · DetectionProbability`. Optionally
+        /// distance-weighted (Rad &amp; Rashtchian 2016) so closer detectors get a
+        /// stronger contribution.</summary>
+        MinResidualRisk = 1
     }
 
     public enum AllocationStatus
@@ -91,8 +101,24 @@ namespace DisperSim3D.Models
         public bool UseExistingDetectors { get; set; } = false;
 
         [Category("Strategy")]
-        [Description("Optimisation strategy. Greedy max-coverage is the only one implemented today.")]
+        [Description("Optimisation strategy. GreedyMaxCoverage = original unweighted greedy. MinResidualRisk = greedy risk reduction (Rad 2017) using per-simulation frequency × consequence.")]
         public AllocationStrategy Strategy { get; set; } = AllocationStrategy.GreedyMaxCoverage;
+
+        [Category("Risk")]
+        [Description("Global probability of detection P_d (0..1). Multiplies every per-scenario risk weight. Default 1.0 = deterministic detector. Lower it to model imperfect / unmaintained detectors. Only consumed by MinResidualRisk.")]
+        public double DetectionProbability { get; set; } = 1.0;
+
+        [Category("Risk")]
+        [Description("When true, the per-candidate score for MinResidualRisk includes a distance weight that favours closer-to-the-cloud picks: w = Wmin + (Wmax-Wmin)·(1 − d/DetectionRadius). Default off keeps the picks position-agnostic within the radius.")]
+        public bool UseDistanceWeighting { get; set; } = false;
+
+        [Category("Risk")]
+        [Description("Distance weight floor (Wmin), per Rad & Rashtchian 2016. 0..1.")]
+        public double DistanceWeightMin { get; set; } = 0.5;
+
+        [Category("Risk")]
+        [Description("Distance weight ceiling (Wmax), per Rad & Rashtchian 2016. 0..1.")]
+        public double DistanceWeightMax { get; set; } = 1.0;
 
         // ── Results ──
 
@@ -123,5 +149,32 @@ namespace DisperSim3D.Models
         [Category("Visualization")]
         [Description("Whether allocated-detector markers are drawn in the 3D viewport when this allocation is the active selection.")]
         public bool IsVisible { get; set; } = true;
+
+        // ── Risk-strategy results ──
+
+        [Category("Result (Risk)")]
+        [Description("Total risk Σ R_s across all study scenarios (events/year × consequence). Populated by MinResidualRisk runs.")]
+        public double TotalRisk { get; set; }
+
+        [Category("Result (Risk)")]
+        [Description("Residual risk after the allocator's picks (events/year × consequence). Populated by MinResidualRisk runs.")]
+        public double ResidualRisk { get; set; }
+
+        [Category("Result (Risk)")]
+        [Description("Risk Reduction Fraction = 1 − ResidualRisk / TotalRisk. 1.0 = all risk eliminated. Populated by MinResidualRisk runs.")]
+        public double RiskReductionFraction { get; set; }
+
+        [Category("Result (Risk)")]
+        [Description("Detector count axis of the risk-reduction curve (k = 0, 1, 2, ...).")]
+        public List<int> RiskCurveK { get; set; } = new List<int>();
+
+        [Category("Result (Risk)")]
+        [Description("RRF values aligned with RiskCurveK — the marginal-utility plot from Rad 2017 Fig. 7. Use to find the knee of the cost / coverage curve.")]
+        public List<double> RiskCurveRRF { get; set; } = new List<double>();
+
+        [Category("Result (Risk)")]
+        [Description("Per-simulation residual risk remaining after the allocator's picks (events/year × consequence).")]
+        public Dictionary<string, double> PerCloudResidualRisk { get; set; }
+            = new Dictionary<string, double>();
     }
 }

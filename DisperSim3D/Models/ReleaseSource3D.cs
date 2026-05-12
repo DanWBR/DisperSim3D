@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Windows.Media.Media3D;
 using DisperSim3D.Core;
@@ -80,6 +81,41 @@ namespace DisperSim3D.Models
         [Category("Release")]
         [Description("Release elevation angle in degrees (0 = horizontal, +ve = upward).")]
         public double ReleaseElevationDeg { get; set; }
+
+        [Category("Risk / IOGP")]
+        [Description("Equipment inventory contributing to this release scenario. The leak frequency is computed as the sum of IOGP 434-01 per-item (or per-metre) frequencies over all items at the chosen HoleSizeBand.")]
+        public List<EquipmentInventoryItem> EquipmentInventory { get; set; }
+            = new List<EquipmentInventoryItem>();
+
+        [Category("Risk / IOGP")]
+        [Description("Representative hole-size band for the modelled release. Geometric-mean diameters: Tiny=1.7mm, Small=5.5mm, Medium=22.4mm, Large=86.6mm, Rupture=full bore.")]
+        public IogpHoleSizeBand HoleSizeBand { get; set; } = IogpHoleSizeBand.Medium;
+
+        [Category("Risk / IOGP")]
+        [Description("When true, LeakFrequencyPerYear is recomputed from EquipmentInventory + HoleSizeBand on every read of EffectiveLeakFrequencyPerYear. When false, the property holds a user-entered override.")]
+        public bool AutoComputeLeakFrequency { get; set; } = true;
+
+        [Category("Risk / IOGP")]
+        [Description("Manual override for source leak frequency (events/year). Only consulted when AutoComputeLeakFrequency is false. Default 1e-4 = a generic order-of-magnitude leak for a small process unit.")]
+        public double LeakFrequencyPerYear { get; set; } = 1e-4;
+
+        /// <summary>
+        /// Total leak frequency for this source in events per year. When
+        /// <see cref="AutoComputeLeakFrequency"/> is true, this is recomputed on
+        /// every access by summing the IOGP 434-01 frequencies over the equipment
+        /// inventory at the configured <see cref="HoleSizeBand"/>. When false, it
+        /// returns the user-supplied <see cref="LeakFrequencyPerYear"/> override.
+        /// </summary>
+        [System.Xml.Serialization.XmlIgnore]
+        public double EffectiveLeakFrequencyPerYear
+        {
+            get
+            {
+                if (AutoComputeLeakFrequency)
+                    return IogpFrequencyTable.TotalSourceFrequency(EquipmentInventory, HoleSizeBand);
+                return LeakFrequencyPerYear;
+            }
+        }
 
         /// <summary>
         /// Gets the unit direction vector of the release computed from
