@@ -123,8 +123,14 @@ namespace DisperSim3D.Dialogs
                 "FluidX3D Dispersion (Steady State)"
             });
             cmbSolver.SelectedIndex = 0;
+            // Owner-draw: prepend a gold star to every FluidX3D row so the
+            // recommended GPU solvers stand out in both the dropdown and the
+            // closed combo. Non-FluidX3D rows render as plain text.
+            cmbSolver.DrawMode = DrawMode.OwnerDrawFixed;
+            cmbSolver.DrawItem += SolverCombo_DrawItem;
             DialogHelpers.AddRowWithHelp(table, ref row, "Solver:", cmbSolver,
-                "Dispersion solver. Gaussian models are fast; CFD solvers respect obstacles and require more time.");
+                "Dispersion solver. Gaussian models are fast; CFD solvers respect obstacles and require more time. " +
+                "★ marks the GPU-accelerated FluidX3D solvers — recommended for fast iteration.");
 
             double defaultDur = _scene.GeneralSettings?.DefaultMeteo != null ? 300 : 300;
             double defaultDomain = _scene.GeneralSettings?.DefaultDomainSizeM ?? 200;
@@ -248,6 +254,44 @@ namespace DisperSim3D.Dialogs
             target.SnapshotGridResolution = (int)nudGrid.Value;
             target.SnapshotCount = (int)nudSnapCount.Value;
             Result = target;
+        }
+
+        /// <summary>Owner-draw handler for the solver combo: prefixes every FluidX3D entry
+        /// with a gold-coloured star to flag the GPU-accelerated solvers as the recommended
+        /// fast-iteration path. Non-FluidX3D rows render exactly like the default
+        /// <see cref="ComboBoxStyle.DropDownList"/> would.</summary>
+        private void SolverCombo_DrawItem(object sender, DrawItemEventArgs e)
+        {
+            if (e.Index < 0 || e.Index >= cmbSolver.Items.Count) return;
+            e.DrawBackground();
+
+            string text = cmbSolver.Items[e.Index].ToString() ?? string.Empty;
+            bool isFluidX3D = text.StartsWith("FluidX3D", StringComparison.Ordinal);
+            bool selected = (e.State & DrawItemState.Selected) != 0;
+            System.Drawing.Color fg = selected
+                ? System.Drawing.SystemColors.HighlightText
+                : cmbSolver.ForeColor;
+
+            int x = e.Bounds.Left + 2;
+            int y = e.Bounds.Top + (e.Bounds.Height - e.Font.Height) / 2;
+
+            if (isFluidX3D)
+            {
+                // Star colour stays the same gold whether the row is selected (blue
+                // background) or not — the contrast is fine against both.
+                const string star = "★"; // ★
+                TextRenderer.DrawText(e.Graphics, star, e.Font,
+                    new System.Drawing.Point(x, y), System.Drawing.Color.Gold,
+                    TextFormatFlags.NoPadding);
+                x += TextRenderer.MeasureText(e.Graphics, star + " ", e.Font,
+                    new System.Drawing.Size(int.MaxValue, e.Bounds.Height),
+                    TextFormatFlags.NoPadding).Width;
+            }
+
+            TextRenderer.DrawText(e.Graphics, text, e.Font,
+                new System.Drawing.Point(x, y), fg, TextFormatFlags.NoPadding);
+
+            e.DrawFocusRectangle();
         }
 
         private static NumericUpDown MakeNud(decimal min, decimal max, decimal value, int decimals)

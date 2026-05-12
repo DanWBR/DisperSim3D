@@ -1,10 +1,10 @@
 # DisperSim 3D
 
-An interactive 3D gas dispersion analysis tool for process safety. Build a project, define release sources and gases, run Gaussian or CFD-based dispersion simulations, visualize concentration fields, and optimize gas detector placement.
+An interactive 3D gas dispersion analysis tool for process safety. Build a project, define release sources and gases, run Gaussian, CFD or GPU LBM dispersion simulations, visualize concentration fields, and optimize gas detector placement.
 
-Built on **.NET 10** with **HelixToolkit.WPF** for 3D rendering, **DockPanelSuite** for the docked layout, and **OpenFOAM** for CFD-based wind fields and reactive transport.
+Built on **.NET 10** with **HelixToolkit.WPF** for 3D rendering, **DockPanelSuite** for the docked layout, **OpenFOAM** for CFD-based wind fields and reactive transport, and **FluidX3D** (GPU lattice Boltzmann) for fast wind, dispersion and fire-plume runs.
 
-For a detailed description of physical models, file format, OpenFOAM case structure, and validation, see [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md).
+Full project documentation is published on **[GitHub Pages](https://danwbr.github.io/DisperSim3D/)**. For a detailed description of physical models, file format, OpenFOAM case structure, and validation, see [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md).
 
 ---
 
@@ -48,6 +48,17 @@ Choose a solver per simulation:
 
 Automatic mesh generation with snappyHexMesh, building/obstacle refinement zones, and proper handling of v2512 `topoSetDict` syntax. Default `MaxCourantNumber = 10` and `wallDist meshWave` follow Fiates & Vianna recommendations.
 
+### GPU Lattice Boltzmann (FluidX3D)
+
+Embedded sibling C++ project (`FluidX3D.dll`) compiled from [Moritz Lehmann's FluidX3D](https://github.com/ProjectPhysX/FluidX3D) and invoked via P/Invoke. Runs on any OpenCL 1.2+ device. Four runners exposed as `CfdSolverType` values:
+
+- **FluidX3DWind** (`FX3DWN`) — steady wind field via Smagorinsky-Lilly LES (typically 5–30 s for 64³–96³ on a mid-range GPU)
+- **FluidX3DDispersion** (`FX3DDP`) — transient dispersion: GPU LBM wind field + CPU semi-Lagrangian tracer (`DispersionTracerEngine`)
+- **FluidX3DDispersionSteady** (`FX3DDS`) — same tracer driven until cell-by-cell L2 delta drops below tolerance; result is a single converged frame, playback bar hidden
+- **FluidX3DFire** (`FX3DFR`) — buoyant fire plume via dual-tracer `FireTracerEngine` (smoke + temperature) with Boussinesq buoyancy `β·g·(T-T_amb)`
+
+GPU selection (multi-GPU systems) and on-demand VRAM/RAM/disk sizing live under **Settings → GPU & Memory…**.
+
 **Atmospheric Boundary Layer treatment** is enabled by default (per-solver presets via `CfdConfigurationPresets`):
 
 - Log-law inlet (`atmBoundaryLayerInletVelocity`/`...InletK`/`...InletEpsilon`) with `Uref`/`Zref`/`z₀` from `MeteorologicalConditions`
@@ -73,9 +84,11 @@ Automatic mesh generation with snappyHexMesh, building/obstacle refinement zones
 ### Analysis
 
 - **Flammable cloud volume** between LFL and UFL
-- **Validation harness** — compare any solver against published benchmarks via `.dsbench` JSON files; computes Hanna SPMs (MRB, RMSE, FAC2, MG, VG) with pass/fail per metric. Available via `Dispersion → Validate against Benchmarks…` (UI) or `DisperSim3D.CLI --validate <file-or-dir>` (CI-friendly). Ships with 4 starter benchmarks under `benchmarks/`.
+- **Validation harness** — compare any solver against published benchmarks via `.dsbench` JSON files; computes Hanna SPMs (MRB, RMSE, FAC2, MG, VG) with pass/fail per metric. Available via `Dispersion → Validate against Benchmarks…` (UI) or `DisperSim3D.CLI --validate <file-or-dir>` (CI-friendly). Ships with 5 starter benchmarks under `benchmarks/`.
 - **Monitor points** sampling concentration in real time
 - **Gas detector optimization** via Set Covering Problem (Vianna 2019), with both greedy and exact Balas branch-and-bound solvers, Cardinal or Moore neighborhoods, and on-demand result loading from saved CFD cases
+- **Dispersion Studies** — curated collections of related simulations bundled into a single object with a detection criterion (`PercentLfl`/`Ppm`/`MoleFraction`/`MassFraction`/`Temperature`/`ThermalRadiation` × threshold)
+- **Detector Allocation** — greedy maximum-coverage detector placement against a Dispersion Study; honours `MaxDetectors`, `DetectionRadiusM`, vertical band `[MinZ,MaxZ]`, obstacle culling, and can pin existing detectors as already-placed
 - **Detection time** scoring per detector
 - **Exceedance curves** with frequency weighting
 - **Dispersion thresholds** (LFL fractions, IDLH, ERPG, custom)
@@ -90,34 +103,54 @@ Automatic mesh generation with snappyHexMesh, building/obstacle refinement zones
 ## Project Structure
 
 ```
-DisperSim3D/
-├── Models/                       # Data classes
-│   ├── Project.cs / Scene3D.cs   # Root container (legacy XML alias)
-│   ├── ProjectSettings.cs        # General defaults
-│   ├── GasLibraryItem.cs         # Pure gas or mixture
-│   ├── ReleaseSource3D.cs        # Top-level sources
-│   ├── WindFieldScenario.cs      # Wind field + visualization
-│   ├── Simulation.cs             # Snapshot-based runnable
-│   ├── CfdConfiguration.cs       # OpenFOAM settings
-│   ├── GasProperties.cs          # LFL, UFL, IDLH, ERPG
+DisperSim3D/                       # Main .NET 10 Windows library
+├── Models/                        # Data classes
+│   ├── Project.cs / Scene3D.cs    # Root container (legacy XML alias)
+│   ├── ProjectSettings.cs         # General defaults
+│   ├── GasLibraryItem.cs          # Pure gas or mixture
+│   ├── ReleaseSource3D.cs         # Top-level sources
+│   ├── WindFieldScenario.cs       # Wind field + visualization
+│   ├── Simulation.cs              # Snapshot-based runnable
+│   ├── CfdSolverType.cs           # Solver enum (Gaussian, OpenFOAM, FluidX3D)
+│   ├── CfdConfiguration.cs        # OpenFOAM settings
+│   ├── DispersionStudy.cs         # Curated simulation collection + detection criterion
+│   ├── DetectorAllocation.cs      # Greedy max-coverage placement config + results
+│   ├── GasProperties.cs           # LFL, UFL, IDLH, ERPG
 │   └── ...
-├── Core/                         # Engines
+├── Core/                          # Engines
 │   ├── GaussianPuffEngine.cs
 │   ├── GaussianPlumeEngine.cs
-│   ├── HighPressureLeakModel.cs  # incl. Birch & Schefer expanded source
+│   ├── HighPressureLeakModel.cs   # incl. Birch & Schefer expanded source
 │   ├── FlammableCloudCalculator.cs
-│   ├── DetectorOptimizer.cs      # Vianna 2019 SCP orchestrator
-│   ├── SetCoveringSolver.cs      # Greedy + Balas exact
+│   ├── DetectorOptimizer.cs       # Vianna 2019 SCP (exact + greedy)
+│   ├── SetCoveringSolver.cs       # Greedy + Balas exact
+│   ├── DispersionStudyEngine.cs   # Cloud snapshots, bbox-culled radius test
+│   ├── DetectorAllocator.cs       # Greedy max-coverage allocator
+│   ├── StudyAllocationRenderer.cs # Marching-cubes per cloud + detector spheres
 │   ├── OpenFoamCaseGenerator.cs
 │   ├── OpenFoamRunner.cs
 │   ├── OpenFoamResultReader.cs
+│   ├── FluidX3DBridge.cs          # P/Invoke surface over FluidX3D.dll
+│   ├── FluidX3DUnits.cs           # SI <-> lattice unit conversion
+│   ├── FluidX3DObstacleVoxelizer.cs
+│   ├── FluidX3DWindFieldRunner.cs # FX3DWN
+│   ├── FluidX3DRunner.cs          # FX3DDP transient dispersion
+│   ├── FluidX3DSteadyDispersionRunner.cs # FX3DDS convergence-driven
+│   ├── FluidX3DFireRunner.cs      # FX3DFR buoyant fire plume
+│   ├── DispersionTracerEngine.cs  # CPU semi-Lagrangian tracer over LBM velocity
+│   ├── FireTracerEngine.cs        # Dual tracer (smoke + T) with Boussinesq
+│   ├── MemoryEstimator.cs         # VRAM/RAM/disk per solver × grid
+│   ├── AppSettings.cs             # PreferredComputeDeviceId etc.
 │   ├── LegacyProjectMigrator.cs
 │   └── ...
 ├── Dialogs/
 │   ├── DispersionSourceDialog.cs
 │   ├── MeteorologicalDialog.cs
 │   ├── CfdSettingsDialog.cs
-│   ├── DetectorOptimizationDialog.cs
+│   ├── DetectorOptimizationDialog.cs       # classic SCP
+│   ├── DispersionStudyDialog.cs            # study editor
+│   ├── DetectorAllocationDialog.cs         # greedy max-coverage
+│   ├── GpuPerformanceSettingsDialog.cs     # GPU picker + Memory Estimator
 │   └── ...
 ├── Controls/
 │   ├── Scene3DEditorPanel.cs       # WinForms shell with docked layout
@@ -126,8 +159,14 @@ DisperSim3D/
 │   ├── PropertyGridWpfPanel.cs     # WinForms PropertyGrid wrapper
 │   ├── PlaybackBar.cs              # Sync'd playback control
 │   └── ...
-├── TestApp/
-└── DisperSim3D.sln
+FluidX3D/                          # Sibling C++ project — FluidX3D.dll
+├── src/disp_bridge.{h,cpp}        # C-ABI bridge exposed to C#
+├── src/defines.hpp                # Feature flags (D3Q19 FP32, VOLUME_FORCE, SUBGRID, …)
+└── …                              # Upstream FluidX3D from ProjectPhysX
+DisperSim3D.CLI/                   # Headless batch runner (--list / --simulation / --validate)
+TestApp/                           # WinForms host that embeds the editor panel
+docs/                              # GitHub Pages site (Jekyll + Just the Docs)
+DisperSim3D.sln
 ```
 
 ---
@@ -143,7 +182,8 @@ dotnet build DisperSim3D.sln
 - **.NET 10 SDK**
 - **Visual Studio 2022 17.14+** (or `dotnet` CLI)
 - **Windows** (WinForms shell + WPF viewport)
-- **OpenFOAM v2512+** (optional, for CFD features)
+- **OpenCL 1.2+ device** (any modern GPU — required for the FluidX3D solvers)
+- **OpenFOAM v2512+** (optional, for the CFD solver family)
 
 ---
 
@@ -222,6 +262,7 @@ See [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md) for the full schema
 - Mack, A. & Spruijt, M. P. N. (2013). *Validation of OpenFoam for heavy gas dispersion applications.* Journal of Hazardous Materials.
 - Tran, L. V. (2019). *On numerical modelling of atmospheric gas dispersion using CFD approach.* PhD thesis, Nanyang Technological University.
 - Schalau, S., Habib, A. & Michel, S. (2021). *Atmospheric Wind Field Modelling with OpenFOAM for Near-Ground Gas Dispersion.* Atmosphere, 12(8), 933.
+- Lehmann, M. (2022). *Esoteric Pull and Esoteric Push: Two simple in-place streaming schemes for the lattice Boltzmann method on GPUs.* Computation. — underpins the [FluidX3D](https://github.com/ProjectPhysX/FluidX3D) solver used by the GPU runners.
 - TNO Yellow Book — *Methods for the Calculation of Physical Effects.*
 
 ---

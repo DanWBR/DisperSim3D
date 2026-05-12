@@ -17,15 +17,19 @@ DisperSim 3D is an open-source desktop application for simulating accidental gas
 
 - 3D scene editor with imported CAD geometry (obstacles, equipment, buildings)
 - Project model centred on reusable Gas Library, Sources, Wind Fields, Simulations
-- Three solver families:
+- Four solver families:
   - **Gaussian Puff** (transient analytical)
   - **Gaussian Plume** (steady-state analytical with bent-plume trajectory)
-  - **CFD** (OpenFOAM): scalarTransportFoam, simpleFoam, pimpleFoam, buoyantPimpleFoam, reactingFoam, rhoSimpleFoam, **rhoReactingBuoyantFoam** (recommended universal, after Fiates & Vianna 2016)
+  - **CFD** (OpenFOAM v2512+): scalarTransportFoam, simpleFoam, pimpleFoam, buoyantPimpleFoam, reactingFoam, rhoSimpleFoam, **rhoReactingBuoyantFoam** (recommended universal, after Fiates & Vianna 2016)
+  - **GPU LBM** (FluidX3D): `FluidX3DWind`, `FluidX3DDispersion`, `FluidX3DDispersionSteady`, `FluidX3DFire` — invoked in-process via `FluidX3D.dll` and a C-ABI bridge, no temp-file round-trip
 - High-pressure leak modelling with **Birch & Schefer expanded-diameter** for sonic releases
 - Pre-computed wind fields shared across multiple dispersion runs
 - Snapshot-based simulations: history is immutable; editing a source after a run does not change past results
 - Animated wind-field visualization with user-tunable arrow appearance
-- **Detector placement optimisation** via the Set Covering Problem (Vianna 2019)
+- **Detector placement** in two flavours:
+  - Set Covering Problem (Vianna 2019) — exact and greedy, minimum-cardinality cover
+  - **Dispersion Studies + Detector Allocation** — curated multi-simulation collection and greedy maximum-coverage placement against a detector budget
+- **GPU device selection** with on-demand VRAM/RAM/disk estimation (`Settings → GPU & Memory…`)
 - Flammable cloud volume integration in the LFL/UFL band
 
 ---
@@ -114,7 +118,7 @@ Solvers (Core/)                          External pipeline
 
 ### 3.3 CFD — solver gallery
 
-| Enum | OpenFOAM solver | Use case |
+| Enum | OpenFOAM / native solver | Use case |
 |---|---|---|
 | `ScalarTransportFoam` / `ScalarTransportFoamSteady` | `scalarTransportFoam` | Passive scalar in a frozen velocity field |
 | `ScalarSimpleFoam` | `simpleFoam` + scalar | Steady-state RANS |
@@ -122,7 +126,11 @@ Solvers (Core/)                          External pipeline
 | `PimpleFoam` | `pimpleFoam` + fvOptions scalar | Transient incompressible |
 | `BuoyantPimpleFoam` | `buoyantPimpleFoam` | Transient with buoyancy (heavy/light gas) |
 | `ReactingFoam` | `reactingFoam` | Multi-species, combustion off |
-| **`RhoReactingBuoyantFoam`** | `rhoReactingBuoyantFoam` | **Recommended**: compressible + buoyant + multi-species, subsonic & sonic, combustion off |
+| **`RhoReactingBuoyantFoam`** | `rhoReactingBuoyantFoam` | **Recommended CFD**: compressible + buoyant + multi-species, subsonic & sonic, combustion off |
+| `FluidX3DWind` | FluidX3D LBM (D3Q19 FP32 + SUBGRID) | GPU steady wind field, seconds-to-minutes |
+| `FluidX3DDispersion` | FluidX3D wind + CPU `DispersionTracerEngine` | GPU wind + semi-Lagrangian transient tracer |
+| `FluidX3DDispersionSteady` | FluidX3D wind + CPU tracer, convergence-driven | Single converged frame, L2-delta tolerance |
+| `FluidX3DFire` | FluidX3D wind + CPU `FireTracerEngine` | Dual tracer (smoke + T) with Boussinesq buoyancy |
 
 The `RhoReactingBuoyantFoam` recipe follows Fiates & Vianna (2016): `chemistryThermo rho`, `chemistry off`, `combustionModel none`, `heRhoThermo` with `reactingMixture`. Reactions are declared but the species block is stripped of all kinetic data.
 
@@ -202,6 +210,169 @@ Implementation of Vianna (2019), *The set covering problem applied to optimisati
 6. Solve via [`SetCoveringSolver.SolveExact`](DisperSim3D/Core/SetCoveringSolver.cs) (Balas-style implicit enumeration, greedy upper bound, branch-and-bound with most-constrained-row branching) or fast greedy
 7. Convert column indices back to world coordinates, return the optimal detector positions
 
+### 3.7 FluidX3D GPU LBM solvers
+
+**Files**:
+[`Core/FluidX3DBridge.cs`](DisperSim3D/Core/FluidX3DBridge.cs),
+[`Core/FluidX3DUnits.cs`](DisperSim3D/Core/FluidX3DUnits.cs),
+[`Core/FluidX3DObstacleVoxelizer.cs`](DisperSim3D/Core/FluidX3DObstacleVoxelizer.cs),
+[`Core/FluidX3DWindFieldRunner.cs`](DisperSim3D/Core/FluidX3DWindFieldRunner.cs),
+[`Core/FluidX3DRunner.cs`](DisperSim3D/Core/FluidX3DRunner.cs),
+[`Core/FluidX3DSteadyDispersionRunner.cs`](DisperSim3D/Core/FluidX3DSteadyDispersionRunner.cs),
+[`Core/FluidX3DFireRunner.cs`](DisperSim3D/Core/FluidX3DFireRunner.cs),
+[`Core/DispersionTracerEngine.cs`](DisperSim3D/Core/DispersionTracerEngine.cs),
+[`Core/FireTracerEngine.cs`](DisperSim3D/Core/FireTracerEngine.cs),
+[`FluidX3D/src/disp_bridge.h`](FluidX3D/src/disp_bridge.h),
+[`FluidX3D/src/disp_bridge.cpp`](FluidX3D/src/disp_bridge.cpp).
+
+FluidX3D is a GPU lattice Boltzmann solver from [ProjectPhysX](https://github.com/ProjectPhysX/FluidX3D) compiled as a sibling C++ project to `FluidX3D.dll` and invoked via P/Invoke through a thin C-ABI bridge. Runs on any OpenCL 1.2+ device. A 64³ wind field that takes minutes in `simpleFoam` finishes in 5–10 s on a mid-range GPU.
+
+**Feature flags compiled into the DLL** (`FluidX3D/src/defines.hpp`):
+
+| Flag | Why |
+|---|---|
+| `VOLUME_FORCE` | gravity + Boussinesq force injection |
+| `EQUILIBRIUM_BOUNDARIES` | inlet/outlet cells as `TYPE_E` with fixed U, ρ |
+| `SUBGRID` | Smagorinsky-Lilly LES — required at atmospheric Re ≥ 10⁵ |
+| `D3Q19`, `FP32` | velocity set / precision (default; FP16 optional later) |
+| **off:** `INTERACTIVE_GRAPHICS` | headless DLL, no SDL/window |
+| **off:** `TEMPERATURE` | replaced by the CPU tracer engines to keep velocity clean |
+
+**C-ABI surface** (`FluidX3D/src/disp_bridge.h`):
+
+```cpp
+extern "C" {
+  uint64_t fx3d_create(const Fx3dConfig* cfg);
+  uint64_t fx3d_create_on_device(const Fx3dConfig* cfg, int device_id);
+  void     fx3d_list_devices(char* buf, uint32_t max_bytes);  // returns JSON
+  void     fx3d_add_box_obstacle(uint64_t h, float xmin, ymin, zmin, xmax, ymax, zmax);
+  void     fx3d_set_inlet_wind(uint64_t h, float ux, float uy, float uz);
+  void     fx3d_add_release_source(uint64_t h, float x, float y, float z,
+                                    float radius_m, float concentration);
+  int      fx3d_run(uint64_t h, uint32_t steps, void(*cb)(uint32_t, uint32_t));
+  void     fx3d_read_velocity(uint64_t h, float* ux, float* uy, float* uz);
+  void     fx3d_read_concentration(uint64_t h, float* c);
+  void     fx3d_destroy(uint64_t h);
+}
+```
+
+Handles are opaque 64-bit integers backed by a `std::unordered_map<uint64_t, std::unique_ptr<LBM>>` on the native side so many simulations can run sequentially without state leak. `FluidX3DBridge.cs` mirrors these with `[DllImport]` declarations.
+
+**Unit conversion** (`FluidX3DUnits`):
+
+```
+Δx           = (2 · domainHalfM) / Nx
+Δt           = Δx · C_si / C_lattice              C_lattice = 1/√3
+nu_lattice   = nu_physical    · Δt / Δx²
+g_lattice    = g_physical     · Δt² / Δx
+alpha_latt.  = alpha_physical · Δt / Δx²
+```
+
+Inverse maps are used when reading velocities and concentrations back to SI.
+
+#### 3.7.1 `FluidX3DWind` — wind field
+
+Pipeline:
+
+1. Convert SI inputs (domain size, wind speed, kinematic viscosity) to lattice units.
+2. `fx3d_create_on_device(cfg, device_id)` allocates an LBM grid on the user-selected GPU.
+3. `FluidX3DObstacleVoxelizer.Voxelize` rasterises every `Decoration3D` AABB to `TYPE_S` solid cells.
+4. `fx3d_set_inlet_wind` installs an equilibrium-boundary inlet on the -X face with the requested wind vector.
+5. `fx3d_run(steady_steps)` — default 3000 steps; LBM stabilises in ~3 domain crossings.
+6. `fx3d_read_velocity` copies `u.x`, `u.y`, `u.z` back to the host as `float[Nx·Ny·Nz]` arrays.
+7. Convert lattice → SI, populate `wf.WindField` (`WindField3D`), mark the scenario **Ready**.
+
+#### 3.7.2 `FluidX3DDispersion` — transient dispersion
+
+Concentration is **not** carried by FluidX3D itself (the upstream `TEMPERATURE` extension perturbs velocities when used for passive scalars). Instead the runner builds a `DispersionTracerEngine` — a CPU semi-Lagrangian advection-diffusion solver that reads the frozen LBM velocity at every cell:
+
+```
+c_new(x) = c_old(x − u(x)·Δt)                                    semi-Lagrangian advection
+        + Δt · diff · ∇²c
+        − Δt · decay · c                                          first-order decay (gas half-life)
+```
+
+Source treatment:
+
+- Position / radius from `Simulation.SnapshotSource.Position`.
+- Magnitude from `ReleaseRateKgPerS` converted via molar mass and voxel volume.
+- HP-leak Birch & Schefer expanded source applied identically to the OpenFOAM path.
+
+#### 3.7.3 `FluidX3DDispersionSteady` — convergence-driven steady run
+
+Identical mechanics to the transient runner, except the loop iterates in chunks (`ConvergenceChecks` chunks over `SnapshotDurationS`) and compares each snapshot to the previous via L2 relative delta:
+
+```
+‖c_n − c_{n−1}‖₂ / max(‖c_n‖₂, ε)  <  ConvergenceTolerance         default 1e-3
+```
+
+When the tolerance is met, the runner writes a **single** converged binary frame and sets `OpenFoamResult.IsSteadyState = true`. The viewport reads that flag and hides the playback bar entirely — there is only one frame to display.
+
+#### 3.7.4 `FluidX3DFire` — buoyant fire plume
+
+A dual-tracer extension of `DispersionTracerEngine` — `FireTracerEngine` advects two scalars simultaneously: a smoke mass fraction `Y_smoke` and a temperature `T` (Kelvin). The Boussinesq buoyancy term is injected into the vertical velocity sampled from the LBM field:
+
+```
+u_z_eff(x) = u_z_lbm(x) + β · g · (T(x) − T_amb) · Δt              capped at 0.5 · dx / Δt
+```
+
+Default exit temperature is **1500 K** (`ExitTemperatureK` override on the source). Output is one `<time>.bin` for smoke plus one `<time>_T.bin` for temperature per write interval.
+
+#### 3.7.5 GPU device selection
+
+If `AppSettings.PreferredComputeDeviceId ≥ 0`, all four runners call `fx3d_create_on_device(cfg, device_id)` to pin the LBM context to that OpenCL device. Device IDs come from `fx3d_list_devices(buf, max_bytes)`, which returns a JSON manifest of every detected OpenCL device with name, type, memory, max work-group size and compute units. A two-call protocol probes the required buffer size first, then fetches the JSON; failures are captured in `FluidX3DBridge.LastListDevicesError` and surfaced in the Compute GPU tab of `GpuPerformanceSettingsDialog`.
+
+### 3.8 Dispersion Studies and Detector Allocation
+
+**Files**:
+[`Models/DispersionStudy.cs`](DisperSim3D/Models/DispersionStudy.cs),
+[`Models/DetectorAllocation.cs`](DisperSim3D/Models/DetectorAllocation.cs),
+[`Core/DispersionStudyEngine.cs`](DisperSim3D/Core/DispersionStudyEngine.cs),
+[`Core/DetectorAllocator.cs`](DisperSim3D/Core/DetectorAllocator.cs),
+[`Core/StudyAllocationRenderer.cs`](DisperSim3D/Core/StudyAllocationRenderer.cs),
+[`Dialogs/DispersionStudyDialog.cs`](DisperSim3D/Dialogs/DispersionStudyDialog.cs),
+[`Dialogs/DetectorAllocationDialog.cs`](DisperSim3D/Dialogs/DetectorAllocationDialog.cs).
+
+Companion workflow to §3.6 — instead of solving an exact set-cover against one simulation, the user curates a multi-simulation **study** and lets a greedy **maximum-coverage** allocator place `K` detectors to cover as many clouds as possible.
+
+#### 3.8.1 `DispersionStudy`
+
+Project-level object with:
+
+| Property | Purpose |
+|---|---|
+| `SimulationIds[]` | references to existing `Simulation` entries |
+| `DetectionQuantity` | `ViewFieldProperty` enum — `PercentLfl`, `Ppm`, `MoleFraction`, `MassFraction`, `Temperature`, `ThermalRadiation` |
+| `DetectionThreshold` | threshold in the units defined by `DetectionQuantity` |
+
+`DispersionStudyEngine.LoadClouds(study, scene)` reads the **last** concentration timestep of each simulation (or the steady-state frame for `FluidX3DDispersionSteady`) and builds one `CloudSnapshot` per simulation — a flagged-cell list with an axis-aligned bounding box used to short-cut the radius test (`CellWithinRadius` skips clouds whose bbox does not intersect the detector sphere).
+
+#### 3.8.2 `DetectorAllocation`
+
+Configuration:
+
+| Property | Purpose |
+|---|---|
+| `DispersionStudyId` | study to allocate against |
+| `Objective` | `CoverAll` (stop only when every cloud has ≥ 1 detector) or `CoverPercentage` (stop at a target %) |
+| `MaxDetectors` | hard cap on detector count |
+| `DetectionRadiusM` | sphere radius around each candidate that counts as "covered" |
+| `MinZ`, `MaxZ` | vertical band detectors may occupy (typically 1.5 – 3 m) |
+| `CandidateNx, Ny, Nz` | candidate grid resolution |
+| `UseExistingDetectors` | when true, project `GasDetector3D`s pin as already-placed and the allocator fills the remaining gap |
+
+`DetectorAllocator.Allocate`:
+
+1. Build a Cartesian candidate grid `Nx · Ny · Nz`, clipped to `[MinZ, MaxZ]`.
+2. Cull candidates inside any `Decoration3D` AABB.
+3. Pre-compute `cover[c_i] = { cloud j : any flagged cell in cloud j lies within DetectionRadiusM of c_i }`.
+4. Greedy loop: while not done and `|placed| < MaxDetectors`, pick the candidate covering the most still-uncovered clouds; remove the newly-covered clouds from consideration; repeat.
+5. Pinned existing detectors (when `UseExistingDetectors = true`) are accounted for before the greedy loop runs.
+
+Results populate `AllocatedPositions[]`, `AchievedCoveragePercent` and `PerCloudCovered[]` (boolean per simulation).
+
+`StudyAllocationRenderer.BuildStudyVisual` produces marching-cubes isosurfaces per cloud (palette-cycled colours) and `BuildAllocationVisual` overlays orange detector spheres with translucent radius shells so coverage gaps are visible at a glance.
+
 ---
 
 ## 4. Workflow
@@ -210,12 +381,13 @@ Implementation of Vianna (2019), *The set covering problem applied to optimisati
 
 1. **File → New Project**
 2. Right-click **Gases → Add Pure Gas...** → enter Methane / Custom
-3. Right-click **Sources → Add Source...** → click on the map → fill the source dialog (gas, release rate, direction, optional HP leak)
-4. Right-click **Wind Fields → Add Wind Field...** in the Manager → set wind speed/direction/stability → **Run** (executes simpleFoam in background, status changes to `Ready`)
-5. Right-click **Simulations → New Simulation...** → pick source × wind field × solver → OK creates a `Configured` simulation
+3. Right-click **Sources → Add Source...** → click on the map → fill the source dialog (gas, release rate, direction, optional HP leak). Once placed, positions can only be changed via the property panel — **drag-to-reposition is intentionally disabled** because moving an object after a simulation has run would silently invalidate the snapshot's geometry.
+4. Right-click **Wind Fields → Add Wind Field...** in the Manager → set wind speed/direction/stability → **Run**. Pick **FluidX3DWind** for a sub-30-second GPU run, or **simpleFoam** for the OpenFOAM path; status changes to `Ready` when done.
+5. Right-click **Simulations → New Simulation...** → pick source × wind field × solver → OK creates a `Configured` simulation. The solver picker includes the four `FluidX3D*` runners alongside the OpenFOAM gallery.
 6. Right-click the simulation → **Run** → `Configured → Queued → Running → Completed`. Snapshot of source/gas/meteo/cfd-config is taken at this moment.
-7. Check the simulation's checkbox in the tree → 3D playback in the viewport, controls in the bottom playback bar
-8. **Dispersion → Optimize Detector Placement...** → pick simulations + protected region → outputs minimum detector set, adds them to the project as `OptDet N`
+7. Check the simulation's checkbox in the tree → 3D playback in the viewport, controls in the bottom playback bar. `FluidX3DDispersionSteady` results hide the bar (single converged frame).
+8. **Dispersion → Optimize Detector Placement...** → pick simulations + protected region → outputs minimum detector set (Vianna 2019 SCP), adds them to the project as `OptDet N`.
+9. **Dispersion Studies → Add Study...** to bundle multiple simulations under one detection criterion, then **Detector Allocation → Add Allocation...** for greedy maximum-coverage placement against a detector budget (see §3.8).
 
 ### 4.2 Project tree sections
 
@@ -225,10 +397,12 @@ Implementation of Vianna (2019), *The set covering problem applied to optimisati
 ├── Gases (n)                  (project Gas Library — pure + mixtures)
 ├── Geometry (n)               (3D models / decorations / obstacles)
 ├── Sources (n)                (release sources, top-level)
-├── Wind Fields (n)            (pre-computed simpleFoam runs)
+├── Wind Fields (n)            (pre-computed simpleFoam / FluidX3DWind runs)
 ├── Simulations (n)            (Source × WindField × Solver runs)
 ├── Monitors (n)               (passive concentration probes)
-└── Detectors (n)              (alarm-threshold detectors)
+├── Detectors (n)              (alarm-threshold detectors)
+├── Dispersion Studies (n)     (curated collections + detection criterion)
+└── Detector Allocations (n)   (greedy max-coverage placement against a Study)
 ```
 
 Each leaf node:
@@ -387,6 +561,32 @@ Adjustable Courant number (`CfdConfiguration.MaxCourantNumber`, default 10.0 per
 
 `WindFieldRunner.Run` writes a steady-state `simpleFoam` case with the user's meteorology as the inlet, no scalar transport. `OpenFoamResultReader.ReadWindField` reads the converged `U` field and constructs a `WindField3D` for in-memory interpolation.
 
+For GPU wind fields, `FluidX3DWindFieldRunner.RunAsync` performs the same job entirely in VRAM: no temp directory, no OpenFOAM dictionary writing, just an LBM allocation, voxelisation, equilibrium-inlet seeding, `fx3d_run(steady_steps)`, and a copy back to host memory. Result is the same `WindField3D` interface, so downstream consumers (`Scene3DEditorControl`, `WindFieldVisualiser`, the dispersion runners) need not know which back end ran.
+
+### 6.5 FluidX3D case layout
+
+FluidX3D runners do not generate an OpenFOAM-style case tree. Instead they own an in-memory LBM instance (handle table on the C++ side, see §3.7) and write **only the result snapshots** to disk, under `%TEMP%/DisperSim3D_<solver>_sim_<id>/`:
+
+```
+DisperSim3D_fx3ddp_sim_<simId>/        FluidX3DDispersion
+├── 0.000.bin                          concentration field at t=0
+├── 1.500.bin                          at t=1.5s
+├── 3.000.bin
+└── ...
+
+DisperSim3D_fx3dds_sim_<simId>/        FluidX3DDispersionSteady
+└── 18.420.bin                         single converged snapshot only
+
+DisperSim3D_fx3dfr_sim_<simId>/        FluidX3DFire (dual tracer)
+├── 0.000.bin       0.000_T.bin
+├── 1.500.bin       1.500_T.bin
+└── ...
+```
+
+Each `.bin` is the raw row-major (X, Y, Z) `double[Nx,Ny,Nz]` array written by `OpenFoamResult.SaveBinaryField`. The runner pre-loads the in-memory cache with the latest snapshot via `OpenFoamResult.PreloadField` so the UI sees the new frame without a disk round-trip; older frames are lazily loaded on demand by `OpenFoamResult.GetField`.
+
+The `<time>` prefix uses `F3` invariant-culture formatting (e.g. `12.500.bin`). Reloading a project locates the case via `entry.CasePath`, scans for `*.bin` files, and reconstructs `OpenFoamResult.TimeStepPaths`. A single `.bin` (or a solver code containing `FX3DDS`) triggers `IsSteadyState = true` so the playback bar stays hidden.
+
 ---
 
 ## 7. API and extensibility
@@ -431,6 +631,22 @@ Read-only values use `[ReadOnly(true)]`. Hidden runtime caches use `[Browsable(f
 ### 7.4.1 Atmospheric defaults for new solvers
 
 When you add a new entry to `CfdSolverType`, also extend `CfdConfigurationPresets.ApplyForSolver` with a `case` arm that seeds the appropriate atmospheric defaults (Sc_t, σ_ε, C_ε3, ground BC). Look at the existing `RhoReactingBuoyantFoam` case as the reference recipe — it is the most-validated configuration. The cryogenic override at the bottom of `ApplyForSolver` reads `GasLibraryItem.IsCryogenic` and bumps Sc_t / GroundT BC for LNG vapour clouds; new solvers that handle temperature should respect the same flag.
+
+### 7.5a Adding a new FluidX3D runner
+
+1. Add an entry to `CfdSolverType` (see §3.3 for the existing four).
+2. Add the six-character code to `Core/SolverCode.cs` and its `DisplayName` map.
+3. Subclass the existing `FluidX3D*Runner` skeleton if your runner reuses the
+   LBM wind field + a CPU tracer; otherwise build directly on top of
+   `FluidX3DBridge`. The runner exposes the same `ProgressUpdated` /
+   `Completed` / `Failed` event surface as the OpenFOAM runners so
+   `SimulationManager` can dispatch to it without special-casing.
+4. Route the new enum in `SimulationManager.RunCfdAsync`, the simulation
+   editor combo (`SimulationEditorDialog`), the headless CLI parser and
+   `MemoryEstimator.For(...)`.
+5. If you need a new OpenCL feature flag, edit `FluidX3D/src/defines.hpp`
+   and rebuild. The post-build event copies `FluidX3D.dll` next to every
+   C# output directory automatically.
 
 ### 7.5 Headless / CLI
 
@@ -594,7 +810,48 @@ Vianna 2019 Table 4 — `T(n) ≈ 4.21 · n^2.98` seconds where `n` is cell coun
 
 ---
 
-## 10. References
+## 10. GPU and memory tooling
+
+### 10.1 GPU device selection
+
+**File**: [`Dialogs/GpuPerformanceSettingsDialog.cs`](DisperSim3D/Dialogs/GpuPerformanceSettingsDialog.cs).
+
+`Settings → GPU & Memory…` opens a two-tab dialog. The **Compute GPU** tab calls `FluidX3DBridge.ListDevicesJson()` and renders every detected OpenCL device in a `ListView` with name, type, memory, compute units and max work-group size. Selecting a row and clicking *Set as default* stores the device id in `AppSettings.PreferredComputeDeviceId` (default `-1` = let FluidX3D pick). All four FluidX3D runners read that setting on `RunAsync` and call `fx3d_create_on_device(cfg, device_id)`.
+
+When `fx3d_list_devices` fails (e.g. DLL missing, OpenCL ICD not installed, driver issue), the underlying P/Invoke exception is captured in `FluidX3DBridge.LastListDevicesError` and surfaced in the dialog's status line — far more useful than the silent "No OpenCL devices reported" that would otherwise appear.
+
+### 10.2 Memory estimator
+
+**File**: [`Core/MemoryEstimator.cs`](DisperSim3D/Core/MemoryEstimator.cs).
+
+The Memory Estimator tab of the same dialog computes per-cell footprint × cell count for any solver before you commit to a run. Per-cell costs (compile-time constants):
+
+| Component | RAM | VRAM |
+|---|---|---|
+| FluidX3D D3Q19 FP32 baseline | – | 93 B |
+| `+ TEMPERATURE` extension | – | +32 B |
+| `+ SUBGRID` LES | – | +24 B |
+| CPU `DispersionTracerEngine` | 41 B | – |
+| CPU `FireTracerEngine` | 57 B | – |
+| OpenFOAM steady (`simpleFoam`) | – | – (≈ 150 B/cell on disk) |
+| OpenFOAM transient reactive | – | – (≈ 450 B/cell per write) |
+
+Public API:
+
+```csharp
+MemoryEstimate EstimateFluidX3DWind(int Nx, int Ny, int Nz);
+MemoryEstimate EstimateDispersionCpu(int Nx, int Ny, int Nz, int writeCount);
+MemoryEstimate EstimateFire(int Nx, int Ny, int Nz, int writeCount);
+MemoryEstimate EstimateOpenFoam(int Nx, int Ny, int Nz, int writeCount,
+                                CfdSolverType solver);
+MemoryEstimate For(CfdSolverType solver, int Nx, int Ny, int Nz, int writeCount);
+```
+
+`MemoryEstimate` carries `RamBytes`, `VramBytes`, `DiskBytes`, plus a `HumanBytes` formatter that produces strings like `VRAM 103 MB · RAM 36 MB · Disk 213 MB`.
+
+---
+
+## 11. References
 
 1. **Fiates, J., Vianna, S.S.V.** (2016). *Numerical modelling of gas dispersion using OpenFOAM*. Process Safety and Environmental Protection, 104, 277–293. https://doi.org/10.1016/j.psep.2016.09.011
 
@@ -630,12 +887,16 @@ Vianna 2019 Table 4 — `T(n) ≈ 4.21 · n^2.98` seconds where `n` is cell coun
 
 17. **VDI 3783/9** (2017). *Environmental Meteorology — Prognostic Microscale Wind Field Models — Evaluation for Flow around Buildings and Obstacles*. Beuth Verlag, Berlin.
 
-14. **HelixToolkit.Wpf** — https://github.com/helix-toolkit/helix-toolkit (MIT)
+18. **Lehmann, M.** (2022). *Esoteric Pull and Esoteric Push: Two simple in-place streaming schemes for the lattice Boltzmann method on GPUs*. Computation, 10 (6), 92. https://doi.org/10.3390/computation10060092 — underpins the [FluidX3D](https://github.com/ProjectPhysX/FluidX3D) solver embedded for the four GPU LBM runners.
 
-15. **DockPanelSuite** — https://github.com/dockpanelsuite/dockpanelsuite (MIT)
+19. **Khronos Group** — OpenCL 1.2 specification and ICD loader. https://www.khronos.org/opencl/
 
-16. **HandyControl** — https://github.com/HandyOrg/HandyControl (MIT)
+20. **HelixToolkit.Wpf** — https://github.com/helix-toolkit/helix-toolkit (MIT)
+
+21. **DockPanelSuite** — https://github.com/dockpanelsuite/dockpanelsuite (MIT)
+
+22. **HandyControl** — https://github.com/HandyOrg/HandyControl (MIT)
 
 ---
 
-*Document generated on 2026-05-09 alongside the v1.0 codebase.*
+*Document last updated on 2026-05-12. Initial v1.0 documentation generated on 2026-05-09; this revision adds the FluidX3D GPU LBM solver family (§3.7), Dispersion Studies and Detector Allocation (§3.8), the FluidX3D case layout (§6.5) and the GPU & Memory tooling (§10).*

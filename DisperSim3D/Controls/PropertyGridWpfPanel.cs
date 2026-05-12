@@ -36,9 +36,16 @@ namespace DisperSim3D.Controls
             ApplyReadOnlyShading(_grid);
 
             // HandyControl's PropertyGrid does not expose its own committed-value event,
-            // so we route commits through LostFocus + Enter on the inner editors. Both
-            // bubble up to the grid root. Fires more often than strictly necessary but
-            // RefreshViews is idempotent so it's fine.
+            // so we route commits through several inner-editor events. All AddHandler
+            // calls use handledEventsToo=true so the events still surface even after
+            // the editor marks them handled. RefreshViews is idempotent, so firing more
+            // often than strictly necessary is harmless.
+            //
+            // - LostKeyboardFocus + Enter/Tab: covers TextBox, NumericUpDown.
+            // - ToggleButton.Checked/Unchecked: covers Toggle / Switch / CheckBox
+            //   editors. These do NOT lose focus on click so they were silent before.
+            // - Selector.SelectionChanged: covers ComboBox (enum dropdowns) which
+            //   may not blur when the popup closes.
             _grid.AddHandler(System.Windows.UIElement.LostKeyboardFocusEvent,
                 new System.Windows.Input.KeyboardFocusChangedEventHandler((s, e) =>
                 {
@@ -49,6 +56,21 @@ namespace DisperSim3D.Controls
                 {
                     if (e.Key == System.Windows.Input.Key.Enter || e.Key == System.Windows.Input.Key.Tab)
                         PropertyValueChanged?.Invoke(this, EventArgs.Empty);
+                }), true);
+            _grid.AddHandler(System.Windows.Controls.Primitives.ToggleButton.CheckedEvent,
+                new System.Windows.RoutedEventHandler((s, e) =>
+                {
+                    PropertyValueChanged?.Invoke(this, EventArgs.Empty);
+                }), true);
+            _grid.AddHandler(System.Windows.Controls.Primitives.ToggleButton.UncheckedEvent,
+                new System.Windows.RoutedEventHandler((s, e) =>
+                {
+                    PropertyValueChanged?.Invoke(this, EventArgs.Empty);
+                }), true);
+            _grid.AddHandler(System.Windows.Controls.Primitives.Selector.SelectionChangedEvent,
+                new System.Windows.Controls.SelectionChangedEventHandler((s, e) =>
+                {
+                    PropertyValueChanged?.Invoke(this, EventArgs.Empty);
                 }), true);
 
             _host = new ElementHost

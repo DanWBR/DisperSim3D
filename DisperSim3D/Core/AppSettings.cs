@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Xml.Linq;
 using DisperSim3D.Models;
 
@@ -43,6 +45,55 @@ namespace DisperSim3D.Core
         /// voxelisation). -1 = auto (FluidX3D picks the fastest by TFLOPS).
         /// IDs match <see cref="FluidX3DBridge.ListDevicesJson"/>.</summary>
         public int PreferredComputeDeviceId { get; set; } = -1;
+
+        private readonly List<string> _recentFiles = new List<string>();
+
+        /// <summary>Read-only view of the most-recently-used project paths
+        /// (most recent first). Populated by <see cref="AddRecentFile"/> as the
+        /// user opens or saves a project; persisted to <c>settings.xml</c>.
+        /// Consumed by the File → Recent Files submenu.</summary>
+        public IReadOnlyList<string> RecentFiles => _recentFiles;
+
+        /// <summary>Maximum number of paths retained in <see cref="RecentFiles"/>.
+        /// Older entries are dropped as new ones come in. Default 10.</summary>
+        public int MaxRecentFiles { get; set; } = 10;
+
+        /// <summary>Pushes <paramref name="path"/> to the head of the MRU list,
+        /// removes any existing duplicate (case-insensitive), trims to
+        /// <see cref="MaxRecentFiles"/> and persists. No-op for null/empty
+        /// input or paths that fail <see cref="Path.GetFullPath(string)"/>.</summary>
+        public void AddRecentFile(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            string full;
+            try { full = Path.GetFullPath(path); }
+            catch { return; }
+            _recentFiles.RemoveAll(p => string.Equals(p, full, StringComparison.OrdinalIgnoreCase));
+            _recentFiles.Insert(0, full);
+            int cap = Math.Max(1, MaxRecentFiles);
+            while (_recentFiles.Count > cap) _recentFiles.RemoveAt(_recentFiles.Count - 1);
+            Save();
+        }
+
+        /// <summary>Removes <paramref name="path"/> from the MRU list (typically
+        /// called when a recent-file load fails because the file no longer
+        /// exists). Persists when it actually removed something.</summary>
+        public void RemoveRecentFile(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            int n = _recentFiles.RemoveAll(p =>
+                string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+            if (n > 0) Save();
+        }
+
+        /// <summary>Clears the MRU list and persists. Wired to the File →
+        /// Recent Files → Clear menu entry.</summary>
+        public void ClearRecentFiles()
+        {
+            if (_recentFiles.Count == 0) return;
+            _recentFiles.Clear();
+            Save();
+        }
 
         private AppSettings()
         {
@@ -111,6 +162,22 @@ namespace DisperSim3D.Core
                         System.Globalization.NumberStyles.Integer, Inv, out id))
                         PreferredComputeDeviceId = id;
                 }
+                var recent = root.Element("RecentFiles");
+                if (recent != null)
+                {
+                    _recentFiles.Clear();
+                    foreach (var f in recent.Elements("File"))
+                    {
+                        var path = ((string)f.Attribute("Path") ?? string.Empty).Trim();
+                        if (string.IsNullOrEmpty(path)) continue;
+                        // Defensive against duplicates and over-cap files from older
+                        // settings.xml schemas that didn't enforce these invariants.
+                        if (_recentFiles.Any(p => string.Equals(p, path,
+                                StringComparison.OrdinalIgnoreCase))) continue;
+                        _recentFiles.Add(path);
+                        if (_recentFiles.Count >= Math.Max(1, MaxRecentFiles)) break;
+                    }
+                }
             }
             catch
             {
@@ -154,7 +221,10 @@ namespace DisperSim3D.Core
                             new XAttribute("PropertyPackage", DwsimPropertyPackage ?? "")),
                         new XElement("Gpu",
                             new XAttribute("PreferredComputeDeviceId",
-                                PreferredComputeDeviceId.ToString(Inv)))
+                                PreferredComputeDeviceId.ToString(Inv))),
+                        new XElement("RecentFiles",
+                            _recentFiles.Select(p => new XElement("File",
+                                new XAttribute("Path", p ?? string.Empty))))
                     )
                 );
 

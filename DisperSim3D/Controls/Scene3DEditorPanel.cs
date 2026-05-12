@@ -45,6 +45,7 @@ namespace DisperSim3D.Controls
         private SimulationManagerDockPanel _simManagerDock;
         private ToolStripMenuItem _miSelectMode;
         private ToolStripMenuItem _miSnap, _miGround, _miVectors, _miWindArrows;
+        private ToolStripMenuItem _miRecentFiles;
         private string _resPath;
 
         public static string ResourcesBasePath { get; set; }
@@ -113,9 +114,15 @@ namespace DisperSim3D.Controls
 
             // --- File menu ---
             var menuFile = new ToolStripMenuItem("&File");
+            _miRecentFiles = new ToolStripMenuItem("Recent &Files", Img("folder_go.png"));
+            // Contents are rebuilt on demand from AppSettings.RecentFiles every time
+            // the submenu opens, so the list reflects the latest MRU state even
+            // across save/load operations performed in this session.
+            _miRecentFiles.DropDownOpening += (s, e) => RebuildRecentFilesMenu();
             menuFile.DropDownItems.AddRange(new ToolStripItem[] {
                 new ToolStripMenuItem("New (Clear)", Img("new.png"), (s, e) => DoClear()),
                 new ToolStripMenuItem("Open...", Img("folder_go.png"), (s, e) => DoLoad()),
+                _miRecentFiles,
                 new ToolStripMenuItem("Save...", Img("disk.png"), (s, e) => DoSave()),
                 new ToolStripSeparator(),
                 new ToolStripMenuItem("Import 3D Model...", Img("icons8-import.png"), (s, e) => DoImport3D()),
@@ -494,6 +501,14 @@ namespace DisperSim3D.Controls
                     _editor.RefreshViews();
                     RefreshProjectTree();
                 }
+                // Live environment updates: rebuilding the sun, sky dome and ground
+                // brush is cheap, so we trigger it on every commit. This is the only
+                // hook that makes the Environment property panel feel real-time —
+                // ApplyEnvironment rebuilds the lighting + sky + ground visuals.
+                if (_propertyGrid.SelectedObject is EnvironmentSettings)
+                {
+                    try { _editor?.ApplyEnvironment(); } catch { }
+                }
                 // Any edit on an object whose label appears in the tree (project name,
                 // gas/source/sim names, …) should refresh the tree so it stays in sync.
                 var pvc = e2 as PropertyValueChangedEventArgs;
@@ -731,6 +746,7 @@ namespace DisperSim3D.Controls
         {
             _editor.SaveToFile(filePath);
             UpdateStatus("Saved: " + filePath);
+            AppSettings.Instance.AddRecentFile(filePath);
         }
 
         public void LoadFromFile(string filePath)
@@ -739,6 +755,7 @@ namespace DisperSim3D.Controls
             RefreshScenarioCombo();
             RefreshProjectTree();
             UpdateStatus("Loaded: " + filePath);
+            AppSettings.Instance.AddRecentFile(filePath);
         }
 
         public void ClearScene()
@@ -809,6 +826,80 @@ namespace DisperSim3D.Controls
                 if (dlg.ShowDialog() == DialogResult.OK)
                     LoadFromFile(dlg.FileName);
             }
+        }
+
+        /// <summary>Loads a project from a Recent Files menu entry. Trips a friendly
+        /// error and removes the path from the MRU list when the file no longer
+        /// exists on disk, so a stale recents list self-heals on use.</summary>
+        private void DoLoadRecent(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return;
+            if (!System.IO.File.Exists(path))
+            {
+                MessageBox.Show(
+                    "The file no longer exists at:\n\n" + path +
+                    "\n\nIt will be removed from the Recent Files list.",
+                    "File not found", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                AppSettings.Instance.RemoveRecentFile(path);
+                return;
+            }
+            try
+            {
+                LoadFromFile(path);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to load:\n\n" + path + "\n\n" + ex.Message,
+                    "Load error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>Rebuilds the File → Recent Files submenu from
+        /// <see cref="AppSettings.RecentFiles"/>. Called from the submenu's
+        /// <c>DropDownOpening</c> event, so the list is always live.</summary>
+        private void RebuildRecentFilesMenu()
+        {
+            if (_miRecentFiles == null) return;
+            _miRecentFiles.DropDownItems.Clear();
+
+            var list = AppSettings.Instance.RecentFiles;
+            if (list == null || list.Count == 0)
+            {
+                _miRecentFiles.DropDownItems.Add(
+                    new ToolStripMenuItem("(No recent files)") { Enabled = false });
+                return;
+            }
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                string path = list[i];
+                // Access key: &1..&9 for the first nine, then plain text.
+                string accel = i < 9 ? "&" + (i + 1) + "  " : "    ";
+                string display = accel + System.IO.Path.GetFileName(path)
+                    + "    [" + EllipsifyMiddle(path, 60) + "]";
+                var item = new ToolStripMenuItem(display)
+                {
+                    ToolTipText = path
+                };
+                string captured = path; // closure capture
+                item.Click += (s, e) => DoLoadRecent(captured);
+                _miRecentFiles.DropDownItems.Add(item);
+            }
+
+            _miRecentFiles.DropDownItems.Add(new ToolStripSeparator());
+            _miRecentFiles.DropDownItems.Add(new ToolStripMenuItem(
+                "&Clear list", null, (s, e) => AppSettings.Instance.ClearRecentFiles()));
+        }
+
+        /// <summary>Compacts <paramref name="text"/> to at most
+        /// <paramref name="maxChars"/> by replacing the middle with "..." while
+        /// keeping both ends intact. Used to fit long file paths into the menu
+        /// strip without horizontal scrolling.</summary>
+        private static string EllipsifyMiddle(string text, int maxChars)
+        {
+            if (string.IsNullOrEmpty(text) || text.Length <= maxChars) return text ?? string.Empty;
+            int keep = Math.Max(4, (maxChars - 3) / 2);
+            return text.Substring(0, keep) + "..." + text.Substring(text.Length - keep);
         }
 
         private void DoClear()
@@ -2447,22 +2538,13 @@ namespace DisperSim3D.Controls
             if (_editor?.Scene == null) return;
             if (_editor.Scene.Environment == null)
                 _editor.Scene.Environment = new EnvironmentSettings();
-            // The PropertyGrid edits the live EnvironmentSettings; subscribe to property
-            // changes via a wrapper that calls ApplyEnvironment on every edit so the user
-            // sees the result immediately. HandyControl PropertyGrid raises PropertyChanged
-            // on the SelectedObject when an editor commits, so we use INotifyPropertyChanged
-            // — EnvironmentSettings doesn't implement it, so we just trigger refresh on
-            // every dispatcher idle while it's selected.
             if (_propertiesDock != null) _propertiesDock.Text = "Properties - Environment";
             _propertyGrid.SelectedObject = _editor.Scene.Environment;
-            // Hook a tick to refresh — PropertyGrid commits on focus loss / Enter.
-            _propertyGrid.LostFocus -= EnvPropChanged;
-            _propertyGrid.LostFocus += EnvPropChanged;
-        }
-
-        private void EnvPropChanged(object sender, EventArgs e)
-        {
-            try { _editor?.ApplyEnvironment(); } catch { }
+            // Live updates are driven by the global PropertyValueChanged hook wired
+            // at construction (it branches on SelectedObject type). No need to
+            // subscribe a per-show handler — and the previous LostFocus-based
+            // subscription on the WinForms panel never fired in practice because
+            // focus rarely leaves the panel during editing.
         }
 
         private void ShowSourceProperties(ReleaseSource3D source)

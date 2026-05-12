@@ -1,0 +1,63 @@
+# Jekyll configuration for the DisperSim 3D GitHub Pages site.
+#
+# Theme: Just the Docs (remote theme — no local build required, GitHub Pages
+#        compiles server-side).
+# Source: /docs (configure under Settings → Pages → "Deploy from a branch" →
+#         Branch: main, Folder: /docs).
+# Live URL: https://danwbr.github.io/DisperSim3D/
+
+title: DisperSim 3D
+description: >-
+  Interactive 3D gas dispersion analysis for process safety. Gaussian, OpenFOAM
+  and FluidX3D (GPU LBM) solvers, gas detector placement optimisation and
+  benchmark-driven validation, all in one .NET desktop application.
+
+# When the repo is published at https://danwbr.github.io/DisperSim3D/, baseurl
+# must be the repo name with a leading slash so that relative links resolve.
+url: "https://danwbr.github.io"
+baseurl: "/DisperSim3D"
+
+remote_theme: just-the-docs/just-the-docs
+
+# Just the Docs configuration
+color_scheme: light
+search_enabled: true
+search:
+  heading_level: 3
+  previews: 3
+  preview_words_before: 5
+  preview_words_after: 10
+  tokenizer_separator: /[\s\-/]+/
+  rel_url: true
+  button: false
+
+# Footer
+heading_anchors: true
+back_to_top: true
+back_to_top_text: "Back to top"
+
+aux_links:
+  "GitHub":
+    - "https://github.com/DanWBR/DisperSim3D"
+  "Donate":
+    - "https://donate.stripe.com/fZu14na8v9AG0PB2iJbMQ01"
+
+aux_links_new_tab: true
+
+footer_content: >-
+  Copyright &copy; 2026 Daniel Wagner Oliveira de Medeiros. Licensed under
+  <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL v3</a>.
+
+# Plugins whitelisted by GitHub Pages
+plugins:
+  - jekyll-remote-theme
+  - jekyll-sitemap
+  - jekyll-seo-tag
+
+# Exclude repo-level junk and source files from the build output.
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor/
+  - node_modules/
+  - README.md

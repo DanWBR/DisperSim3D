@@ -56,3 +56,7 @@ Desktop.ini
 # JetBrains Rider
 .idea/
 *.sln.iml
+
+# Reference PDFs kept locally for offline reading — not published to GitHub
+# Pages (linked via DOI / institutional repositories from docs/references.md).
+docs/*.pdf

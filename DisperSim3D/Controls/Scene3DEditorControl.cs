@@ -32,13 +32,12 @@ namespace DisperSim3D.Controls
         private double _gridSpacing = 5.0;
         private LinesVisual3D _selectionHighlight;
 
-        private bool _isDragging;
-        private Point3D _dragStartPosition;
-        private Point3D _dragUnitOriginalPosition;
+        // Drag-to-reposition is disabled by design — moving a placed object would
+        // invalidate the CFD snapshots cached for any simulations that already use
+        // its current position. Edit positions through the properties panel only.
 
         private Decoration3D _selectedDecoration;
         private ReleaseSource3D _selectedSource;
-        private bool _isDraggingDecoration;
 
         private GaussianPuffEngine _dispersionEngine;
         private IConcentrationField _steadyStateEngine;
@@ -4203,17 +4202,11 @@ namespace DisperSim3D.Controls
                         SelectedDecoration = hitDeco;
                         SelectedSource = null;
 
-                        if (hitDeco != null && e.LeftButton == System.Windows.Input.MouseButtonState.Pressed)
-                        {
-                            var dragPoint = GetHitPoint(position);
-                            if (dragPoint != null)
-                            {
-                                _isDraggingDecoration = true;
-                                _dragStartPosition = dragPoint.Value;
-                                _dragUnitOriginalPosition = hitDeco.Position;
-                                _viewport.CaptureMouse();
-                            }
-                        }
+                        // Drag-to-reposition is intentionally disabled: any geometry move
+                        // would invalidate the CFD snapshots cached for existing
+                        // simulations. Positions can only be edited through the
+                        // properties panel (which performs the proper invalidation
+                        // bookkeeping).
                     }
                     else if (hitTag != null && hitTag.Category == "ReleaseSource")
                     {
@@ -4288,47 +4281,13 @@ namespace DisperSim3D.Controls
 
         private void Viewport_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
         {
-            var position = e.GetPosition(_viewport);
-
-            if (_isDraggingDecoration && _selectedDecoration != null)
-            {
-                var currentPoint = GetHitPoint(position);
-                if (currentPoint != null)
-                {
-                    var delta = currentPoint.Value - _dragStartPosition;
-                    var newPos = new Point3D(
-                        _dragUnitOriginalPosition.X + delta.X,
-                        _dragUnitOriginalPosition.Y + delta.Y,
-                        _dragUnitOriginalPosition.Z);
-
-                    if (_snapToGrid)
-                    {
-                        newPos = newPos.SnapToGrid(_gridSpacing);
-                    }
-
-                    _selectedDecoration.Position = newPos;
-                    _selectedDecoration.UpdateBoundingBox();
-                    UpdateViewport();
-                    OnSelectedUnitChanged();
-                }
-                return;
-            }
-
+            // Drag-to-reposition has been removed — see field block at the top of
+            // the class. Mouse-move handling for orbit/pan is owned by HelixToolkit.
         }
 
         private void Viewport_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            if (_isDragging)
-            {
-                _isDragging = false;
-                _viewport.ReleaseMouseCapture();
-            }
-
-            if (_isDraggingDecoration)
-            {
-                _isDraggingDecoration = false;
-                _viewport.ReleaseMouseCapture();
-            }
+            // No drag state to release — see field block at the top of the class.
         }
 
         private void Viewport_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
