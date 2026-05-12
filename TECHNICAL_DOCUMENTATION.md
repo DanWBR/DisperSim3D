@@ -766,24 +766,45 @@ When you add a new entry to `CfdSolverType`, also extend `CfdConfigurationPreset
 
 Project file is either `.dsproj` (self-contained ZIP, recommended) or legacy `.xml`. The CLI loads `.dsproj` via `ProjectBundle.Open` (extracted to a session temp dir; CFD case folders inside the bundle remain readable for the run's duration).
 
-Common modes:
+#### 7.5.1 Run modes (need a project file)
 
-- **List the project** — `--list` / `-l`: dumps gases, top-level sources, wind fields, and simulations with names + IDs. Use this to discover names before invoking `--simulation`.
-- **Run a project Simulation** — `--simulation <name|id>`: picks an entry from `Project.Simulations` and executes its snapshot via `HeadlessRunner.RunSimulation`. The simulation's `SnapshotCfdConfig` (atmospheric BL, Sc_t, ground T BC, etc.) is honoured; the CLI re-applies `CfdConfigurationPresets.ApplyForSolver` defensively before running.
-- **Run a Gaussian / CFD solver directly** — `-s <solver>`: bypasses the project's Simulation list. Solver names: `plume`, `puff`, `scalartransportfoam`, `scalarsimplefoam`, `pimplefoam`, `buoyantpimplefoam`, `reactingfoam`, `rhosimplefoam`, `rhoreactingbuoyantfoam`.
+- **List the project** — `--list` / `-l`: dumps **every** section of the project — gases, top-level sources (with their IOGP equipment inventory, hole-size band, and effective leak frequency), wind fields, simulations, dispersion studies (with `ScenarioRisk` weights), detector allocations (with risk-reduction results when `MinResidualRisk`), wind rose, monitor points, and gas detectors. Use this to discover names + IDs before invoking `--simulation` or `--allocation`.
+- **Run a project Simulation** — `--simulation <name|id>`: picks an entry from `Project.Simulations` and executes its snapshot via `HeadlessRunner.RunSimulation`. Both OpenFOAM and FluidX3D solver families are dispatched correctly: the runner checks `IsFluidX3DSolver(sim.SolverType)` and routes to the in-process GPU bridge for `FluidX3DDispersion / FluidX3DDispersionSteady / FluidX3DFire`, otherwise to the external OpenFOAM environment. The simulation's `SnapshotCfdConfig` (atmospheric BL, Sc_t, ground T BC, etc.) is honoured; the CLI re-applies `CfdConfigurationPresets.ApplyForSolver` defensively before running.
+- **Run a Gaussian / CFD / GPU solver directly** — `-s <solver>`: bypasses the project's Simulation list. Solver names (case-insensitive): `plume`, `puff`, `scalartransportfoam`, `scalarsimplefoam`, `pimplefoam`, `buoyantpimplefoam`, `reactingfoam`, `rhosimplefoam`, `rhoreactingbuoyantfoam`, `fluidx3ddispersion`, `fluidx3ddispersionsteady`, `fluidx3dfire`. The wind-field flavour `fluidx3dwind` returns an explanatory error — it lives on the scene's `WindFieldScenarios`, not on a `DispersionScenario`, and must be run from the UI or a future `--run-windfield` CLI mode.
+- **Re-run a detector allocation** — `--allocation <name|id>`: loads the project, finds the saved `DetectorAllocation`, executes `DetectorAllocator.Run` (max-coverage or min-residual-risk depending on the saved strategy), and **prints** the result to stdout. Currently read-only — the CLI does not write the new positions/risk-curve back to the project file; reopen the project in the app and Run again to persist. Useful for headless QRA reporting pipelines.
+- **Validate against benchmarks** — `--validate <file|dir>`: see §8.2.
 - **Legacy XML** — `--scenario <index>`: pick a `DispersionScenario` from old XML files (no Simulation list).
 
-OpenFOAM environment selection (`--env native|wsl|docker|bluecfd`, `--openfoam-path <path>`, `--wsl-distro <name>`) and tuning (`--grid <N>`, `--nprocs <N>`) are unchanged from the legacy CLI.
+#### 7.5.2 Diagnostic / standalone modes (no project file required)
 
-**Native Windows OpenFOAM v2512 is the recommended path** and is proven end-to-end with `rhoReactingBuoyantFoam`. The standard ESI installer puts the project root at `%APPDATA%\ESI-OpenCFD\OpenFOAM\v2512\msys64\home\ofuser\OpenFOAM\OpenFOAM-v2512` — pass that as `--openfoam-path`. WSL/Docker/BlueCFD remain available as alternatives.
+- **Enumerate GPUs** — `--list-gpus`: calls `FluidX3DBridge.ListDevicesJson()` and prints every OpenCL device the bridge can see (name, type, memory, compute units). The output is the raw JSON manifest plus a hint pointing at `--gpu-device <id>`.
+- **IOGP table self-test** — `--iogp-selftest`: same as `DisperSim3D.App.exe --iogp-selftest`. Runs the 27-assertion test against the embedded IOGP 434-01 table and returns exit code 0 on full pass, 1 otherwise. CI-friendly.
+- **IOGP table dump** — `--list-iogp [type]`: prints the leak-frequency table for one equipment type (e.g. `--list-iogp ManualValve`) or all 24 (no argument). Columns are the 5 hole-size bands × the 6 anchor diameters + geometric-mean hole size in mm. Output is plain text suitable for piping into a spreadsheet or grepping.
+- **Memory estimate** — `--memory-estimate <solver> <N>`: prints the same VRAM / RAM / disk numbers the in-app Memory Estimator shows, for a grid `N × N × N/2` with 30 snapshots and quality `Fast`. Useful before kicking off a large run to confirm it fits.
 
-Examples:
+#### 7.5.3 Common options
+
+- **OpenFOAM environment**: `--env native|wsl|docker|bluecfd`, `--openfoam-path <path>`, `--wsl-distro <name>`.
+- **FluidX3D device pinning**: `--gpu-device <id>` writes `AppSettings.PreferredComputeDeviceId` (default `-1` = auto). The setting persists in `%APPDATA%\DisperSim3D\settings.xml` so subsequent runs honour it too.
+- **Tuning**: `--grid <N>` (grid override), `--nprocs <N>` (OpenFOAM parallel decomposition).
+
+**Native Windows OpenFOAM v2512 is the recommended path** for the OpenFOAM family and is proven end-to-end with `rhoReactingBuoyantFoam`. The standard ESI installer puts the project root at `%APPDATA%\ESI-OpenCFD\OpenFOAM\v2512\msys64\home\ofuser\OpenFOAM\OpenFOAM-v2512` — pass that as `--openfoam-path`. WSL/Docker/BlueCFD remain available as alternatives.
+
+#### 7.5.4 Examples
 
 ```
 DisperSim3D.CLI project.dsproj --list
 DisperSim3D.CLI project.dsproj --simulation "Stack#1 x 5m/s SW" --env native --openfoam-path "C:\Users\<you>\AppData\Roaming\ESI-OpenCFD\OpenFOAM\v2512\msys64\home\ofuser\OpenFOAM\OpenFOAM-v2512"
+DisperSim3D.CLI project.dsproj --simulation "Fast LBM run" -s fluidx3dDispersion --gpu-device 0
+DisperSim3D.CLI project.dsproj --allocation "Site A — risk"
 DisperSim3D.CLI project.dsproj -s plume
 DisperSim3D.CLI legacy.xml -s rhoReactingBuoyantFoam --env native --openfoam-path "<openfoam-root>" --grid 60
+
+DisperSim3D.CLI --list-gpus
+DisperSim3D.CLI --iogp-selftest
+DisperSim3D.CLI --list-iogp FlangedJoint
+DisperSim3D.CLI --memory-estimate FluidX3DDispersion 128
+DisperSim3D.CLI --validate benchmarks/
 ```
 
 ---

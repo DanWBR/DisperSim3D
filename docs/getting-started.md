@@ -76,12 +76,58 @@ From here you can:
 
 ## CLI quick reference
 
+The headless runner `DisperSim3D.CLI` exposes every project-level operation
+the app can do — running simulations, allocating detectors, validating
+benchmarks — plus a handful of diagnostic modes that don't need a project
+file at all.
+
+### Run modes (project required)
+
 ```text
-DisperSim3D.CLI project.dsproj --list                            # enumerate gases/sources/sims
+DisperSim3D.CLI project.dsproj --list                            # enumerate every section
 DisperSim3D.CLI project.dsproj --simulation "Stack#1 5m/s SW"    # run an existing snapshot
+DisperSim3D.CLI project.dsproj --simulation "Fast LBM" -s fluidx3dDispersion --gpu-device 0
+DisperSim3D.CLI project.dsproj --allocation "Site A — risk"     # re-run a detector allocation
 DisperSim3D.CLI project.dsproj -s plume                          # run a solver directly
-DisperSim3D.CLI --validate benchmarks/                           # run benchmark harness
+DisperSim3D.CLI legacy.xml -s rhoReactingBuoyantFoam --env native --openfoam-path "<path>"
 ```
 
-`--validate` returns exit code 0 only when every `.dsbench` file passes its
-Hanna acceptance ranges, so it is CI-friendly.
+`--list` dumps every project section in a single pass: gases, sources
+**with their IOGP equipment inventory + effective leak frequency**, wind
+fields, simulations, dispersion studies (incl. per-scenario risk weights),
+detector allocations (incl. RRF for risk-strategy runs), wind rose,
+monitor points, and gas detectors.
+
+`-s <solver>` accepts the analytical names (`plume`, `puff`), the OpenFOAM
+gallery (`scalarTransportFoam`, `pimpleFoam`, `buoyantPimpleFoam`,
+`reactingFoam`, `rhoSimpleFoam`, `rhoReactingBuoyantFoam`, etc.) **and the
+FluidX3D family** (`fluidx3dDispersion`, `fluidx3dDispersionSteady`,
+`fluidx3dFire`). FluidX3D solvers run in-process via the GPU bridge — no
+OpenFOAM environment required.
+
+`--allocation` re-executes a saved detector allocation and prints its
+results to stdout (read-only — the project file is not modified). Useful
+for QRA reporting pipelines.
+
+### Diagnostic modes (no project required)
+
+```text
+DisperSim3D.CLI --list-gpus                                      # enumerate OpenCL devices
+DisperSim3D.CLI --iogp-selftest                                  # verify embedded IOGP 434-01 table
+DisperSim3D.CLI --list-iogp FlangedJoint                         # dump one IOGP datasheet
+DisperSim3D.CLI --list-iogp                                      # dump all 24 datasheets
+DisperSim3D.CLI --memory-estimate FluidX3DDispersion 128         # VRAM/RAM/disk for a 128³/2 run
+DisperSim3D.CLI --validate benchmarks/                           # run the benchmark harness
+```
+
+`--validate` returns exit code 0 only when every `.dsbench` file passes
+its Hanna acceptance ranges, so it is CI-friendly.
+
+`--iogp-selftest` exits 0 only when the 27 self-checks against the
+published IOGP 434-01 values all pass — pair it with `--validate` for a
+two-step CI smoke that covers both the dispersion solvers and the
+risk-frequency database.
+
+`--gpu-device <id>` persists into `%APPDATA%\DisperSim3D\settings.xml`, so
+subsequent CLI / app runs also honour the pinned device until you change
+it.

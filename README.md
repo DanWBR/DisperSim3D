@@ -171,7 +171,9 @@ FluidX3D/                          # Sibling C++ project — FluidX3D.dll
 ├── src/disp_bridge.{h,cpp}        # C-ABI bridge exposed to C#
 ├── src/defines.hpp                # Feature flags (D3Q19 FP32, VOLUME_FORCE, SUBGRID, …)
 └── …                              # Upstream FluidX3D from ProjectPhysX
-DisperSim3D.CLI/                   # Headless batch runner (--list / --simulation / --validate)
+DisperSim3D.CLI/                   # Headless batch runner (--list / --simulation /
+                                   # --allocation / --validate / --list-gpus /
+                                   # --iogp-selftest / --list-iogp / --memory-estimate)
 DisperSim3D.App/                   # WinForms host that embeds the editor panel
 docs/                              # GitHub Pages site (Jekyll + Just the Docs)
 DisperSim3D.sln

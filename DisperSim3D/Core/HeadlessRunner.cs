@@ -157,6 +157,14 @@ namespace DisperSim3D.Core
 
             var solverType = solverOverride ?? scenario.SolverType;
 
+            // FluidX3D solvers run entirely in-process via the GPU LBM bridge —
+            // no OpenFOAM environment / external process to set up. Route them
+            // through a dedicated dispatcher so RunCfd's OpenFOAM-only setup
+            // (env probing, GridResolution overwrite, OpenFoamRunner) never
+            // executes for those cases.
+            if (IsFluidX3DSolver(solverType))
+                return RunFluidX3D(scene, scenario, cfdConfig, solverType, log, cancel);
+
             var env = new OpenFoamEnvironment();
             env.Configure(cfdConfig.OpenFoamPath, cfdConfig.DetectedEnvironment, cfdConfig.WslDistroName);
             if (!env.IsAvailable)
@@ -244,6 +252,166 @@ namespace DisperSim3D.Core
             }
 
             return result ?? new HeadlessResult { Success = false, Error = "Unknown error" };
+        }
+
+        /// <summary>True for the four GPU LBM runners that bypass OpenFOAM.</summary>
+        private static bool IsFluidX3DSolver(CfdSolverType t)
+        {
+            return t == CfdSolverType.FluidX3DWind
+                || t == CfdSolverType.FluidX3DDispersion
+                || t == CfdSolverType.FluidX3DDispersionSteady
+                || t == CfdSolverType.FluidX3DFire;
+        }
+
+        /// <summary>
+        /// Headless driver for the FluidX3D family. Picks the right runner from
+        /// <paramref name="solverType"/>, hooks its ProgressUpdated /
+        /// Completed / Failed events into <paramref name="log"/>, and waits for
+        /// the background worker to finish. Returns the same
+        /// <see cref="HeadlessResult"/> shape as the OpenFOAM path so callers
+        /// (CLI, validation harness, programmatic users) don't need to branch
+        /// on the solver family.
+        /// </summary>
+        private static HeadlessResult RunFluidX3D(Scene3D scene, DispersionScenario scenario,
+            CfdConfiguration cfdConfig, CfdSolverType solverType,
+            Action<string> log, CancellationToken cancel)
+        {
+            // Wind-field generation is conceptually a different beast — there's
+            // no DispersionScenario to drive it; the WindFieldScenario lives on
+            // the scene. The headless path expects --simulation or --solver to
+            // be dispersion-shaped, so steer the user to the right interface.
+            if (solverType == CfdSolverType.FluidX3DWind)
+            {
+                return new HeadlessResult
+                {
+                    Success = false,
+                    Error = "FluidX3D wind-field generation is not a dispersion solver — "
+                          + "it precomputes a velocity field consumed by other runs. "
+                          + "Run it from the UI (Wind Field Manager) or wait for the "
+                          + "--run-windfield CLI mode."
+                };
+            }
+
+            log?.Invoke(string.Format("Running FluidX3D solver: {0}", solverType));
+            log?.Invoke(string.Format("  Domain: {0}m, Grid: {1}, Duration: {2}s",
+                scenario.DomainSizeM, scenario.GridResolution, scenario.SimulationDurationS));
+
+            // Collect obstacles the same way the UI does — every decoration's
+            // pre-computed BoundingBox. The FluidX3D tracer voxelises these into
+            // TYPE_S cells so the plume wraps around the geometry.
+            var obstacles = new System.Collections.Generic.List<BoundingBox>();
+            if (scene.Decorations != null)
+                foreach (var d in scene.Decorations)
+                    if (d != null && d.BoundingBox != null) obstacles.Add(d.BoundingBox);
+
+            HeadlessResult result = null;
+            var done = new ManualResetEventSlim(false);
+            string casePath = null;
+
+            EventHandler<OpenFoamProgress> onProgress = (s, p) =>
+            {
+                if (!string.IsNullOrEmpty(p.Step))
+                    log?.Invoke(string.Format(CultureInfo.InvariantCulture,
+                        "  [{0:P0}] {1}", p.Fraction, p.Step));
+            };
+            EventHandler<OpenFoamResult> onCompleted = (s, ofResult) =>
+            {
+                log?.Invoke(string.Format("  FluidX3D complete: {0} time step(s) loaded",
+                    ofResult.TimeSteps.Count));
+                result = new HeadlessResult
+                {
+                    Success = ofResult.IsLoaded,
+                    CasePath = casePath,
+                    TimeStepCount = ofResult.TimeSteps.Count,
+                    Error = ofResult.IsLoaded ? null
+                          : "FluidX3D produced no readable result."
+                };
+
+                if (ofResult.IsLoaded && ofResult.TimeSteps.Count > 0)
+                {
+                    var lastField = ofResult.GetField(ofResult.TimeSteps[ofResult.TimeSteps.Count - 1]);
+                    if (lastField != null)
+                    {
+                        result.ConcentrationField = lastField;
+                        double maxC = 0;
+                        int nx = lastField.GetLength(0), ny = lastField.GetLength(1), nz = lastField.GetLength(2);
+                        for (int i = 0; i < nx; i++)
+                            for (int j = 0; j < ny; j++)
+                                for (int k = 0; k < nz; k++)
+                                    if (lastField[i, j, k] > maxC) maxC = lastField[i, j, k];
+                        result.MaxConcentration = maxC;
+                        log?.Invoke(string.Format(CultureInfo.InvariantCulture,
+                            "  Max concentration: {0:G6}", maxC));
+                    }
+                }
+                done.Set();
+            };
+            EventHandler<string> onFailed = (s, msg) =>
+            {
+                result = new HeadlessResult
+                {
+                    Success = false,
+                    Error = msg,
+                    CasePath = casePath
+                };
+                done.Set();
+            };
+
+            switch (solverType)
+            {
+                case CfdSolverType.FluidX3DDispersion:
+                {
+                    var runner = new FluidX3DRunner();
+                    runner.ProgressUpdated += onProgress;
+                    runner.Completed += onCompleted;
+                    runner.Failed += onFailed;
+                    runner.RunAsync(scenario, cfdConfig, scene, obstacles,
+                        CfdSolverType.FluidX3DDispersion);
+                    while (!done.Wait(500))
+                        if (cancel.IsCancellationRequested)
+                            { runner.Cancel(); return new HeadlessResult { Success = false, Error = "Cancelled" }; }
+                    casePath = runner.CasePath;
+                    break;
+                }
+                case CfdSolverType.FluidX3DDispersionSteady:
+                {
+                    var runner = new FluidX3DSteadyDispersionRunner();
+                    runner.ProgressUpdated += onProgress;
+                    runner.Completed += onCompleted;
+                    runner.Failed += onFailed;
+                    runner.RunAsync(scenario, cfdConfig, scene, obstacles);
+                    while (!done.Wait(500))
+                        if (cancel.IsCancellationRequested)
+                            { runner.Cancel(); return new HeadlessResult { Success = false, Error = "Cancelled" }; }
+                    casePath = runner.CasePath;
+                    break;
+                }
+                case CfdSolverType.FluidX3DFire:
+                {
+                    var runner = new FluidX3DFireRunner();
+                    runner.ProgressUpdated += onProgress;
+                    runner.Completed += onCompleted;
+                    runner.Failed += onFailed;
+                    runner.RunAsync(scenario, cfdConfig, scene, obstacles);
+                    while (!done.Wait(500))
+                        if (cancel.IsCancellationRequested)
+                            { runner.Cancel(); return new HeadlessResult { Success = false, Error = "Cancelled" }; }
+                    casePath = runner.CasePath;
+                    break;
+                }
+                default:
+                    return new HeadlessResult
+                    {
+                        Success = false,
+                        Error = "Unsupported FluidX3D solver: " + solverType
+                    };
+            }
+
+            // Fix-up casePath on the result (the lambda captured null before the
+            // runner assigned its own path).
+            if (result != null && string.IsNullOrEmpty(result.CasePath))
+                result.CasePath = casePath;
+            return result ?? new HeadlessResult { Success = false, Error = "FluidX3D run produced no result" };
         }
 
         /// <summary>
@@ -362,6 +530,13 @@ namespace DisperSim3D.Core
                     case "scalarsimplefoam": solverType = CfdSolverType.ScalarSimpleFoam; break;
                     case "rhosimplefoam": solverType = CfdSolverType.RhoSimpleFoam; break;
                     case "rhoreactingbuoyantfoam": solverType = CfdSolverType.RhoReactingBuoyantFoam; break;
+                    // FluidX3D GPU LBM family. The wind-field runner has no
+                    // DispersionScenario shape so it can't be invoked through
+                    // this entry point — RunFluidX3D returns a clear error.
+                    case "fluidx3dwind":             solverType = CfdSolverType.FluidX3DWind; break;
+                    case "fluidx3ddispersion":       solverType = CfdSolverType.FluidX3DDispersion; break;
+                    case "fluidx3ddispersionsteady": solverType = CfdSolverType.FluidX3DDispersionSteady; break;
+                    case "fluidx3dfire":             solverType = CfdSolverType.FluidX3DFire; break;
                     default:
                         return new HeadlessResult
                         {

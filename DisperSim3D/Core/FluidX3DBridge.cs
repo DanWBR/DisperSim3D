@@ -8,7 +8,7 @@ namespace DisperSim3D.Core
     /// callers do SI &lt;-&gt; lattice conversion via <see cref="FluidX3DUnits"/>.
     /// Layout matches the C ABI defined in <c>FluidX3D/src/disp_bridge.h</c>.
     /// </summary>
-    internal static class FluidX3DBridge
+    public static class FluidX3DBridge
     {
         private const string Dll = "FluidX3D.dll";
 
