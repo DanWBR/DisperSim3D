@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using DisperSim3D.Core;
@@ -20,6 +21,9 @@ namespace DisperSim3D.Models
         public string FilePath { get; set; }
 
         /// <summary>Gets or sets the world-space position of this decoration.</summary>
+        [TypeConverter(typeof(DisperSim3D.Core.Point3DStringConverter))]
+        [Editor(typeof(DisperSim3D.Controls.Point3DPropertyEditor),
+            typeof(HandyControl.Controls.PropertyEditorBase))]
         public Point3D Position { get; set; }
 
         /// <summary>Gets or sets the Euler rotation angles (in degrees) around the X, Y, and Z axes.</summary>

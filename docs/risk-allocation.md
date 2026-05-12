@@ -28,65 +28,76 @@ Covering Problem, see [Dispersion Studies &amp; Detector Allocation](studies-det
 
 ## Mathematical formulation
 
-Per-scenario risk:
+Per-scenario risk (events/year × consequence):
 
-```
-R_s = freq_s · cons_s · P_d                       (events/year × consequence)
-```
+$$
+R_s \;=\; f_s \cdot c_s \cdot P_d
+$$
 
-`s` indexes the simulations in a `DispersionStudy`. `P_d` is a global
-detection probability (default 1.0). The allocator greedily picks at each
-step the candidate `c*` that maximises the weighted risk it covers:
+$s$ indexes the simulations in a `DispersionStudy`. $P_d$ is a global
+detection probability (default $1.0$). The allocator greedily picks at each
+step the candidate $c^{\star}$ that maximises the weighted risk it covers:
 
-```
-c* = argmax_c   Σ_{s ∈ cover(c) \ covered}   R_s · w(c, s)
-```
+$$
+c^{\star} \;=\; \arg\max_{c}
+  \sum_{s \,\in\, \mathrm{cover}(c)\,\setminus\,\mathrm{covered}}
+  R_s \cdot w(c, s)
+$$
 
-With distance weighting **off**: `w(c, s) ≡ 1` — every cloud within the
-detection radius is "fully covered".
+With distance weighting **off**, $w(c, s) \equiv 1$ — every cloud within
+the detection radius is "fully covered".
 
 With distance weighting **on** (Rad &amp; Rashtchian 2016):
 
-```
-w(c, s) = w_min + (w_max − w_min) · (1 − d(c, s) / DetectionRadius)
-```
+$$
+w(c, s) \;=\; w_{\min} + (w_{\max} - w_{\min}) \cdot
+              \left(1 - \frac{d(c, s)}{R_{\mathrm{det}}}\right)
+$$
 
-where `d(c, s)` is the candidate-to-cloud-bbox closest-point distance — a
-cheap proxy that preserves the monotonic "closer is better" property. With
-defaults `w_min = 0.5, w_max = 1.0` a detector right on the edge of the
+where $d(c, s)$ is the candidate-to-cloud-bbox closest-point distance — a
+cheap proxy that preserves the monotonic "closer is better" property — and
+$R_{\mathrm{det}}$ is the configured `DetectionRadius`. With defaults
+$w_{\min} = 0.5$ and $w_{\max} = 1.0$, a detector right on the edge of the
 radius contributes half of a detector at the cloud centre.
 
 The greedy loop stops when either `MaxDetectors` is reached or the residual
-risk drops below `(1 − TargetRRF%/100) · TotalRisk`. Approximation guarantee
-versus the exact MILP solution: `(1 − 1/e) ≈ 63%` worst case (Nemhauser et
-al. 1978), typically &lt; 5% gap on industrial cases per Rad 2017.
+risk drops below $(1 - \mathrm{TargetRRF}) \cdot R_{\mathrm{total}}$.
+Approximation guarantee versus the exact MILP solution:
+$1 - 1/e \approx 0.63$ worst case (Nemhauser et al. 1978), typically less
+than $5\%$ gap on industrial cases per Rad 2017.
 
-A **risk-reduction curve** `(k, RRF)` is captured after every pick — the
+A **risk-reduction curve** $(k, \mathrm{RRF})$ is captured after every pick — the
 "marginal utility" plot from Rad 2017 Fig. 7. The knee of that curve tells
 you when adding more detectors stops paying off in risk terms.
 
 ## Inputs the allocator needs
 
-Per scenario `s`:
+Per scenario $s$:
 
-- `freq_s` — events / year. Comes from **auto** (IOGP × wind rose, default)
-  or **manual** override in the dialog grid.
-- `cons_s` — consequence weight (relative scalar). Auto-derived from cloud
-  volume × hazard, or manual.
-- `P_d` — global detection probability (single dialog field).
+- $f_s$ — frequency in events / year. Comes from **auto** (IOGP × wind
+  rose, default) or **manual** override in the dialog grid.
+- $c_s$ — consequence weight (positive scalar, relative severity).
+  Auto-derived from cloud volume × hazard, or manual.
+- $P_d$ — global detection probability (single dialog field, default $1.0$).
 
 Per candidate detector:
 
-- Position `(x, y, z)` in the `[MinZ, MaxZ]` breathing zone.
-- `DetectionRadiusM` — sphere within which a cloud is considered covered.
+- Position $(x, y, z)$ in the $[\mathrm{MinZ},\ \mathrm{MaxZ}]$ breathing zone.
+- $R_{\mathrm{det}}$ — sphere radius within which a cloud is considered
+  covered (`DetectionRadiusM`).
 
 ## Auto frequency — IOGP × wind rose
 
-The default `freq_s` for a simulation is:
+The default $f_s$ for a simulation is:
 
-```
-freq_s = source.EffectiveLeakFrequencyPerYear  ×  P_wind(WindDirection_deg)
-```
+$$
+f_s \;=\; F_{\mathrm{source}}^{\mathrm{eff}} \cdot
+          P_{\mathrm{wind}}(\theta_{\mathrm{WF}})
+$$
+
+where $F_{\mathrm{source}}^{\mathrm{eff}}$ is `source.EffectiveLeakFrequencyPerYear`
+and $\theta_{\mathrm{WF}}$ is the wind direction of the simulation's wind
+field, in degrees.
 
 ### IOGP 434-01 leak-frequency database
 
@@ -95,6 +106,16 @@ freq_s = source.EffectiveLeakFrequencyPerYear  ×  P_wind(WindDirection_deg)
 release scenario. Each item carries (type, nominal diameter, count). For
 pipe types the "count" is total length in metres; for everything else it's
 the number of items.
+
+$$
+F_{\mathrm{source}}^{\mathrm{eff}} \;=\;
+\sum_{i \,\in\, \mathrm{inventory}}
+  F_{\mathrm{IOGP}}(\mathrm{type}_i,\,d_i,\,b) \cdot n_i
+$$
+
+where $b$ is the source's `HoleSizeBand`, $d_i$ is the item's nominal
+diameter (interpolated to the IOGP anchors), and $n_i$ is the item's count
+(or length in metres for pipe types).
 
 The embedded database is the **2006–2015 dataset of IOGP Report 434-01**
 (September 2019, revision 1.1 May 2021): 24 equipment types × 5 hole-size
@@ -153,18 +174,30 @@ optimisation still runs.
 
 ### Worked example
 
-A 6" carbon-steel process loop with the following inventory:
+A 6" carbon-steel process loop with the following inventory, all at the
+**Medium** band ($10$–$50$ mm hole, geometric-mean diameter $22.36$ mm):
 
-```
-50 m  steel pipe       6"   → 50 × 1.6×10⁻⁶ = 8.0×10⁻⁵
-12    flanged joints   6"   → 12 × 1.4×10⁻⁶ = 1.68×10⁻⁵
- 4    manual valves    6"   →  4 × 3.8×10⁻⁶ = 1.52×10⁻⁵
-                                       ──────────────────
-Total source frequency, Medium band   = 1.12×10⁻⁴ events/yr
-```
+| Item | Count | IOGP per-unit freq | Contribution |
+|---|---|---|---|
+| Steel process pipe, 6" | $50$ m | $1.6 \times 10^{-6}$ / m·yr | $8.0 \times 10^{-5}$ |
+| Flanged joint, 6" | $12$ | $1.4 \times 10^{-6}$ / joint·yr | $1.68 \times 10^{-5}$ |
+| Manual valve, 6" | $4$ | $3.8 \times 10^{-6}$ / valve·yr | $1.52 \times 10^{-5}$ |
 
-At a wind probability of 0.125 (default uniform rose), `freq_s` for one
-simulation = `1.4×10⁻⁵` events/year.
+$$
+F_{\mathrm{source}}^{\mathrm{eff}}
+\;=\; 8.0 \times 10^{-5}
+\;+\; 1.68 \times 10^{-5}
+\;+\; 1.52 \times 10^{-5}
+\;=\; 1.12 \times 10^{-4}\ \mathrm{events/yr}
+$$
+
+With a wind probability of $P_{\mathrm{wind}} = 0.125$ (default uniform
+8-direction rose), the per-scenario frequency for that wind direction is
+
+$$
+f_s \;=\; 1.12 \times 10^{-4} \cdot 0.125
+\;=\; 1.4 \times 10^{-5}\ \mathrm{events/yr}.
+$$
 
 ### Three levels of override
 
@@ -178,21 +211,39 @@ Levels 1 and 2 take precedence when set.
 
 ## Auto consequence — cloud volume × hazard
 
-For each cloud snapshot the allocator computes:
+For each cloud snapshot the allocator computes the cell volume from the
+domain dimensions and the cloud volume from the flagged-cell count:
 
-```
-cellVol = (2·DomainHalfM / Nx) · (2·DomainHalfM / Ny) · (DomainHeightM / Nz)
-vol     = CloudCellCount · cellVol
+$$
+V_{\mathrm{cell}}
+\;=\; \frac{2\,L_{\mathrm{half}}}{N_x}\,\cdot\,
+      \frac{2\,L_{\mathrm{half}}}{N_y}\,\cdot\,
+      \frac{H}{N_z}
+$$
 
-toxic     and gas.IDLH > 0   →  cons = vol · max(1, peakConc/IDLH)
-flammable and gas.LFL  > 0   →  cons = vol · (peakConc ≥ LFL ? 1.0 : 0.5)
-otherwise                    →  cons = vol
-```
+$$
+V_{\mathrm{cloud}} \;=\; N_{\mathrm{flagged}} \cdot V_{\mathrm{cell}}
+$$
 
-The IDLH / LFL come from the gas on the simulation's snapshot source. A more
-sophisticated probit-fatality model (TNT-equivalent overpressure integrated
-over the cloud) is out of scope for v1; the heuristic above keeps consequence
-proportional to "amount of bad gas × how bad it is".
+Consequence is then volume × hazard, with the hazard term picked from the
+gas properties on the simulation's snapshot source:
+
+$$
+c_s \;=\;
+\begin{cases}
+V_{\mathrm{cloud}}\cdot
+  \max\!\left(1,\dfrac{c_{\mathrm{peak}}}{\mathrm{IDLH}}\right)
+  & \text{toxic, IDLH > 0}\\[6pt]
+V_{\mathrm{cloud}}\cdot
+  \begin{cases} 1.0 & c_{\mathrm{peak}} \ge \mathrm{LFL} \\ 0.5 & \text{otherwise}\end{cases}
+  & \text{flammable, LFL > 0}\\[10pt]
+V_{\mathrm{cloud}} & \text{otherwise}
+\end{cases}
+$$
+
+A more sophisticated probit-fatality model (TNT-equivalent overpressure
+integrated over the cloud) is out of scope for v1; the heuristic above
+keeps consequence proportional to "amount of bad gas × how bad it is".
 
 Manual override via `ScenarioRisk.ConsMode = Manual`.
 
@@ -243,7 +294,7 @@ then in the new **Strategy** radio group at the top of settings:
 
 Click **Run allocation**. The results panel surfaces:
 
-- **Total risk** Σ R_s across all scenarios.
+- **Total risk** $\sum_s R_s$ across all scenarios.
 - **Residual** risk after the chosen positions.
 - **RRF** as a percentage — the headline number for stakeholders.
 - A small `(K, RRF)` ListView — the marginal-utility curve. Look for the

@@ -65,14 +65,14 @@ Chang &amp; Hanna 2004):
 
 | Metric | Formula | Acceptable | Perfect |
 |---|---|---|---|
-| **MRB** Mean Relative Bias | `2·mean((Co−Cp)/(Co+Cp))` | [-0.4, 0.4] | 0 |
-| **RMSE** (normalised) | `sqrt(mean((Co−Cp)²)) / mean(Co)` | < 2.3 | 0 |
-| **NMSE** | `mean((Co−Cp)²) / (mean(Co)·mean(Cp))` | — | 0 |
-| **FAC2** | fraction with `0.5 ≤ Cp/Co ≤ 2.0` | [0.5, 2.0] | 1 |
-| **MG** geometric mean bias | `exp(mean(ln Co − ln Cp))` | [0.67, 1.5] | 1 |
-| **VG** geometric variance | `exp(var(ln Co − ln Cp))` | < 3.3 | 1 |
+| **MRB** Mean Relative Bias | $\,2\cdot\overline{(C_o - C_p)/(C_o + C_p)}\,$ | $[-0.4,\,0.4]$ | $0$ |
+| **RMSE** (normalised) | $\,\sqrt{\overline{(C_o - C_p)^2}}\,/\,\overline{C_o}\,$ | $<2.3$ | $0$ |
+| **NMSE** | $\,\overline{(C_o - C_p)^2}\,/\,(\overline{C_o}\cdot\overline{C_p})\,$ | — | $0$ |
+| **FAC2** | fraction with $\,0.5 \le C_p / C_o \le 2.0\,$ | $[0.5,\,2.0]$ | $1$ |
+| **MG** geometric mean bias | $\,\exp\!\overline{(\ln C_o - \ln C_p)}\,$ | $[0.67,\,1.5]$ | $1$ |
+| **VG** geometric variance | $\,\exp\!\operatorname{var}(\ln C_o - \ln C_p)\,$ | $<3.3$ | $1$ |
 
-Geometric (log-based) metrics floor zero values at `1e-12` to avoid `−∞`.
+Geometric (log-based) metrics floor zero values at $10^{-12}$ to avoid $-\infty$.
 
 ## `.dsbench` file format
 

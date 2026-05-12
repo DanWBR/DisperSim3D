@@ -79,32 +79,60 @@ namespace DisperSim3D.Dialogs
             idBox.Controls.Add(ig);
 
             // Detection criterion
+            //
+            // Single-row TableLayoutPanel: Quantity | combo | gap | Threshold ≥ | NUD | unit | stretch
+            // Labels carry a small top-margin so their text baselines align with the
+            // ComboBox/NumericUpDown text rather than sitting flush at the cell top.
             var crBox = new GroupBox { Text = "Detection criterion (applied per simulation, with each sim's gas)",
                 Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 Padding = new Padding((int)(8 * dpi)) };
             var cg = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 4 };
-            cg.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            cg.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            cg.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            cg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            cg.Controls.Add(MakeLabel("Quantity:", dpi), 0, 0);
-            _cmbQuantity = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList,
-                Width = (int)(240 * dpi) };
+                AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 7, RowCount = 1 };
+            cg.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));     // 0 Quantity:
+            cg.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));     // 1 combo
+            cg.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(24 * dpi))); // 2 gap
+            cg.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));     // 3 Threshold ≥
+            cg.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));     // 4 NUD
+            cg.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));     // 5 unit label
+            cg.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); // 6 stretch
+            cg.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            // ── Quantity ─────────────────────────────────────────────────────
+            cg.Controls.Add(InlineLabel("Quantity:", dpi), 0, 0);
+            _cmbQuantity = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Width = (int)(240 * dpi),
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(0, (int)(2 * dpi), 0, (int)(2 * dpi))
+            };
             foreach (ViewFieldProperty vfp in Enum.GetValues(typeof(ViewFieldProperty)))
                 _cmbQuantity.Items.Add(vfp);
             _cmbQuantity.SelectedItem = ViewFieldProperty.PercentLFL;
             _cmbQuantity.SelectedIndexChanged += (s, e) => UpdateUnitLabel();
             cg.Controls.Add(_cmbQuantity, 1, 0);
-            cg.Controls.Add(MakeLabel("Threshold ≥", dpi), 2, 0);
-            var rightRow = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true,
-                FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(0) };
-            _nudThreshold = new NumericUpDown { Minimum = 0m, Maximum = 1_000_000_000m,
-                Value = 50m, DecimalPlaces = 4, Increment = 1m, Width = (int)(110 * dpi) };
-            _lblUnit = new Label { AutoSize = true, Padding = new Padding(4, (int)(6 * dpi), 0, 0) };
-            rightRow.Controls.Add(_nudThreshold);
-            rightRow.Controls.Add(_lblUnit);
-            cg.Controls.Add(rightRow, 3, 0);
+
+            // ── Threshold ────────────────────────────────────────────────────
+            cg.Controls.Add(InlineLabel("Threshold ≥", dpi), 3, 0);
+            _nudThreshold = new NumericUpDown
+            {
+                Minimum = 0m,
+                Maximum = 1_000_000_000m,
+                Value = 50m,
+                DecimalPlaces = 4,
+                Increment = 1m,
+                Width = (int)(110 * dpi),
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(0, (int)(2 * dpi), 0, (int)(2 * dpi))
+            };
+            cg.Controls.Add(_nudThreshold, 4, 0);
+            _lblUnit = new Label
+            {
+                AutoSize = true,
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding((int)(4 * dpi), (int)(6 * dpi), 0, 0)
+            };
+            cg.Controls.Add(_lblUnit, 5, 0);
             crBox.Controls.Add(cg);
 
             // Simulation chooser
@@ -170,6 +198,18 @@ namespace DisperSim3D.Dialogs
         {
             Text = text, AutoSize = true, Anchor = AnchorStyles.Left,
             Padding = new Padding(0, (int)(6 * dpi), (int)(6 * dpi), 0)
+        };
+
+        /// <summary>Variant of <see cref="MakeLabel"/> tuned for labels sitting
+        /// next to <see cref="ComboBox"/> / <see cref="NumericUpDown"/> on the
+        /// same TableLayoutPanel row: uses <c>Margin</c> (table cell offset)
+        /// instead of <c>Padding</c> (label internal offset) so the baseline
+        /// lines up with the input controls' rendered text, independent of the
+        /// row's auto-sized height.</summary>
+        private static Label InlineLabel(string text, float dpi) => new Label
+        {
+            Text = text, AutoSize = true, Anchor = AnchorStyles.Left,
+            Margin = new Padding(0, (int)(6 * dpi), (int)(6 * dpi), 0)
         };
 
         private void UpdateUnitLabel()

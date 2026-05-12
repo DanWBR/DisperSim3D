@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Windows.Media.Media3D;
 
 namespace DisperSim3D.Models
@@ -21,6 +22,9 @@ namespace DisperSim3D.Models
         /// <summary>
         /// Gets or sets the camera position in world coordinates.
         /// </summary>
+        [TypeConverter(typeof(DisperSim3D.Core.Point3DStringConverter))]
+        [Editor(typeof(DisperSim3D.Controls.Point3DPropertyEditor),
+            typeof(HandyControl.Controls.PropertyEditorBase))]
         public Point3D Position { get; set; }
 
         /// <summary>

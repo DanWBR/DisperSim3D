@@ -111,9 +111,12 @@ two scalars simultaneously — a smoke mass fraction `Y` and a temperature
 `T` (Kelvin) — with a **Boussinesq buoyancy** term injected into the vertical
 velocity:
 
-```
-u_z_eff = u_z_lbm + β · g · (T − T_amb) · dt           (capped at 0.5·dx/dt)
-```
+$$
+u_{z}^{\mathrm{eff}}
+  \;=\; u_{z}^{\mathrm{LBM}}
+        + \beta\,g\,(T - T_{\mathrm{amb}})\,\Delta t
+\qquad\text{(capped at } 0.5\,\Delta x / \Delta t\text{)}
+$$
 
 Default fire exit temperature is **1500 K** (`ExitTemperatureK` override
 available on the source). The pre-computed wind field stays unchanged — the

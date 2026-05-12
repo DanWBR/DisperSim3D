@@ -85,12 +85,24 @@ sub-millimetre cells and sub-microsecond timesteps. Birch &amp; Schefer (1984)
 replaces the real orifice with a fictitious larger one at atmospheric
 pressure and subsonic velocity:
 
-```
-mdot     = Cd · A_orifice · P0 · sqrt(γM/RT · (2/(γ+1))^((γ+1)/(γ−1)))   (choked)
-ρ_amb    = P_atm · M / (R · T_amb)
-A_pseudo = mdot / (ρ_amb · V_target)               V_target ≈ 100 m/s
-d_pseudo = sqrt(4 · A_pseudo / π)
-```
+$$
+\dot m \;=\; C_d \cdot A_{\mathrm{orifice}} \cdot P_0 \cdot
+  \sqrt{\frac{\gamma M}{RT}\!
+    \left(\frac{2}{\gamma+1}\right)^{\!\frac{\gamma+1}{\gamma-1}}}
+\quad\text{(choked)}
+$$
+
+$$
+\rho_{\mathrm{amb}}
+  \;=\; \frac{P_{\mathrm{atm}}\,M}{R\,T_{\mathrm{amb}}},
+\qquad
+A_{\mathrm{pseudo}}
+  \;=\; \frac{\dot m}{\rho_{\mathrm{amb}}\,V_{\mathrm{target}}},
+\qquad
+d_{\mathrm{pseudo}} \;=\; \sqrt{\frac{4\,A_{\mathrm{pseudo}}}{\pi}}
+$$
+
+with $V_{\mathrm{target}} \approx 100\ \mathrm{m/s}$.
 
 `HighPressureLeakModel.ComputeExpandedSource(p, 100, 293.15)` returns
 `(d_pseudo, V_target, T_amb)`. `ReleaseSource3D.ExpandedDiameterForCfdM` and

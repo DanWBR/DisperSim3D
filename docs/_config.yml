@@ -54,6 +54,15 @@ plugins:
   - jekyll-sitemap
   - jekyll-seo-tag
 
+# Kramdown is told to leave $$…$$ blocks (and $…$ inline) alone so MathJax can
+# pick them up client-side via the script in _includes/head_custom.html.
+# Without "math_engine: mathjax", kramdown's own math parser may rewrite the
+# block before MathJax sees it.
+kramdown:
+  math_engine: mathjax
+  input: GFM
+  syntax_highlighter: rouge
+
 # Exclude repo-level junk and source files from the build output.
 exclude:
   - Gemfile

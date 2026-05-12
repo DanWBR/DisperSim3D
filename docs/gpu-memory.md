@@ -98,18 +98,27 @@ human-readable summary via `HumanBytes`.
 
 ### Worked example
 
-A 96³ FluidX3D Dispersion run with 30 written snapshots:
+A $96^3$ FluidX3D Dispersion run with 30 written snapshots:
 
-```
-N_cells       = 96 * 96 * 96 = 884 736
-VRAM (LBM)    = 884 736 · (93 + 24)  =  ~103 MB
-RAM (tracer)  = 884 736 · 41         =   ~36 MB
-Disk          = 884 736 · 8 B/snap · 30 = ~213 MB
-```
+$$
+\begin{aligned}
+N_{\mathrm{cells}}
+  &\;=\; 96 \times 96 \times 96 \;=\; 884\,736 \\
+\mathrm{VRAM\ (LBM)}
+  &\;=\; 884\,736 \cdot (93 + 24)\ \mathrm{B}
+  \;\approx\; 103\ \mathrm{MB} \\
+\mathrm{RAM\ (tracer)}
+  &\;=\; 884\,736 \cdot 41\ \mathrm{B}
+  \;\approx\; 36\ \mathrm{MB} \\
+\mathrm{Disk}
+  &\;=\; 884\,736 \cdot 8\ \mathrm{B/snap} \cdot 30
+  \;\approx\; 213\ \mathrm{MB}
+\end{aligned}
+$$
 
 The dialog renders that as **VRAM 103 MB · RAM 36 MB · Disk 213 MB**.
-Doubling the grid to 128³ multiplies cell count by ~2.4×, so all three
-numbers scale roughly linearly.
+Doubling the grid to $128^3$ multiplies cell count by ~$2.4\times$, so all
+three numbers scale roughly linearly.
 
 ### When to consult the estimator
 

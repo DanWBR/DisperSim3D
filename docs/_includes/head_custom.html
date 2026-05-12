@@ -1,0 +1,24 @@
+{%- comment -%}
+  MathJax 3 — inline and display LaTeX rendering for the docs site.
+  Just the Docs renders this fragment inside the page <head>, so the engine
+  is available before the body markdown runs. Inline math uses $…$ and
+  \(…\); display math uses $$…$$ and \[…\]. The risk-allocation page is the
+  main consumer today; new pages with equations just need the same syntax.
+{%- endcomment -%}
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']],
+      processEscapes: true,
+      processEnvironments: true
+    },
+    options: {
+      ignoreHtmlClass: 'tex2jax_ignore|highlight',
+      processHtmlClass: 'tex2jax_process'
+    },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script id="MathJax-script" async
+        src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>

@@ -36,6 +36,20 @@ namespace DisperSim3D.Controls
         // invalidate the CFD snapshots cached for any simulations that already use
         // its current position. Edit positions through the properties panel only.
 
+        // Translucent ghost shown at the cursor while the user is in a Place*
+        // edit mode. Rebuilt on every CurrentEditMode change and moved on
+        // MouseMove. Removed when the mode returns to Select.
+        private System.Windows.Media.Media3D.ModelVisual3D _placementGhost;
+        private System.Windows.Media.Media3D.TranslateTransform3D _placementGhostTransform;
+        private Point3D? _placementGhostPosition;
+
+        // Arrow cone that decorates the release-source ghost. Its transform is
+        // updated on MouseMove so the cone always points along the surface
+        // normal under the cursor — giving the user a live preview of the
+        // release direction that the source will be placed with.
+        private System.Windows.Media.Media3D.GeometryModel3D _placementArrowModel;
+        private Vector3D _placementGhostNormal = new Vector3D(0, 0, 1);
+
         private Decoration3D _selectedDecoration;
         private ReleaseSource3D _selectedSource;
 
@@ -1760,7 +1774,13 @@ namespace DisperSim3D.Controls
                 Name = template?.Name ?? "Source",
                 ReleaseRateKgPerS = template?.ReleaseRateKgPerS ?? 0.5,
                 PuffIntervalS = template?.PuffIntervalS ?? 1.0,
-                ReleaseHeightOffset = template?.ReleaseHeightOffset ?? 2.0
+                ReleaseHeightOffset = template?.ReleaseHeightOffset ?? 2.0,
+                // Azimuth/elevation are propagated so callers (placement ghost
+                // → MouseDown) can pre-orient the leak direction perpendicular
+                // to the surface the user clicked on. Default 0/0 (towards +Y,
+                // horizontal) matches the prior behaviour.
+                ReleaseAzimuthDeg = template?.ReleaseAzimuthDeg ?? 0.0,
+                ReleaseElevationDeg = template?.ReleaseElevationDeg ?? 0.0,
             };
             _scene.DispersionScenario.Sources.Add(source);
             UpdateViewport();
@@ -2563,6 +2583,11 @@ namespace DisperSim3D.Controls
         {
             var doc = BuildSceneXDocument(filePath);
 
+            // Snapshot the previous file (if any) to a sibling .bak so an
+            // accidental save over a working project can be rolled back from
+            // the same folder. Best-effort — never blocks the save.
+            BackupExistingProjectFile(filePath);
+
             if (ProjectBundle.IsBundleFile(filePath))
             {
                 ProjectBundle.Save(filePath, _scene, doc);
@@ -2570,6 +2595,32 @@ namespace DisperSim3D.Controls
             else
             {
                 doc.Save(filePath);
+            }
+        }
+
+        /// <summary>If <paramref name="filePath"/> already exists, copy it to
+        /// <c>filePath + ".bak"</c> in the same folder (overwriting any previous
+        /// backup). Used as a single-step rollback before <see cref="SaveToFile"/>
+        /// overwrites the original — covers both the .dsproj bundle and the
+        /// legacy .xml paths because the file copy happens before any
+        /// format-specific save logic runs.
+        ///
+        /// Backups are best-effort: any I/O error here is swallowed so a
+        /// permissions glitch on the backup write can never block the user's
+        /// save. The actual save below will surface its own errors.</summary>
+        private static void BackupExistingProjectFile(string filePath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(filePath)) return;
+                if (!System.IO.File.Exists(filePath)) return;
+                string bak = filePath + ".bak";
+                System.IO.File.Copy(filePath, bak, overwrite: true);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    "[BackupExistingProjectFile] " + ex.Message);
             }
         }
 
@@ -4328,10 +4379,20 @@ namespace DisperSim3D.Controls
                     break;
 
                 case EditMode.PlaceReleaseSource:
-                    var releasePoint = GetHitPoint(position);
-                    if (releasePoint != null)
+                    // GetPlacementHit = obstacle-aware position (snaps onto whatever
+                    // Decoration3D AABB face the camera ray entered) + grid snap +
+                    // the outward face normal. The normal is converted to azimuth
+                    // /elevation so the placed source's arrow already points
+                    // perpendicular to the surface the user was pointing at —
+                    // matching the live ghost preview the user just saw.
+                    var releaseHit = GetPlacementHit(position);
+                    if (releaseHit != null)
                     {
-                        var src = AddReleaseSource(releasePoint.Value, PendingSourceTemplate);
+                        var template = PendingSourceTemplate ?? new ReleaseSource3D();
+                        var (az, el) = NormalToAzimuthElevation(releaseHit.Value.Normal);
+                        template.ReleaseAzimuthDeg = az;
+                        template.ReleaseElevationDeg = el;
+                        var src = AddReleaseSource(releaseHit.Value.Position, template);
                         PendingSourceTemplate = null;
                         CurrentEditMode = EditMode.Select;
                         ObjectPlaced?.Invoke(this, new ObjectPlacedEventArgs
@@ -4340,7 +4401,7 @@ namespace DisperSim3D.Controls
                     break;
 
                 case EditMode.PlaceMonitorPoint:
-                    var monitorPoint = GetHitPoint(position);
+                    var monitorPoint = GetPlacementPoint(position);
                     if (monitorPoint != null)
                     {
                         var mon = AddMonitorPoint(monitorPoint.Value, PendingMonitorTemplate);
@@ -4352,11 +4413,11 @@ namespace DisperSim3D.Controls
                     break;
 
                 case EditMode.PlaceFireSource:
-                    var firePoint = GetHitPoint(position);
+                    var firePoint = GetPlacementPoint(position);
                     if (firePoint != null)
                     {
                         var fire = PendingFireTemplate ?? new Models.FireSource();
-                        fire.Position = _snapToGrid ? firePoint.Value.SnapToGrid(_gridSpacing) : firePoint.Value;
+                        fire.Position = firePoint.Value;
                         _scene.FireScenario.Sources.Add(fire);
                         PendingFireTemplate = null;
                         CurrentEditMode = EditMode.Select;
@@ -4367,12 +4428,12 @@ namespace DisperSim3D.Controls
                     break;
 
                 case EditMode.PlaceGasDetector:
-                    var detPoint = GetHitPoint(position);
+                    var detPoint = GetPlacementPoint(position);
                     if (detPoint != null)
                     {
                         var det = PendingDetectorTemplate ?? new Models.GasDetector3D
                             { Name = "Detector" + (_scene.GasDetectors.Count + 1) };
-                        det.Position = _snapToGrid ? detPoint.Value.SnapToGrid(_gridSpacing) : detPoint.Value;
+                        det.Position = detPoint.Value;
                         _scene.GasDetectors.Add(det);
                         PendingDetectorTemplate = null;
                         CurrentEditMode = EditMode.Select;
@@ -4387,8 +4448,25 @@ namespace DisperSim3D.Controls
 
         private void Viewport_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
         {
-            // Drag-to-reposition has been removed — see field block at the top of
-            // the class. Mouse-move handling for orbit/pan is owned by HelixToolkit.
+            // Drag-to-reposition has been removed. We only do work here when the
+            // user is in a Place* edit mode — the ghost preview tracks the
+            // cursor in real time so the user can see exactly where the next
+            // click will land, snapped to obstacles and the grid. For release
+            // sources we also rotate the arrow cone to match the surface
+            // normal so the leak direction preview matches what the source
+            // will be committed with.
+            if (_placementGhost == null || _placementGhostTransform == null) return;
+            if (!IsPlacementMode(_currentEditMode)) return;
+            var screen = e.GetPosition(_viewport);
+            var hit = GetPlacementHit(screen);
+            if (hit == null) return;
+            _placementGhostTransform.OffsetX = hit.Value.Position.X;
+            _placementGhostTransform.OffsetY = hit.Value.Position.Y;
+            _placementGhostTransform.OffsetZ = hit.Value.Position.Z;
+            _placementGhostPosition = hit.Value.Position;
+            _placementGhostNormal = hit.Value.Normal;
+            if (_placementArrowModel != null)
+                _placementArrowModel.Transform = BuildArrowTransform(_placementGhostNormal, 1.5);
         }
 
         private void Viewport_MouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -4490,7 +4568,337 @@ namespace DisperSim3D.Controls
 
         private void OnEditModeChanged()
         {
+            RebuildPlacementGhost();
             EditModeChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>Tears down any existing placement-preview ghost and, if the
+        /// current edit mode is a Place* mode, builds a fresh translucent ghost
+        /// matching that placement type. The ghost sits at origin until the next
+        /// <see cref="Viewport_MouseMove"/> updates its translation.</summary>
+        private void RebuildPlacementGhost()
+        {
+            if (_placementGhost != null)
+            {
+                try { _viewport.Children.Remove(_placementGhost); } catch { }
+                _placementGhost = null;
+                _placementGhostTransform = null;
+                _placementGhostPosition = null;
+            }
+            if (!IsPlacementMode(_currentEditMode)) return;
+            var model = BuildGhostModel3D(_currentEditMode);
+            if (model == null) return;
+            _placementGhostTransform = new System.Windows.Media.Media3D.TranslateTransform3D(0, 0, 0);
+            _placementGhost = new System.Windows.Media.Media3D.ModelVisual3D
+            {
+                Content = model,
+                Transform = _placementGhostTransform
+            };
+            _placementGhost.SetValue(System.Windows.FrameworkElement.TagProperty,
+                new Visual3DTag("PlacementGhost", "ghost"));
+            _viewport.Children.Add(_placementGhost);
+        }
+
+        private static bool IsPlacementMode(EditMode m)
+        {
+            return m == EditMode.PlaceReleaseSource
+                || m == EditMode.PlaceMonitorPoint
+                || m == EditMode.PlaceFireSource
+                || m == EditMode.PlaceGasDetector;
+        }
+
+        /// <summary>Builds the translucent preview geometry shown at the cursor
+        /// during placement. Shape + colour pick depends on the placement mode:
+        /// cyan sphere for release sources (with a directional arrow cone),
+        /// orange for gas detectors, lime for monitor points, and a red sphere
+        /// with a flame cone for fire sources. Sets
+        /// <see cref="_placementArrowModel"/> as a side effect when the mode
+        /// has a directional arrow.</summary>
+        private System.Windows.Media.Media3D.Model3D BuildGhostModel3D(EditMode mode)
+        {
+            _placementArrowModel = null;
+
+            System.Windows.Media.Color color;
+            switch (mode)
+            {
+                case EditMode.PlaceReleaseSource: color = System.Windows.Media.Colors.Cyan; break;
+                case EditMode.PlaceGasDetector:   color = System.Windows.Media.Colors.Orange; break;
+                case EditMode.PlaceMonitorPoint:  color = System.Windows.Media.Colors.LimeGreen; break;
+                case EditMode.PlaceFireSource:    color = System.Windows.Media.Colors.OrangeRed; break;
+                default: return null;
+            }
+            var translucent = System.Windows.Media.Color.FromArgb(110, color.R, color.G, color.B);
+            var emissive    = System.Windows.Media.Color.FromArgb(160, color.R, color.G, color.B);
+            var mat = new System.Windows.Media.Media3D.MaterialGroup();
+            mat.Children.Add(new System.Windows.Media.Media3D.DiffuseMaterial(
+                new System.Windows.Media.SolidColorBrush(translucent)));
+            mat.Children.Add(new System.Windows.Media.Media3D.EmissiveMaterial(
+                new System.Windows.Media.SolidColorBrush(emissive)));
+
+            const double sphereRadius = 1.5;
+
+            var group = new System.Windows.Media.Media3D.Model3DGroup();
+            var sphereMesh = CreateGhostSphereMesh(sphereRadius, 14, 10);
+            group.Children.Add(new System.Windows.Media.Media3D.GeometryModel3D(sphereMesh, mat)
+                { BackMaterial = mat });
+
+            // Release sources get a directional arrow whose orientation is
+            // updated on MouseMove to match the surface normal under the
+            // cursor — telling the user, before they click, that the leak
+            // will spray perpendicular to whatever they're hovering.
+            if (mode == EditMode.PlaceReleaseSource)
+            {
+                var arrowMesh = CreateGhostConeMesh(0.55, 2.5, 16);
+                var arrow = new System.Windows.Media.Media3D.GeometryModel3D(arrowMesh, mat)
+                    { BackMaterial = mat };
+                arrow.Transform = BuildArrowTransform(new Vector3D(0, 0, 1), sphereRadius);
+                group.Children.Add(arrow);
+                _placementArrowModel = arrow;
+            }
+
+            // Flame cone for fire sources, pointing up.
+            if (mode == EditMode.PlaceFireSource)
+            {
+                var coneMesh = CreateGhostConeMesh(0.9, 3.0, 16);
+                var cone = new System.Windows.Media.Media3D.GeometryModel3D(coneMesh, mat)
+                    { BackMaterial = mat };
+                cone.Transform = new System.Windows.Media.Media3D.TranslateTransform3D(0, 0, 1.5);
+                group.Children.Add(cone);
+            }
+            return group;
+        }
+
+        /// <summary>Closed UV-sphere with manual triangulation. Used for ghost
+        /// previews; tessellation kept low (14×10) since it's a translucent overlay.</summary>
+        private static System.Windows.Media.Media3D.MeshGeometry3D CreateGhostSphereMesh(
+            double radius, int slices, int stacks)
+        {
+            var mesh = new System.Windows.Media.Media3D.MeshGeometry3D();
+            mesh.Positions.Add(new Point3D(0, 0, radius));
+            for (int s = 1; s < stacks; s++)
+            {
+                double phi = Math.PI * s / stacks;
+                double sinP = Math.Sin(phi);
+                double cosP = Math.Cos(phi);
+                for (int sl = 0; sl < slices; sl++)
+                {
+                    double theta = 2 * Math.PI * sl / slices;
+                    mesh.Positions.Add(new Point3D(
+                        radius * sinP * Math.Cos(theta),
+                        radius * sinP * Math.Sin(theta),
+                        radius * cosP));
+                }
+            }
+            mesh.Positions.Add(new Point3D(0, 0, -radius));
+            int bottom = mesh.Positions.Count - 1;
+            for (int sl = 0; sl < slices; sl++)
+            {
+                int next = (sl + 1) % slices;
+                mesh.TriangleIndices.Add(0);
+                mesh.TriangleIndices.Add(1 + sl);
+                mesh.TriangleIndices.Add(1 + next);
+            }
+            for (int s = 0; s < stacks - 2; s++)
+            {
+                int row2 = 1 + s * slices;
+                int nextRow = 1 + (s + 1) * slices;
+                for (int sl = 0; sl < slices; sl++)
+                {
+                    int next = (sl + 1) % slices;
+                    mesh.TriangleIndices.Add(row2 + sl);
+                    mesh.TriangleIndices.Add(nextRow + sl);
+                    mesh.TriangleIndices.Add(nextRow + next);
+                    mesh.TriangleIndices.Add(row2 + sl);
+                    mesh.TriangleIndices.Add(nextRow + next);
+                    mesh.TriangleIndices.Add(row2 + next);
+                }
+            }
+            int lastRow = 1 + (stacks - 2) * slices;
+            for (int sl = 0; sl < slices; sl++)
+            {
+                int next = (sl + 1) % slices;
+                mesh.TriangleIndices.Add(lastRow + sl);
+                mesh.TriangleIndices.Add(bottom);
+                mesh.TriangleIndices.Add(lastRow + next);
+            }
+            return mesh;
+        }
+
+        /// <summary>Cone pointing up the +Z axis (apex at z=height, base at z=0).
+        /// Used as the flame indicator on the fire-source ghost.</summary>
+        private static System.Windows.Media.Media3D.MeshGeometry3D CreateGhostConeMesh(
+            double radius, double height, int segments)
+        {
+            var mesh = new System.Windows.Media.Media3D.MeshGeometry3D();
+            mesh.Positions.Add(new Point3D(0, 0, height));
+            for (int i = 0; i <= segments; i++)
+            {
+                double angle = 2 * Math.PI * i / segments;
+                mesh.Positions.Add(new Point3D(radius * Math.Cos(angle),
+                    radius * Math.Sin(angle), 0));
+            }
+            for (int i = 0; i < segments; i++)
+            {
+                mesh.TriangleIndices.Add(0);
+                mesh.TriangleIndices.Add(i + 1);
+                mesh.TriangleIndices.Add(i + 2);
+            }
+            int center = mesh.Positions.Count;
+            mesh.Positions.Add(new Point3D(0, 0, 0));
+            for (int i = 0; i < segments; i++)
+            {
+                mesh.TriangleIndices.Add(center);
+                mesh.TriangleIndices.Add(i + 2);
+                mesh.TriangleIndices.Add(i + 1);
+            }
+            return mesh;
+        }
+
+        /// <summary>Result of a placement-time ray cast: world-space hit point
+        /// plus the outward unit surface normal at that point. The normal is
+        /// (0,0,1) for ground-plane fallback hits and the corresponding axis
+        /// for AABB face hits.</summary>
+        private struct PlacementHit
+        {
+            public Point3D Position;
+            public Vector3D Normal;
+        }
+
+        /// <summary>Returns the world-space placement target for the current
+        /// mouse position, plus the outward surface normal at that point.
+        ///
+        /// Uses <see cref="Viewport3DHelper.FindHits"/> which fires a true
+        /// ray-versus-triangle test against every visible mesh in the viewport,
+        /// so the snap target follows the actual decoration geometry (the top
+        /// of a single column in an imported refinery, not the top of the
+        /// entire model's AABB). Falls back to the work-plane intersection
+        /// when the ray misses all decorations.
+        ///
+        /// Grid snap is applied to X/Y but never to Z — the user almost always
+        /// wants the object glued exactly to the hit surface, not lifted to a
+        /// grid plane.</summary>
+        private PlacementHit? GetPlacementHit(System.Windows.Point screenPosition)
+        {
+            var ray = _viewport.Viewport.Point2DtoRay3D(screenPosition);
+            if (ray.Direction.LengthSquared < 1e-12) return null;
+
+            // HelixToolkit's hit-test gives world-space Position + Normal already
+            // computed through the visual transform chain — so internal
+            // Model3DGroup hierarchies in imported OBJs / STLs are handled
+            // correctly without us having to walk Visual3D / Model3D trees by
+            // hand. Results are sorted front-to-back.
+            IList<HelixToolkit.Wpf.PointHitResult> hits = null;
+            try { hits = _viewport.Viewport.FindHits(screenPosition, null); }
+            catch { hits = null; }
+
+            if (hits != null)
+            {
+                foreach (var h in hits)
+                {
+                    if (h == null) continue;
+                    if (!IsHitOnDecoration(h.Visual)) continue;
+                    var pos = h.Position;
+                    var nrm = h.Normal;
+                    if (nrm.LengthSquared < 1e-12) nrm = new Vector3D(0, 0, 1);
+                    else nrm.Normalize();
+                    // Orient outward (against the incoming ray).
+                    if (Vector3D.DotProduct(nrm, ray.Direction) > 0) nrm = -nrm;
+                    if (_snapToGrid)
+                        pos = new Point3D(
+                            Math.Round(pos.X / _gridSpacing) * _gridSpacing,
+                            Math.Round(pos.Y / _gridSpacing) * _gridSpacing,
+                            pos.Z);
+                    return new PlacementHit { Position = pos, Normal = nrm };
+                }
+            }
+
+            // No decoration under the cursor — fall back to ground plane (grid
+            // snap is already applied by GetHitPoint).
+            var groundHit = GetHitPoint(screenPosition);
+            if (groundHit == null) return null;
+            return new PlacementHit
+            {
+                Position = groundHit.Value,
+                Normal = new Vector3D(0, 0, 1)
+            };
+        }
+
+        /// <summary>Walks up the visual tree from <paramref name="visual"/>
+        /// looking for a tagged ModelVisual3D ancestor with category
+        /// <c>"Decoration"</c>. Filters out the placement ghost (which lives in
+        /// the same viewport), already-placed sources / detectors / monitors,
+        /// and any other tagged overlay we don't want to snap onto.</summary>
+        private static bool IsHitOnDecoration(System.Windows.Media.Media3D.Visual3D visual)
+        {
+            System.Windows.DependencyObject cur = visual;
+            while (cur != null)
+            {
+                if (cur is System.Windows.Media.Media3D.ModelVisual3D mv)
+                {
+                    var tag = mv.GetValue(System.Windows.FrameworkElement.TagProperty) as Visual3DTag;
+                    if (tag != null && tag.Category == "Decoration") return true;
+                    if (tag != null && tag.Category == "PlacementGhost") return false;
+                }
+                cur = System.Windows.Media.VisualTreeHelper.GetParent(cur);
+            }
+            return false;
+        }
+
+        /// <summary>Back-compat wrapper for callers that only need the position.</summary>
+        private Point3D? GetPlacementPoint(System.Windows.Point screenPosition)
+            => GetPlacementHit(screenPosition)?.Position;
+
+        /// <summary>Converts a unit normal vector to azimuth/elevation degrees
+        /// using the same convention as <see cref="ReleaseSource3D.ReleaseDirection"/>:
+        /// azimuth measured clockwise from +Y (North), elevation 0° = horizontal,
+        /// +90° = straight up. Used to align a placed release source's arrow
+        /// with the surface its ghost was hovering when the user clicked.</summary>
+        private static (double azDeg, double elDeg) NormalToAzimuthElevation(Vector3D n)
+        {
+            if (n.LengthSquared < 1e-12) return (0.0, 90.0);
+            n.Normalize();
+            double el = Math.Asin(Math.Max(-1.0, Math.Min(1.0, n.Z))) * 180.0 / Math.PI;
+            double az;
+            if (Math.Abs(n.X) < 1e-9 && Math.Abs(n.Y) < 1e-9)
+                az = 0.0;
+            else
+                az = Math.Atan2(n.X, n.Y) * 180.0 / Math.PI;
+            if (az < 0) az += 360.0;
+            return (az, el);
+        }
+
+        /// <summary>Builds a rotate-then-translate transform that aligns a model
+        /// whose default axis is +Z with the given unit normal, then slides it
+        /// outward along that normal by <paramref name="offset"/> metres. Used
+        /// to place the release-source arrow cone just outside the ghost sphere
+        /// surface, pointing along the hit-face normal.</summary>
+        private static Transform3D BuildArrowTransform(Vector3D normal, double offset)
+        {
+            var group = new Transform3DGroup();
+            var n = normal;
+            if (n.LengthSquared < 1e-12) n = new Vector3D(0, 0, 1);
+            n.Normalize();
+            var zAxis = new Vector3D(0, 0, 1);
+            double dot = Vector3D.DotProduct(zAxis, n);
+            if (dot < 0.9999)
+            {
+                Vector3D axis;
+                double angleDeg;
+                if (dot < -0.9999)
+                {
+                    axis = new Vector3D(1, 0, 0);
+                    angleDeg = 180.0;
+                }
+                else
+                {
+                    axis = Vector3D.CrossProduct(zAxis, n);
+                    axis.Normalize();
+                    angleDeg = Math.Acos(Math.Max(-1.0, Math.Min(1.0, dot))) * 180.0 / Math.PI;
+                }
+                group.Children.Add(new RotateTransform3D(new AxisAngleRotation3D(axis, angleDeg)));
+            }
+            group.Children.Add(new TranslateTransform3D(n.X * offset, n.Y * offset, n.Z * offset));
+            return group;
         }
 
         #endregion
