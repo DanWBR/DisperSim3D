@@ -23,10 +23,18 @@ namespace DisperSim3D.Dialogs
 
         private TextBox _txtName;
         private ComboBox _cmbStudy;
+        private RadioButton _radioStrategyCov, _radioStrategyRisk;
         private RadioButton _radioAll, _radioPercent;
+        private Label _lblTargetPct;
         private NumericUpDown _nudTargetPct, _nudMaxDet, _nudRadius, _nudMinZ, _nudMaxZ;
         private NumericUpDown _nudNx, _nudNy, _nudNz;
         private CheckBox _chkUseExisting;
+        private GroupBox _grpRisk;
+        private DataGridView _gridRisk;
+        private CheckBox _chkDistanceWeight;
+        private NumericUpDown _nudWmin, _nudWmax, _nudPod;
+        private Label _lblTotalRisk, _lblResidualRisk, _lblRrf;
+        private ListView _lvRiskCurve;
         private Button _btnRun;
         private Label _lblStatus, _lblCoverage;
         private ListView _lvPositions, _lvPerCloud;
