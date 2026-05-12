@@ -26,9 +26,10 @@ DisperSim 3D is an open-source desktop application for simulating accidental gas
 - Pre-computed wind fields shared across multiple dispersion runs
 - Snapshot-based simulations: history is immutable; editing a source after a run does not change past results
 - Animated wind-field visualization with user-tunable arrow appearance
-- **Detector placement** in two flavours:
+- **Detector placement** in three flavours:
   - Set Covering Problem (Vianna 2019) — exact and greedy, minimum-cardinality cover
-  - **Dispersion Studies + Detector Allocation** — curated multi-simulation collection and greedy maximum-coverage placement against a detector budget
+  - **Greedy Max Coverage** over a Dispersion Study — bundle N simulations and cover as many clouds as possible
+  - **Greedy Min Residual Risk** (Rad et al. 2017 MRR) — minimise `Σ frequency_s · consequence_s · (1 − detected_s)` with per-source leak frequency derived from the embedded **IOGP 434-01** database (24 equipment types × 5 hole bands × 6 diameters, 2006–2015 dataset)
 - **GPU device selection** with on-demand VRAM/RAM/disk estimation (`Settings → GPU & Memory…`)
 - Flammable cloud volume integration in the LFL/UFL band
 
@@ -373,6 +374,117 @@ Results populate `AllocatedPositions[]`, `AchievedCoveragePercent` and `PerCloud
 
 `StudyAllocationRenderer.BuildStudyVisual` produces marching-cubes isosurfaces per cloud (palette-cycled colours) and `BuildAllocationVisual` overlays orange detector spheres with translucent radius shells so coverage gaps are visible at a glance.
 
+### 3.9 Risk-reduction detector allocation (IOGP 434-01 + Rad 2017)
+
+**Files**:
+[`Core/RiskWeightHelper.cs`](DisperSim3D/Core/RiskWeightHelper.cs),
+[`Core/IogpFrequencyTable.cs`](DisperSim3D/Core/IogpFrequencyTable.cs),
+[`Core/DetectorAllocator.cs`](DisperSim3D/Core/DetectorAllocator.cs) (`RunRiskReductionGreedy`),
+[`Models/IogpEquipmentType.cs`](DisperSim3D/Models/IogpEquipmentType.cs),
+[`Models/EquipmentInventoryItem.cs`](DisperSim3D/Models/EquipmentInventoryItem.cs),
+[`Dialogs/EquipmentInventoryDialog.cs`](DisperSim3D/Dialogs/EquipmentInventoryDialog.cs).
+
+Companion strategy to §3.8's unweighted max-coverage allocator. Implements the **Maximum Risk Reduction (MRR)** greedy of Rad et al. 2017 with the optional distance-weighted refinement of Rad &amp; Rashtchian 2016, driven by a forward-looking **per-source leak frequency derived from the embedded IOGP 434-01 database**.
+
+#### 3.9.1 Optimisation formulation
+
+Per-scenario risk:
+
+```
+R_s = freq_s · cons_s · P_d                        (events/year × consequence)
+```
+
+where `s` indexes the simulations in a `DispersionStudy`, `P_d` is the global detection probability (default 1.0). The greedy step picks at each iteration the candidate `c*` that maximises the sum of weighted risk it covers:
+
+```
+c* = argmax_c  Σ_{s ∈ cover(c) \ covered}  R_s · w(c, s)
+```
+
+With distance weighting off, `w(c, s) ≡ 1`. With it on:
+
+```
+w(c, s) = w_min + (w_max − w_min) · (1 − d(c, s) / DetectionRadius)
+```
+
+where `d(c, s)` is the candidate-to-cloud-bbox closest-point distance — a cheap proxy that preserves the monotonic "closer = better" property Paper 2 calls for. The greedy loop terminates when `MaxDetectors` is reached or the residual risk falls below `(1 − TargetCoveragePercent/100) · TotalRisk`.
+
+Worst-case approximation ratio versus the optimum MILP is `(1 − 1/e) ≈ 63%` (Nemhauser et al. 1978, applies to any monotone-submodular objective). For typical industrial layouts the gap is far smaller — under 5% on the Rad 2017 case studies.
+
+The algorithm emits a **risk-reduction curve** `(k, RRF(k))` for every detector added, exposing the marginal-utility profile from Rad 2017 Fig. 7. The "knee" of that curve tells the engineer when adding more detectors stops paying off.
+
+#### 3.9.2 Auto frequency — IOGP 434-01 × wind rose
+
+The per-scenario frequency comes from:
+
+```
+freq_s = source.EffectiveLeakFrequencyPerYear  ×  P_wind(WF.WindDirectionDeg)
+```
+
+`P_wind` is a nearest-direction lookup on `Scene3D.WindRose.Bins[]` (each bin has `DirectionDeg` and `Frequency` in percent, e.g. 12.5% per direction for a default 8-bin uniform rose). When no rose is configured, falls back to 1/8 uniform per direction so the optimisation still runs.
+
+`source.EffectiveLeakFrequencyPerYear` sums over the source's `EquipmentInventory` by looking up each item in the **IOGP 434-01 Process Release Frequencies database** (Sep 2019, revision 1.1 May 2021). Two pipe types are reported per metre·year; all others are per item·year:
+
+```
+LeakFrequencyPerYear = Σ_i  IogpFrequencyTable.FrequencyFor(item_i.Type,
+                                                            item_i.NominalDiameterMm,
+                                                            source.HoleSizeBand)
+                          × item_i.Count
+```
+
+[`IogpFrequencyTable.cs`](DisperSim3D/Core/IogpFrequencyTable.cs) embeds the 2006–2015 dataset for all 24 equipment types (Section 2.2 of IOGP 434-01), shape `[24 types, 6 diameter anchors, 5 hole-size bands]`. The 6 anchor diameters are 50/150/300/450/600/900 mm (2"/6"/12"/18"/24"/36"); intermediate diameters are linearly interpolated. The 5 hole-size bands are 1–3, 3–10, 10–50, 50–150, &gt; 150 mm; the representative diameter for QRA consequence work is the **geometric mean** per IOGP §2.1.2 (Tiny = 1.73 mm, Small = 5.48 mm, Medium = 22.36 mm, Large = 86.60 mm).
+
+The user can override frequency at three levels of granularity, from coarse to fine:
+1. **Manual on `ScenarioRisk`** (per-simulation) — tick the `FreqMode = Manual` box in the allocation dialog grid and type a value.
+2. **Manual on `ReleaseSource3D`** — uncheck `AutoComputeLeakFrequency` and supply a per-source override.
+3. **IOGP inventory** (default) — `AutoComputeLeakFrequency = true`, define the equipment inventory + hole-size band.
+
+Levels 1 and 2 take precedence over the IOGP table when set.
+
+#### 3.9.3 Auto consequence — cloud volume × hazard
+
+Implemented in `RiskWeightHelper.AutoConsequence`. For each cloud snapshot:
+
+```
+cellVol = (2·DomainHalfM / Nx) · (2·DomainHalfM / Ny) · (DomainHeightM / Nz)
+vol     = CloudCellCount · cellVol
+
+if quantity is toxic    and gas.IDLH > 0   →  cons = vol · max(1, peakConc/IDLH)
+if quantity is flammable and gas.LFL > 0   →  cons = vol · (peakConc ≥ LFL ? 1.0 : 0.5)
+else                                       →  cons = vol
+```
+
+The IDLH / LFL come from `GasProperties` on the simulation's snapshot source. A more sophisticated probit-fatality model (TNT-equivalent overpressure integrated over the cloud, Paper 3) is out of scope for v1; the heuristic above keeps consequence proportional to "amount of bad gas × how bad it is".
+
+Manual override available via the `ScenarioRisk.ConsMode = Manual` path.
+
+#### 3.9.4 UI flow
+
+1. **Source tree → right-click a source → "Equipment Inventory (IOGP)..."** opens `EquipmentInventoryDialog`. The user adds rows in the DataGridView (equipment type combo + diameter mm + count/length), picks the hole-size band, and watches the "Effective: 1.20E-04 events/yr" label update live.
+2. **Dispersion Studies → Add Study...** as today, bundling the simulations.
+3. **Detector Allocations → Add Allocation...** → in the new top-of-dialog Strategy radio group pick **"Min residual risk (IOGP × wind rose × consequence)"**. A risk-weights `DataGridView` reveals itself with one row per study simulation: `Freq Auto` + `Freq/yr` + `Cons Auto` + `Consequence` + computed `Risk R_s`. Toggle `Auto` to manual-override any value.
+4. **Run** computes the curve. The results panel shows `Total risk`, `Residual`, `RRF` (Risk Reduction Fraction in %), and a compact ListView of `(k, RRF)` pairs — the marginal-utility plot.
+
+#### 3.9.5 Limitations of the v1 implementation
+
+| Limitation | Mitigation |
+|---|---|
+| Greedy approximation ratio `(1 − 1/e)` worst case | For exact MILP / Pareto add an LP solver dependency (e.g. Google.OrTools) — out of scope for v1 |
+| Single global `DetectionProbability` scalar | No per-detector POD curves yet |
+| Consequence is volume × hazard heuristic | No probit fatality / TNT overpressure model |
+| Only IOGP 2006–2015 dataset embedded | The 1992–2015 historical dataset is not bundled |
+| Only IOGP §2.1 (offshore/onshore/refinery) datasheets | §2.3 LNG FRT is not bundled |
+| Cloud rendering colour is palette-cycled, not by `R_s` | A future `StudyAllocationRenderer.BuildRiskHeatmap` would shade clouds by relative risk to highlight what dominates the picture |
+
+#### 3.9.6 Verification
+
+`TestApp/IogpTableTests.cs` is a self-checking class invoked via `DisperSim3D.App.exe --iogp-selftest`. It asserts:
+
+- 25 representative table cells across 15 of the 24 equipment types match the printed values in IOGP 434-01 v1.1 within 5% relative tolerance.
+- An aggregate inventory (50 m pipe + 12 flanges + 4 valves, all 6" / 10–50 mm) sums to the hand-calculated total `1.12 × 10⁻⁴` events/year.
+- The geometric-mean hole diameters match `√(low × high)` for every band.
+
+All 27 assertions pass on the v1 implementation.
+
 ---
 
 ## 4. Workflow
@@ -387,7 +499,7 @@ Results populate `AllocatedPositions[]`, `AchievedCoveragePercent` and `PerCloud
 6. Right-click the simulation → **Run** → `Configured → Queued → Running → Completed`. Snapshot of source/gas/meteo/cfd-config is taken at this moment.
 7. Check the simulation's checkbox in the tree → 3D playback in the viewport, controls in the bottom playback bar. `FluidX3DDispersionSteady` results hide the bar (single converged frame).
 8. **Dispersion → Optimize Detector Placement...** → pick simulations + protected region → outputs minimum detector set (Vianna 2019 SCP), adds them to the project as `OptDet N`.
-9. **Dispersion Studies → Add Study...** to bundle multiple simulations under one detection criterion, then **Detector Allocation → Add Allocation...** for greedy maximum-coverage placement against a detector budget (see §3.8).
+9. **Dispersion Studies → Add Study...** to bundle multiple simulations under one detection criterion, then **Detector Allocation → Add Allocation...** for greedy max-coverage placement against a detector budget (see §3.8). For risk-weighted allocations also right-click each source → **Equipment Inventory (IOGP)...** to derive its leak frequency from the IOGP 434-01 database, then pick "Min residual risk" as the strategy (see §3.9).
 
 ### 4.2 Project tree sections
 
@@ -897,6 +1009,12 @@ MemoryEstimate For(CfdSolverType solver, int Nx, int Ny, int Nz, int writeCount)
 
 22. **HandyControl** — https://github.com/HandyOrg/HandyControl (MIT)
 
+23. **Rad, A., Rashtchian, D., Badri, N.** (2017). *A risk-based methodology for optimum placement of flammable gas detectors*. Process Safety and Environmental Protection, 105, 175–183. — the MRR greedy implemented by `RunRiskReductionGreedy`.
+
+24. **Rad, A., Rashtchian, D.** (2016). *A new approach for optimal placement of gas detectors*. Chemical Engineering Transactions, 53, 145–150. — the distance-weighted refinement (`UseDistanceWeighting`).
+
+25. **IOGP Report 434-01** (2019, rev 1.1 May 2021). *Risk Assessment Data Directory — Process Release Frequencies*. International Association of Oil &amp; Gas Producers. — the embedded leak-frequency database in `IogpFrequencyTable.cs` (24 equipment types, 2006–2015 dataset). https://www.iogp.org/bookstore/product/risk-assessment-data-directory-process-release-frequencies/
+
 ---
 
-*Document last updated on 2026-05-12. Initial v1.0 documentation generated on 2026-05-09; this revision adds the FluidX3D GPU LBM solver family (§3.7), Dispersion Studies and Detector Allocation (§3.8), the FluidX3D case layout (§6.5) and the GPU & Memory tooling (§10).*
+*Document last updated on 2026-05-12. Initial v1.0 documentation generated on 2026-05-09; subsequent revisions add the FluidX3D GPU LBM solver family (§3.7), Dispersion Studies and Detector Allocation (§3.8), risk-reduction-based detector allocation with the embedded IOGP 434-01 database (§3.9), the FluidX3D case layout (§6.5) and the GPU & Memory tooling (§10).*

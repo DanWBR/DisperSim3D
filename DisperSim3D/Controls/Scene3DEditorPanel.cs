@@ -251,6 +251,9 @@ namespace DisperSim3D.Controls
                 new ToolStripMenuItem("Report an Issue...", null,
                     (s, e) => OpenUrl("https://github.com/DanWBR/dispersim3d/issues/new")),
                 new ToolStripSeparator(),
+                new ToolStripMenuItem("Run IOGP 434-01 self-test...", null,
+                    (s, e) => DoRunIogpSelfTest()),
+                new ToolStripSeparator(),
                 new ToolStripMenuItem("About DisperSim 3D...", null, (s, e) => DoAbout())
             });
 
@@ -1104,6 +1107,9 @@ namespace DisperSim3D.Controls
                 case ProjectTreeAction.EditSource:
                     DoEditSource(e.ItemId);
                     break;
+                case ProjectTreeAction.EditSourceInventory:
+                    DoEditSourceInventory(e.ItemId);
+                    break;
                 case ProjectTreeAction.DeleteSource:
                     DoDeleteSource(e.ItemId);
                     break;
@@ -1508,6 +1514,25 @@ namespace DisperSim3D.Controls
             if (src == null) return;
             ShowSourceProperties(src);
             UpdateStatus("Edit source via Properties panel");
+        }
+
+        /// <summary>Opens the IOGP 434-01 equipment-inventory editor for the
+        /// source identified by <paramref name="id"/>. Risk-based detector
+        /// allocations consume the configured leak frequency.</summary>
+        private void DoEditSourceInventory(string id)
+        {
+            var src = _editor.Scene.TopLevelSources.FirstOrDefault(s => s.Id == id);
+            if (src == null) return;
+            using (var dlg = new EquipmentInventoryDialog(src))
+            {
+                if (dlg.ShowDialog(this) == DialogResult.OK)
+                {
+                    UpdateStatus("Inventory updated for '" + (src.Name ?? id)
+                        + "' → " + src.EffectiveLeakFrequencyPerYear.ToString("E2",
+                            System.Globalization.CultureInfo.InvariantCulture) + " events/yr");
+                    RefreshProjectTree();
+                }
+            }
         }
 
         private void DoDeleteSource(string id)
@@ -2428,6 +2453,63 @@ namespace DisperSim3D.Controls
             {
                 dlg.ShowDialog(this);
             }
+        }
+
+        /// <summary>Runs the embedded IOGP 434-01 table self-test and presents
+        /// the result (pass/fail per row + diagnostic on any mismatch) in a
+        /// MessageBox. Same logic as <c>DisperSim3D.App.exe --iogp-selftest</c>;
+        /// surfaced here so end users can sanity-check the leak-frequency
+        /// database without dropping to a terminal.</summary>
+        private void DoRunIogpSelfTest()
+        {
+            string report;
+            MessageBoxIcon icon = MessageBoxIcon.Information;
+            try
+            {
+                report = DisperSim3D.Core.IogpTableTests.RunAll();
+            }
+            catch (Exception ex)
+            {
+                report = ex.Message;
+                icon = MessageBoxIcon.Error;
+            }
+            // The report can be long — show it in a sizeable text dialog rather
+            // than a fixed-width MessageBox.
+            using (var dlg = new Form
+            {
+                Text = "IOGP 434-01 self-test",
+                StartPosition = FormStartPosition.CenterParent,
+                Size = new System.Drawing.Size(820, 560),
+                MinimumSize = new System.Drawing.Size(520, 360),
+                MinimizeBox = false,
+                MaximizeBox = true
+            })
+            {
+                var tb = new TextBox
+                {
+                    Dock = DockStyle.Fill,
+                    Multiline = true,
+                    ReadOnly = true,
+                    ScrollBars = ScrollBars.Both,
+                    WordWrap = false,
+                    Font = new System.Drawing.Font(
+                        System.Drawing.FontFamily.GenericMonospace, 9F),
+                    Text = report
+                };
+                var btn = new Button
+                {
+                    Text = "Close", DialogResult = DialogResult.OK,
+                    Dock = DockStyle.Bottom, Height = 32
+                };
+                dlg.AcceptButton = btn;
+                dlg.CancelButton = btn;
+                dlg.Controls.Add(tb);
+                dlg.Controls.Add(btn);
+                dlg.ShowDialog(this);
+            }
+            // Suppress unused-warning on icon for the rare case where the user
+            // recompiles with a stricter analyser.
+            _ = icon;
         }
 
         private static void OpenUrl(string url)

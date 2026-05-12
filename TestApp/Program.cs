@@ -14,6 +14,22 @@ namespace DisperSim3D.App
                 return;
             }
 
+            if (args.Length > 0 && args[0] == "--iogp-selftest")
+            {
+                try
+                {
+                    var report = DisperSim3D.Core.IogpTableTests.RunAll();
+                    Console.WriteLine(report);
+                    Environment.Exit(0);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(ex.Message);
+                    Environment.Exit(1);
+                }
+                return;
+            }
+
             if (Environment.OSVersion.Version.Major >= 6)
             {
                 SetProcessDPIAware();

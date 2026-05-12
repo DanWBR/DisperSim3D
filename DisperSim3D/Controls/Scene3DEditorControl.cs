@@ -2745,6 +2745,16 @@ namespace DisperSim3D.Controls
 
         private System.Xml.Linq.XElement SerializeSourceCommon(ReleaseSource3D src, System.Globalization.CultureInfo inv)
         {
+            System.Xml.Linq.XElement invEl = null;
+            if (src.EquipmentInventory != null && src.EquipmentInventory.Count > 0)
+            {
+                invEl = new System.Xml.Linq.XElement("Inventory",
+                    src.EquipmentInventory.Select(it => new System.Xml.Linq.XElement("I",
+                        new System.Xml.Linq.XAttribute("Type", it.Type.ToString()),
+                        new System.Xml.Linq.XAttribute("DiamMm", it.NominalDiameterMm.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("Count", it.Count.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("Note", it.Note ?? ""))));
+            }
             return new System.Xml.Linq.XElement("Source",
                 new System.Xml.Linq.XAttribute("Id", src.Id ?? ""),
                 new System.Xml.Linq.XAttribute("Name", src.Name ?? ""),
@@ -2758,6 +2768,9 @@ namespace DisperSim3D.Controls
                 new System.Xml.Linq.XAttribute("HeightOffset", src.ReleaseHeightOffset.ToString(inv)),
                 new System.Xml.Linq.XAttribute("Azimuth", src.ReleaseAzimuthDeg.ToString(inv)),
                 new System.Xml.Linq.XAttribute("Elevation", src.ReleaseElevationDeg.ToString(inv)),
+                new System.Xml.Linq.XAttribute("HoleSize", src.HoleSizeBand.ToString()),
+                new System.Xml.Linq.XAttribute("AutoLeakFreq", src.AutoComputeLeakFrequency.ToString()),
+                new System.Xml.Linq.XAttribute("LeakFreq", src.LeakFrequencyPerYear.ToString(inv)),
                 src.HighPressureLeak != null ? new System.Xml.Linq.XElement("HPLeak",
                     new System.Xml.Linq.XAttribute("VesselP", src.HighPressureLeak.VesselPressurePa.ToString(inv)),
                     new System.Xml.Linq.XAttribute("VesselT", src.HighPressureLeak.VesselTemperatureK.ToString(inv)),
@@ -2770,7 +2783,8 @@ namespace DisperSim3D.Controls
                     new System.Xml.Linq.XAttribute("Name", src.Gas.Name ?? ""),
                     new System.Xml.Linq.XAttribute("MolarMass", src.Gas.MolarMass.ToString(inv)),
                     new System.Xml.Linq.XAttribute("LFL", src.Gas.LFL.ToString(inv)),
-                    new System.Xml.Linq.XAttribute("IDLH", src.Gas.IDLH.ToString(inv))) : null);
+                    new System.Xml.Linq.XAttribute("IDLH", src.Gas.IDLH.ToString(inv))) : null,
+                invEl);
         }
 
         private System.Xml.Linq.XElement SerializeSimulations(System.Globalization.CultureInfo inv)
@@ -2875,7 +2889,16 @@ namespace DisperSim3D.Controls
                     new System.Xml.Linq.XAttribute("IsVisible", st.IsVisible.ToString()),
                     new System.Xml.Linq.XElement("Simulations",
                         (st.SimulationIds ?? new List<string>()).Select(sid =>
-                            new System.Xml.Linq.XElement("Simulation", new System.Xml.Linq.XAttribute("Id", sid)))))));
+                            new System.Xml.Linq.XElement("Simulation", new System.Xml.Linq.XAttribute("Id", sid)))),
+                    (st.RiskWeights != null && st.RiskWeights.Count > 0)
+                        ? new System.Xml.Linq.XElement("RiskWeights",
+                            st.RiskWeights.Select(kv => new System.Xml.Linq.XElement("R",
+                                new System.Xml.Linq.XAttribute("SimId", kv.Key ?? ""),
+                                new System.Xml.Linq.XAttribute("FreqMode", kv.Value.FreqMode.ToString()),
+                                new System.Xml.Linq.XAttribute("FreqValue", kv.Value.FreqPerYear.ToString(inv)),
+                                new System.Xml.Linq.XAttribute("ConsMode", kv.Value.ConsMode.ToString()),
+                                new System.Xml.Linq.XAttribute("ConsValue", kv.Value.Consequence.ToString(inv)))))
+                        : null)));
         }
 
         private void DeserializeDispersionStudies(System.Xml.Linq.XElement root,
@@ -2903,6 +2926,23 @@ namespace DisperSim3D.Controls
                 if (sims != null)
                     foreach (var sx in sims.Elements("Simulation"))
                         st.SimulationIds.Add((string)sx.Attribute("Id") ?? "");
+                var rw = se.Element("RiskWeights");
+                if (rw != null)
+                {
+                    foreach (var re in rw.Elements("R"))
+                    {
+                        string sid = (string)re.Attribute("SimId") ?? "";
+                        if (string.IsNullOrEmpty(sid)) continue;
+                        var sr = new ScenarioRisk();
+                        if (Enum.TryParse((string)re.Attribute("FreqMode") ?? "Auto", out RiskValueMode fm))
+                            sr.FreqMode = fm;
+                        if (Enum.TryParse((string)re.Attribute("ConsMode") ?? "Auto", out RiskValueMode cm))
+                            sr.ConsMode = cm;
+                        sr.FreqPerYear = double.Parse((string)re.Attribute("FreqValue") ?? "1", inv);
+                        sr.Consequence = double.Parse((string)re.Attribute("ConsValue") ?? "1", inv);
+                        st.RiskWeights[sid] = sr;
+                    }
+                }
                 scene.DispersionStudies.Add(st);
             }
         }
@@ -2926,7 +2966,14 @@ namespace DisperSim3D.Controls
                     new System.Xml.Linq.XAttribute("CandidateNz", a.CandidateNz.ToString(inv)),
                     new System.Xml.Linq.XAttribute("UseExistingDetectors", a.UseExistingDetectors.ToString()),
                     new System.Xml.Linq.XAttribute("Strategy", a.Strategy.ToString()),
+                    new System.Xml.Linq.XAttribute("DetectionProbability", a.DetectionProbability.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("UseDistanceWeighting", a.UseDistanceWeighting.ToString()),
+                    new System.Xml.Linq.XAttribute("DistanceWeightMin", a.DistanceWeightMin.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("DistanceWeightMax", a.DistanceWeightMax.ToString(inv)),
                     new System.Xml.Linq.XAttribute("AchievedCoveragePercent", a.AchievedCoveragePercent.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("TotalRisk", a.TotalRisk.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("ResidualRisk", a.ResidualRisk.ToString(inv)),
+                    new System.Xml.Linq.XAttribute("RiskReductionFraction", a.RiskReductionFraction.ToString(inv)),
                     new System.Xml.Linq.XAttribute("Status", a.Status.ToString()),
                     new System.Xml.Linq.XAttribute("StatusMessage", a.StatusMessage ?? ""),
                     new System.Xml.Linq.XAttribute("RunAt", a.RunAt.ToString("o")),
@@ -2941,7 +2988,20 @@ namespace DisperSim3D.Controls
                         (a.PerCloudCovered ?? new Dictionary<string, bool>()).Select(kv =>
                             new System.Xml.Linq.XElement("C",
                                 new System.Xml.Linq.XAttribute("SimId", kv.Key),
-                                new System.Xml.Linq.XAttribute("Covered", kv.Value.ToString())))))));
+                                new System.Xml.Linq.XAttribute("Covered", kv.Value.ToString())))),
+                    (a.PerCloudResidualRisk != null && a.PerCloudResidualRisk.Count > 0)
+                        ? new System.Xml.Linq.XElement("ResidualRisks",
+                            a.PerCloudResidualRisk.Select(kv => new System.Xml.Linq.XElement("R",
+                                new System.Xml.Linq.XAttribute("SimId", kv.Key),
+                                new System.Xml.Linq.XAttribute("R", kv.Value.ToString(inv)))))
+                        : null,
+                    (a.RiskCurveK != null && a.RiskCurveK.Count > 0)
+                        ? new System.Xml.Linq.XElement("RiskCurve",
+                            Enumerable.Range(0, Math.Min(a.RiskCurveK.Count, a.RiskCurveRRF?.Count ?? 0))
+                                .Select(i => new System.Xml.Linq.XElement("P",
+                                    new System.Xml.Linq.XAttribute("K", a.RiskCurveK[i].ToString(inv)),
+                                    new System.Xml.Linq.XAttribute("RRF", a.RiskCurveRRF[i].ToString(inv)))))
+                        : null)));
         }
 
         private void DeserializeDetectorAllocations(System.Xml.Linq.XElement root,
@@ -2966,7 +3026,14 @@ namespace DisperSim3D.Controls
                     CandidateNy = int.Parse((string)ae.Attribute("CandidateNy") ?? "60", inv),
                     CandidateNz = int.Parse((string)ae.Attribute("CandidateNz") ?? "3", inv),
                     UseExistingDetectors = bool.Parse((string)ae.Attribute("UseExistingDetectors") ?? "False"),
+                    DetectionProbability = double.Parse((string)ae.Attribute("DetectionProbability") ?? "1.0", inv),
+                    UseDistanceWeighting = bool.Parse((string)ae.Attribute("UseDistanceWeighting") ?? "False"),
+                    DistanceWeightMin = double.Parse((string)ae.Attribute("DistanceWeightMin") ?? "0.5", inv),
+                    DistanceWeightMax = double.Parse((string)ae.Attribute("DistanceWeightMax") ?? "1.0", inv),
                     AchievedCoveragePercent = double.Parse((string)ae.Attribute("AchievedCoveragePercent") ?? "0", inv),
+                    TotalRisk = double.Parse((string)ae.Attribute("TotalRisk") ?? "0", inv),
+                    ResidualRisk = double.Parse((string)ae.Attribute("ResidualRisk") ?? "0", inv),
+                    RiskReductionFraction = double.Parse((string)ae.Attribute("RiskReductionFraction") ?? "0", inv),
                     StatusMessage = (string)ae.Attribute("StatusMessage") ?? "",
                     IsVisible = bool.Parse((string)ae.Attribute("IsVisible") ?? "True")
                 };
@@ -2990,6 +3057,21 @@ namespace DisperSim3D.Controls
                         string sid = (string)ce.Attribute("SimId") ?? "";
                         if (!string.IsNullOrEmpty(sid))
                             a.PerCloudCovered[sid] = bool.Parse((string)ce.Attribute("Covered") ?? "False");
+                    }
+                var rr = ae.Element("ResidualRisks");
+                if (rr != null)
+                    foreach (var re in rr.Elements("R"))
+                    {
+                        string sid = (string)re.Attribute("SimId") ?? "";
+                        if (!string.IsNullOrEmpty(sid))
+                            a.PerCloudResidualRisk[sid] = double.Parse((string)re.Attribute("R") ?? "0", inv);
+                    }
+                var rc = ae.Element("RiskCurve");
+                if (rc != null)
+                    foreach (var ce in rc.Elements("P"))
+                    {
+                        a.RiskCurveK.Add(int.Parse((string)ce.Attribute("K") ?? "0", inv));
+                        a.RiskCurveRRF.Add(double.Parse((string)ce.Attribute("RRF") ?? "0", inv));
                     }
                 scene.DetectorAllocations.Add(a);
             }
@@ -3270,6 +3352,30 @@ namespace DisperSim3D.Controls
             src.ReleaseHeightOffset = double.Parse((string)se.Attribute("HeightOffset") ?? "2", inv);
             src.ReleaseAzimuthDeg = double.Parse((string)se.Attribute("Azimuth") ?? "0", inv);
             src.ReleaseElevationDeg = double.Parse((string)se.Attribute("Elevation") ?? "0", inv);
+
+            // IOGP / risk metadata (new in 2026-05). Defaults match the model so
+            // older project files load cleanly with sensible defaults.
+            if (Enum.TryParse((string)se.Attribute("HoleSize") ?? "Medium",
+                out IogpHoleSizeBand band))
+                src.HoleSizeBand = band;
+            src.AutoComputeLeakFrequency = bool.Parse((string)se.Attribute("AutoLeakFreq") ?? "True");
+            src.LeakFrequencyPerYear = double.Parse((string)se.Attribute("LeakFreq") ?? "1e-4", inv);
+            var invEl = se.Element("Inventory");
+            if (invEl != null)
+            {
+                src.EquipmentInventory.Clear();
+                foreach (var ie in invEl.Elements("I"))
+                {
+                    var item = new EquipmentInventoryItem();
+                    if (Enum.TryParse((string)ie.Attribute("Type") ?? "SteelProcessPipe",
+                        out IogpEquipmentType et))
+                        item.Type = et;
+                    item.NominalDiameterMm = double.Parse((string)ie.Attribute("DiamMm") ?? "150", inv);
+                    item.Count = double.Parse((string)ie.Attribute("Count") ?? "1", inv);
+                    item.Note = (string)ie.Attribute("Note") ?? "";
+                    src.EquipmentInventory.Add(item);
+                }
+            }
 
             var hpEl = se.Element("HPLeak");
             if (hpEl != null)

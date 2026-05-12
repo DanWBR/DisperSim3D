@@ -434,6 +434,7 @@ namespace DisperSim3D.Controls
                     AddItem("Add Source...", ProjectTreeAction.AddSource); break;
                 case NodeKind.SourceItem:
                     AddItem("Edit...", ProjectTreeAction.EditSource);
+                    AddItem("Equipment Inventory (IOGP)...", ProjectTreeAction.EditSourceInventory);
                     AddItem("Use in New Simulation...", ProjectTreeAction.NewSimulationFromSource);
                     AddItem("Duplicate", ProjectTreeAction.DuplicateSource);
                     AddItem("Delete", ProjectTreeAction.DeleteSource);
@@ -615,7 +616,7 @@ namespace DisperSim3D.Controls
         EditGeneralSettings,
         AddPureGas, AddMixture, AddMixtureFromDwsim, EditGas, DuplicateGas, DeleteGas,
         ImportGeometry, EditGeometry, DeleteGeometry,
-        AddSource, EditSource, DuplicateSource, DeleteSource, NewSimulationFromSource,
+        AddSource, EditSource, EditSourceInventory, DuplicateSource, DeleteSource, NewSimulationFromSource,
         AddWindField, EditWindField, RunWindField, OpenWindFieldCase, DeleteWindField, OpenWindFieldManager,
         AddSimulation, EditSimulation, RunSimulation, RerunSimulation,
         ViewSimulationResults, OpenSimulationCase, DeleteSimulation,

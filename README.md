@@ -88,7 +88,10 @@ GPU selection (multi-GPU systems) and on-demand VRAM/RAM/disk sizing live under 
 - **Monitor points** sampling concentration in real time
 - **Gas detector optimization** via Set Covering Problem (Vianna 2019), with both greedy and exact Balas branch-and-bound solvers, Cardinal or Moore neighborhoods, and on-demand result loading from saved CFD cases
 - **Dispersion Studies** — curated collections of related simulations bundled into a single object with a detection criterion (`PercentLfl`/`Ppm`/`MoleFraction`/`MassFraction`/`Temperature`/`ThermalRadiation` × threshold)
-- **Detector Allocation** — greedy maximum-coverage detector placement against a Dispersion Study; honours `MaxDetectors`, `DetectionRadiusM`, vertical band `[MinZ,MaxZ]`, obstacle culling, and can pin existing detectors as already-placed
+- **Detector Allocation** — greedy detector placement against a Dispersion Study, with two strategies:
+  - **Max Coverage** (default) — minimise the number of detectors that touch every cloud
+  - **Min Residual Risk** (Rad et al. 2017 MRR) — minimise expected unmitigated risk `Σ R_s` where `R_s = frequency_s · consequence_s · P_d`, with optional distance weighting (Rad &amp; Rashtchian 2016)
+- **IOGP 434-01 leak-frequency database** — embedded 2006–2015 dataset covering all 24 process equipment types × 5 hole-size bands × 6 nominal diameters. Per-source equipment inventories sum into a forward-looking leak frequency that feeds the risk allocator
 - **Detection time** scoring per detector
 - **Exceedance curves** with frequency weighting
 - **Dispersion thresholds** (LFL fractions, IDLH, ERPG, custom)
@@ -113,8 +116,10 @@ DisperSim3D/                       # Main .NET 10 Windows library
 │   ├── Simulation.cs              # Snapshot-based runnable
 │   ├── CfdSolverType.cs           # Solver enum (Gaussian, OpenFOAM, FluidX3D)
 │   ├── CfdConfiguration.cs        # OpenFOAM settings
-│   ├── DispersionStudy.cs         # Curated simulation collection + detection criterion
-│   ├── DetectorAllocation.cs      # Greedy max-coverage placement config + results
+│   ├── DispersionStudy.cs         # Curated simulation collection + ScenarioRisk weights
+│   ├── DetectorAllocation.cs      # Placement config + results (coverage + risk reduction)
+│   ├── IogpEquipmentType.cs       # IOGP 434-01 24-type enum + hole-size bands
+│   ├── EquipmentInventoryItem.cs  # One inventory row on a release source
 │   ├── GasProperties.cs           # LFL, UFL, IDLH, ERPG
 │   └── ...
 ├── Core/                          # Engines
@@ -125,7 +130,9 @@ DisperSim3D/                       # Main .NET 10 Windows library
 │   ├── DetectorOptimizer.cs       # Vianna 2019 SCP (exact + greedy)
 │   ├── SetCoveringSolver.cs       # Greedy + Balas exact
 │   ├── DispersionStudyEngine.cs   # Cloud snapshots, bbox-culled radius test
-│   ├── DetectorAllocator.cs       # Greedy max-coverage allocator
+│   ├── DetectorAllocator.cs       # Greedy max-coverage + min-residual-risk dispatcher
+│   ├── RiskWeightHelper.cs        # Auto frequency/consequence resolution
+│   ├── IogpFrequencyTable.cs      # IOGP 434-01 2006-2015 leak-frequency database
 │   ├── StudyAllocationRenderer.cs # Marching-cubes per cloud + detector spheres
 │   ├── OpenFoamCaseGenerator.cs
 │   ├── OpenFoamRunner.cs
@@ -149,7 +156,8 @@ DisperSim3D/                       # Main .NET 10 Windows library
 │   ├── CfdSettingsDialog.cs
 │   ├── DetectorOptimizationDialog.cs       # classic SCP
 │   ├── DispersionStudyDialog.cs            # study editor
-│   ├── DetectorAllocationDialog.cs         # greedy max-coverage
+│   ├── DetectorAllocationDialog.cs         # max-coverage + risk-reduction allocator
+│   ├── EquipmentInventoryDialog.cs         # IOGP equipment inventory editor per source
 │   ├── GpuPerformanceSettingsDialog.cs     # GPU picker + Memory Estimator
 │   └── ...
 ├── Controls/
@@ -263,6 +271,9 @@ See [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md) for the full schema
 - Tran, L. V. (2019). *On numerical modelling of atmospheric gas dispersion using CFD approach.* PhD thesis, Nanyang Technological University.
 - Schalau, S., Habib, A. & Michel, S. (2021). *Atmospheric Wind Field Modelling with OpenFOAM for Near-Ground Gas Dispersion.* Atmosphere, 12(8), 933.
 - Lehmann, M. (2022). *Esoteric Pull and Esoteric Push: Two simple in-place streaming schemes for the lattice Boltzmann method on GPUs.* Computation. — underpins the [FluidX3D](https://github.com/ProjectPhysX/FluidX3D) solver used by the GPU runners.
+- Rad, A., Rashtchian, D. & Badri, N. (2017). *A risk-based methodology for optimum placement of flammable gas detectors.* Process Safety and Environmental Protection, 105, 175–183. — the Maximum Risk Reduction (MRR) greedy used by the risk-reduction allocator.
+- Rad, A. & Rashtchian, D. (2016). *A new approach for optimal placement of gas detectors.* Chemical Engineering Transactions, 53, 145–150. — the optional distance-weighted refinement.
+- **IOGP Report 434-01** (2019, rev 1.1 May 2021). *Risk Assessment Data Directory — Process Release Frequencies.* International Association of Oil & Gas Producers. — the embedded leak-frequency database (24 equipment types, 2006–2015 dataset).
 - TNO Yellow Book — *Methods for the Calculation of Physical Effects.*
 
 ---

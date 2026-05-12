@@ -38,7 +38,7 @@ namespace DisperSim3D.Core
     /// air-cooled HX, degassers, expanders), those values are used as the
     /// "2006–2015" entry because no newer dataset exists.
     /// </summary>
-    internal static class IogpFrequencyTable
+    public static class IogpFrequencyTable
     {
         /// <summary>Anchor diameters in mm matching the columns of every IOGP
         /// tabulation panel: 2" / 6" / 12" / 18" / 24" / 36".</summary>

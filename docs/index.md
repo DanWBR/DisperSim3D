@@ -54,7 +54,8 @@ dispersion modelling, area classification and gas-detector siting studies.
 | [Workflow](workflow) | Project-centric model, tree sections, snapshot semantics |
 | [Solvers](solvers) | Decision matrix, analytical, OpenFOAM and FluidX3D pages |
 | [Visualization](visualization) | Isosurfaces, contour planes, streamlines, wind fields, playback |
-| [Dispersion Studies &amp; Detector Allocation](studies-detectors) | Curated collections and greedy SCP placement |
+| [Dispersion Studies &amp; Detector Allocation](studies-detectors) | Curated collections and greedy max-coverage placement |
+| [Risk-Reduction Allocation](risk-allocation) | Greedy MRR + embedded IOGP 434-01 leak-frequency database |
 | [GPU &amp; Memory](gpu-memory) | OpenCL device selection, RAM/VRAM/disk estimator |
 | [Validation](validation) | Hanna SPMs, `.dsbench` files, bundled benchmarks |
 | [Project File Format](file-format) | XML schema, `.dsproj` bundle, migration rules |
