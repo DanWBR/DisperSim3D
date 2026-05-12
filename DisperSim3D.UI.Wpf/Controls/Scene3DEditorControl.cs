@@ -705,7 +705,7 @@ namespace DisperSim3D.Controls
         private struct SteadyStateResult
         {
             public Model3DGroup IsoGroup;
-            public List<List<Point3D>> Trajectories;
+            public List<List<DisperSim3D.Geometry.Point3D>> Trajectories;
             public List<Model3DGroup> ContourGroups;
             public List<(MonitorPoint3D mon, double c)> MonitorData;
             public List<DispersionThreshold> Thresholds;
@@ -720,7 +720,7 @@ namespace DisperSim3D.Controls
         {
             var isoGroup = renderer.ComputeIsosurfaces(engine, thresholds);
 
-            var trajectories = new List<List<Point3D>>();
+            var trajectories = new List<List<DisperSim3D.Geometry.Point3D>>();
             if (engine is GaussianPlumeEngine plumeEngine)
                 trajectories = plumeEngine.GetTrajectoryPaths();
 
@@ -884,7 +884,7 @@ namespace DisperSim3D.Controls
             var obstacles = new List<BoundingBox>();
             foreach (var deco in _scene.Decorations)
             {
-                var aabbs = FluidX3DObstacleVoxelizer.ExtractWorldAabbs(deco);
+                var aabbs = FluidX3DObstacleVoxelizerWpf.ExtractWorldAabbs(deco);
                 if (aabbs != null) obstacles.AddRange(aabbs);
             }
 
@@ -2490,7 +2490,7 @@ namespace DisperSim3D.Controls
         /// Imports a 3D model from file as a standalone decoration at the given position.
         /// If position is null, places at origin or camera target.
         /// </summary>
-        public Decoration3D ImportDecoration(string filePath, Point3D? position = null)
+        public Decoration3D ImportDecoration(string filePath, DisperSim3D.Geometry.Point3D? position = null)
         {
             if (string.IsNullOrEmpty(filePath))
                 return null;
@@ -3110,7 +3110,7 @@ namespace DisperSim3D.Controls
                     new System.Xml.Linq.XAttribute("RunAt", a.RunAt.ToString("o")),
                     new System.Xml.Linq.XAttribute("IsVisible", a.IsVisible.ToString()),
                     new System.Xml.Linq.XElement("Positions",
-                        (a.AllocatedPositions ?? new List<System.Windows.Media.Media3D.Point3D>()).Select(p =>
+                        (a.AllocatedPositions ?? new List<DisperSim3D.Geometry.Point3D>()).Select(p =>
                             new System.Xml.Linq.XElement("P",
                                 new System.Xml.Linq.XAttribute("X", p.X.ToString(inv)),
                                 new System.Xml.Linq.XAttribute("Y", p.Y.ToString(inv)),
@@ -5074,7 +5074,7 @@ namespace DisperSim3D.Controls
             return hitPoint;
         }
 
-        private Point3D? GetPlaneIntersection(Ray3D ray, Point3D planePoint, Vector3D planeNormal)
+        private DisperSim3D.Geometry.Point3D? GetPlaneIntersection(Ray3D ray, Point3D planePoint, Vector3D planeNormal)
         {
             var denom = Vector3D.DotProduct(planeNormal, ray.Direction);
 
@@ -5482,16 +5482,17 @@ namespace DisperSim3D.Controls
             {
                 if (deco.Model3D != null)
                 {
-                    if (deco.UseCustomMaterial)
+                    var decoModel = deco.Model3D as System.Windows.Media.Media3D.Model3DGroup;
+                    if (deco.UseCustomMaterial && decoModel != null)
                     {
                         var mat = Core.MaterialHelper.CreateMaterial(
                             deco.MaterialType, deco.MaterialColor, deco.SpecularPower, deco.Opacity);
-                        Core.MaterialHelper.ApplyToModel(deco.Model3D, mat, deco.MaterialType);
+                        Core.MaterialHelper.ApplyToModel(decoModel, mat, deco.MaterialType);
                     }
 
                     var visual = new System.Windows.Media.Media3D.ModelVisual3D
                     {
-                        Content = deco.Model3D,
+                        Content = decoModel,
                         Transform = deco.GetWorldTransform()
                     };
                     visual.SetValue(System.Windows.FrameworkElement.TagProperty,

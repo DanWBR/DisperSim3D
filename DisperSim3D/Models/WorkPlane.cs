@@ -1,4 +1,4 @@
-﻿using System.Windows.Media;
+﻿using DisperSim3D.Geometry;
 
 namespace DisperSim3D.Models
 {

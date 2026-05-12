@@ -589,7 +589,7 @@ namespace DisperSim3D.Core
         /// <returns>A <see cref="ModelVisual3D"/> containing the streamline visuals.</returns>
         public ModelVisual3D GenerateStreamlines(
             IConcentrationField engine, Vector3D windVector,
-            List<Point3D> seedPoints, double maxConcentration,
+            List<DisperSim3D.Geometry.Point3D> seedPoints, double maxConcentration,
             int steps = 60, double stepSize = 1.0)
         {
             var visual = new ModelVisual3D();

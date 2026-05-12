@@ -51,13 +51,13 @@ namespace DisperSim3D.Models
 
         [Category("Sky")]
         [Description("Zenith colour (top of the sky dome).")]
-        public System.Windows.Media.Color SkyZenithColor { get; set; }
-            = System.Windows.Media.Color.FromRgb(80, 130, 200);
+        public DisperSim3D.Geometry.Color SkyZenithColor { get; set; }
+            = DisperSim3D.Geometry.Color.FromRgb(80, 130, 200);
 
         [Category("Sky")]
         [Description("Horizon colour (bottom of the sky dome — blends into the ground).")]
-        public System.Windows.Media.Color SkyHorizonColor { get; set; }
-            = System.Windows.Media.Color.FromRgb(220, 225, 230);
+        public DisperSim3D.Geometry.Color SkyHorizonColor { get; set; }
+            = DisperSim3D.Geometry.Color.FromRgb(220, 225, 230);
 
         [Category("Ground")]
         [Description("Procedural ground material drawn on the editor's ground plane.")]

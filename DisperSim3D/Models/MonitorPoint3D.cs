@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
-using System.Windows.Media.Media3D;
+using DisperSim3D.Geometry;
 
 namespace DisperSim3D.Models
 {
@@ -35,8 +35,8 @@ namespace DisperSim3D.Models
         [Category("Position")]
         [Description("3D position (start point for line monitors, corner for region monitors).")]
         [TypeConverter(typeof(DisperSim3D.Core.Point3DStringConverter))]
-        [Editor(typeof(DisperSim3D.Controls.Point3DPropertyEditor),
-            typeof(HandyControl.Controls.PropertyEditorBase))]
+        [Editor("DisperSim3D.Controls.Point3DPropertyEditor, DisperSim3D.UI.Wpf",
+            "HandyControl.Controls.PropertyEditorBase, HandyControl")]
         public Point3D Position { get; set; }
 
         [Category("Display")]
@@ -58,8 +58,8 @@ namespace DisperSim3D.Models
         [Category("Geometry")]
         [Description("End position (used only by Line monitors).")]
         [TypeConverter(typeof(DisperSim3D.Core.Point3DStringConverter))]
-        [Editor(typeof(DisperSim3D.Controls.Point3DPropertyEditor),
-            typeof(HandyControl.Controls.PropertyEditorBase))]
+        [Editor("DisperSim3D.Controls.Point3DPropertyEditor, DisperSim3D.UI.Wpf",
+            "HandyControl.Controls.PropertyEditorBase, HandyControl")]
         public Point3D EndPosition { get; set; }
 
         [Category("Geometry")]

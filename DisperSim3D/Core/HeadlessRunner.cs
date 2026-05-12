@@ -4,7 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using System.Windows.Media.Media3D;
+using DisperSim3D.Geometry;
 using DisperSim3D.Models;
 
 namespace DisperSim3D.Core
@@ -42,8 +42,6 @@ namespace DisperSim3D.Core
             engine.Initialize(scenario);
 
             log?.Invoke("Evaluating concentration field...");
-            var renderer = new DispersionRenderer();
-            renderer.Initialize(scenario);
 
             int gridRes = scenario.GridResolution;
             double domain = scenario.DomainSizeM;

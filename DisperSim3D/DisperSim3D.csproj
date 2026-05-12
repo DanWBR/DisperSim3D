@@ -1,11 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- Multi-targeting: net10.0 lets the engine build on Linux/macOS for the
+         CLI and cross-platform consumers; net10.0-windows enables the WPF
+         interop conversions used by DisperSim3D.UI.Wpf and DisperSim3D.App. -->
+    <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
     <OutputType>Library</OutputType>
     <RootNamespace>DisperSim3D</RootNamespace>
     <AssemblyName>DisperSim3D</AssemblyName>
-    <UseWPF>true</UseWPF>
-    <UseWindowsForms>true</UseWindowsForms>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Title>DisperSim3D</Title>
     <Description>Open Source 3D Gas Dispersion Analysis Library</Description>
@@ -14,16 +15,17 @@
     <Copyright>Copyright © 2026 Daniel Wagner Oliveira de Medeiros</Copyright>
     <Version>1.0.0</Version>
     <NoWarn>WFO1000</NoWarn>
+  </PropertyGroup>
+
+  <!-- Windows-only flags: WPF/WinForms types are referenced only by the
+       #if WINDOWS implicit-conversion blocks in DisperSim3D.Geometry; the
+       net10.0 variant compiles those blocks out so it stays cross-platform. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
     <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
     <ForceDesignerDpiUnaware>true</ForceDesignerDpiUnaware>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="HelixToolkit.Wpf" Version="3.1.2" />
-    <PackageReference Include="DockPanelSuite" Version="3.1.1" />
-    <PackageReference Include="DockPanelSuite.ThemeVS2015" Version="3.1.1" />
-    <PackageReference Include="HandyControl" Version="3.5.1" />
-  </ItemGroup>
 
   <ItemGroup>
     <None Include="Resources\Models3D\CSTR.obj" CopyToOutputDirectory="PreserveNewest" />

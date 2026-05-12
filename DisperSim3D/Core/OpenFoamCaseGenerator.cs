@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
-using System.Windows.Media.Media3D;
+using DisperSim3D.Geometry;
 using DisperSim3D.Models;
 
 namespace DisperSim3D.Core
@@ -1053,7 +1053,7 @@ namespace DisperSim3D.Core
         }
 
         private static void WriteSetFieldsDict(string caseDir, List<ReleaseSource3D> sources,
-            System.Windows.Media.Media3D.Vector3D wind, double cellSize)
+            DisperSim3D.Geometry.Vector3D wind, double cellSize)
         {
             bool hasJet = false;
             foreach (var src in sources)
@@ -1157,7 +1157,7 @@ namespace DisperSim3D.Core
         }
 
         private static void WriteJetSetFieldsDict(string caseDir, List<ReleaseSource3D> sources,
-            System.Windows.Media.Media3D.Vector3D wind, double cellSize)
+            DisperSim3D.Geometry.Vector3D wind, double cellSize)
         {
             bool hasJet = false;
             foreach (var src in sources)
@@ -2249,7 +2249,7 @@ namespace DisperSim3D.Core
         }
 
         private static void WriteReactingSetFieldsDict(string caseDir, List<ReleaseSource3D> sources,
-            System.Windows.Media.Media3D.Vector3D wind, double cellSize)
+            DisperSim3D.Geometry.Vector3D wind, double cellSize)
         {
             var sb = new StringBuilder();
             sb.Append(FoamHeader("dictionary", "setFieldsDict"));

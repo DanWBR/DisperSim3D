@@ -69,7 +69,7 @@ namespace DisperSim3D.Models
         /// <summary>
         /// Gets or sets the seed points used for streamline visualization of the wind field.
         /// </summary>
-        public List<System.Windows.Media.Media3D.Point3D> StreamlineSeedPoints { get; set; }
+        public List<DisperSim3D.Geometry.Point3D> StreamlineSeedPoints { get; set; }
 
         /// <summary>
         /// Gets or sets the transient wind profile for time-varying wind conditions.
@@ -108,7 +108,7 @@ namespace DisperSim3D.Models
             Sources = new List<ReleaseSource3D>();
             Thresholds = new List<DispersionThreshold>();
             ContourPlanes = new List<ContourPlaneConfig>();
-            StreamlineSeedPoints = new List<System.Windows.Media.Media3D.Point3D>();
+            StreamlineSeedPoints = new List<DisperSim3D.Geometry.Point3D>();
             TransientWind = new TransientWindProfile();
             GasMixture = new GasMixture();
             SolverType = CfdSolverType.GaussianPuff;

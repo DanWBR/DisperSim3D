@@ -612,7 +612,7 @@ namespace DisperSim3D.Dialogs
         {
             _lvPositions.Items.Clear();
             int n = 1;
-            foreach (var p in a.AllocatedPositions ?? new List<System.Windows.Media.Media3D.Point3D>())
+            foreach (var p in a.AllocatedPositions ?? new List<DisperSim3D.Geometry.Point3D>())
             {
                 var lvi = new ListViewItem((n++).ToString());
                 lvi.SubItems.Add(p.X.ToString("F2"));

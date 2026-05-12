@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Windows.Media.Media3D;
+using DisperSim3D.Geometry;
 using DisperSim3D.Models;
 
 namespace DisperSim3D.Core

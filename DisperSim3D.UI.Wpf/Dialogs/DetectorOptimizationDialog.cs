@@ -27,12 +27,12 @@ namespace DisperSim3D.Dialogs
         private Label _lblStatus;
         private DataGridView _grid;
 
-        public List<System.Windows.Media.Media3D.Point3D> ResultDetectorPositions { get; private set; }
+        public List<DisperSim3D.Geometry.Point3D> ResultDetectorPositions { get; private set; }
 
         public DetectorOptimizationDialog(Scene3D scene)
         {
             _scene = scene;
-            ResultDetectorPositions = new List<System.Windows.Media.Media3D.Point3D>();
+            ResultDetectorPositions = new List<DisperSim3D.Geometry.Point3D>();
             BuildUI();
             PopulateSimulations();
             PrepopulateRegionFromScene();

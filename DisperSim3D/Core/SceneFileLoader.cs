@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Xml.Linq;
-using System.Windows.Media.Media3D;
+using DisperSim3D.Geometry;
 using DisperSim3D.Models;
 
 namespace DisperSim3D.Core
@@ -198,7 +198,7 @@ namespace DisperSim3D.Core
                 Name = (string)se.Attribute("Name") ?? "",
                 AttachedUnitId = (string)se.Attribute("AttachedUnitId"),
                 GasRefId = (string)se.Attribute("GasRefId"),
-                Position = new System.Windows.Media.Media3D.Point3D(
+                Position = new DisperSim3D.Geometry.Point3D(
                     double.Parse((string)se.Attribute("PosX") ?? "0", inv),
                     double.Parse((string)se.Attribute("PosY") ?? "0", inv),
                     double.Parse((string)se.Attribute("PosZ") ?? "0", inv)),
@@ -288,8 +288,8 @@ namespace DisperSim3D.Core
                 v.IsVisible = bool.Parse((string)ve.Attribute("IsVisible") ?? "True");
                 v.Opacity = double.Parse((string)ve.Attribute("Opacity") ?? "0.5", inv);
                 v.IsoValue = double.Parse((string)ve.Attribute("IsoValue") ?? "0.05", inv);
-                try { v.IsoColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString((string)ve.Attribute("IsoColor") ?? "#FF00FFFF"); }
-                catch { v.IsoColor = System.Windows.Media.Colors.Cyan; }
+                try { v.IsoColor = DisperSim3D.Geometry.Color.Parse((string)ve.Attribute("IsoColor") ?? "#FF00FFFF"); }
+                catch { v.IsoColor = DisperSim3D.Geometry.Colors.Cyan; }
                 v.PlanePosition = double.Parse((string)ve.Attribute("PlanePosition") ?? "1", inv);
                 if (Enum.TryParse((string)ve.Attribute("ColorMap") ?? "Jet", out ColorMapName cm)) v.ColorMap = cm;
                 v.MinValue = double.Parse((string)ve.Attribute("MinValue") ?? "0", inv);

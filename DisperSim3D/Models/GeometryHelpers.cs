@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Windows.Media.Media3D;
+using DisperSim3D.Geometry;
 
 namespace DisperSim3D.Models
 {
@@ -96,46 +96,8 @@ namespace DisperSim3D.Models
                    point.Z >= Min.Z && point.Z <= Max.Z;
         }
 
-        /// <summary>
-        /// Applies a 3D transform to all eight corners and returns a new axis-aligned bounding box enclosing the result.
-        /// </summary>
-        /// <param name="transform">The 3D transform to apply.</param>
-        /// <returns>A new <see cref="BoundingBox"/> that encloses the transformed corners.</returns>
-        public BoundingBox Transform(Transform3D transform)
-        {
-            var corners = new[]
-            {
-                transform.Transform(new Point3D(Min.X, Min.Y, Min.Z)),
-                transform.Transform(new Point3D(Max.X, Min.Y, Min.Z)),
-                transform.Transform(new Point3D(Min.X, Max.Y, Min.Z)),
-                transform.Transform(new Point3D(Max.X, Max.Y, Min.Z)),
-                transform.Transform(new Point3D(Min.X, Min.Y, Max.Z)),
-                transform.Transform(new Point3D(Max.X, Min.Y, Max.Z)),
-                transform.Transform(new Point3D(Min.X, Max.Y, Max.Z)),
-                transform.Transform(new Point3D(Max.X, Max.Y, Max.Z))
-            };
-
-            var minX = double.MaxValue;
-            var minY = double.MaxValue;
-            var minZ = double.MaxValue;
-            var maxX = double.MinValue;
-            var maxY = double.MinValue;
-            var maxZ = double.MinValue;
-
-            foreach (var corner in corners)
-            {
-                if (corner.X < minX) minX = corner.X;
-                if (corner.Y < minY) minY = corner.Y;
-                if (corner.Z < minZ) minZ = corner.Z;
-                if (corner.X > maxX) maxX = corner.X;
-                if (corner.Y > maxY) maxY = corner.Y;
-                if (corner.Z > maxZ) maxZ = corner.Z;
-            }
-
-            return new BoundingBox(
-                new Point3D(minX, minY, minZ),
-                new Point3D(maxX, maxY, maxZ)
-            );
-        }
+        // The WPF-specific BoundingBox.Transform(Transform3D) lives as an
+        // extension method in DisperSim3D.UI.Wpf so the engine stays free of
+        // Media3D's transform hierarchy.
     }
 }

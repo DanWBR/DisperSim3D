@@ -60,6 +60,7 @@ namespace DisperSim3D.CLI
             string validatePath = null;
             bool listGpus = false;
             bool iogpSelftest = false;
+            bool geometrySelftest = false;
             string listIogpType = null;        // null = "no --list-iogp"; "" = all 24; otherwise the type name
             bool memoryEstimate = false;
             string memSolverArg = null;
@@ -113,6 +114,9 @@ namespace DisperSim3D.CLI
                     case "--iogp-selftest":
                         iogpSelftest = true;
                         break;
+                    case "--geometry-selftest":
+                        geometrySelftest = true;
+                        break;
                     case "--list-iogp":
                         // Optional positional: equipment type name. We peek the
                         // next arg; if it starts with '-' it's the next flag.
@@ -139,6 +143,7 @@ namespace DisperSim3D.CLI
             // ── Standalone modes (don't need a project file) ──────────────
             if (listGpus) return RunListGpus();
             if (iogpSelftest) return RunIogpSelfTest();
+            if (geometrySelftest) return RunGeometrySelfTest();
             if (listIogpType != null) return RunListIogp(listIogpType);
             if (memoryEstimate) return RunMemoryEstimate(memSolverArg, memNxArg);
 
@@ -362,6 +367,23 @@ namespace DisperSim3D.CLI
             {
                 Console.Write(IogpTableTests.RunAll());
                 return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return 1;
+            }
+        }
+
+        /// <summary>Wrapper around <see cref="GeometrySelfTest.RunAndPrint"/>.
+        /// Returns 0 when every portable Point3D / Vector3D test passes, 1 otherwise.
+        /// Used as a CI smoke that the engine's geometry primitives match WPF
+        /// behaviour after the cross-platform port.</summary>
+        static int RunGeometrySelfTest()
+        {
+            try
+            {
+                return GeometrySelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             }
             catch (Exception ex)
             {

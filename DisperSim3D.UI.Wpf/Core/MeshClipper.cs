@@ -5,20 +5,9 @@ using System.Windows.Media.Media3D;
 namespace DisperSim3D.Core
 {
     /// <summary>
-    /// Specifies the axis along which mesh clipping is performed.
-    /// </summary>
-    public enum ClipAxis
-    {
-        /// <summary>Clip along the X axis.</summary>
-        X,
-        /// <summary>Clip along the Y axis.</summary>
-        Y,
-        /// <summary>Clip along the Z axis.</summary>
-        Z
-    }
-
-    /// <summary>
-    /// Clips 3D mesh geometry along an axis-aligned plane.
+    /// Clips 3D mesh geometry along an axis-aligned plane. (The <see cref="ClipAxis"/>
+    /// enum itself is defined in the engine project so models can persist their
+    /// chosen axis without dragging in WPF.)
     /// </summary>
     public static class MeshClipper
     {

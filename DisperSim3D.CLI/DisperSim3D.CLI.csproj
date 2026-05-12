@@ -1,12 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- Plain net10.0 — the headless runner consumes only the cross-platform
+         engine API and runs on Linux/macOS as well as Windows. The WPF/WinForms
+         desktop SDK is intentionally NOT enabled. -->
+    <TargetFramework>net10.0</TargetFramework>
     <OutputType>Exe</OutputType>
     <RootNamespace>DisperSim3D.CLI</RootNamespace>
     <AssemblyName>DisperSim3D.CLI</AssemblyName>
-    <UseWPF>true</UseWPF>
-    <UseWindowsForms>true</UseWindowsForms>
     <NoWarn>WFO1000</NoWarn>
   </PropertyGroup>
 

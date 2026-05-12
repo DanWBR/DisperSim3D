@@ -1,6 +1,6 @@
 using System;
 using System.ComponentModel;
-using System.Windows.Media;
+using DisperSim3D.Geometry;
 using System.Xml.Serialization;
 using DisperSim3D.Core;
 
@@ -119,7 +119,7 @@ namespace DisperSim3D.Models
 
         [Category("Isosurface")]
         [Description("Surface colour for the isosurface.")]
-        [Editor(typeof(DisperSim3D.Controls.ColorPickerPropertyEditor), typeof(HandyControl.Controls.PropertyEditorBase))]
+        [Editor("DisperSim3D.Controls.ColorPickerPropertyEditor, DisperSim3D.UI.Wpf", "HandyControl.Controls.PropertyEditorBase, HandyControl")]
         public Color IsoColor { get; set; }
 
         // ── Contour-plane-specific ──

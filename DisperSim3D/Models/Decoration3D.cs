@@ -1,13 +1,16 @@
 ﻿using System;
 using System.ComponentModel;
-using System.Windows.Media;
-using System.Windows.Media.Media3D;
 using DisperSim3D.Core;
+using DisperSim3D.Geometry;
 
 namespace DisperSim3D.Models
 {
     /// <summary>
-    /// Represents a decorative 3D model placed in the scene, with support for transforms, materials, and clipping planes.
+    /// Represents a decorative 3D model placed in the scene, with support for
+    /// transforms, materials, and clipping planes. The engine holds the data;
+    /// WPF-coupled operations (clip, world transform, bounding-box recompute)
+    /// live as extension methods in <c>DisperSim3D.UI.Wpf</c> next to the
+    /// renderers that consume them.
     /// </summary>
     public class Decoration3D
     {
@@ -22,8 +25,8 @@ namespace DisperSim3D.Models
 
         /// <summary>Gets or sets the world-space position of this decoration.</summary>
         [TypeConverter(typeof(DisperSim3D.Core.Point3DStringConverter))]
-        [Editor(typeof(DisperSim3D.Controls.Point3DPropertyEditor),
-            typeof(HandyControl.Controls.PropertyEditorBase))]
+        [Editor("DisperSim3D.Controls.Point3DPropertyEditor, DisperSim3D.UI.Wpf",
+            "HandyControl.Controls.PropertyEditorBase, HandyControl")]
         public Point3D Position { get; set; }
 
         /// <summary>Gets or sets the Euler rotation angles (in degrees) around the X, Y, and Z axes.</summary>
@@ -32,11 +35,14 @@ namespace DisperSim3D.Models
         /// <summary>Gets or sets the uniform scale factor applied to the model.</summary>
         public double Scale { get; set; }
 
-        /// <summary>Gets or sets the original unclipped 3D model geometry.</summary>
-        public Model3DGroup OriginalModel3D { get; set; }
+        /// <summary>Original unclipped 3D model geometry. Typed as <c>object</c>
+        /// so the engine assembly doesn't depend on <c>System.Windows.Media.Media3D</c>;
+        /// the UI layer stores a <c>Model3DGroup</c> here and casts on read.</summary>
+        public object OriginalModel3D { get; set; }
 
-        /// <summary>Gets or sets the current (possibly clipped) 3D model geometry used for rendering.</summary>
-        public Model3DGroup Model3D { get; set; }
+        /// <summary>Current (possibly clipped) 3D model geometry used for rendering.
+        /// Typed as <c>object</c> for the same reason as <see cref="OriginalModel3D"/>.</summary>
+        public object Model3D { get; set; }
 
         /// <summary>Gets or sets the axis-aligned bounding box of this decoration in world space.</summary>
         public BoundingBox BoundingBox { get; set; }
@@ -88,66 +94,5 @@ namespace DisperSim3D.Models
             ClipAbove = true;
         }
 
-        /// <summary>
-        /// Applies the current clipping configuration to the model. If clipping is disabled, restores the original model.
-        /// </summary>
-        public void ApplyClip()
-        {
-            if (OriginalModel3D == null) return;
-
-            if (!ClipEnabled)
-            {
-                Model3D = OriginalModel3D;
-                return;
-            }
-
-            Model3D = MeshClipper.ClipModel(OriginalModel3D, ClipAxis, ClipValue, ClipAbove);
-        }
-
-        /// <summary>
-        /// Computes the composite world transform (scale, rotation, translation) for this decoration.
-        /// </summary>
-        /// <returns>A <see cref="Transform3D"/> representing the combined scale, rotation, and translation.</returns>
-        public Transform3D GetWorldTransform()
-        {
-            var group = new Transform3DGroup();
-
-            group.Children.Add(new ScaleTransform3D(Scale, Scale, Scale));
-
-            if (Rotation.Z != 0)
-                group.Children.Add(new RotateTransform3D(
-                    new AxisAngleRotation3D(new Vector3D(0, 0, 1), Rotation.Z)));
-            if (Rotation.Y != 0)
-                group.Children.Add(new RotateTransform3D(
-                    new AxisAngleRotation3D(new Vector3D(0, 1, 0), Rotation.Y)));
-            if (Rotation.X != 0)
-                group.Children.Add(new RotateTransform3D(
-                    new AxisAngleRotation3D(new Vector3D(1, 0, 0), Rotation.X)));
-
-            group.Children.Add(new TranslateTransform3D(Position.X, Position.Y, Position.Z));
-            return group;
-        }
-
-        /// <summary>
-        /// Recalculates the world-space bounding box from the current model geometry and transform.
-        /// </summary>
-        public void UpdateBoundingBox()
-        {
-            if (Model3D == null)
-            {
-                var size = 1.0 * Scale;
-                BoundingBox = new BoundingBox(
-                    new Point3D(Position.X - size / 2, Position.Y - size / 2, Position.Z - size / 2),
-                    new Point3D(Position.X + size / 2, Position.Y + size / 2, Position.Z + size / 2));
-            }
-            else
-            {
-                var bounds = Model3D.Bounds;
-                var transform = GetWorldTransform();
-                var min = new Point3D(bounds.X, bounds.Y, bounds.Z);
-                var max = new Point3D(bounds.X + bounds.SizeX, bounds.Y + bounds.SizeY, bounds.Z + bounds.SizeZ);
-                BoundingBox = new BoundingBox(min, max).Transform(transform);
-            }
-        }
     }
 }

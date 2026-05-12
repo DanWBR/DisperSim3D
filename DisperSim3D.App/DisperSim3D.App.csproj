@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DisperSim3D\DisperSim3D.csproj" />
+    <ProjectReference Include="..\DisperSim3D.UI.Wpf\DisperSim3D.UI.Wpf.csproj" />
   </ItemGroup>
 
   <ItemGroup>

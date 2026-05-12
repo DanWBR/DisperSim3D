@@ -762,7 +762,7 @@ namespace DisperSim3D.Core
         public List<DispersionThreshold> Thresholds { get; set; }
         public System.Windows.Media.Media3D.Model3DGroup IsoGroup { get; set; }
         public List<System.Windows.Media.Media3D.Model3DGroup> ContourGroups { get; set; }
-        public List<List<System.Windows.Media.Media3D.Point3D>> Trajectories { get; set; }
+        public List<List<DisperSim3D.Geometry.Point3D>> Trajectories { get; set; }
     }
 
     internal static class ProcessSuspend

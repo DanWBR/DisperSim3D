@@ -1,6 +1,6 @@
 ﻿using System;
 using System.ComponentModel;
-using System.Windows.Media.Media3D;
+using DisperSim3D.Geometry;
 
 namespace DisperSim3D.Models
 {
