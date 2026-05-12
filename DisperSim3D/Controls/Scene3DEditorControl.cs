@@ -2708,6 +2708,7 @@ namespace DisperSim3D.Controls
                                         new System.Xml.Linq.XAttribute("MolarMass", c.MolarMass.ToString(inv)),
                                         new System.Xml.Linq.XAttribute("MoleFrac", c.MoleFraction.ToString(inv)),
                                         new System.Xml.Linq.XAttribute("LFL", c.LFL.ToString(inv)),
+                                        new System.Xml.Linq.XAttribute("UFL", c.UFL.ToString(inv)),
                                         new System.Xml.Linq.XAttribute("IDLH", c.IDLH.ToString(inv))))));
                     }
                     var gp = g.PureGas ?? new GasProperties();
@@ -3083,6 +3084,7 @@ namespace DisperSim3D.Controls
                                 MolarMass = double.Parse((string)ce.Attribute("MolarMass") ?? "0.016", inv),
                                 MoleFraction = double.Parse((string)ce.Attribute("MoleFrac") ?? "1", inv),
                                 LFL = double.Parse((string)ce.Attribute("LFL") ?? "0", inv),
+                                UFL = double.Parse((string)ce.Attribute("UFL") ?? "0", inv),
                                 IDLH = double.Parse((string)ce.Attribute("IDLH") ?? "0", inv)
                             });
                         }

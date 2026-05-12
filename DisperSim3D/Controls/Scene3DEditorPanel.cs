@@ -188,6 +188,7 @@ namespace DisperSim3D.Controls
                 new ToolStripMenuItem("Thresholds...", Img("icons8-slider.png"), (s, e) => DoThresholds()),
                 new ToolStripSeparator(),
                 new ToolStripMenuItem("CFD Settings (Application)...", Img("cog.png"), (s, e) => DoCfdSettings()),
+                new ToolStripMenuItem("DWSIM Settings (Application)...", Img("cog.png"), (s, e) => DoDwsimSettings()),
                 new ToolStripMenuItem("Simulation Manager...", Img("table.png"), (s, e) => DoShowSimulationManager()),
                 new ToolStripSeparator(),
                 new ToolStripMenuItem("Exceedance Curves...", Img("icons8-combo_chart.png"), (s, e) => DoExceedanceCurves()),
@@ -976,6 +977,9 @@ namespace DisperSim3D.Controls
                 case ProjectTreeAction.AddMixture:
                     DoAddGas(true);
                     break;
+                case ProjectTreeAction.AddMixtureFromDwsim:
+                    DoAddGasFromDwsim();
+                    break;
                 case ProjectTreeAction.EditGas:
                     DoEditGas(e.ItemId);
                     break;
@@ -1282,6 +1286,22 @@ namespace DisperSim3D.Controls
                 {
                     _editor.Scene.GasLibrary.Add(dlg.Result);
                     UpdateStatus("Added gas: " + dlg.Result.Name);
+                }
+            }
+        }
+
+        /// <summary>Opens the DWSIM-driven mixture builder: lets the user pick compounds
+        /// from DWSIM's database, set mole fractions, run a Peng-Robinson 1978 flash,
+        /// and adds the resulting <see cref="GasLibraryItem"/> to the project library.</summary>
+        private void DoAddGasFromDwsim()
+        {
+            using (var dlg = new Dialogs.DwsimMixtureBuilderDialog())
+            {
+                if (dlg.ShowDialog() == DialogResult.OK && dlg.Result != null)
+                {
+                    _editor.Scene.GasLibrary.Add(dlg.Result);
+                    UpdateStatus("Added DWSIM mixture: " + dlg.Result.Name);
+                    RefreshProjectTree();
                 }
             }
         }
@@ -2080,6 +2100,18 @@ namespace DisperSim3D.Controls
                 {
                     AppSettings.Instance.UpdateFromConfig(dlg.Result);
                     UpdateStatus("Application CFD settings updated (" + dlg.Result.DetectedEnvironment + ")");
+                }
+            }
+        }
+
+        private void DoDwsimSettings()
+        {
+            using (var dlg = new Dialogs.DwsimSettingsDialog())
+            {
+                if (dlg.ShowDialog() == DialogResult.OK)
+                {
+                    UpdateStatus("DWSIM settings updated (" +
+                        AppSettings.Instance.DwsimPropertyPackage + ")");
                 }
             }
         }

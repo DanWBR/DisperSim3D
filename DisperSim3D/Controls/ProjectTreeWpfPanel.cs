@@ -370,6 +370,7 @@ namespace DisperSim3D.Controls
                 case NodeKind.GasesRoot:
                     AddItem("Add Pure Gas...", ProjectTreeAction.AddPureGas);
                     AddItem("Add Mixture...", ProjectTreeAction.AddMixture);
+                    AddItem("Add Mixture from DWSIM...", ProjectTreeAction.AddMixtureFromDwsim);
                     break;
                 case NodeKind.GasItem:
                     AddItem("Edit...", ProjectTreeAction.EditGas);
@@ -538,7 +539,7 @@ namespace DisperSim3D.Controls
     public enum ProjectTreeAction
     {
         EditGeneralSettings,
-        AddPureGas, AddMixture, EditGas, DuplicateGas, DeleteGas,
+        AddPureGas, AddMixture, AddMixtureFromDwsim, EditGas, DuplicateGas, DeleteGas,
         ImportGeometry, EditGeometry, DeleteGeometry,
         AddSource, EditSource, DuplicateSource, DeleteSource, NewSimulationFromSource,
         AddWindField, EditWindField, RunWindField, OpenWindFieldCase, DeleteWindField, OpenWindFieldManager,

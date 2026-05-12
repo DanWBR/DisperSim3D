@@ -29,6 +29,16 @@ namespace DisperSim3D.Core
         /// </summary>
         public CfdConfiguration CfdDefaults { get; set; }
 
+        /// <summary>Filesystem path to the DWSIM installation directory (the folder
+        /// containing DWSIM.Automation.FluentAPI.dll). When empty, DWSIM-driven
+        /// thermodynamics features are disabled.</summary>
+        public string DwsimInstallPath { get; set; } = "";
+
+        /// <summary>DWSIM property-package name to use for mixture flashes. Defaults
+        /// to Peng-Robinson 1978 (PR78). Set via the DWSIM Settings dialog; consumed
+        /// by <see cref="DwsimThermo.ComputeMixtureProperties"/>.</summary>
+        public string DwsimPropertyPackage { get; set; } = "Peng-Robinson 1978 (PR78)";
+
         private AppSettings()
         {
             string appDir = Path.Combine(
@@ -81,6 +91,13 @@ namespace DisperSim3D.Core
                     CfdDefaults.SubgridMarginFactor = ParseDouble(cfd, "SubgridMarginFactor", 1.5);
                     CfdDefaults.UseWindField = ParseBool(cfd, "UseWindField", true);
                 }
+                var dwsim = root.Element("Dwsim");
+                if (dwsim != null)
+                {
+                    DwsimInstallPath = (string)dwsim.Attribute("InstallPath") ?? "";
+                    string pp = (string)dwsim.Attribute("PropertyPackage");
+                    if (!string.IsNullOrEmpty(pp)) DwsimPropertyPackage = pp;
+                }
             }
             catch
             {
@@ -118,7 +135,10 @@ namespace DisperSim3D.Core
                             new XAttribute("UseGaussianSubgrid", CfdDefaults.UseGaussianSubgrid),
                             new XAttribute("SubgridMarginFactor", CfdDefaults.SubgridMarginFactor.ToString(Inv)),
                             new XAttribute("UseWindField", CfdDefaults.UseWindField)
-                        )
+                        ),
+                        new XElement("Dwsim",
+                            new XAttribute("InstallPath", DwsimInstallPath ?? ""),
+                            new XAttribute("PropertyPackage", DwsimPropertyPackage ?? ""))
                     )
                 );
 

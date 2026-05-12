@@ -85,26 +85,36 @@ namespace DisperSim3D.Models
             if (Mixture == null || Mixture.Components.Count == 0)
                 return new GasProperties { Name = Name };
 
-            double mw = 0, lfl = 0, idlh = 0;
+            // Use Le Chatelier's rule for LFL/UFL of mixtures of flammables — it's
+            // the standard mole-fraction-of-fuels weighted reciprocal:
+            //   1/LFL_mix = Σ y_i / LFL_i   (over components with LFL > 0)
+            // For components without flammability data we skip them in the sum, which
+            // approximates them as inerts.
+            double mw = 0, idlh = 0;
             double totalFrac = 0;
+            double recipLfl = 0, recipUfl = 0;
+            double flammableFrac = 0;
             foreach (var c in Mixture.Components)
             {
                 mw += c.MolarMass * c.MoleFraction;
-                lfl += c.LFL * c.MoleFraction;
                 idlh += c.IDLH * c.MoleFraction;
                 totalFrac += c.MoleFraction;
+                if (c.LFL > 0) { recipLfl += c.MoleFraction / c.LFL; flammableFrac += c.MoleFraction; }
+                if (c.UFL > 0) recipUfl += c.MoleFraction / c.UFL;
             }
             if (totalFrac > 0)
             {
                 mw /= totalFrac;
-                lfl /= totalFrac;
                 idlh /= totalFrac;
             }
+            double lflMix = (flammableFrac > 0 && recipLfl > 0) ? flammableFrac / recipLfl : 0;
+            double uflMix = (flammableFrac > 0 && recipUfl > 0) ? flammableFrac / recipUfl : 0;
             return new GasProperties
             {
                 Name = Name,
                 MolarMass = mw,
-                LFL = lfl,
+                LFL = lflMix,
+                UFL = uflMix,
                 IDLH = idlh
             };
         }

@@ -30,12 +30,17 @@ namespace DisperSim3D.Models
         public double MoleFraction { get; set; } = 1.0;
 
         /// <summary>
-        /// Gets or sets the Lower Flammability Limit as a volume fraction.
+        /// Gets or sets the Lower Flammability Limit (kg/m³).
         /// </summary>
         public double LFL { get; set; }
 
         /// <summary>
-        /// Gets or sets the Immediately Dangerous to Life or Health concentration as a volume fraction.
+        /// Gets or sets the Upper Flammability Limit (kg/m³).
+        /// </summary>
+        public double UFL { get; set; }
+
+        /// <summary>
+        /// Gets or sets the Immediately Dangerous to Life or Health concentration (kg/m³).
         /// </summary>
         public double IDLH { get; set; }
     }
