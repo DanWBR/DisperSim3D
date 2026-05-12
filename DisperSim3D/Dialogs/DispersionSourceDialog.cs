@@ -27,12 +27,30 @@ namespace DisperSim3D.Dialogs
         public double ElevationDeg { get; private set; } = 0;
 
         private double _defaultAzimuth;
+        private double _defaultElevation;
 
-        public DispersionSourceDialog() : this(0) { }
+        public DispersionSourceDialog() : this(0, 0, 0) { }
 
         public DispersionSourceDialog(double windDirectionDeg)
+            : this(windDirectionDeg, windDirectionDeg, 0) { }
+
+        /// <summary>Constructor used by the surface-normal placement path: lets
+        /// the caller pre-populate the Azimuth and Elevation NUDs with values
+        /// derived from the surface the user clicked on. Without this, the
+        /// dialog defaults the NUDs to (windDir, 0) and the OK handler then
+        /// overwrites whatever orientation the placement code computed —
+        /// silently throwing away the perpendicular-to-surface direction.</summary>
+        /// <param name="windDirectionDeg">Project meteo wind direction (only used
+        ///   when the placement code hasn't supplied a specific azimuth).</param>
+        /// <param name="initialAzimuthDeg">Azimuth to show in the NUD on open
+        ///   (typically the source's current ReleaseAzimuthDeg).</param>
+        /// <param name="initialElevationDeg">Elevation to show in the NUD on
+        ///   open (typically the source's current ReleaseElevationDeg).</param>
+        public DispersionSourceDialog(double windDirectionDeg,
+            double initialAzimuthDeg, double initialElevationDeg)
         {
-            _defaultAzimuth = windDirectionDeg;
+            _defaultAzimuth = initialAzimuthDeg;
+            _defaultElevation = initialElevationDeg;
             Gas = GasProperties.CreateMethane();
             BuildUI();
         }
@@ -113,11 +131,18 @@ namespace DisperSim3D.Dialogs
             DialogHelpers.AddRowWithHelp(table, ref row, "Height Offset (m):", nudHeightOffset,
                 "Vertical offset from the source position (e.g. stack height above the unit).");
 
-            nudAzimuth = MakeNud(0m, 359m, (decimal)_defaultAzimuth, 0);
+            // Clamp the seed values to the NUD's valid range before assigning
+            // so values like 360° (which the NUD rejects with max=359) don't
+            // crash the InitializeComponent call.
+            decimal seedAz = (decimal)Math.Max(0, Math.Min(359,
+                ((_defaultAzimuth % 360) + 360) % 360));
+            decimal seedEl = (decimal)Math.Max(-90, Math.Min(90, _defaultElevation));
+
+            nudAzimuth = MakeNud(0m, 359m, seedAz, 0);
             DialogHelpers.AddRowWithHelp(table, ref row, "Release Azimuth (°):", nudAzimuth,
                 "Horizontal direction of the initial jet (0°=N, 90°=E, 180°=S, 270°=W).");
 
-            nudElevation = MakeNud(-90m, 90m, 0m, 0);
+            nudElevation = MakeNud(-90m, 90m, seedEl, 0);
             DialogHelpers.AddRowWithHelp(table, ref row, "Release Elevation (°):", nudElevation,
                 "Vertical jet angle: 0° = horizontal, +90° = straight up, -90° = straight down.");
 

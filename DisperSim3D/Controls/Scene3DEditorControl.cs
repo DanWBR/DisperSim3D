@@ -220,6 +220,30 @@ namespace DisperSim3D.Controls
         public event EventHandler<Point3D> PointPicked;
         public event EventHandler<ObjectPlacedEventArgs> ObjectPlaced;
 
+        /// <summary>Fired by <see cref="SaveToFile"/> / <see cref="LoadFromFile"/>
+        /// at each meaningful step so the host panel can drive a status-bar
+        /// progress display. The <c>Fraction</c> is in [0,1]; pass NaN when no
+        /// percentage is known (indeterminate phase) and the panel renders a
+        /// marquee instead.</summary>
+        public event EventHandler<ProjectIoProgressEventArgs> ProjectIoProgress;
+
+        /// <summary>Payload for <see cref="ProjectIoProgress"/>. Lightweight
+        /// struct passed by event so save/load can fire dozens of updates
+        /// without GC churn.</summary>
+        public class ProjectIoProgressEventArgs : EventArgs
+        {
+            /// <summary>"Save" or "Load" — useful for the host to label the bar.</summary>
+            public string Operation;
+            /// <summary>Short human-readable step description, e.g. "Packing
+            /// decoration assets" or "Reading simulations".</summary>
+            public string Step;
+            /// <summary>Normalised progress in [0,1]; NaN = indeterminate.</summary>
+            public double Fraction;
+            /// <summary>True on the final event of a save/load (success or fail);
+            /// the host hides the progress bar on this.</summary>
+            public bool Done;
+        }
+
         #endregion
 
         #region Constructor
@@ -1767,9 +1791,21 @@ namespace DisperSim3D.Controls
                 _scene.DispersionScenario = new DispersionScenario();
             }
 
+            // Snap XY only — Z came from the surface ray-cast (or the work-plane
+            // for ground placements) and we want to keep the source glued to the
+            // exact surface the user clicked on, not lifted to the nearest grid
+            // plane. Without this Z-preserving rule, clicking on a tank face at
+            // Z = 5.3 would round to Z = 5.0 and drop the marker through the
+            // surface.
+            var snappedPos = _snapToGrid
+                ? new Point3D(
+                    Math.Round(position.X / _gridSpacing) * _gridSpacing,
+                    Math.Round(position.Y / _gridSpacing) * _gridSpacing,
+                    position.Z)
+                : position;
             var source = new ReleaseSource3D
             {
-                Position = _snapToGrid ? position.SnapToGrid(_gridSpacing) : position,
+                Position = snappedPos,
                 Gas = template?.Gas ?? GasProperties.CreateMethane(),
                 Name = template?.Name ?? "Source",
                 ReleaseRateKgPerS = template?.ReleaseRateKgPerS ?? 0.5,
@@ -1789,9 +1825,18 @@ namespace DisperSim3D.Controls
 
         public MonitorPoint3D AddMonitorPoint(Point3D position, MonitorPoint3D template = null)
         {
+            // XY-only grid snap — Z is preserved so the monitor sticks to the
+            // exact surface (or specific work-plane elevation) the placement
+            // code resolved. See AddReleaseSource for the rationale.
+            var snappedPos = _snapToGrid
+                ? new Point3D(
+                    Math.Round(position.X / _gridSpacing) * _gridSpacing,
+                    Math.Round(position.Y / _gridSpacing) * _gridSpacing,
+                    position.Z)
+                : position;
             var monitor = new MonitorPoint3D
             {
-                Position = _snapToGrid ? position.SnapToGrid(_gridSpacing) : position,
+                Position = snappedPos,
                 Name = template?.Name ?? "Monitor" + (_scene.MonitorPoints.Count + 1)
             };
             _scene.MonitorPoints.Add(monitor);
@@ -2581,20 +2626,55 @@ namespace DisperSim3D.Controls
         /// </summary>
         public void SaveToFile(string filePath)
         {
-            var doc = BuildSceneXDocument(filePath);
-
-            // Snapshot the previous file (if any) to a sibling .bak so an
-            // accidental save over a working project can be rolled back from
-            // the same folder. Best-effort — never blocks the save.
-            BackupExistingProjectFile(filePath);
-
-            if (ProjectBundle.IsBundleFile(filePath))
+            try
             {
-                ProjectBundle.Save(filePath, _scene, doc);
+                EmitIoProgress("Save", "Building project XML...", 0.05, false);
+                var doc = BuildSceneXDocument(filePath);
+
+                // Snapshot the previous file (if any) to a sibling .bak so an
+                // accidental save over a working project can be rolled back from
+                // the same folder. Best-effort — never blocks the save.
+                EmitIoProgress("Save", "Backing up previous file...", 0.10, false);
+                BackupExistingProjectFile(filePath);
+
+                if (ProjectBundle.IsBundleFile(filePath))
+                {
+                    // ProjectBundle.Save accepts a progress callback so the bundle
+                    // copy / zip phases can report fine-grained progress mapped
+                    // into the [0.15 .. 0.95] range here.
+                    ProjectBundle.Save(filePath, _scene, doc, (step, frac) =>
+                        EmitIoProgress("Save", step,
+                            0.15 + 0.80 * Math.Max(0, Math.Min(1, frac)), false));
+                }
+                else
+                {
+                    EmitIoProgress("Save", "Writing XML...", 0.50, false);
+                    doc.Save(filePath);
+                }
+                EmitIoProgress("Save", "Saved: " + filePath, 1.0, true);
             }
-            else
+            catch
             {
-                doc.Save(filePath);
+                EmitIoProgress("Save", "Save failed.", double.NaN, true);
+                throw;
+            }
+        }
+
+        /// <summary>Fires <see cref="ProjectIoProgress"/> with the given payload.
+        /// Wrapped in try/catch so a host-side exception in an event handler
+        /// never poisons the save/load itself.</summary>
+        private void EmitIoProgress(string operation, string step, double fraction, bool done)
+        {
+            try
+            {
+                ProjectIoProgress?.Invoke(this, new ProjectIoProgressEventArgs
+                {
+                    Operation = operation, Step = step, Fraction = fraction, Done = done
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[EmitIoProgress] " + ex.Message);
             }
         }
 
@@ -4128,6 +4208,8 @@ namespace DisperSim3D.Controls
 
             var inv = System.Globalization.CultureInfo.InvariantCulture;
 
+            EmitIoProgress("Load", "Preparing...", 0.02, false);
+
             // Drop any previous bundle's temp dir.
             if (!string.IsNullOrEmpty(_currentBundleRoot))
             {
@@ -4141,12 +4223,16 @@ namespace DisperSim3D.Controls
                 System.Xml.Linq.XDocument doc;
                 if (ProjectBundle.IsBundleFile(filePath))
                 {
-                    var bundle = ProjectBundle.Open(filePath);
+                    EmitIoProgress("Load", "Extracting bundle...", 0.10, false);
+                    var bundle = ProjectBundle.Open(filePath, (step, frac) =>
+                        EmitIoProgress("Load", step,
+                            0.10 + 0.20 * Math.Max(0, Math.Min(1, frac)), false));
                     _currentBundleRoot = bundle.BundleRoot;
                     doc = bundle.ProjectXml;
                 }
                 else
                 {
+                    EmitIoProgress("Load", "Reading XML...", 0.20, false);
                     doc = System.Xml.Linq.XDocument.Load(filePath);
                 }
                 var root = doc.Root;
@@ -4198,8 +4284,17 @@ namespace DisperSim3D.Controls
                 var decosEl = root.Element("Decorations");
                 if (decosEl != null)
                 {
-                    foreach (var de in decosEl.Elements("Decoration"))
+                    var decoList = decosEl.Elements("Decoration").ToList();
+                    int decoIdx = 0;
+                    foreach (var de in decoList)
                     {
+                        decoIdx++;
+                        if (decoList.Count > 0)
+                            EmitIoProgress("Load",
+                                $"Loading decoration {decoIdx}/{decoList.Count}: " +
+                                ((string)de.Attribute("Name") ?? ""),
+                                0.30 + 0.20 * ((double)decoIdx / Math.Max(1, decoList.Count)),
+                                false);
                         var deco = new Decoration3D();
                         deco.Id = (string)de.Attribute("Id") ?? Guid.NewGuid().ToString();
                         deco.Name = (string)de.Attribute("Name") ?? "";
@@ -4247,25 +4342,34 @@ namespace DisperSim3D.Controls
                     }
                 }
 
+                EmitIoProgress("Load", "Loading settings...",   0.55, false);
                 DeserializeGeneralSettings(root, inv, fs);
                 DeserializeEnvironment(root, inv, fs);
+                EmitIoProgress("Load", "Loading gas library...", 0.60, false);
                 DeserializeGasLibrary(root, inv, fs);
+                EmitIoProgress("Load", "Loading sources...",     0.65, false);
                 DeserializeTopLevelSources(root, inv, fs);
+                EmitIoProgress("Load", "Loading wind fields...", 0.70, false);
                 DeserializeWindFieldScenarios(root, inv, fs);
+                EmitIoProgress("Load", "Loading simulations...", 0.75, false);
                 DeserializeSimulations(root, inv, fs);
+                EmitIoProgress("Load", "Loading views...",       0.80, false);
                 DeserializeViews(root, inv, fs);
+                EmitIoProgress("Load", "Loading studies...",     0.83, false);
                 DeserializeDispersionStudies(root, inv, fs);
                 DeserializeDetectorAllocations(root, inv, fs);
                 DeserializeDispersionScenario(root, inv, fs);
 
                 LegacyProjectMigrator.MigrateInPlace(fs);
 
+                EmitIoProgress("Load", "Loading monitors/detectors...", 0.88, false);
                 DeserializeMonitorPoints(root, inv, fs);
                 DeserializeWindRose(root, inv, fs);
                 DeserializeFireScenario(root, inv, fs);
                 DeserializeGasDetectors(root, inv, fs);
                 DeserializeCfdSimulations(root, inv, fs);
 
+                EmitIoProgress("Load", "Rebuilding viewport...", 0.95, false);
                 _scene = fs;
                 _snapToGrid = fs.SnapToGrid;
                 _gridSpacing = fs.GridSpacing;
@@ -4273,10 +4377,12 @@ namespace DisperSim3D.Controls
                 if (_scene.Environment == null) _scene.Environment = new EnvironmentSettings();
                 ApplyEnvironment();
                 UpdateViewport();
+                EmitIoProgress("Load", "Loaded: " + filePath, 1.0, true);
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("Failed to load scene: " + ex.Message);
+                EmitIoProgress("Load", "Load failed: " + ex.Message, double.NaN, true);
             }
         }
 

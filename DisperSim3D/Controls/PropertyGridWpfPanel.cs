@@ -1,8 +1,10 @@
 using System;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Forms.Integration;
 using System.Windows.Media;
 using HcPropertyGrid = HandyControl.Controls.PropertyGrid;
+using HcPropertyItem = HandyControl.Controls.PropertyItem;
 using SwfUserControl = System.Windows.Forms.UserControl;
 using SwfDockStyle = System.Windows.Forms.DockStyle;
 
@@ -10,7 +12,10 @@ namespace DisperSim3D.Controls
 {
     /// <summary>
     /// WPF-based property grid hosted in a WinForms ElementHost using HandyControl's PropertyGrid.
-    /// MIT license, modern look, native editors per type.
+    /// MIT license, modern look, native editors per type. Also renders the
+    /// <c>[Description("…")]</c> of the focused property as a wrapping footer
+    /// below the grid (VS-style help panel), so the docs that already exist on
+    /// every model surface are discoverable without hover.
     /// </summary>
     public class PropertyGridWpfPanel : SwfUserControl
     {
@@ -18,6 +23,8 @@ namespace DisperSim3D.Controls
 
         private readonly ElementHost _host;
         private readonly HcPropertyGrid _grid;
+        private readonly TextBlock _descriptionTitle;
+        private readonly TextBlock _descriptionBody;
 
         public event EventHandler PropertyValueChanged;
 
@@ -73,12 +80,96 @@ namespace DisperSim3D.Controls
                     PropertyValueChanged?.Invoke(this, EventArgs.Empty);
                 }), true);
 
+            // ── Description footer ─────────────────────────────────────────
+            // Mimics the Visual Studio Properties pane: an always-visible
+            // panel below the grid showing the [DisplayName] in bold and the
+            // [Description("…")] of whichever property currently has focus.
+            // Updated by walking the visual tree from the focused element up
+            // to the nearest PropertyItem.
+            var descBorder = new Border
+            {
+                BorderThickness = new Thickness(0, 1, 0, 0),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0xCF, 0xCF, 0xCF)),
+                Background = new SolidColorBrush(Color.FromRgb(0xF6, 0xF6, 0xF6)),
+                Padding = new Thickness(8, 6, 8, 8),
+                MinHeight = 56
+            };
+            DockPanel.SetDock(descBorder, System.Windows.Controls.Dock.Bottom);
+
+            _descriptionTitle = new TextBlock
+            {
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 0, 0, 2),
+                Text = ""
+            };
+            _descriptionBody = new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44)),
+                Text = "Select a property to see its description."
+            };
+            var descStack = new StackPanel { Orientation = Orientation.Vertical };
+            descStack.Children.Add(_descriptionTitle);
+            descStack.Children.Add(_descriptionBody);
+            descBorder.Child = descStack;
+
+            var rootDock = new DockPanel { LastChildFill = true };
+            rootDock.Children.Add(descBorder);   // docked Bottom
+            rootDock.Children.Add(_grid);        // fills remainder
+
+            // Focus events on the inner editors propagate up to the grid root.
+            // Walk to the nearest PropertyItem ancestor and read its DisplayName
+            // / Description so the help panel tracks the user's current focus
+            // in the grid.
+            _grid.AddHandler(System.Windows.UIElement.GotFocusEvent,
+                new System.Windows.RoutedEventHandler((s, e) =>
+                    UpdateDescriptionFromFocus(e.OriginalSource)), true);
+            _grid.AddHandler(System.Windows.Input.Mouse.MouseEnterEvent,
+                new System.Windows.Input.MouseEventHandler((s, e) =>
+                    UpdateDescriptionFromFocus(e.OriginalSource)), true);
+
             _host = new ElementHost
             {
                 Dock = SwfDockStyle.Fill,
-                Child = _grid
+                Child = rootDock
             };
             this.Controls.Add(_host);
+        }
+
+        /// <summary>Walks up the WPF visual tree from <paramref name="hit"/>
+        /// looking for the enclosing <see cref="HcPropertyItem"/>, then mirrors
+        /// its DisplayName + Description into the footer panel. Used to feed
+        /// both focus and mouse-enter events — focus tracks keyboard/click
+        /// navigation, mouse-enter gives instant feedback on hover without
+        /// requiring the user to actually click into the editor.</summary>
+        private void UpdateDescriptionFromFocus(object hit)
+        {
+            try
+            {
+                var dep = hit as System.Windows.DependencyObject;
+                while (dep != null)
+                {
+                    if (dep is HcPropertyItem item)
+                    {
+                        string title = !string.IsNullOrEmpty(item.DisplayName)
+                            ? item.DisplayName
+                            : item.PropertyName ?? "";
+                        string body = item.Description ?? "";
+                        _descriptionTitle.Text = title;
+                        _descriptionBody.Text = string.IsNullOrEmpty(body)
+                            ? "(No description on this property.)"
+                            : body;
+                        return;
+                    }
+                    dep = VisualTreeHelper.GetParent(dep);
+                }
+            }
+            catch
+            {
+                // If the visual tree shape changes between HandyControl
+                // versions and the cast fails, just leave the footer alone —
+                // the property grid still works.
+            }
         }
 
         public object SelectedObject

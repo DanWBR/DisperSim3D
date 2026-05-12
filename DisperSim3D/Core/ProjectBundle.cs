@@ -34,7 +34,7 @@ namespace DisperSim3D.Core
         /// path-resolved project XML. The caller may then run their existing XML deserializer
         /// over <see cref="ProjectXml"/>.
         /// </summary>
-        public static ProjectBundle Open(string filePath)
+        public static ProjectBundle Open(string filePath, Action<string, double> progress = null)
         {
             if (string.IsNullOrEmpty(filePath))
                 throw new ArgumentNullException(nameof(filePath));
@@ -44,6 +44,7 @@ namespace DisperSim3D.Core
             string tempRoot = CreateSessionTempDir();
             try
             {
+                progress?.Invoke("Extracting bundle archive...", 0.30);
                 ZipFile.ExtractToDirectory(filePath, tempRoot);
             }
             catch
@@ -59,8 +60,10 @@ namespace DisperSim3D.Core
                 throw new InvalidDataException("Bundle is missing " + ProjectXmlEntryName);
             }
 
+            progress?.Invoke("Reading project XML from bundle...", 0.80);
             var doc = XDocument.Load(projectXmlPath);
             RewriteBundlePathsToAbsolute(doc, tempRoot);
+            progress?.Invoke("Bundle ready.", 1.0);
 
             return new ProjectBundle
             {
@@ -76,7 +79,8 @@ namespace DisperSim3D.Core
         /// attributes to <c>bundle://</c> URIs inside the saved project.xml. The in-memory
         /// <paramref name="doc"/> and <paramref name="scene"/> are NOT mutated.
         /// </summary>
-        public static void Save(string outPath, Scene3D scene, XDocument doc)
+        public static void Save(string outPath, Scene3D scene, XDocument doc,
+            Action<string, double> progress = null)
         {
             if (string.IsNullOrEmpty(outPath)) throw new ArgumentNullException(nameof(outPath));
             if (scene == null) throw new ArgumentNullException(nameof(scene));
@@ -88,15 +92,20 @@ namespace DisperSim3D.Core
                 // Clone the doc so we can safely rewrite without touching the caller's instance.
                 var stagedDoc = new XDocument(doc);
 
+                progress?.Invoke("Copying decoration assets...", 0.05);
                 CopyDecorationAssets(stagedDoc, scene, stagingRoot);
+                progress?.Invoke("Copying wind field cases...", 0.20);
                 CopyWindFieldCases(stagedDoc, scene, stagingRoot);
+                progress?.Invoke("Copying simulation cases...", 0.40);
                 CopySimulationCases(stagedDoc, scene, stagingRoot);
 
                 // manifest.json
+                progress?.Invoke("Writing manifest...", 0.65);
                 File.WriteAllText(Path.Combine(stagingRoot, ManifestEntryName), BuildManifestJson(),
                     new UTF8Encoding(false));
 
                 // project.xml (with bundle:// rewrites)
+                progress?.Invoke("Writing project XML...", 0.70);
                 stagedDoc.Save(Path.Combine(stagingRoot, ProjectXmlEntryName));
 
                 // Pack into zip with Fastest compression. Bundle content is dominated by
@@ -104,13 +113,16 @@ namespace DisperSim3D.Core
                 // so deflate gives only ~5 % size reduction with Optimal vs. Fastest, while
                 // taking 5–10× longer on large grids). Fastest keeps Save responsive even
                 // for 1000-snapshot dispersion runs.
+                progress?.Invoke("Packing bundle archive...", 0.80);
                 string tmpZip = outPath + ".tmp";
                 if (File.Exists(tmpZip)) File.Delete(tmpZip);
                 ZipFile.CreateFromDirectory(stagingRoot, tmpZip, CompressionLevel.Fastest,
                     includeBaseDirectory: false);
 
+                progress?.Invoke("Replacing target file...", 0.98);
                 if (File.Exists(outPath)) File.Delete(outPath);
                 File.Move(tmpZip, outPath);
+                progress?.Invoke("Bundle written.", 1.0);
             }
             finally
             {

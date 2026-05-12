@@ -20,6 +20,7 @@ namespace DisperSim3D.Controls
         private StatusStrip _statusStrip;
         private ToolStripStatusLabel _statusLabel;
         private ToolStripStatusLabel _dispersionTimeLabel;
+        private ToolStripProgressBar _ioProgressBar;
         private ToolStripButton _btnRun;
         private ToolStripButton _btnPlay;
         private ToolStripButton _btnPause;
@@ -106,7 +107,20 @@ namespace DisperSim3D.Controls
             _statusStrip = new StatusStrip { Font = toolFont };
             _statusLabel = new ToolStripStatusLabel("Ready") { Spring = true, TextAlign = System.Drawing.ContentAlignment.MiddleLeft };
             _dispersionTimeLabel = new ToolStripStatusLabel("");
+            // Hidden until SaveToFile / LoadFromFile fires the first
+            // ProjectIoProgress event; the host hides it on Done=true.
+            _ioProgressBar = new ToolStripProgressBar
+            {
+                Name = "ioProgressBar",
+                Visible = false,
+                Width = (int)(160 * dpiScale),
+                Minimum = 0,
+                Maximum = 100,
+                Style = ProgressBarStyle.Continuous,
+                Alignment = ToolStripItemAlignment.Right
+            };
             _statusStrip.Items.Add(_statusLabel);
+            _statusStrip.Items.Add(_ioProgressBar);
             _statusStrip.Items.Add(_dispersionTimeLabel);
 
             // === MenuStrip ===
@@ -446,6 +460,7 @@ namespace DisperSim3D.Controls
             _editor = new Scene3DEditorControl { Dock = DockStyle.Fill };
 
             _editor.EditModeChanged += (s, e) => { UpdateStatus("Mode: " + _editor.CurrentEditMode); UncheckAllModes(); };
+            _editor.ProjectIoProgress += Editor_ProjectIoProgress;
 
             _editor.MonitorDataUpdated += (s, e) => UpdateMonitorGrid();
 
@@ -2195,7 +2210,12 @@ namespace DisperSim3D.Controls
                     var src = (ReleaseSource3D)e.PlacedObject;
                     double windDir = _editor.Scene.GeneralSettings?.DefaultMeteo?.WindDirectionDeg
                         ?? _editor.Scene.DispersionScenario?.Meteo?.WindDirectionDeg ?? 0;
-                    using (var dlg = new DispersionSourceDialog(windDir))
+                    // Seed the dialog with the orientation Scene3DEditorControl
+                    // already derived from the surface normal under the cursor
+                    // (otherwise the dialog's default 0/0 would silently
+                    // overwrite the perpendicular-to-surface direction).
+                    using (var dlg = new DispersionSourceDialog(windDir,
+                        src.ReleaseAzimuthDeg, src.ReleaseElevationDeg))
                     {
                         dlg.Text = "Configure Release Source";
                         if (dlg.ShowDialog() == DialogResult.OK)
@@ -2884,6 +2904,53 @@ namespace DisperSim3D.Controls
         {
             _statusLabel.Text = message;
             StatusChanged?.Invoke(this, message);
+        }
+
+        /// <summary>Drives the status-bar progress bar + status label from
+        /// <see cref="Scene3DEditorControl.ProjectIoProgress"/> events fired
+        /// during SaveToFile / LoadFromFile. Force-refreshes the strip so the
+        /// repaint happens synchronously even though the save/load is running
+        /// on the UI thread — without that, the user sees only the final
+        /// "Saved/Loaded:" message after several seconds of frozen UI.</summary>
+        private void Editor_ProjectIoProgress(object sender,
+            Scene3DEditorControl.ProjectIoProgressEventArgs e)
+        {
+            if (e == null) return;
+            try
+            {
+                string prefix = string.IsNullOrEmpty(e.Operation) ? "" : (e.Operation + ": ");
+                _statusLabel.Text = prefix + (e.Step ?? "");
+
+                if (_ioProgressBar != null)
+                {
+                    if (e.Done)
+                    {
+                        _ioProgressBar.Value = 100;
+                        _ioProgressBar.Visible = false;
+                        _ioProgressBar.Style = ProgressBarStyle.Continuous;
+                    }
+                    else if (double.IsNaN(e.Fraction))
+                    {
+                        _ioProgressBar.Style = ProgressBarStyle.Marquee;
+                        _ioProgressBar.Visible = true;
+                    }
+                    else
+                    {
+                        _ioProgressBar.Style = ProgressBarStyle.Continuous;
+                        int pct = (int)Math.Max(0, Math.Min(100, Math.Round(e.Fraction * 100)));
+                        _ioProgressBar.Value = pct;
+                        _ioProgressBar.Visible = true;
+                    }
+                }
+                // Save/Load runs on the UI thread, so the strip would otherwise
+                // only repaint after the whole operation finished. Force an
+                // immediate repaint so the user sees the live progress.
+                _statusStrip?.Refresh();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[Editor_ProjectIoProgress] " + ex.Message);
+            }
         }
 
         #endregion
