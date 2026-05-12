@@ -99,10 +99,14 @@ namespace DisperSim3D.Core
                 // project.xml (with bundle:// rewrites)
                 stagedDoc.Save(Path.Combine(stagingRoot, ProjectXmlEntryName));
 
-                // Pack into zip (Optimal compression — most case files are text and compress well).
+                // Pack into zip with Fastest compression. Bundle content is dominated by
+                // .bin field snapshots (typed double[,,] arrays — entropy is already high,
+                // so deflate gives only ~5 % size reduction with Optimal vs. Fastest, while
+                // taking 5–10× longer on large grids). Fastest keeps Save responsive even
+                // for 1000-snapshot dispersion runs.
                 string tmpZip = outPath + ".tmp";
                 if (File.Exists(tmpZip)) File.Delete(tmpZip);
-                ZipFile.CreateFromDirectory(stagingRoot, tmpZip, CompressionLevel.Optimal,
+                ZipFile.CreateFromDirectory(stagingRoot, tmpZip, CompressionLevel.Fastest,
                     includeBaseDirectory: false);
 
                 if (File.Exists(outPath)) File.Delete(outPath);

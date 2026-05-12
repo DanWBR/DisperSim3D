@@ -78,26 +78,14 @@ namespace DisperSim3D.Core
             CfdConfiguration config, Scene3D scene, OpenFoamEnvironment env,
             List<BoundingBox> obstacles = null, Dictionary<string, double[]> hpLeakProfiles = null)
         {
-            string solverLabel;
-            switch (solverType)
-            {
-                case CfdSolverType.GaussianPlume: solverLabel = "Gaussian Plume"; break;
-                case CfdSolverType.GaussianPuff: solverLabel = "Gaussian Puff"; break;
-                case CfdSolverType.ScalarTransportFoamSteady: solverLabel = "CFD Steady"; break;
-                case CfdSolverType.ScalarSimpleFoam: solverLabel = "CFD SimpleFoam"; break;
-                case CfdSolverType.PimpleFoam: solverLabel = "CFD pimpleFoam"; break;
-                case CfdSolverType.BuoyantPimpleFoam: solverLabel = "CFD buoyantPimpleFoam"; break;
-                case CfdSolverType.ReactingFoam: solverLabel = "CFD reactingFoam"; break;
-                case CfdSolverType.RhoSimpleFoam: solverLabel = "CFD rhoSimpleFoam"; break;
-                case CfdSolverType.RhoReactingBuoyantFoam: solverLabel = "CFD rhoReactingBuoyantFoam"; break;
-                case CfdSolverType.FluidX3DWind: solverLabel = "CFD (FluidX3D) Wind"; break;
-                case CfdSolverType.FluidX3DDispersion: solverLabel = "CFD (FluidX3D) Dispersion"; break;
-                default: solverLabel = "CFD (OpenFOAM)"; break;
-            }
+            // Each solver gets a stable 6-char tag (SolverCode) prepended to the label
+            // so the user can tell at a glance which solver produced a given simulation.
+            string solverTag = SolverCode.Of(solverType);
+            string solverLabel = SolverCode.DisplayName(solverType);
 
             var job = new SimulationJob
             {
-                Name = string.Format("{0} — {1}", solverLabel, scenario.Name ?? "Scenario"),
+                Name = string.Format("[{0}] {1} — {2}", solverTag, solverLabel, scenario.Name ?? "Scenario"),
                 Scenario = scenario,
                 SolverType = solverType,
                 CfdConfig = config,
@@ -518,9 +506,7 @@ namespace DisperSim3D.Core
             };
             runner.Completed += (s, result) =>
             {
-                string solverLabel = job.SolverType == CfdSolverType.FluidX3DWind
-                    ? "CFD (FluidX3D) Wind"
-                    : "CFD (FluidX3D) Dispersion";
+                string solverLabel = "[" + SolverCode.Of(job.SolverType) + "] " + SolverCode.DisplayName(job.SolverType);
                 var entry = new CfdSimulationEntry
                 {
                     Name = job.Name,
@@ -589,7 +575,7 @@ namespace DisperSim3D.Core
                 bool isSteady = job.SolverType == CfdSolverType.ScalarTransportFoamSteady
                              || job.SolverType == CfdSolverType.ScalarSimpleFoam
                              || job.SolverType == CfdSolverType.RhoSimpleFoam;
-                string solverLabel = isSteady ? "CFD Steady" : "CFD (OpenFOAM)";
+                string solverLabel = "[" + SolverCode.Of(job.SolverType) + "] " + SolverCode.DisplayName(job.SolverType);
 
                 var entry = new CfdSimulationEntry
                 {

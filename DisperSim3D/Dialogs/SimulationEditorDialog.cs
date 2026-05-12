@@ -24,11 +24,42 @@ namespace DisperSim3D.Dialogs
 
         public Simulation Result { get; private set; }
 
+        private readonly Simulation _editingSim;
+
         public SimulationEditorDialog(Scene3D scene, string preselectedSourceId = null)
         {
             _scene = scene;
             BuildUI();
             PopulateLists(preselectedSourceId);
+        }
+
+        /// <summary>Edits an existing Simulation in place: dialog is pre-populated from
+        /// <paramref name="sim"/> and on OK the same instance is updated (Id preserved).
+        /// Used by Configure &amp; Run on an existing simulation node.</summary>
+        public SimulationEditorDialog(Scene3D scene, Simulation sim)
+        {
+            _scene = scene;
+            _editingSim = sim;
+            BuildUI();
+            this.Text = "Configure Simulation";
+            PopulateLists(sim?.SourceId);
+            // Pre-fill UI from the existing simulation.
+            if (sim != null)
+            {
+                txtName.Text = sim.Name ?? "";
+                if (!string.IsNullOrEmpty(sim.WindFieldId))
+                {
+                    int wi = _scene.WindFieldScenarios.FindIndex(w => w.Id == sim.WindFieldId);
+                    if (wi >= 0) cmbWindField.SelectedIndex = wi + 1;
+                }
+                int sx = (int)sim.SolverType;
+                if (sx >= 0 && sx < cmbSolver.Items.Count) cmbSolver.SelectedIndex = sx;
+                if (sim.SnapshotDurationS > 0) nudDuration.Value = (decimal)Math.Max(1, Math.Min(100000, sim.SnapshotDurationS));
+                if (sim.SnapshotTimeStepS > 0) nudTimeStep.Value = (decimal)Math.Max(0.01, Math.Min(60, sim.SnapshotTimeStepS));
+                if (sim.SnapshotDomainSizeM > 0) nudDomain.Value = (decimal)Math.Max(10, Math.Min(100000, sim.SnapshotDomainSizeM));
+                if (sim.SnapshotGridResolution > 0) nudGrid.Value = (decimal)Math.Max(10, Math.Min(500, sim.SnapshotGridResolution));
+                if (sim.SnapshotCount > 0) nudSnapCount.Value = (decimal)Math.Max(2, Math.Min(1000, sim.SnapshotCount));
+            }
         }
 
         private void BuildUI()
@@ -199,19 +230,20 @@ namespace DisperSim3D.Dialogs
                 case 11: solverType = CfdSolverType.FluidX3DDispersion; break;
             }
 
-            Result = new Simulation
-            {
-                Name = string.IsNullOrEmpty(txtName.Text) ? "Simulation" : txtName.Text,
-                SourceId = _scene.TopLevelSources[srcIdx].Id,
-                WindFieldId = _scene.WindFieldScenarios[wfIdx].Id,
-                SolverType = solverType,
-                Status = SimulationStatus.Configured,
-                SnapshotDurationS = (double)nudDuration.Value,
-                SnapshotTimeStepS = (double)nudTimeStep.Value,
-                SnapshotDomainSizeM = (double)nudDomain.Value,
-                SnapshotGridResolution = (int)nudGrid.Value,
-                SnapshotCount = (int)nudSnapCount.Value
-            };
+            // Edit existing sim in place (preserves Id) when launched via the editing
+            // constructor; otherwise create a new instance.
+            var target = _editingSim ?? new Simulation();
+            target.Name = string.IsNullOrEmpty(txtName.Text) ? "Simulation" : txtName.Text;
+            target.SourceId = _scene.TopLevelSources[srcIdx].Id;
+            target.WindFieldId = _scene.WindFieldScenarios[wfIdx].Id;
+            target.SolverType = solverType;
+            target.Status = SimulationStatus.Configured;
+            target.SnapshotDurationS = (double)nudDuration.Value;
+            target.SnapshotTimeStepS = (double)nudTimeStep.Value;
+            target.SnapshotDomainSizeM = (double)nudDomain.Value;
+            target.SnapshotGridResolution = (int)nudGrid.Value;
+            target.SnapshotCount = (int)nudSnapCount.Value;
+            Result = target;
         }
 
         private static NumericUpDown MakeNud(decimal min, decimal max, decimal value, int decimals)

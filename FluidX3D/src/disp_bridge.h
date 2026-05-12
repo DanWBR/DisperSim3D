@@ -29,6 +29,19 @@ FX3D_API void fx3d_set_box_solid(uint64_t h,
                                  uint32_t xmin, uint32_t ymin, uint32_t zmin,
                                  uint32_t xmax, uint32_t ymax, uint32_t zmax);
 
+// GPU-accelerated triangle-mesh voxelization. Each vertex array is laid out
+// as [x0,y0,z0, x1,y1,z1, ...] in LATTICE coordinates (i.e. C# must convert
+// SI -> lattice before calling). triangle_count entries from each array are
+// consumed (so each array has 3*triangle_count floats). The mesh is voxelized
+// to TYPE_S cells via FluidX3D's GPU raycasting kernel, which is orders of
+// magnitude faster than per-triangle AABB voxelization on the CPU and produces
+// far more accurate occupancy for curved surfaces (tanks, vessels, pipes).
+FX3D_API void fx3d_voxelize_triangles(uint64_t h,
+                                      const float* p0_xyz,
+                                      const float* p1_xyz,
+                                      const float* p2_xyz,
+                                      uint32_t triangle_count);
+
 // Mark inlet plane x=0 cells as TYPE_E with given velocity and density 1.0.
 FX3D_API void fx3d_set_inlet_x(uint64_t h, float ux, float uy, float uz);
 

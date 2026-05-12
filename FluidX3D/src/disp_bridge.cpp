@@ -110,6 +110,37 @@ FX3D_API void fx3d_set_box_solid(uint64_t h,
                 lbm->flags[lbm->index(x, y, z)] = TYPE_S;
 }
 
+FX3D_API void fx3d_voxelize_triangles(uint64_t h,
+                                      const float* p0_xyz,
+                                      const float* p1_xyz,
+                                      const float* p2_xyz,
+                                      uint32_t triangle_count) {
+    {
+        char buf[160];
+        std::snprintf(buf, sizeof(buf), "fx3d_voxelize_triangles h=%llu triangles=%u",
+            (unsigned long long)h, triangle_count);
+        log_line(buf);
+    }
+    LBM* lbm = resolve(h); if (!lbm) return;
+    if (triangle_count == 0u || !p0_xyz || !p1_xyz || !p2_xyz) return;
+
+    // Build a FluidX3D Mesh on the heap; voxelize_mesh_on_device dispatches the
+    // GPU raycasting kernel and updates the device-side flag buffer directly,
+    // so we don't need to touch lbm->flags afterwards. Mesh owns its arrays
+    // and frees them in the destructor.
+    const float3 center(0.0f);
+    Mesh* mesh = new Mesh(triangle_count, center);
+    for (uint32_t i = 0u; i < triangle_count; i++) {
+        const uint32_t b = 3u * i;
+        mesh->p0[i] = float3(p0_xyz[b + 0u], p0_xyz[b + 1u], p0_xyz[b + 2u]);
+        mesh->p1[i] = float3(p1_xyz[b + 0u], p1_xyz[b + 1u], p1_xyz[b + 2u]);
+        mesh->p2[i] = float3(p2_xyz[b + 0u], p2_xyz[b + 1u], p2_xyz[b + 2u]);
+    }
+    mesh->find_bounds();
+    lbm->voxelize_mesh_on_device(mesh, TYPE_S);
+    delete mesh;
+}
+
 FX3D_API void fx3d_set_inlet_x(uint64_t h, float ux, float uy, float uz) {
     LBM* lbm = resolve(h); if (!lbm) return;
     const uint32_t Ny = lbm->get_Ny(), Nz = lbm->get_Nz();

@@ -27,7 +27,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v145</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
@@ -80,7 +80,9 @@
       <Command>if exist "$(SolutionDir)TestApp\bin\Release\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)TestApp\bin\Release\net10.0-windows\"
 if exist "$(SolutionDir)TestApp\bin\Debug\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)TestApp\bin\Debug\net10.0-windows\"
 if exist "$(SolutionDir)DisperSim3D.CLI\bin\Release\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D.CLI\bin\Release\net10.0-windows\"
-if exist "$(SolutionDir)DisperSim3D.CLI\bin\Debug\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D.CLI\bin\Debug\net10.0-windows\"</Command>
+if exist "$(SolutionDir)DisperSim3D.CLI\bin\Debug\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D.CLI\bin\Debug\net10.0-windows\"
+if exist "$(SolutionDir)DisperSim3D\bin\Release\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D\bin\Release\net10.0-windows\"
+if exist "$(SolutionDir)DisperSim3D\bin\Debug\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D\bin\Debug\net10.0-windows\"</Command>
       <Message>Copying FluidX3D.dll to C# output directories</Message>
     </PostBuildEvent>
   </ItemDefinitionGroup>

@@ -79,6 +79,18 @@ namespace DisperSim3D.Core
             return ((uint)x, (uint)y, (uint)z);
         }
 
+        /// <summary>Float overload that returns fractional (non-snapped, non-clamped)
+        /// lattice coordinates. Used by the GPU triangle voxelizer which needs sub-cell
+        /// precision so the raycasting kernel produces accurate occupancy.</summary>
+        public (float x, float y, float z) SiToLatticeF(double xSi, double ySi, double zSi)
+        {
+            double dz = DomainHeightM / Nz;
+            return (
+                (float)((xSi + DomainHalfM) / DxSi),
+                (float)((ySi + DomainHalfM) / DxSi),
+                (float)(zSi / dz));
+        }
+
         /// <summary>Inverse of <see cref="SiToLattice"/>: lattice cell index → SI position (cell centre).</summary>
         public (double xSi, double ySi, double zSi) LatticeToSi(uint xCell, uint yCell, uint zCell)
         {

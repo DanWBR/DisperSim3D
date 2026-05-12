@@ -24,8 +24,16 @@ namespace DisperSim3D.Models
         public Point3D Position { get; set; }
 
         [Category("Detection")]
-        [Description("Concentration threshold above which the detector triggers an alarm (kg/m³).")]
+        [Description("Concentration threshold above which the detector triggers an alarm (kg/m³). Used when MeasuredQuantity = Concentration / MassFraction / ConcentrationKgM3.")]
         public double ThresholdKgM3 { get; set; } = 0.01;
+
+        [Category("Detection")]
+        [Description("Quantity the detector measures. The detector triggers when this quantity at its position exceeds Threshold. Units: %LFL, %UFL, ppm, ppb, K, mole/mass fraction, kW/m².")]
+        public ViewFieldProperty MeasuredQuantity { get; set; } = ViewFieldProperty.ConcentrationKgM3;
+
+        [Category("Detection")]
+        [Description("Trigger threshold expressed in the unit of MeasuredQuantity (e.g. 25 for 25% LFL, 100 for 100 ppm). Overrides ThresholdKgM3 when MeasuredQuantity is non-default.")]
+        public double Threshold { get; set; } = 25.0;
 
         [Category("Display")]
         [Description("Whether the detector marker is shown in the 3D viewport.")]

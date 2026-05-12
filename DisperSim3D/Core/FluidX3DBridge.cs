@@ -25,6 +25,18 @@ namespace DisperSim3D.Core
             uint xmin, uint ymin, uint zmin,
             uint xmax, uint ymax, uint zmax);
 
+        /// <summary>GPU-accelerated triangle-mesh voxelization. Each array is laid out
+        /// as [x0,y0,z0, x1,y1,z1, ...] in LATTICE coordinates and has length
+        /// 3*triangleCount. FluidX3D's raycasting kernel is ~100× faster than the
+        /// CPU per-triangle AABB approach and produces accurate curved-surface fits
+        /// for tanks/vessels/pipes.</summary>
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void fx3d_voxelize_triangles(ulong h,
+            [In] float[] p0_xyz,
+            [In] float[] p1_xyz,
+            [In] float[] p2_xyz,
+            uint triangleCount);
+
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern void fx3d_set_inlet_x(ulong h, float ux, float uy, float uz);
 

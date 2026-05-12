@@ -17,20 +17,53 @@ namespace DisperSim3D.Core
         /// <param name="engine">Dispersion engine used to compute concentrations.</param>
         /// <param name="currentTimeS">Current simulation time in seconds.</param>
         public static void EvaluateStep(
-            List<GasDetector3D> detectors, IConcentrationField engine, double currentTimeS)
+            List<GasDetector3D> detectors, IConcentrationField engine, double currentTimeS,
+            GasProperties gas = null, Scene3D sceneForRadiation = null)
         {
             foreach (var det in detectors)
             {
-                double c = engine.EvaluateConcentration(
+                double cRaw = engine.EvaluateConcentration(
                     det.Position.X, det.Position.Y, det.Position.Z);
+
+                // Convert from kg/m³ (engine native) to the user-picked quantity.
+                // The engine returns kg/m³ — we back-derive Y by dividing by ρ_air
+                // before feeding the transform helper.
+                double measured;
+                if (det.MeasuredQuantity == ViewFieldProperty.ThermalRadiationKwM2)
+                {
+                    measured = FieldTransform.RadiationAtPoint(sceneForRadiation,
+                        det.Position.X, det.Position.Y, det.Position.Z);
+                }
+                else if (det.MeasuredQuantity == ViewFieldProperty.ConcentrationKgM3
+                      || det.MeasuredQuantity == ViewFieldProperty.Concentration
+                      || det.MeasuredQuantity == ViewFieldProperty.MassFraction)
+                {
+                    // Engine already gives kg/m³ — leave as-is for ConcentrationKgM3,
+                    // back-derive Y for the others.
+                    measured = det.MeasuredQuantity == ViewFieldProperty.ConcentrationKgM3
+                        ? cRaw
+                        : cRaw / 1.205; // approximate Y back from kg/m³
+                }
+                else
+                {
+                    double y = cRaw / 1.205;
+                    measured = FieldTransform.ScalarFromMassFraction(y, det.MeasuredQuantity, gas);
+                }
 
                 det.TimeSeries.Add(new MonitorSample
                 {
                     TimeS = currentTimeS,
-                    Concentration = c
+                    Concentration = measured
                 });
 
-                if (!det.Detected && c >= det.ThresholdKgM3)
+                // Trigger logic: when MeasuredQuantity is the legacy kg/m³ field and
+                // Threshold is left at its default 25, the user might still rely on
+                // the legacy ThresholdKgM3 field. Prefer the new Threshold when the
+                // user selected a non-kg/m³ measurement.
+                double trigger = det.MeasuredQuantity == ViewFieldProperty.ConcentrationKgM3
+                    ? det.ThresholdKgM3
+                    : det.Threshold;
+                if (!det.Detected && measured >= trigger)
                 {
                     det.Detected = true;
                     det.DetectionTimeS = currentTimeS;

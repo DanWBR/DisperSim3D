@@ -38,6 +38,15 @@ namespace DisperSim3D.Core
         public bool Run(WindFieldScenario windScenario, List<BoundingBox> obstacles,
             Action<double, string> progress)
         {
+            return Run(windScenario, obstacles, null, progress);
+        }
+
+        /// <summary>Run with an optional GPU triangle bundle. When non-null and non-empty,
+        /// FluidX3D's GPU raycasting voxelizer is used; otherwise the per-triangle AABB
+        /// fallback runs on the CPU bridge.</summary>
+        public bool Run(WindFieldScenario windScenario, List<BoundingBox> obstacles,
+            TriangleBundle triangles, Action<double, string> progress)
+        {
             if (windScenario == null) throw new ArgumentNullException(nameof(windScenario));
 
             try
@@ -116,10 +125,20 @@ namespace DisperSim3D.Core
                     FluidX3DBridge.fx3d_set_lateral_free_stream(handle, uxLat, uyLat, uzLat);
                     FluidX3DBridge.fx3d_set_z_boundaries(handle);
 
-                    // Obstacles — caller supplied the pre-computed world-space AABBs
-                    // (per-mesh boxes when geometry was loaded, or one big bbox per
-                    // decoration as a fallback).
-                    int obstacleBoxes = FluidX3DObstacleVoxelizer.VoxelizeBoxes(obstacles, handle, units);
+                    // Obstacles — prefer GPU-side triangle voxelization (FluidX3D
+                    // raycasts every cell against the mesh, accurate for curved
+                    // surfaces). Fall back to per-triangle AABB on the CPU bridge
+                    // when no triangle bundle was supplied.
+                    int obstacleBoxes;
+                    if (triangles != null && triangles.TriangleCount > 0)
+                    {
+                        obstacleBoxes = FluidX3DObstacleVoxelizer.VoxelizeTrianglesOnGpu(
+                            triangles, handle, units);
+                    }
+                    else
+                    {
+                        obstacleBoxes = FluidX3DObstacleVoxelizer.VoxelizeBoxes(obstacles, handle, units);
+                    }
 
                     // TEMPERATURE init — MUST be 1.0 (ambient), NOT zero. T=0 host buffer
                     // makes the thermal LBM diverge and pegs all velocities at ±c_s.

@@ -1020,6 +1020,8 @@ namespace DisperSim3D.Controls
                     DoNewSimulation(null);
                     break;
                 case ProjectTreeAction.RunSimulation:
+                    DoConfigureAndRunSimulation(e.ItemId);
+                    break;
                 case ProjectTreeAction.RerunSimulation:
                     DoRunSimulation(e.ItemId);
                     break;
@@ -1478,6 +1480,29 @@ namespace DisperSim3D.Controls
             _editor.Scene.Simulations.Remove(sim);
         }
 
+        /// <summary>Opens the SimulationEditorDialog pre-filled with the simulation's
+        /// current snapshot params; on OK applies them in-place and triggers a run.
+        /// Used by the "Configure &amp; Run" context-menu action — distinct from
+        /// "Re-run" which skips the dialog (calls <see cref="DoRunSimulation"/> directly).</summary>
+        private void DoConfigureAndRunSimulation(string id)
+        {
+            var sim = _editor.Scene.Simulations.FirstOrDefault(s => s.Id == id);
+            if (sim == null) return;
+            using (var dlg = new SimulationEditorDialog(_editor.Scene, sim))
+            {
+                if (dlg.ShowDialog() == DialogResult.OK && dlg.Result != null)
+                {
+                    if (sim.SnapshotCfdConfig == null)
+                        sim.SnapshotCfdConfig = new CfdConfiguration();
+                    var gas = ResolveGasForSimulation(sim);
+                    var meteo = ResolveMeteoForSimulation(sim);
+                    CfdConfigurationPresets.ApplyForSolver(sim.SnapshotCfdConfig, sim.SolverType, gas, meteo);
+                    UpdateStatus("Simulation configured: " + sim.Name);
+                    DoRunSimulation(id);
+                }
+            }
+        }
+
         private void DoRunSimulation(string id)
         {
             var sim = _editor.Scene.Simulations.FirstOrDefault(s => s.Id == id);
@@ -1669,6 +1694,7 @@ namespace DisperSim3D.Controls
             // (cross-thread access throws). We walk the model children here and pass plain
             // value-typed BoundingBoxes to the runner.
             System.Collections.Generic.List<BoundingBox> fluidObstacles = null;
+            Core.TriangleBundle fluidTriangles = null;
             if (wf.UseFluidX3D)
             {
                 fluidObstacles = new System.Collections.Generic.List<BoundingBox>();
@@ -1677,6 +1703,11 @@ namespace DisperSim3D.Controls
                     var boxes = Core.FluidX3DObstacleVoxelizer.ExtractWorldAabbs(deco);
                     fluidObstacles.AddRange(boxes);
                 }
+                // GPU-side: extract a flat world-space triangle list. FluidX3D's
+                // voxelize_mesh_on_device raycasts every cell against the mesh on the GPU,
+                // producing accurate occupancy for curved surfaces (tanks, vessels) that
+                // the per-triangle AABB approach can only approximate.
+                fluidTriangles = Core.FluidX3DObstacleVoxelizer.ExtractWorldTriangles(fs.Decorations);
             }
 
             var dpiF = this.DeviceDpi / 96f;
@@ -1726,7 +1757,7 @@ namespace DisperSim3D.Controls
                 if (wf.UseFluidX3D)
                 {
                     var fx = new FluidX3DWindFieldRunner();
-                    fx.Run(wf, fluidObstacles,
+                    fx.Run(wf, fluidObstacles, fluidTriangles,
                         (frac, msg) => worker.ReportProgress((int)(frac * 100), msg));
                     return;
                 }

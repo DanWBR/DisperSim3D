@@ -41,6 +41,10 @@ namespace DisperSim3D.Models
         public bool Visible { get; set; } = true;
 
         [Category("Data")]
+        [Description("Quantity the monitor records in its time series. Units: %LFL, %UFL, ppm, ppb, K, mole/mass fraction, kW/m².")]
+        public ViewFieldProperty MeasuredQuantity { get; set; } = ViewFieldProperty.ConcentrationKgM3;
+
+        [Category("Data")]
         [Description("Concentration time-series collected during the run.")]
         public List<MonitorSample> TimeSeries { get; set; } = new List<MonitorSample>();
 

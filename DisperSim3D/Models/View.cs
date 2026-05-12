@@ -25,7 +25,7 @@ namespace DisperSim3D.Models
     /// </summary>
     public enum ViewFieldProperty
     {
-        /// <summary>The release species mass fraction (CH4 / SF6 / s — auto from source gas).</summary>
+        /// <summary>The release species mass fraction (CH4 / SF6 / s — auto from source gas). Synonym of MassFraction.</summary>
         Concentration = 0,
         /// <summary>Temperature field T (K).</summary>
         Temperature = 1,
@@ -38,7 +38,23 @@ namespace DisperSim3D.Models
         /// <summary>Turbulent dissipation rate epsilon.</summary>
         TurbulentEpsilon = 5,
         /// <summary>Turbulent eddy viscosity nut.</summary>
-        TurbulentViscosity = 6
+        TurbulentViscosity = 6,
+        /// <summary>Mass fraction of released species (kg/kg, [0..1]). Same as Concentration.</summary>
+        MassFraction = 7,
+        /// <summary>Mole fraction (Y_i × M_mix / M_species) — useful for ppm/ppb conversion.</summary>
+        MoleFraction = 8,
+        /// <summary>Mass concentration in kg/m³ (Y_i × ρ_mixture).</summary>
+        ConcentrationKgM3 = 9,
+        /// <summary>Volumetric concentration in parts per million (mole_fraction × 1e6).</summary>
+        ConcentrationPpm = 10,
+        /// <summary>Volumetric concentration in parts per billion (mole_fraction × 1e9).</summary>
+        ConcentrationPpb = 11,
+        /// <summary>Percentage of Lower Flammability Limit (kg/m³ / LFL_kg/m³ × 100).</summary>
+        PercentLFL = 12,
+        /// <summary>Percentage of Upper Flammability Limit (kg/m³ / UFL_kg/m³ × 100).</summary>
+        PercentUFL = 13,
+        /// <summary>Thermal radiation flux (kW/m²) — computed analytically from every FireSource.</summary>
+        ThermalRadiationKwM2 = 14
     }
 
     /// <summary>How the View collapses transient timesteps to a single field.</summary>

@@ -658,7 +658,7 @@ namespace DisperSim3D.Controls
             }
 
             foreach (var (mon, c) in result.MonitorData)
-                mon.TimeSeries.Add(new MonitorSample { TimeS = 0, Concentration = c });
+                mon.TimeSeries.Add(new MonitorSample { TimeS = 0, Concentration = ApplyMonitorTransform(mon, c) });
 
             _dispersionState = DispersionSimulationState.SteadyStateComplete;
         }
@@ -824,7 +824,7 @@ namespace DisperSim3D.Controls
                 if (!monitor.Visible) continue;
                 double c = data.Engine.EvaluateConcentration(
                     monitor.Position.X, monitor.Position.Y, monitor.Position.Z);
-                monitor.TimeSeries.Add(new MonitorSample { TimeS = 0, Concentration = c });
+                monitor.TimeSeries.Add(new MonitorSample { TimeS = 0, Concentration = ApplyMonitorTransform(monitor, c) });
             }
 
             _dispersionState = DispersionSimulationState.SteadyStateComplete;
@@ -1146,7 +1146,7 @@ namespace DisperSim3D.Controls
 
                     bool isSteady = scenario.SolverType == CfdSolverType.ScalarTransportFoamSteady
                                  || scenario.SolverType == CfdSolverType.ScalarSimpleFoam;
-                    string solverLabel = isSteady ? "CFD Steady" : "CFD (OpenFOAM)";
+                    string solverLabel = "[" + Core.SolverCode.Of(scenario.SolverType) + "] " + Core.SolverCode.DisplayName(scenario.SolverType);
                     string baseName = string.IsNullOrEmpty(scenario.Name) ? solverLabel : scenario.Name;
                     var entry = new CfdSimulationEntry
                     {
@@ -2141,7 +2141,12 @@ namespace DisperSim3D.Controls
 
                 _cfdConcentrationField = r.concField;
                 foreach (var (mon, c) in (List<(MonitorPoint3D, double)>)r.monitorData)
-                    mon.TimeSeries.Add(new MonitorSample { TimeS = t, Concentration = c });
+                {
+                    // c is in kg/m³ from the engine. Convert to the monitor's chosen
+                    // unit before storing in the time series.
+                    double measured = ApplyMonitorTransform(mon, c);
+                    mon.TimeSeries.Add(new MonitorSample { TimeS = t, Concentration = measured });
+                }
                 MonitorDataUpdated?.Invoke(this, EventArgs.Empty);
 
                 RemoveDispersionVisuals();
@@ -3482,6 +3487,7 @@ namespace DisperSim3D.Controls
                         new System.Xml.Linq.XAttribute("PosX", m.Position.X.ToString(inv)),
                         new System.Xml.Linq.XAttribute("PosY", m.Position.Y.ToString(inv)),
                         new System.Xml.Linq.XAttribute("PosZ", m.Position.Z.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("MeasuredQuantity", m.MeasuredQuantity.ToString()),
                         new System.Xml.Linq.XAttribute("Visible", m.Visible))));
         }
 
@@ -3501,6 +3507,9 @@ namespace DisperSim3D.Controls
                     double.Parse((string)me.Attribute("PosY") ?? "0", inv),
                     double.Parse((string)me.Attribute("PosZ") ?? "0", inv));
                 monitor.Visible = bool.Parse((string)me.Attribute("Visible") ?? "True");
+                ViewFieldProperty mqM;
+                if (Enum.TryParse((string)me.Attribute("MeasuredQuantity") ?? "ConcentrationKgM3", out mqM))
+                    monitor.MeasuredQuantity = mqM;
                 fs.MonitorPoints.Add(monitor);
             }
         }
@@ -3633,6 +3642,8 @@ namespace DisperSim3D.Controls
                         new System.Xml.Linq.XAttribute("PosY", d.Position.Y.ToString(inv)),
                         new System.Xml.Linq.XAttribute("PosZ", d.Position.Z.ToString(inv)),
                         new System.Xml.Linq.XAttribute("Threshold", d.ThresholdKgM3.ToString(inv)),
+                        new System.Xml.Linq.XAttribute("MeasuredQuantity", d.MeasuredQuantity.ToString()),
+                        new System.Xml.Linq.XAttribute("MeasuredThreshold", d.Threshold.ToString(inv)),
                         new System.Xml.Linq.XAttribute("Visible", d.Visible))));
         }
 
@@ -3652,6 +3663,10 @@ namespace DisperSim3D.Controls
                     double.Parse((string)de.Attribute("PosY") ?? "0", inv),
                     double.Parse((string)de.Attribute("PosZ") ?? "0", inv));
                 det.ThresholdKgM3 = double.Parse((string)de.Attribute("Threshold") ?? "0.01", inv);
+                ViewFieldProperty mq;
+                if (Enum.TryParse((string)de.Attribute("MeasuredQuantity") ?? "ConcentrationKgM3", out mq))
+                    det.MeasuredQuantity = mq;
+                det.Threshold = double.Parse((string)de.Attribute("MeasuredThreshold") ?? "25", inv);
                 det.Visible = bool.Parse((string)de.Attribute("Visible") ?? "True");
                 fs.GasDetectors.Add(det);
             }
@@ -4421,6 +4436,25 @@ namespace DisperSim3D.Controls
         /// the Views collection or any View property changes. Removed/hidden views have their
         /// visual stripped from the viewport; new/edited views get a fresh visual.
         /// </summary>
+        /// <summary>Convert a kg/m³ concentration sample to the monitor's chosen unit
+        /// (%LFL, ppm, mole fraction, K, kW/m², etc.). Pulls the gas via the scenario's
+        /// first source. Returns the input unchanged for ConcentrationKgM3.</summary>
+        private double ApplyMonitorTransform(MonitorPoint3D mon, double concKgM3)
+        {
+            var q = mon.MeasuredQuantity;
+            if (q == DisperSim3D.Models.ViewFieldProperty.ThermalRadiationKwM2)
+                return Core.FieldTransform.RadiationAtPoint(_scene, mon.Position.X, mon.Position.Y, mon.Position.Z);
+            if (q == DisperSim3D.Models.ViewFieldProperty.ConcentrationKgM3) return concKgM3;
+            if (q == DisperSim3D.Models.ViewFieldProperty.Concentration
+                || q == DisperSim3D.Models.ViewFieldProperty.MassFraction)
+                return concKgM3 / 1.205;
+            var gas = _scene?.DispersionScenario?.Sources?.Count > 0
+                ? _scene.DispersionScenario.Sources[0].Gas
+                : (_scene?.TopLevelSources?.Count > 0 ? _scene.TopLevelSources[0].Gas : null);
+            double y = concKgM3 / 1.205;
+            return Core.FieldTransform.ScalarFromMassFraction(y, q, gas);
+        }
+
         public void RefreshViews()
         {
             if (_viewport == null || _scene == null) return;

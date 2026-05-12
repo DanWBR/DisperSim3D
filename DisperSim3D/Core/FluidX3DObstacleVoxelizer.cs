@@ -12,8 +12,119 @@ namespace DisperSim3D.Core
     /// and returns plain value-typed <see cref="BoundingBox"/> objects that the runner
     /// can safely consume from a background worker.
     /// </summary>
+    /// <summary>Flat triangle bundle in world-space SI coords. Returned by
+    /// <see cref="FluidX3DObstacleVoxelizer.ExtractWorldTriangles"/> for the GPU
+    /// voxelization path — each array has length <c>3 * TriangleCount</c>.</summary>
+    public sealed class TriangleBundle
+    {
+        public float[] P0;
+        public float[] P1;
+        public float[] P2;
+        public int TriangleCount;
+    }
+
     public static class FluidX3DObstacleVoxelizer
     {
+        /// <summary>UI-THREAD ONLY. Walks every decoration's Model3D tree and collects
+        /// all triangle vertices in world space. The result is a flat triple of float
+        /// arrays ready for <see cref="VoxelizeTrianglesOnGpu"/> on a background thread.
+        /// Coordinates are in SI metres; the caller converts to lattice with
+        /// <see cref="FluidX3DUnits.SiToLatticeF"/>.</summary>
+        public static TriangleBundle ExtractWorldTriangles(IEnumerable<Decoration3D> decos)
+        {
+            var p0 = new List<float>();
+            var p1 = new List<float>();
+            var p2 = new List<float>();
+            if (decos != null)
+            {
+                foreach (var deco in decos)
+                {
+                    if (deco?.Model3D == null) continue;
+                    var xform = deco.GetWorldTransform();
+                    WalkGroupTriangles(deco.Model3D, xform, p0, p1, p2);
+                }
+            }
+            return new TriangleBundle
+            {
+                P0 = p0.ToArray(),
+                P1 = p1.ToArray(),
+                P2 = p2.ToArray(),
+                TriangleCount = p0.Count / 3
+            };
+        }
+
+        private static void WalkGroupTriangles(Model3DGroup group, Transform3D worldXform,
+            List<float> p0, List<float> p1, List<float> p2)
+        {
+            if (group == null) return;
+            foreach (var child in group.Children)
+            {
+                if (child is Model3DGroup g)
+                    WalkGroupTriangles(g, worldXform, p0, p1, p2);
+                else if (child is GeometryModel3D gm && gm.Geometry is MeshGeometry3D mesh)
+                    EmitTriangleVerts(mesh, gm.Transform, worldXform, p0, p1, p2);
+            }
+        }
+
+        private static void EmitTriangleVerts(MeshGeometry3D mesh, Transform3D localXform,
+            Transform3D worldXform, List<float> p0, List<float> p1, List<float> p2)
+        {
+            var positions = mesh.Positions;
+            var indices = mesh.TriangleIndices;
+            int triCount = indices.Count >= 3 ? indices.Count / 3 : positions.Count / 3;
+            for (int t = 0; t < triCount; t++)
+            {
+                int i0, i1, i2;
+                if (indices.Count >= 3)
+                {
+                    i0 = indices[t * 3];
+                    i1 = indices[t * 3 + 1];
+                    i2 = indices[t * 3 + 2];
+                }
+                else { i0 = t * 3; i1 = t * 3 + 1; i2 = t * 3 + 2; }
+                if (i0 >= positions.Count || i1 >= positions.Count || i2 >= positions.Count)
+                    continue;
+
+                var v0 = positions[i0]; var v1 = positions[i1]; var v2 = positions[i2];
+                if (localXform != null)
+                {
+                    v0 = localXform.Transform(v0); v1 = localXform.Transform(v1); v2 = localXform.Transform(v2);
+                }
+                if (worldXform != null)
+                {
+                    v0 = worldXform.Transform(v0); v1 = worldXform.Transform(v1); v2 = worldXform.Transform(v2);
+                }
+                p0.Add((float)v0.X); p0.Add((float)v0.Y); p0.Add((float)v0.Z);
+                p1.Add((float)v1.X); p1.Add((float)v1.Y); p1.Add((float)v1.Z);
+                p2.Add((float)v2.X); p2.Add((float)v2.Y); p2.Add((float)v2.Z);
+            }
+        }
+
+        /// <summary>BACKGROUND-SAFE. Converts world-SI triangle vertices to lattice
+        /// coords and dispatches FluidX3D's GPU raycasting voxelizer. Returns the
+        /// triangle count actually processed (0 = nothing voxelized).</summary>
+        public static int VoxelizeTrianglesOnGpu(TriangleBundle bundle, ulong lbmHandle,
+            FluidX3DUnits units)
+        {
+            if (bundle == null || bundle.TriangleCount == 0) return 0;
+            int n3 = bundle.TriangleCount * 3;
+            var p0L = new float[n3];
+            var p1L = new float[n3];
+            var p2L = new float[n3];
+            for (int i = 0; i < bundle.TriangleCount; i++)
+            {
+                int b = 3 * i;
+                var (x0, y0, z0) = units.SiToLatticeF(bundle.P0[b], bundle.P0[b + 1], bundle.P0[b + 2]);
+                var (x1, y1, z1) = units.SiToLatticeF(bundle.P1[b], bundle.P1[b + 1], bundle.P1[b + 2]);
+                var (x2, y2, z2) = units.SiToLatticeF(bundle.P2[b], bundle.P2[b + 1], bundle.P2[b + 2]);
+                p0L[b] = x0; p0L[b + 1] = y0; p0L[b + 2] = z0;
+                p1L[b] = x1; p1L[b + 1] = y1; p1L[b + 2] = z1;
+                p2L[b] = x2; p2L[b + 1] = y2; p2L[b + 2] = z2;
+            }
+            FluidX3DBridge.fx3d_voxelize_triangles(lbmHandle, p0L, p1L, p2L, (uint)bundle.TriangleCount);
+            return bundle.TriangleCount;
+        }
+
         /// <summary>
         /// UI-THREAD ONLY. Walks the decoration's <see cref="Decoration3D.Model3D"/> tree
         /// and produces one world-space AABB per child <see cref="GeometryModel3D"/>.

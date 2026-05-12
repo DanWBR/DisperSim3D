@@ -33,32 +33,54 @@ namespace DisperSim3D.Core
             if (string.IsNullOrEmpty(sim.CasePath) || !Directory.Exists(sim.CasePath))
             { LogView($"[ViewRenderer] missing CasePath: '{sim.CasePath}'"); return null; }
 
-            string fieldName = ResolveFieldName(view.FieldProperty, sim);
-            if (string.IsNullOrEmpty(fieldName))
-            { LogView("[ViewRenderer] fieldName null/empty"); return null; }
-
             int nx = sim.SnapshotGridResolution > 0 ? sim.SnapshotGridResolution : 60;
             int ny = nx;
             int nz = Math.Max(1, nx / 2);
             double half = sim.SnapshotDomainSizeM > 0 ? sim.SnapshotDomainSizeM : 200;
 
-            var result = OpenFoamResultReader.ReadResults(sim.CasePath, nx, ny, nz, half,
-                scalarFieldName: fieldName);
-            if (result == null || !result.IsLoaded || result.TimeSteps.Count == 0)
+            double[,,] field;
+            if (FieldTransform.IsAnalytic(view.FieldProperty))
             {
-                // FluidX3D dispersion writes flat <time>.bin files at the case root rather
-                // than OpenFOAM-style time subdirectories. Detect that layout and rebuild
-                // an OpenFoamResult by hand so the rest of the rendering pipeline works.
-                result = TryLoadFlatBinCase(sim.CasePath, ref nx, ref ny, ref nz, half);
-                if (result == null || !result.IsLoaded || result.TimeSteps.Count == 0)
-                { LogView($"[ViewRenderer] no results at '{sim.CasePath}' (nx={nx})"); return null; }
-                LogView($"[ViewRenderer] flat-bin loaded: {result.TimeSteps.Count} ts, nx={nx} ny={ny} nz={nz}");
+                // Thermal radiation: doesn't sample from the CFD result — computed
+                // analytically from every FireSource in the scene at each cell centre.
+                field = FieldTransform.BuildRadiationField(scene, nx, ny, nz, half);
+                if (field == null) { LogView("[ViewRenderer] analytic field null"); return null; }
+                LogView($"[ViewRenderer] analytic radiation field {nx}x{ny}x{nz}");
             }
+            else
+            {
+                string fieldName = ResolveFieldName(view.FieldProperty, sim);
+                if (string.IsNullOrEmpty(fieldName))
+                { LogView("[ViewRenderer] fieldName null/empty"); return null; }
 
-            var field = SelectField(result, view.TimeMode, view.SpecificTimeS);
-            if (field == null)
-            { LogView("[ViewRenderer] SelectField returned null"); return null; }
-            LogView($"[ViewRenderer] field {field.GetLength(0)}x{field.GetLength(1)}x{field.GetLength(2)}, building {view.Kind}");
+                var result = OpenFoamResultReader.ReadResults(sim.CasePath, nx, ny, nz, half,
+                    scalarFieldName: fieldName);
+                if (result == null || !result.IsLoaded || result.TimeSteps.Count == 0)
+                {
+                    // FluidX3D dispersion writes flat <time>.bin files at the case root rather
+                    // than OpenFOAM-style time subdirectories. Detect that layout and rebuild
+                    // an OpenFoamResult by hand so the rest of the rendering pipeline works.
+                    result = TryLoadFlatBinCase(sim.CasePath, ref nx, ref ny, ref nz, half);
+                    if (result == null || !result.IsLoaded || result.TimeSteps.Count == 0)
+                    { LogView($"[ViewRenderer] no results at '{sim.CasePath}' (nx={nx})"); return null; }
+                    LogView($"[ViewRenderer] flat-bin loaded: {result.TimeSteps.Count} ts, nx={nx} ny={ny} nz={nz}");
+                }
+
+                field = SelectField(result, view.TimeMode, view.SpecificTimeS);
+                if (field == null)
+                { LogView("[ViewRenderer] SelectField returned null"); return null; }
+
+                // If the user picked a derived quantity (ppm, %LFL, mole fraction, …),
+                // transform Y_i → target unit using the simulation source's gas. The
+                // ContourXY / Isosurface renderers downstream don't know or care which
+                // unit they're rendering — just that the values are physically meaningful.
+                if (FieldTransform.NeedsSpeciesField(view.FieldProperty))
+                {
+                    var gas = ResolveGasForSimulation(sim, scene);
+                    field = FieldTransform.FromMassFraction(field, view.FieldProperty, gas);
+                }
+                LogView($"[ViewRenderer] field {field.GetLength(0)}x{field.GetLength(1)}x{field.GetLength(2)}, prop={view.FieldProperty}, building {view.Kind}");
+            }
 
             switch (view.Kind)
             {
@@ -133,10 +155,13 @@ namespace DisperSim3D.Core
         /// </summary>
         private static string ResolveFieldName(ViewFieldProperty prop, Simulation sim)
         {
+            // All species-derived quantities (mass/mole fraction, kg/m³, ppm/ppb,
+            // %LFL/%UFL) read the SAME source field — the released-species mass
+            // fraction Y_i. FieldTransform then converts it to the user's unit.
+            if (FieldTransform.NeedsSpeciesField(prop))
+                return OpenFoamCaseGenerator.ResolveOpenFoamSpecies(sim.SnapshotSource);
             switch (prop)
             {
-                case ViewFieldProperty.Concentration:
-                    return OpenFoamCaseGenerator.ResolveOpenFoamSpecies(sim.SnapshotSource);
                 case ViewFieldProperty.Temperature:        return "T";
                 case ViewFieldProperty.WindSpeed:          return "magU"; // assumes mag(U) FO
                 case ViewFieldProperty.Pressure:           return "p_rgh";
@@ -145,6 +170,21 @@ namespace DisperSim3D.Core
                 case ViewFieldProperty.TurbulentViscosity: return "nut";
                 default: return null;
             }
+        }
+
+        /// <summary>Resolve the gas attached to the simulation's snapshotted source —
+        /// preferring the linked gas-library entry, then falling back to the inline
+        /// <see cref="ReleaseSource3D.Gas"/>. Used for unit conversion (M, LFL, UFL).</summary>
+        private static GasProperties ResolveGasForSimulation(Simulation sim, Scene3D scene)
+        {
+            if (sim?.SnapshotSource == null) return null;
+            var src = sim.SnapshotSource;
+            if (!string.IsNullOrEmpty(src.GasRefId) && scene?.GasLibrary != null)
+            {
+                var lib = scene.GasLibrary.Find(g => g.Id == src.GasRefId);
+                if (lib != null) return lib.AsGasProperties();
+            }
+            return src.Gas;
         }
 
         // ── time-mode selection ──
