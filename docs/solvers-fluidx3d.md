@@ -169,6 +169,80 @@ declarations. Handles are opaque 64-bit integers backed by a
 `std::unordered_map<uint64_t, std::unique_ptr<LBM>>` on the native side, so
 many simulations can run sequentially without state leak between them.
 
+### Building FluidX3D on Linux / macOS
+
+The Windows build of `FluidX3D.dll` lives in `FluidX3D/FluidX3D.vcxproj`
+(MSBuild + MSVC). The cross-platform recipe is in `FluidX3D/makefile`
+under the `disp-bridge-Linux` / `disp-bridge-macOS` targets, which compile
+the same source set (every `src/*.cpp` **except** `main.cpp`, plus
+`disp_bridge.cpp`) into `bin/libFluidX3D.so` / `bin/libFluidX3D.dylib`.
+
+```bash
+# Inside the repo, on a Linux/macOS shell:
+cd FluidX3D
+./make-disp-bridge.sh           # produces bin/libFluidX3D.{so,dylib}
+./make-disp-bridge.sh --copy    # also copies into ../DisperSim3D.CLI/bin/Release/net10.0/
+```
+
+Equivalent manual `make` invocation if you prefer:
+
+```bash
+cd FluidX3D
+make disp-bridge-Linux -j$(nproc)     # Linux
+make disp-bridge-macOS -j$(sysctl -n hw.ncpu)   # macOS
+```
+
+The output is a position-independent shared library (`-fPIC -shared`)
+linked against the bundled `src/OpenCL/lib/libOpenCL.so`. At **runtime**
+you need an OpenCL ICD reachable through `libOpenCL.so.1`.
+
+#### Quick path — PoCL (CPU OpenCL, universal)
+
+For development, CI, and any host without a GPU (including WSL2 where
+GPU passthrough is finicky), install **PoCL** — a CPU OpenCL
+implementation that works on every x86_64 Linux distro out of the box:
+
+```bash
+sudo apt install -y pocl-opencl-icd ocl-icd-libopencl1 clinfo
+clinfo -l    # should list "Platform #0: Portable Computing Language"
+```
+
+Slow for production-sized 3-D LBM (CPU ≪ GPU), but enough to validate
+the entire pipeline (engine → bridge → libFluidX3D.so → OpenCL kernel
+compilation → solve). The bundled benchmark harness
+(`DisperSim3D.CLI --validate benchmarks/`) runs analytical solvers only
+and doesn't touch OpenCL, so it's an even faster smoke if you just want
+to verify the .NET side.
+
+#### Production path — GPU ICDs
+
+| GPU | Package | Notes |
+|---|---|---|
+| **NVIDIA** | already exposed via WSL2 / `nvidia-driver-XXX` on bare-metal | Add `/etc/OpenCL/vendors/nvidia.icd` if not auto-created — `echo "/usr/lib/wsl/lib/libnvidia-opencl.so.1" \| sudo tee /etc/OpenCL/vendors/nvidia.icd` |
+| **AMD** (RX 6000+) | `amdgpu-install --usecase=opencl --opencl=rocr` | See FluidX3D's `--list-gpus` error banner for the exact apt sequence; only ROCm-supported GPUs |
+| **Intel iGPU / Arc** | `intel-opencl-icd` | Works on integrated graphics in Intel CPUs Gen 9+ |
+| **Generic loader** | `ocl-icd-libopencl1` | Always install this in addition to the vendor package |
+
+[`FluidX3DBridge.cs`](https://github.com/DanWBR/DisperSim3D/blob/main/DisperSim3D/Core/FluidX3DBridge.cs)
+uses `[DllImport("FluidX3D")]` — no extension. .NET appends the
+platform-correct suffix and prefix: `FluidX3D.dll` on Windows,
+`libFluidX3D.so` on Linux, `libFluidX3D.dylib` on macOS. (Don't use
+`"FluidX3D.dll"` literally — .NET on Linux never strips that suffix and
+will only try `FluidX3D.dll{,.so}` and `libFluidX3D.dll{,.so}`, never the
+`libFluidX3D.so` you actually built.)
+
+Smoke test the build:
+
+```bash
+cp bin/libFluidX3D.so ../DisperSim3D.CLI/bin/Release/net10.0/
+dotnet ../DisperSim3D.CLI/bin/Release/net10.0/DisperSim3D.CLI.dll --list-gpus
+```
+
+A successful run enumerates every OpenCL device on the host as JSON. If
+`--list-gpus` reports `FluidX3D.dll not loadable (DllNotFound / no OpenCL
+device)`, either the library wasn't found (check the file is next to
+`DisperSim3D.CLI.dll`) or there's no OpenCL ICD installed.
+
 ## FluidX3D feature flags
 
 Compiled into `FluidX3D.dll` via `defines.hpp`:

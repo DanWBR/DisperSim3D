@@ -2,8 +2,12 @@
   <PropertyGroup>
     <!-- Multi-targeting: net10.0 lets the engine build on Linux/macOS for the
          CLI and cross-platform consumers; net10.0-windows enables the WPF
-         interop conversions used by DisperSim3D.UI.Wpf and DisperSim3D.App. -->
-    <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
+         interop conversions used by DisperSim3D.UI.Wpf and DisperSim3D.App.
+         The windows TFM is only included when MSBuild is running on Windows
+         (otherwise NETSDK1100 fires the moment the SDK tries to restore the
+         windows variant on Linux/macOS, even when nothing consumes it). -->
+    <TargetFrameworks Condition="'$(OS)' == 'Windows_NT'">net10.0;net10.0-windows</TargetFrameworks>
+    <TargetFrameworks Condition="'$(OS)' != 'Windows_NT'">net10.0</TargetFrameworks>
     <OutputType>Library</OutputType>
     <RootNamespace>DisperSim3D</RootNamespace>
     <AssemblyName>DisperSim3D</AssemblyName>

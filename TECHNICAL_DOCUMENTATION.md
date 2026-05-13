@@ -2,7 +2,13 @@
 
 **Version**: 1.0  
 **License**: GPL v3  
-**Target framework**: .NET 10 (Windows, WPF + WinForms)  
+**Target frameworks**:
+
+- `DisperSim3D` (calculation engine) — multi-targets **`net10.0`** + **`net10.0-windows`** (Linux/macOS-friendly)
+- `DisperSim3D.CLI` (headless runner) — **`net10.0`** (cross-platform)
+- `DisperSim3D.UI.Wpf` (WPF + WinForms UI library) — **`net10.0-windows`**
+- `DisperSim3D.App` (desktop entry point) — **`net10.0-windows`**
+
 **Author**: Daniel Wagner Oliveira de Medeiros
 
 ---
@@ -39,11 +45,26 @@ DisperSim 3D is an open-source desktop application for simulating accidental gas
 
 ### 2.1 Solution layout
 
-| Project | Type | Purpose |
+The solution splits into a portable calculation engine and a Windows-only WPF UI library. The split keeps the WinForms desktop app intact while letting the engine and headless CLI compile on Linux and macOS without dragging in the Windows desktop SDK.
+
+| Project | Type | Target framework(s) | Purpose |
+|---|---|---|---|
+| `DisperSim3D` | Class library | **`net10.0;net10.0-windows`** (multi-target) | Calculation engine: models, solvers (Gaussian / OpenFOAM / FluidX3D dispatch), validation harness, portable `Geometry` types. WPF interop conversions on `Point3D`/`Vector3D`/`Color` compile only on the windows TFM (gated by `#if WINDOWS`). |
+| `DisperSim3D.UI.Wpf` | Class library | `net10.0-windows` (`UseWPF=true`, `UseWindowsForms=true`) | WPF / HelixToolkit / HandyControl / DockPanelSuite: `Scene3DEditorControl`, `Scene3DEditorPanel`, every dialog, every renderer (`DispersionRenderer`, `ViewRenderer`, `MarchingCubes`, `MeshClipper`, `ModelLoader`, etc.), `SimulationManager`, property adapters, and the WPF half of `FluidX3DObstacleVoxelizer`. References `DisperSim3D`. |
+| `DisperSim3D.CLI` | Console exe | **`net10.0`** (no UseWPF) | Headless batch runner — reads XML, runs solver, prints summary. Cross-platform: builds and runs on Linux/macOS. |
+| `DisperSim3D.App` | WinForms exe | `net10.0-windows` | Standalone desktop entry point. References **both** `DisperSim3D` and `DisperSim3D.UI.Wpf`. |
+
+**Portable geometry primitives** live in `DisperSim3D/Geometry/`:
+
+| Type | Mirrors | Notes |
 |---|---|---|
-| `DisperSim3D` | Library (net10.0-windows) | Models, solvers, viewport, dialogs |
-| `DisperSim3D.CLI` | Console exe | Headless batch runner — reads XML, runs solver, prints summary |
-| `DisperSim3D.App` | WinForms exe | Standalone UI host that embeds the editor panel |
+| `DisperSim3D.Geometry.Point3D` | `System.Windows.Media.Media3D.Point3D` | Same `(double X, Y, Z)` layout, same operators, `Point - Point → Vector`, `Point + Vector → Point`. Carries `[TypeConverter(typeof(Point3DStringConverter))]` for the property grid. |
+| `DisperSim3D.Geometry.Vector3D` | `System.Windows.Media.Media3D.Vector3D` | Same surface: `Length`, `LengthSquared`, instance `Normalize`/`Negate`, static `CrossProduct`/`DotProduct`/`AngleBetween`. Operators include unary minus and scalar multiply/divide. |
+| `DisperSim3D.Geometry.Color` | `System.Windows.Media.Color` | 32-bit ARGB with `ScR`/`ScG`/`ScB`/`ScA` accessors and a `Parse("#AARRGGBB")` helper for XML round-trip. Companion `DisperSim3D.Geometry.Colors` constants (`Red`, `Cyan`, `LightGray`, …). |
+
+On `net10.0-windows`, the portable types expose **implicit conversions** to and from their WPF counterparts (the conversion operators are wrapped in `#if WINDOWS`). UI code can pass a portable `Point3D` straight into HelixToolkit calls and vice versa. On `net10.0`, those operators vanish and engine code stays free of `System.Windows.*`.
+
+A handful of formerly engine-resident methods that depend on WPF (`Decoration3D.ApplyClip` / `GetWorldTransform` / `UpdateBoundingBox`, `BoundingBox.Transform(Transform3D)`) live as **extension methods** in `DisperSim3D.UI.Wpf.Models` so the call-site syntax stays identical (`deco.ApplyClip()`) without the engine assembly depending on `Model3DGroup` / `Transform3D`.
 
 ### 2.2 UI stack
 
@@ -92,6 +113,9 @@ Solvers (Core/)                          External pipeline
 2. **Dock framework via DockPanelSuite**: panels are full WeifenLuo `DockContent`s; viewport stays as `DockState.Document` and never closes.
 3. **Tree action separation**: `ProjectTreeWpfPanel` raises high-level events (`ActionRequested`, `VisibilityChanged`, `SelectionChanged`); the panel doesn't know about solvers or dialogs.
 4. **CFD pipeline is fully external**: case directories are written to disk, OpenFOAM is invoked via `OpenFoamEnvironment` (WSL2/Docker/Native/BlueCFD), results read from disk. The C# runtime never links to OpenFOAM.
+5. **Engine / UI separation for cross-platform**: every type that imports `System.Windows.Media[.Media3D]`, HelixToolkit, HandyControl or DockPanelSuite lives in `DisperSim3D.UI.Wpf`. The engine project (`DisperSim3D.csproj`) multi-targets `net10.0;net10.0-windows` so it builds on Linux/macOS for the CLI and any future cross-platform UI. Portable `Point3D`/`Vector3D`/`Color` mirror the WPF API one-for-one and (on the windows TFM) expose implicit conversions to keep call sites unchanged.
+6. **`Decoration3D.Model3D` is typed `object`** in engine, not `Model3DGroup`. Models hold the runtime WPF visual through an `object` slot; the UI layer casts on read (`deco.Model3D as Model3DGroup`). Saving/loading is unaffected because the visual is loaded from the `.obj`/`.stl` path at runtime — it never serializes.
+7. **`[Editor(typeof(...))]` attributes on models use string-based type references** (`"DisperSim3D.Controls.Point3DPropertyEditor, DisperSim3D.UI.Wpf"`) so the engine assembly doesn't compile-link the UI editor types. Property grids resolve them at runtime via reflection.
 
 ---
 
@@ -330,9 +354,9 @@ If `AppSettings.PreferredComputeDeviceId ≥ 0`, all four runners call `fx3d_cre
 [`Models/DetectorAllocation.cs`](DisperSim3D/Models/DetectorAllocation.cs),
 [`Core/DispersionStudyEngine.cs`](DisperSim3D/Core/DispersionStudyEngine.cs),
 [`Core/DetectorAllocator.cs`](DisperSim3D/Core/DetectorAllocator.cs),
-[`Core/StudyAllocationRenderer.cs`](DisperSim3D/Core/StudyAllocationRenderer.cs),
-[`Dialogs/DispersionStudyDialog.cs`](DisperSim3D/Dialogs/DispersionStudyDialog.cs),
-[`Dialogs/DetectorAllocationDialog.cs`](DisperSim3D/Dialogs/DetectorAllocationDialog.cs).
+[`Core/StudyAllocationRenderer.cs`](DisperSim3D.UI.Wpf/Core/StudyAllocationRenderer.cs),
+[`Dialogs/DispersionStudyDialog.cs`](DisperSim3D.UI.Wpf/Dialogs/DispersionStudyDialog.cs),
+[`Dialogs/DetectorAllocationDialog.cs`](DisperSim3D.UI.Wpf/Dialogs/DetectorAllocationDialog.cs).
 
 Companion workflow to §3.6 — instead of solving an exact set-cover against one simulation, the user curates a multi-simulation **study** and lets a greedy **maximum-coverage** allocator place `K` detectors to cover as many clouds as possible.
 
@@ -382,7 +406,7 @@ Results populate `AllocatedPositions[]`, `AchievedCoveragePercent` and `PerCloud
 [`Core/DetectorAllocator.cs`](DisperSim3D/Core/DetectorAllocator.cs) (`RunRiskReductionGreedy`),
 [`Models/IogpEquipmentType.cs`](DisperSim3D/Models/IogpEquipmentType.cs),
 [`Models/EquipmentInventoryItem.cs`](DisperSim3D/Models/EquipmentInventoryItem.cs),
-[`Dialogs/EquipmentInventoryDialog.cs`](DisperSim3D/Dialogs/EquipmentInventoryDialog.cs).
+[`Dialogs/EquipmentInventoryDialog.cs`](DisperSim3D.UI.Wpf/Dialogs/EquipmentInventoryDialog.cs).
 
 Companion strategy to §3.8's unweighted max-coverage allocator. Implements the **Maximum Risk Reduction (MRR)** greedy of Rad et al. 2017 with the optional distance-weighted refinement of Rad &amp; Rashtchian 2016, driven by a forward-looking **per-source leak frequency derived from the embedded IOGP 434-01 database**.
 
@@ -930,7 +954,8 @@ Vianna 2019 Table 4 — `T(n) ≈ 4.21 · n^2.98` seconds where `n` is cell coun
 
 | Area | Limitation | Mitigation |
 |---|---|---|
-| Operating system | Windows-only (UseWindowsForms + UseWPF) | OpenFOAM runs natively (ESI v2512 mingw build) or via WSL2/Docker; the C# layer is Windows-only by design |
+| Operating system | The **desktop UI** (`DisperSim3D.App` + `DisperSim3D.UI.Wpf`) is Windows-only (`UseWindowsForms` + `UseWPF`). The **calculation engine and CLI** are cross-platform (`net10.0`). | OpenFOAM runs natively (ESI v2512 mingw build) or via WSL2/Docker on Windows, and natively on Linux/macOS. Headless dispersion runs via `DisperSim3D.CLI` work on any .NET 10 host. A future cross-platform UI is possible against the now-portable engine. |
+| FluidX3D on Linux/macOS | `FluidX3D.dll` is the Windows MSVC build; the Unix build is produced separately via `FluidX3D/make-disp-bridge.sh` (or `make disp-bridge-Linux` / `make disp-bridge-macOS`) and lands as `libFluidX3D.so` / `libFluidX3D.dylib`. **Validated end-to-end on Ubuntu/WSL2 with `pocl-opencl-icd`** (CPU OpenCL — universal, no GPU needed) and works with any vendor ICD (NVIDIA via `nvidia.icd` pointing at `/usr/lib/wsl/lib/libnvidia-opencl.so.1`, AMD via `amdgpu-install --usecase=opencl`, Intel via `intel-opencl-icd`). | Drop the produced `.so`/`.dylib` next to `DisperSim3D.CLI.dll`. `FluidX3DBridge.cs` uses `[DllImport("FluidX3D")]` (no extension) so .NET picks `FluidX3D.dll` on Windows, `libFluidX3D.so` on Linux, `libFluidX3D.dylib` on macOS — same C# binary, same source. |
 | Mesh max size | OpenFOAM cases beyond ~10 M cells exceed practical wallclock | Mesh-sensitivity analysis suggests ~1.3 M cells is the optimum (Fiates & Vianna 2016 Mesh_02) |
 | Detector optimisation | Greedy ≤ 1 detector over optimum on structured grids; exact solver caps at 200 000 nodes | Use Moore neighbourhood to reduce row count; or shrink the protected region |
 | BinaryFormatter | Disabled in .NET 9+/10 — older WeifenLuo versions break | Project pinned to DockPanelSuite 3.1.1 (NuGet) which doesn't use BinaryFormatter |
@@ -947,7 +972,7 @@ Vianna 2019 Table 4 — `T(n) ≈ 4.21 · n^2.98` seconds where `n` is cell coun
 
 ### 10.1 GPU device selection
 
-**File**: [`Dialogs/GpuPerformanceSettingsDialog.cs`](DisperSim3D/Dialogs/GpuPerformanceSettingsDialog.cs).
+**File**: [`Dialogs/GpuPerformanceSettingsDialog.cs`](DisperSim3D.UI.Wpf/Dialogs/GpuPerformanceSettingsDialog.cs).
 
 `Settings → GPU & Memory…` opens a two-tab dialog. The **Compute GPU** tab calls `FluidX3DBridge.ListDevicesJson()` and renders every detected OpenCL device in a `ListView` with name, type, memory, compute units and max work-group size. Selecting a row and clicking *Set as default* stores the device id in `AppSettings.PreferredComputeDeviceId` (default `-1` = let FluidX3D pick). All four FluidX3D runners read that setting on `RunAsync` and call `fx3d_create_on_device(cfg, device_id)`.
 

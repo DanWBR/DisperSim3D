@@ -10,7 +10,12 @@ namespace DisperSim3D.Core
     /// </summary>
     public static class FluidX3DBridge
     {
-        private const string Dll = "FluidX3D.dll";
+        // No extension — lets .NET pick the platform-correct suffix and prefix:
+        // Windows → FluidX3D.dll, Linux → libFluidX3D.so, macOS → libFluidX3D.dylib.
+        // (With the explicit ".dll" suffix .NET on Linux only tries
+        // FluidX3D.dll, libFluidX3D.dll, FluidX3D.dll.so, libFluidX3D.dll.so —
+        // it never strips the ".dll" and so misses the obvious libFluidX3D.so.)
+        private const string Dll = "FluidX3D";
 
         /// <summary>Returning non-zero from the callback asks the run to stop early.</summary>
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -54,7 +59,12 @@ namespace DisperSim3D.Core
             LastListDevicesError = "";
             if (!IsAvailable())
             {
-                LastListDevicesError = "FluidX3D.dll not loadable (DllNotFound / no OpenCL device).";
+                // Forward the specific reason rather than the generic
+                // "DllNotFound / no OpenCL device" blanket message — distinguishes
+                // missing .so / .dll vs no OpenCL ICD installed vs arch mismatch.
+                LastListDevicesError = string.IsNullOrEmpty(LastAvailabilityError)
+                    ? "FluidX3D not available (unknown reason)."
+                    : LastAvailabilityError;
                 return "";
             }
             // Two-call protocol: first call with small buffer to size; second to fetch.
@@ -153,20 +163,47 @@ namespace DisperSim3D.Core
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern void fx3d_destroy(ulong h);
 
-        /// <summary>Probes whether FluidX3D.dll is loadable in the current process.</summary>
+        /// <summary>Last reason <see cref="IsAvailable"/> returned <c>false</c>.
+        /// Populated with one of: "" (available), "DllNotFound: <message>",
+        /// "BadImageFormat: <message>", "fx3d_create returned 0 (no OpenCL device)",
+        /// or "<ExceptionType>: <message>".</summary>
+        public static string LastAvailabilityError { get; private set; } = "";
+
+        /// <summary>Probes whether FluidX3D.dll is loadable in the current process
+        /// AND at least one OpenCL device is reachable. On failure, the specific
+        /// reason is surfaced via <see cref="LastAvailabilityError"/> for diagnostics.</summary>
         public static bool IsAvailable()
         {
             try
             {
                 // Tiny instance just to verify the DLL + OpenCL device exists. Destroyed immediately.
                 ulong h = fx3d_create(8u, 8u, 8u, 0.1f, 0f, 0f, 0f, 0f, 0f);
-                if (h == 0UL) return false;
+                if (h == 0UL)
+                {
+                    LastAvailabilityError = "fx3d_create returned 0 (FluidX3D library loaded, but no OpenCL device available — install your GPU vendor's ICD).";
+                    return false;
+                }
                 fx3d_destroy(h);
+                LastAvailabilityError = "";
                 return true;
             }
-            catch (DllNotFoundException) { return false; }
-            catch (BadImageFormatException) { return false; }
-            catch { return false; }
+            catch (DllNotFoundException ex)
+            {
+                LastAvailabilityError = "DllNotFound: " + ex.Message +
+                    " (the native FluidX3D library was not found next to the .NET binary; on Linux it must be named libFluidX3D.so, on macOS libFluidX3D.dylib).";
+                return false;
+            }
+            catch (BadImageFormatException ex)
+            {
+                LastAvailabilityError = "BadImageFormat: " + ex.Message +
+                    " (architecture mismatch between the .NET host and the native library — rebuild the native library for the same arch as the .NET runtime).";
+                return false;
+            }
+            catch (Exception ex)
+            {
+                LastAvailabilityError = ex.GetType().Name + ": " + ex.Message;
+                return false;
+            }
         }
     }
 }

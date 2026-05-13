@@ -22,10 +22,14 @@ placement.
 
 ## What it does
 
-DisperSim 3D is a Windows desktop application (.NET 10, WPF + WinForms) for
-simulating accidental gas releases and their atmospheric dispersion in
-industrial environments. It combines three solver families inside a single
-project-centric workflow:
+DisperSim 3D is a .NET 10 desktop application for simulating accidental gas
+releases and their atmospheric dispersion in industrial environments. The
+**WinForms + WPF UI is Windows-only**, but the **calculation engine and
+headless CLI are cross-platform** (`net10.0`): the engine multi-targets
+`net10.0;net10.0-windows` and the CLI is plain `net10.0`, so both build on
+Linux / macOS without the Windows desktop SDK.
+
+It combines three solver families inside a single project-centric workflow:
 
 - **Analytical** — Gaussian puff, Gaussian plume, Briggs plume rise, TNO
   Yellow Book jets, Birch &amp; Schefer expanded source for sonic releases.

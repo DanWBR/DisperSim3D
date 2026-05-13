@@ -33,10 +33,23 @@ namespace {
     void log_open_if_needed() {
         auto& b = bridge();
         if (b.log.is_open()) return;
-        // Resolve %TEMP%; fall back to current dir on failure.
+        // Resolve a writable temp directory. On Windows the convention is
+        // %TEMP% / %TMP%; POSIX uses $TMPDIR with /tmp as the universal
+        // fallback. Final fallback to the current working directory keeps the
+        // logger silent rather than crashing when none of those exist.
         const char* tmp = std::getenv("TEMP");
         if (!tmp) tmp = std::getenv("TMP");
-        std::string path = (tmp ? std::string(tmp) : std::string(".")) + "\\fluidx3d_bridge.log";
+        if (!tmp) tmp = std::getenv("TMPDIR");
+#ifdef _WIN32
+        const char sep = '\\';
+        const char* default_tmp = ".";
+#else
+        const char sep = '/';
+        const char* default_tmp = "/tmp";
+#endif
+        std::string path = (tmp ? std::string(tmp) : std::string(default_tmp));
+        path.push_back(sep);
+        path.append("fluidx3d_bridge.log");
         b.log.open(path, std::ios::out | std::ios::trunc);
         if (b.log.is_open()) {
             b.log << "=== FluidX3D bridge log opened ===\n";
@@ -51,7 +64,12 @@ namespace {
         auto now = std::chrono::system_clock::now();
         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
         std::time_t t = std::chrono::system_clock::to_time_t(now);
-        std::tm tm; localtime_s(&tm, &t);
+        std::tm tm;
+#ifdef _WIN32
+        localtime_s(&tm, &t);          // MSVC's secure CRT variant
+#else
+        localtime_r(&t, &tm);          // POSIX equivalent — args swapped
+#endif
         b.log << std::put_time(&tm, "%H:%M:%S") << "."
               << std::setw(3) << std::setfill('0') << ms << "  " << s << "\n";
         b.log.flush();

@@ -4,6 +4,8 @@ An interactive 3D gas dispersion analysis tool for process safety. Build a proje
 
 Built on **.NET 10** with **HelixToolkit.WPF** for 3D rendering, **DockPanelSuite** for the docked layout, **OpenFOAM** for CFD-based wind fields and reactive transport, and **FluidX3D** (GPU lattice Boltzmann) for fast wind, dispersion and fire-plume runs.
 
+The **calculation engine and headless CLI are cross-platform** (`net10.0`); the **WinForms + WPF desktop UI** is Windows-only. The solution splits cleanly into a portable engine (`DisperSim3D.csproj` multi-targeting `net10.0;net10.0-windows`) and a WPF UI library (`DisperSim3D.UI.Wpf.csproj`, Windows-only) so the engine compiles on Linux/macOS without dragging in the Windows desktop SDK.
+
 Full project documentation is published on **[GitHub Pages](https://danwbr.github.io/DisperSim3D/)**. For a detailed description of physical models, file format, OpenFOAM case structure, and validation, see [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md).
 
 ---
@@ -105,8 +107,14 @@ GPU selection (multi-GPU systems) and on-demand VRAM/RAM/disk sizing live under 
 
 ## Project Structure
 
+The solution splits into a **cross-platform calculation engine** and a **Windows-only WPF UI library**, keeping the WinForms desktop app intact while letting the engine and CLI build on Linux/macOS.
+
 ```
-DisperSim3D/                       # Main .NET 10 Windows library
+DisperSim3D/                       # Calculation engine — multi-targets net10.0 + net10.0-windows
+├── Geometry/                      # Portable types (no WPF dependency)
+│   ├── Point3D.cs                 # Mirrors System.Windows.Media.Media3D.Point3D
+│   ├── Vector3D.cs                # Mirrors System.Windows.Media.Media3D.Vector3D
+│   └── Color.cs                   # Mirrors System.Windows.Media.Color (R/G/B/A + ScR/ScG/ScB/ScA)
 ├── Models/                        # Data classes
 │   ├── Project.cs / Scene3D.cs    # Root container (legacy XML alias)
 │   ├── ProjectSettings.cs         # General defaults
@@ -114,6 +122,7 @@ DisperSim3D/                       # Main .NET 10 Windows library
 │   ├── ReleaseSource3D.cs         # Top-level sources
 │   ├── WindFieldScenario.cs       # Wind field + visualization
 │   ├── Simulation.cs              # Snapshot-based runnable
+│   ├── Decoration3D.cs            # Imported geometry (Model3D field typed object — UI casts to Model3DGroup)
 │   ├── CfdSolverType.cs           # Solver enum (Gaussian, OpenFOAM, FluidX3D)
 │   ├── CfdConfiguration.cs        # OpenFOAM settings
 │   ├── DispersionStudy.cs         # Curated simulation collection + ScenarioRisk weights
@@ -122,7 +131,7 @@ DisperSim3D/                       # Main .NET 10 Windows library
 │   ├── EquipmentInventoryItem.cs  # One inventory row on a release source
 │   ├── GasProperties.cs           # LFL, UFL, IDLH, ERPG
 │   └── ...
-├── Core/                          # Engines
+├── Core/                          # Engines (all portable)
 │   ├── GaussianPuffEngine.cs
 │   ├── GaussianPlumeEngine.cs
 │   ├── HighPressureLeakModel.cs   # incl. Birch & Schefer expanded source
@@ -133,13 +142,12 @@ DisperSim3D/                       # Main .NET 10 Windows library
 │   ├── DetectorAllocator.cs       # Greedy max-coverage + min-residual-risk dispatcher
 │   ├── RiskWeightHelper.cs        # Auto frequency/consequence resolution
 │   ├── IogpFrequencyTable.cs      # IOGP 434-01 2006-2015 leak-frequency database
-│   ├── StudyAllocationRenderer.cs # Marching-cubes per cloud + detector spheres
 │   ├── OpenFoamCaseGenerator.cs
 │   ├── OpenFoamRunner.cs
 │   ├── OpenFoamResultReader.cs
 │   ├── FluidX3DBridge.cs          # P/Invoke surface over FluidX3D.dll
 │   ├── FluidX3DUnits.cs           # SI <-> lattice unit conversion
-│   ├── FluidX3DObstacleVoxelizer.cs
+│   ├── FluidX3DObstacleVoxelizer.cs # Background-safe GPU voxelization (engine half)
 │   ├── FluidX3DWindFieldRunner.cs # FX3DWN
 │   ├── FluidX3DRunner.cs          # FX3DDP transient dispersion
 │   ├── FluidX3DSteadyDispersionRunner.cs # FX3DDS convergence-driven
@@ -149,6 +157,38 @@ DisperSim3D/                       # Main .NET 10 Windows library
 │   ├── MemoryEstimator.cs         # VRAM/RAM/disk per solver × grid
 │   ├── AppSettings.cs             # PreferredComputeDeviceId etc.
 │   ├── LegacyProjectMigrator.cs
+│   ├── HeadlessRunner.cs          # CLI dispatcher (used by DisperSim3D.CLI)
+│   └── ...
+├── Validation/                    # Hanna SPM benchmark harness + GeometrySelfTest
+└── DisperSim3D.csproj             # <TargetFrameworks>net10.0;net10.0-windows</TargetFrameworks>
+
+DisperSim3D.UI.Wpf/                # WPF + WinForms UI library — net10.0-windows only
+├── Geometry/
+│   └── WpfInterop.cs              # .ToWpf() / .ToPortable() bridges (Point3D, Vector3D)
+├── Models/
+│   ├── Decoration3D.Wpf.cs        # ApplyClip / GetWorldTransform / UpdateBoundingBox extensions
+│   └── BoundingBoxWpfExtensions.cs # BoundingBox.Transform(Transform3D)
+├── Core/
+│   ├── DispersionRenderer.cs      # Builds Model3DGroup isosurfaces / contour planes
+│   ├── ViewRenderer.cs            # View → Model3DGroup pipeline
+│   ├── EnvironmentRenderer.cs     # Sky / sun / ground lighting
+│   ├── WindFieldVisual.cs / WindFieldStreamlineVisual.cs
+│   ├── FireRenderer.cs / WindRoseRenderer.cs / StudyAllocationRenderer.cs
+│   ├── MarchingCubes.cs           # Returns MeshGeometry3D (UI-only)
+│   ├── MeshClipper.cs             # WPF mesh clipping for decorations
+│   ├── ModelLoader.cs             # HelixToolkit importer (.obj/.stl/.glb/.3ds)
+│   ├── MaterialHelper.cs / DecorationTextureRenderer.cs
+│   ├── SimulationManager.cs       # Job queue + WPF-typed SteadyStateResultData
+│   ├── SimulationRunner.cs        # Bridges Simulation snapshots to the Scene3DEditorControl
+│   ├── FluidX3DObstacleVoxelizer.Wpf.cs # Walks Model3DGroup trees (UI-thread)
+│   ├── WpfColorEditor.cs / FormExtensions.cs / Point3DStringConverter
+│   └── ...
+├── Controls/
+│   ├── Scene3DEditorPanel.cs      # WinForms shell with docked layout
+│   ├── Scene3DEditorControl.cs    # WPF HelixViewport3D host
+│   ├── ProjectTreeWpfPanel.cs     # WPF TreeView via ElementHost
+│   ├── PropertyGridWpfPanel.cs    # WinForms PropertyGrid wrapper
+│   ├── PlaybackBar.cs             # Sync'd playback control
 │   └── ...
 ├── Dialogs/
 │   ├── DispersionSourceDialog.cs
@@ -160,21 +200,19 @@ DisperSim3D/                       # Main .NET 10 Windows library
 │   ├── EquipmentInventoryDialog.cs         # IOGP equipment inventory editor per source
 │   ├── GpuPerformanceSettingsDialog.cs     # GPU picker + Memory Estimator
 │   └── ...
-├── Controls/
-│   ├── Scene3DEditorPanel.cs       # WinForms shell with docked layout
-│   ├── Scene3DEditorControl.cs     # WPF HelixViewport3D host
-│   ├── ProjectTreeWpfPanel.cs      # WPF TreeView via ElementHost
-│   ├── PropertyGridWpfPanel.cs     # WinForms PropertyGrid wrapper
-│   ├── PlaybackBar.cs              # Sync'd playback control
-│   └── ...
-FluidX3D/                          # Sibling C++ project — FluidX3D.dll
+└── PropertyAdapters/               # HandyControl property-grid bridges
+
+FluidX3D/                          # Sibling C++ project — FluidX3D.dll (Windows-only build for now)
 ├── src/disp_bridge.{h,cpp}        # C-ABI bridge exposed to C#
 ├── src/defines.hpp                # Feature flags (D3Q19 FP32, VOLUME_FORCE, SUBGRID, …)
 └── …                              # Upstream FluidX3D from ProjectPhysX
-DisperSim3D.CLI/                   # Headless batch runner (--list / --simulation /
-                                   # --allocation / --validate / --list-gpus /
-                                   # --iogp-selftest / --list-iogp / --memory-estimate)
-DisperSim3D.App/                   # WinForms host that embeds the editor panel
+
+DisperSim3D.CLI/                   # Headless batch runner — net10.0 (cross-platform)
+                                   # --list / --simulation / --allocation / --validate /
+                                   # --list-gpus / --iogp-selftest / --geometry-selftest /
+                                   # --list-iogp / --memory-estimate
+DisperSim3D.App/                   # WinForms host that embeds the editor panel — net10.0-windows
+                                   # References both DisperSim3D and DisperSim3D.UI.Wpf
 docs/                              # GitHub Pages site (Jekyll + Just the Docs)
 DisperSim3D.sln
 ```
@@ -184,25 +222,50 @@ DisperSim3D.sln
 ## Building
 
 ```powershell
+# Full Windows build — engine, WPF UI library, WinForms app, headless CLI
 dotnet build DisperSim3D.sln
+```
+
+To build just the cross-platform pieces (engine + CLI) on Linux/macOS or Windows:
+
+```bash
+dotnet build DisperSim3D/DisperSim3D.csproj      # multi-targets net10.0 + net10.0-windows
+dotnet build DisperSim3D.CLI/DisperSim3D.CLI.csproj   # plain net10.0
+```
+
+Both succeed without the Windows desktop SDK. The CLI binary lands in
+`DisperSim3D.CLI/bin/Release/net10.0/`. On Linux, run smoke tests with:
+
+```bash
+dotnet DisperSim3D.CLI.dll --geometry-selftest   # 19/19 portable Point3D/Vector3D checks
+dotnet DisperSim3D.CLI.dll --iogp-selftest       # 27/27 IOGP 434-01 frequency checks
 ```
 
 ### Requirements
 
-- **.NET 10 SDK**
-- **Visual Studio 2022 17.14+** (or `dotnet` CLI)
-- **Windows** (WinForms shell + WPF viewport)
-- **OpenCL 1.2+ device** (any modern GPU — required for the FluidX3D solvers)
-- **OpenFOAM v2512+** (optional, for the CFD solver family)
+| Component | Notes |
+|---|---|
+| **.NET 10 SDK** | Required for every target. |
+| **Visual Studio 2022 17.14+** _or_ `dotnet` CLI | Either works. |
+| **OpenCL 1.2+ device** | Required for FluidX3D solvers (NVIDIA, AMD, Intel). |
+| **OpenFOAM v2512+** _(optional)_ | Required only for the CFD solver family. WSL2/Docker/native Windows builds supported. |
+| **Windows 10/11** | Only required to run **DisperSim3D.App** (WinForms shell + WPF viewport). The engine and headless CLI run on Linux/macOS. |
+
+### Cross-platform status
+
+- ✅ **`DisperSim3D`** (engine, models, validation, Gaussian/CFD/OpenFOAM I/O) — builds on Linux/macOS via the `net10.0` target.
+- ✅ **`DisperSim3D.CLI`** (headless runner: `--list`, `--simulation`, `--allocation`, `--validate`, `--iogp-selftest`, `--geometry-selftest`, `--list-iogp`, `--memory-estimate`) — pure `net10.0`, cross-platform.
+- 🪟 **`DisperSim3D.UI.Wpf`** + **`DisperSim3D.App`** — `net10.0-windows` only (WPF + WinForms).
+- ✅ **`libFluidX3D.so` / `.dylib`** — now buildable on Linux/macOS via `FluidX3D/make-disp-bridge.sh` (wraps a `disp-bridge-Linux` / `disp-bridge-macOS` makefile target that produces the same C-ABI exposed by the Windows `FluidX3D.dll`). FluidX3D solvers (`FX3DWN`/`FX3DDP`/`FX3DDS`/`FX3DFR`) work cross-platform once the native library sits next to `DisperSim3D.CLI.dll`. Validated end-to-end on Ubuntu/WSL2 via `pocl-opencl-icd` (CPU OpenCL — universal) or any GPU vendor ICD (NVIDIA, AMD ROCm, Intel) for production speed. See [docs/solvers-fluidx3d.md](docs/solvers-fluidx3d.md#building-fluidx3d-on-linux--macos).
 
 ---
 
 ## Quick Start
 
 ```csharp
-using DisperSim3D.Controls;
+using DisperSim3D.Controls;     // Scene3DEditorPanel — lives in DisperSim3D.UI.Wpf
 using DisperSim3D.Models;
-using System.Windows.Media.Media3D;
+using DisperSim3D.Geometry;     // portable Point3D / Vector3D / Color
 
 var editor = new Scene3DEditorPanel { Dock = DockStyle.Fill };
 panel.Controls.Add(editor);
@@ -233,6 +296,12 @@ project.WindFieldScenarios.Add(new WindFieldScenario
 // Refresh the tree to surface them in the UI
 editor.RefreshProjectTree();
 ```
+
+> `Point3D` and `Vector3D` in `DisperSim3D.Geometry` mirror the WPF API one-for-one
+> (same constructors, same `X/Y/Z` accessors, same operators, `CrossProduct`,
+> `DotProduct`, `Normalize`, `Negate`, etc.). On `net10.0-windows` they expose
+> implicit conversions to and from `System.Windows.Media.Media3D` so existing
+> renderer code keeps working without `.ToWpf()` calls everywhere.
 
 ---
 

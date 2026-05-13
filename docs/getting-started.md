@@ -14,11 +14,11 @@ nav_order: 2
 
 | Component | Notes |
 |---|---|
-| **Windows 10/11** | WinForms shell + WPF viewport — Windows only by design |
-| **.NET 10 SDK** | Build target is `net10.0-windows` |
-| **Visual Studio 2022 17.14+** _or_ `dotnet` CLI | Either works |
-| **GPU with OpenCL 1.2+** | Required for FluidX3D solvers (NVIDIA, AMD or Intel) |
+| **.NET 10 SDK** | Required for every target. |
+| **Visual Studio 2022 17.14+** _or_ `dotnet` CLI | Either works. |
+| **GPU with OpenCL 1.2+** | Required for FluidX3D solvers (NVIDIA, AMD or Intel). |
 | **OpenFOAM v2512+** _(optional)_ | Required for the CFD solver family. Native Windows build is recommended; WSL2/Docker/BlueCFD are also supported. |
+| **Windows 10/11** | Only required for **DisperSim3D.App** (WinForms shell + WPF viewport). The calculation engine and CLI run on Linux/macOS. |
 
 The native Windows ESI installer puts OpenFOAM at
 `%APPDATA%\ESI-OpenCFD\OpenFOAM\v2512\msys64\home\ofuser\OpenFOAM\OpenFOAM-v2512`.
@@ -34,15 +34,49 @@ dotnet build DisperSim3D.sln -c Release
 
 The solution contains:
 
-| Project | Output | Purpose |
-|---|---|---|
-| `DisperSim3D` | `net10.0-windows` library | Models, solvers, viewport, dialogs |
-| `DisperSim3D.CLI` | Console exe | Headless batch runner |
-| `DisperSim3D.App` | WinForms exe | Standalone host that embeds the editor panel |
-| `FluidX3D` | `FluidX3D.dll` | C++ GPU LBM bridge, auto-copied to C# output dirs |
+| Project | Output | Target framework(s) | Purpose |
+|---|---|---|---|
+| `DisperSim3D` | Library | **`net10.0`** + `net10.0-windows` (multi-target) | Calculation engine: models, solvers, validation harness, portable `Geometry` types. Cross-platform on the `net10.0` TFM. |
+| `DisperSim3D.UI.Wpf` | Library | `net10.0-windows` | WPF + WinForms UI: viewport, dialogs, renderers, property adapters, `SimulationManager`. References `DisperSim3D`. |
+| `DisperSim3D.CLI` | Console exe | **`net10.0`** | Headless batch runner. Cross-platform. |
+| `DisperSim3D.App` | WinForms exe | `net10.0-windows` | Standalone host that embeds the editor panel. References both `DisperSim3D` and `DisperSim3D.UI.Wpf`. |
+| `FluidX3D` | `FluidX3D.dll` | Native C++ (Windows for now) | GPU LBM bridge, auto-copied to C# output dirs. |
 
-After a successful build, run **DisperSim3D.App** (or the executable bundled in a
-release artifact) and you have the full GUI.
+After a successful Windows build, run **DisperSim3D.App** (or the executable bundled in a release artifact) and you have the full GUI.
+
+### Cross-platform build (Linux / macOS)
+
+The engine and CLI build with stock `dotnet` on any OS that ships .NET 10 — no Windows desktop SDK needed:
+
+```bash
+git clone https://github.com/DanWBR/DisperSim3D.git
+cd DisperSim3D
+dotnet build DisperSim3D/DisperSim3D.csproj -c Release     # multi-target engine
+dotnet build DisperSim3D.CLI/DisperSim3D.CLI.csproj -c Release   # plain net10.0 CLI
+```
+
+Smoke tests that exercise the portable geometry types and the embedded IOGP table:
+
+```bash
+dotnet DisperSim3D.CLI/bin/Release/net10.0/DisperSim3D.CLI.dll --geometry-selftest   # 19/19 PASS
+dotnet DisperSim3D.CLI/bin/Release/net10.0/DisperSim3D.CLI.dll --iogp-selftest       # 27/27 PASS
+```
+
+Analytical Gaussian solvers and external OpenFOAM runs work cross-platform from day one. **FluidX3D solvers** (`FX3DWN`/`FX3DDP`/`FX3DDS`/`FX3DFR`) now also build on Linux/macOS — see the [Building FluidX3D on Linux / macOS](solvers-fluidx3d#building-fluidx3d-on-linux--macos) section. Short version:
+
+```bash
+# Build the native library
+cd FluidX3D
+./make-disp-bridge.sh --copy     # → bin/libFluidX3D.so + copy into the .NET output dir
+
+# Install an OpenCL ICD (PoCL = CPU-based, works on any Linux/WSL2)
+sudo apt install -y pocl-opencl-icd ocl-icd-libopencl1
+
+# Smoke test the whole pipeline end-to-end
+dotnet ../DisperSim3D.CLI/bin/Release/net10.0/DisperSim3D.CLI.dll --list-gpus
+```
+
+Expected output: JSON describing every OpenCL device — at minimum your CPU under PoCL, plus your GPU if a vendor ICD (NVIDIA/AMD/Intel) is installed. Requires `g++` + `make` (apt: `build-essential make`).
 
 ## First simulation — 5-minute walkthrough
 
@@ -114,6 +148,7 @@ for QRA reporting pipelines.
 ```text
 DisperSim3D.CLI --list-gpus                                      # enumerate OpenCL devices
 DisperSim3D.CLI --iogp-selftest                                  # verify embedded IOGP 434-01 table
+DisperSim3D.CLI --geometry-selftest                              # verify portable Point3D / Vector3D semantics
 DisperSim3D.CLI --list-iogp FlangedJoint                         # dump one IOGP datasheet
 DisperSim3D.CLI --list-iogp                                      # dump all 24 datasheets
 DisperSim3D.CLI --memory-estimate FluidX3DDispersion 128         # VRAM/RAM/disk for a 128³/2 run
@@ -127,6 +162,14 @@ its Hanna acceptance ranges, so it is CI-friendly.
 published IOGP 434-01 values all pass — pair it with `--validate` for a
 two-step CI smoke that covers both the dispersion solvers and the
 risk-frequency database.
+
+`--geometry-selftest` exercises the engine's portable `Point3D` and
+`Vector3D` types against 19 expected results (constructors, operators,
+`Length`, `Normalize`, `CrossProduct`, `DotProduct`, `AngleBetween`,
+explicit `Point3D → Vector3D` cast, etc.). Exit 0 = every test passed.
+The portable types are designed to be API-compatible with WPF's
+`System.Windows.Media.Media3D` counterparts, so the same algorithm code
+runs identically on Windows and Linux.
 
 `--gpu-device <id>` persists into `%APPDATA%\DisperSim3D\settings.xml`, so
 subsequent CLI / app runs also honour the pinned device until you change
