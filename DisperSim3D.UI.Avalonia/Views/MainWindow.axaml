@@ -1,0 +1,98 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
+        x:Class="DisperSim3D.UI.Avalonia.Views.MainWindow"
+        Title="DisperSim 3D — Avalonia smoke"
+        Width="980" Height="720"
+        WindowStartupLocation="CenterScreen">
+
+  <DockPanel Margin="12">
+    <TextBlock DockPanel.Dock="Top"
+               Text="Cross-platform smoke — same engine code as the WinForms app."
+               FontWeight="Bold" FontSize="16" Margin="0,0,0,10" />
+
+    <TextBlock DockPanel.Dock="Top"
+               x:Name="EnvLine"
+               Foreground="#666"
+               Margin="0,0,0,12" />
+
+    <UniformGrid Columns="2" Rows="2">
+
+      <!-- Panel 1 — Geometry self-test -->
+      <Border BorderBrush="#ddd" BorderThickness="1" CornerRadius="6"
+              Margin="0,0,6,6" Padding="10">
+        <DockPanel>
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+            <TextBlock Grid.Column="0" Text="Portable geometry self-test"
+                       FontWeight="Bold" VerticalAlignment="Center" />
+            <Button Grid.Column="1" x:Name="BtnGeometry" Content="Run" Click="BtnGeometry_Click" />
+          </Grid>
+          <ScrollViewer>
+            <TextBox x:Name="GeometryOutput" IsReadOnly="True" AcceptsReturn="True"
+                     FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+                     FontSize="11" TextWrapping="NoWrap"
+                     BorderThickness="0" Background="Transparent" />
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+
+      <!-- Panel 2 — IOGP 434-01 self-test -->
+      <Border BorderBrush="#ddd" BorderThickness="1" CornerRadius="6"
+              Margin="6,0,0,6" Padding="10">
+        <DockPanel>
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+            <TextBlock Grid.Column="0" Text="IOGP 434-01 risk frequency self-test"
+                       FontWeight="Bold" VerticalAlignment="Center" />
+            <Button Grid.Column="1" x:Name="BtnIogp" Content="Run" Click="BtnIogp_Click" />
+          </Grid>
+          <ScrollViewer>
+            <TextBox x:Name="IogpOutput" IsReadOnly="True" AcceptsReturn="True"
+                     FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+                     FontSize="11" TextWrapping="NoWrap"
+                     BorderThickness="0" Background="Transparent" />
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+
+      <!-- Panel 3 — OpenCL device probe via FluidX3D -->
+      <Border BorderBrush="#ddd" BorderThickness="1" CornerRadius="6"
+              Margin="0,6,6,0" Padding="10">
+        <DockPanel>
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+            <TextBlock Grid.Column="0" Text="FluidX3D — list OpenCL devices"
+                       FontWeight="Bold" VerticalAlignment="Center" />
+            <Button Grid.Column="1" x:Name="BtnGpus" Content="Probe" Click="BtnGpus_Click" />
+          </Grid>
+          <ScrollViewer>
+            <TextBox x:Name="GpusOutput" IsReadOnly="True" AcceptsReturn="True"
+                     FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+                     FontSize="11" TextWrapping="Wrap"
+                     BorderThickness="0" Background="Transparent" />
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+
+      <!-- Panel 4 — End-to-end Gaussian plume -->
+      <Border BorderBrush="#ddd" BorderThickness="1" CornerRadius="6"
+              Margin="6,6,0,0" Padding="10">
+        <DockPanel>
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+            <TextBlock Grid.Column="0" Text="Engine end-to-end (Gaussian plume)"
+                       FontWeight="Bold" VerticalAlignment="Center" />
+            <Button Grid.Column="1" x:Name="BtnPlume" Content="Run" Click="BtnPlume_Click" />
+          </Grid>
+          <ScrollViewer>
+            <TextBox x:Name="PlumeOutput" IsReadOnly="True" AcceptsReturn="True"
+                     FontFamily="Cascadia Mono,Consolas,Menlo,monospace"
+                     FontSize="11" TextWrapping="NoWrap"
+                     BorderThickness="0" Background="Transparent" />
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+
+    </UniformGrid>
+  </DockPanel>
+
+</Window>

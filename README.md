@@ -257,6 +257,7 @@ dotnet DisperSim3D.CLI.dll --iogp-selftest       # 27/27 IOGP 434-01 frequency c
 - ✅ **`DisperSim3D.CLI`** (headless runner: `--list`, `--simulation`, `--allocation`, `--validate`, `--iogp-selftest`, `--geometry-selftest`, `--list-iogp`, `--memory-estimate`) — pure `net10.0`, cross-platform.
 - 🪟 **`DisperSim3D.UI.Wpf`** + **`DisperSim3D.App`** — `net10.0-windows` only (WPF + WinForms).
 - ✅ **`libFluidX3D.so` / `.dylib`** — now buildable on Linux/macOS via `FluidX3D/make-disp-bridge.sh` (wraps a `disp-bridge-Linux` / `disp-bridge-macOS` makefile target that produces the same C-ABI exposed by the Windows `FluidX3D.dll`). FluidX3D solvers (`FX3DWN`/`FX3DDP`/`FX3DDS`/`FX3DFR`) work cross-platform once the native library sits next to `DisperSim3D.CLI.dll`. Validated end-to-end on Ubuntu/WSL2 via `pocl-opencl-icd` (CPU OpenCL — universal) or any GPU vendor ICD (NVIDIA, AMD ROCm, Intel) for production speed. See [docs/solvers-fluidx3d.md](docs/solvers-fluidx3d.md#building-fluidx3d-on-linux--macos).
+- ✅ **`DisperSim3D.UI.Avalonia`** — cross-platform Avalonia 11 smoke window (`net10.0`, runs on Windows / Linux / macOS / WSL2 via WSLg). Exercises the portable geometry types, IOGP database, FluidX3D bridge and a Gaussian-plume run from one window. Not a replacement for the full WinForms UI — it's a proof that the engine is genuinely portable. `dotnet run -c Release` from inside the project directory.
 
 ---
 

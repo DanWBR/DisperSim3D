@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Plain net10.0 — no Windows-specific SDK. Same TFM as the cross-platform
+         engine, so this exe runs on Linux/macOS as well as Windows. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>DisperSim3D.UI.Avalonia</RootNamespace>
+    <AssemblyName>DisperSim3D.UI.Avalonia</AssemblyName>
+    <Nullable>enable</Nullable>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <Title>DisperSim3D.UI.Avalonia</Title>
+    <Description>Cross-platform Avalonia UI smoke test for DisperSim 3D — exercises
+    the engine, FluidX3D P/Invoke and a Gaussian-plume run on the same code base
+    that powers the WinForms app, but compiled for any OS Avalonia targets.</Description>
+    <Version>0.1.0</Version>
+    <!-- NU1903 fires on Tmds.DBus.Protocol 0.20.0 (Avalonia transitive dep, Linux
+         D-Bus only). Avalonia 11.2.x pins it; suppressed here until upstream
+         updates. -->
+    <NoWarn>$(NoWarn);NU1903</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.3" />
+    <!-- Diagnostics package only in Debug, per Avalonia docs. -->
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.2.3"
+                      Condition="'$(Configuration)' == 'Debug'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DisperSim3D\DisperSim3D.csproj" />
+  </ItemGroup>
+
+  <!-- Auto-copy the FluidX3D native library next to the .NET output so the
+       [DllImport("FluidX3D")] in FluidX3DBridge.cs resolves. Each Condition
+       guards against the others' artefacts being absent on a given OS. -->
+  <ItemGroup>
+    <None Include="..\bin\FluidX3D.dll"
+          Condition="Exists('..\bin\FluidX3D.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </None>
+    <None Include="..\FluidX3D\bin\libFluidX3D.so"
+          Condition="Exists('..\FluidX3D\bin\libFluidX3D.so')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </None>
+    <None Include="..\FluidX3D\bin\libFluidX3D.dylib"
+          Condition="Exists('..\FluidX3D\bin\libFluidX3D.dylib')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </None>
+  </ItemGroup>
+
+</Project>

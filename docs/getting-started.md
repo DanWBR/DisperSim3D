@@ -38,11 +38,29 @@ The solution contains:
 |---|---|---|---|
 | `DisperSim3D` | Library | **`net10.0`** + `net10.0-windows` (multi-target) | Calculation engine: models, solvers, validation harness, portable `Geometry` types. Cross-platform on the `net10.0` TFM. |
 | `DisperSim3D.UI.Wpf` | Library | `net10.0-windows` | WPF + WinForms UI: viewport, dialogs, renderers, property adapters, `SimulationManager`. References `DisperSim3D`. |
+| `DisperSim3D.UI.Avalonia` | Avalonia exe | **`net10.0`** | Cross-platform Avalonia 11 smoke window — same engine, same source, runs on Windows / Linux / macOS / WSL2. |
 | `DisperSim3D.CLI` | Console exe | **`net10.0`** | Headless batch runner. Cross-platform. |
 | `DisperSim3D.App` | WinForms exe | `net10.0-windows` | Standalone host that embeds the editor panel. References both `DisperSim3D` and `DisperSim3D.UI.Wpf`. |
-| `FluidX3D` | `FluidX3D.dll` | Native C++ (Windows for now) | GPU LBM bridge, auto-copied to C# output dirs. |
+| `FluidX3D` | `FluidX3D.dll` (Windows) / `libFluidX3D.so` / `.dylib` (Unix) | Native C++ | GPU LBM bridge, auto-copied to C# output dirs. |
 
 After a successful Windows build, run **DisperSim3D.App** (or the executable bundled in a release artifact) and you have the full GUI.
+
+### Cross-platform smoke window (Avalonia)
+
+For Linux / macOS / WSL2 you can run **DisperSim3D.UI.Avalonia**, a small 4-panel
+Avalonia 11 window that exercises the same engine code as the WinForms app but
+compiles for plain `net10.0`. Each panel has a button: portable geometry
+self-test, IOGP 434-01 self-test, FluidX3D OpenCL device probe, and a synthetic
+Gaussian plume run.
+
+```bash
+cd DisperSim3D.UI.Avalonia
+dotnet run -c Release
+```
+
+On WSL2 the window appears on your Windows desktop via WSLg. On bare-metal Linux
+it opens through X11 or Wayland. On macOS it uses CoreGraphics. Same source, same
+binary across all three.
 
 ### Cross-platform build (Linux / macOS)
 

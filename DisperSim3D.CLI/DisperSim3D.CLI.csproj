@@ -15,8 +15,20 @@
     <ProjectReference Include="..\DisperSim3D\DisperSim3D.csproj" />
   </ItemGroup>
 
+  <!-- Auto-copy the FluidX3D native library next to the .NET output so the
+       [DllImport("FluidX3D")] in FluidX3DBridge.cs resolves on every OS. -->
   <ItemGroup>
     <None Include="..\bin\FluidX3D.dll" Condition="Exists('..\bin\FluidX3D.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </None>
+    <None Include="..\FluidX3D\bin\libFluidX3D.so"
+          Condition="Exists('..\FluidX3D\bin\libFluidX3D.so')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </None>
+    <None Include="..\FluidX3D\bin\libFluidX3D.dylib"
+          Condition="Exists('..\FluidX3D\bin\libFluidX3D.dylib')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </None>

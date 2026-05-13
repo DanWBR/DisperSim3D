@@ -20,11 +20,22 @@
     <ProjectReference Include="..\DisperSim3D.UI.Wpf\DisperSim3D.UI.Wpf.csproj" />
   </ItemGroup>
 
+  <!-- Auto-copy the FluidX3D native library next to the .exe so
+       DllImport("FluidX3D") resolves at runtime. Three flavours (Windows DLL
+       from MSBuild, Linux .so from make-disp-bridge.sh, macOS .dylib idem)
+       so the App can run from a Unix dev environment too. -->
   <ItemGroup>
-    <!-- FluidX3D.dll is built by FluidX3D/FluidX3D.vcxproj and lands in ../bin/.
-         Copy it next to the .exe so DllImport("FluidX3D.dll") resolves at runtime.
-         Marked CopyIfNewer + Visible=false so it doesn't clutter the IDE. -->
     <None Include="..\bin\FluidX3D.dll" Condition="Exists('..\bin\FluidX3D.dll')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </None>
+    <None Include="..\FluidX3D\bin\libFluidX3D.so"
+          Condition="Exists('..\FluidX3D\bin\libFluidX3D.so')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </None>
+    <None Include="..\FluidX3D\bin\libFluidX3D.dylib"
+          Condition="Exists('..\FluidX3D\bin\libFluidX3D.dylib')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Visible>false</Visible>
     </None>

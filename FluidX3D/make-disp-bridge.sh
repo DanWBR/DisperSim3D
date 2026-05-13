@@ -37,7 +37,7 @@ echo -e "\033[92mInfo\033[0m: built $(ls -lh "${out}" | awk '{print $5, $9}')"
 if [ "${1:-}" = "--copy" ]; then
     for tfm in net10.0 net10.0-windows; do
         for cfg in Release Debug; do
-            for proj in DisperSim3D.CLI DisperSim3D.App DisperSim3D; do
+            for proj in DisperSim3D.CLI DisperSim3D.App DisperSim3D DisperSim3D.UI.Avalonia DisperSim3D.UI.Wpf; do
                 dir="../${proj}/bin/${cfg}/${tfm}"
                 if [ -d "${dir}" ]; then
                     cp -v "${out}" "${dir}/"
