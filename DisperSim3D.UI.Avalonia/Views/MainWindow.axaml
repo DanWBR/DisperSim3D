@@ -161,7 +161,13 @@
                     DoubleTapped="ProjectTree_DoubleTapped">
             <TreeView.ItemTemplate>
               <TreeDataTemplate DataType="vm:ProjectTreeNode" ItemsSource="{Binding Children}">
-                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                  <!-- Visibility checkbox — only shown for spatial objects -->
+                  <CheckBox IsChecked="{Binding IsVisible3D}"
+                            IsVisible="{Binding HasVisibilityToggle}"
+                            VerticalAlignment="Center"
+                            MinWidth="0" Margin="0,0,2,0"
+                            ToolTip.Tip="Toggle 3D visibility" />
                   <!-- Material Design Icon resolved via Projektanker.Icons.Avalonia.
                        The TreeNode.Icon property carries the "mdi-..." string. -->
                   <i:Icon Value="{Binding Icon}" FontSize="14"
@@ -181,10 +187,63 @@
 
       <GridSplitter Grid.Column="1" Background="Transparent" />
 
-      <!-- Center dock: 3D viewport (OpenGL via OpenGlControlBase) -->
-      <Border Grid.Column="2" Background="#1A1A1A">
-        <views:GlViewport x:Name="Viewport3D" />
-      </Border>
+      <!-- Center dock: 3D viewport + playback bar -->
+      <DockPanel Grid.Column="2">
+        <!-- Playback bar — visible only when a transient simulation is selected -->
+        <Border DockPanel.Dock="Bottom" Background="#F0F0F0" BorderBrush="#CCC"
+                BorderThickness="0,1,0,0"
+                x:Name="PlaybackPanel" IsVisible="False">
+          <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="6,4">
+            <Button Grid.Column="0" x:Name="BtnPlayPause" Click="BtnPlayPause_Click"
+                    Width="32" Height="28" Padding="0"
+                    ToolTip.Tip="Play / Pause">
+              <i:Icon Value="mdi-play" x:Name="PlayPauseIcon" FontSize="16" />
+            </Button>
+            <Button Grid.Column="1" x:Name="BtnStop" Click="BtnStop_Click"
+                    Width="32" Height="28" Padding="0" Margin="2,0,6,0"
+                    ToolTip.Tip="Stop (rewind)">
+              <i:Icon Value="mdi-stop" FontSize="16" />
+            </Button>
+            <TextBlock Grid.Column="2" x:Name="PlaybackTimeLabel"
+                       Text="0.0 s" VerticalAlignment="Center"
+                       Margin="0,0,8,0" MinWidth="60" />
+            <Slider Grid.Column="3" x:Name="PlaybackSlider"
+                    Minimum="0" Maximum="1000"
+                    Value="0" VerticalAlignment="Center"
+                    PropertyChanged="PlaybackSlider_ValueChanged" />
+            <ComboBox Grid.Column="4" x:Name="PlaybackSpeed"
+                      SelectedIndex="2" Width="70" Margin="6,0"
+                      VerticalAlignment="Center"
+                      SelectionChanged="PlaybackSpeed_Changed"
+                      ToolTip.Tip="Playback speed">
+              <ComboBoxItem Content="0.25x" />
+              <ComboBoxItem Content="0.5x" />
+              <ComboBoxItem Content="1x" />
+              <ComboBoxItem Content="2x" />
+              <ComboBoxItem Content="5x" />
+            </ComboBox>
+            <TextBlock Grid.Column="5" x:Name="PlaybackTotalLabel"
+                       Text="" VerticalAlignment="Center"
+                       Foreground="#666" />
+          </Grid>
+        </Border>
+        <Grid Background="#C8CDD4">
+          <views:GlViewport x:Name="Viewport3D" />
+          <!-- Concentration legend overlay (top-right) -->
+          <Border x:Name="LegendPanel" IsVisible="False"
+                  HorizontalAlignment="Right" VerticalAlignment="Top"
+                  Margin="0,10,10,0"
+                  Background="#D2FFFFFF" CornerRadius="6"
+                  BorderBrush="#BBBBBB" BorderThickness="1"
+                  Padding="10,8" MinWidth="120">
+            <StackPanel>
+              <TextBlock Text="Concentration (kg/m³)" FontWeight="Bold"
+                         FontSize="11" Margin="0,0,0,6" />
+              <StackPanel x:Name="LegendItems" />
+            </StackPanel>
+          </Border>
+        </Grid>
+      </DockPanel>
 
       <GridSplitter Grid.Column="3" Background="Transparent" />
 

@@ -22,6 +22,7 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
         EnumChoice,  // any enum
         Point3D,     // DisperSim3D.Geometry.Point3D (3 numeric fields)
         Vector3D,    // DisperSim3D.Geometry.Vector3D (3 numeric fields)
+        Color,       // DisperSim3D.Geometry.Color (swatch + hex + RGB flyout)
         ReadOnly     // collections, complex objects — shows a short summary
     }
 
@@ -91,6 +92,7 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
             }
             else if (ut == typeof(Geometry.Point3D)) kind = PropertyEditorKind.Point3D;
             else if (ut == typeof(Geometry.Vector3D)) kind = PropertyEditorKind.Vector3D;
+            else if (ut == typeof(Geometry.Color)) kind = PropertyEditorKind.Color;
             else kind = PropertyEditorKind.ReadOnly;
 
             return new PropertyRow(

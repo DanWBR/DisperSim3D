@@ -70,7 +70,7 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
                     geometry.Children.Add(new ProjectTreeNode(
                         "deco:" + d.Id, LeafIcon,
                         string.IsNullOrEmpty(d.Name) ? "(decoration)" : d.Name,
-                        tag: d));
+                        tag: d, hasVisibilityToggle: true));
             project.Children.Add(geometry);
 
             // ── Sources ────────────────────────────────────────────────────
@@ -81,7 +81,8 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
                     sources.Children.Add(new ProjectTreeNode(
                         "src:" + s.Id, LeafIcon,
                         string.IsNullOrEmpty(s.Name) ? "(source)" : s.Name,
-                        tag: s));
+                        tag: s, hasVisibilityToggle: true,
+                        initialVisibility: s.IsVisible));
             project.Children.Add(sources);
 
             // ── Fire Sources ───────────────────────────────────────────────
@@ -97,7 +98,7 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
                     fires.Children.Add(new ProjectTreeNode(
                         "fire:" + f.Id, LeafIcon,
                         string.IsNullOrEmpty(f.Name) ? "(fire)" : f.Name,
-                        tag: f));
+                        tag: f, hasVisibilityToggle: true));
             project.Children.Add(fires);
 
             // ── Wind Fields ────────────────────────────────────────────────
@@ -108,7 +109,7 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
                     winds.Children.Add(new ProjectTreeNode(
                         "wind:" + w.Id, LeafIcon,
                         string.IsNullOrEmpty(w.Name) ? "(wind field)" : w.Name,
-                        tag: w));
+                        tag: w, hasVisibilityToggle: true));
             project.Children.Add(winds);
 
             // ── Simulations ────────────────────────────────────────────────
@@ -119,7 +120,8 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
                     sims.Children.Add(new ProjectTreeNode(
                         "sim:" + s.Id, LeafIcon,
                         string.IsNullOrEmpty(s.Name) ? "(simulation)" : s.Name,
-                        tag: s));
+                        tag: s, hasVisibilityToggle: true,
+                        initialVisibility: s.IsVisible));
             project.Children.Add(sims);
 
             // ── Dispersion Studies ─────────────────────────────────────────
@@ -152,7 +154,8 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
                     views.Children.Add(new ProjectTreeNode(
                         "view:" + v.Id, LeafIcon,
                         string.IsNullOrEmpty(v.Name) ? "(view)" : v.Name,
-                        tag: v));
+                        tag: v, hasVisibilityToggle: true,
+                        initialVisibility: v.IsVisible));
             project.Children.Add(views);
 
             // ── Camera Presets ─────────────────────────────────────────────
@@ -174,7 +177,8 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
                     monitors.Children.Add(new ProjectTreeNode(
                         "mon:" + m.Id, LeafIcon,
                         string.IsNullOrEmpty(m.Name) ? "(monitor)" : m.Name,
-                        tag: m));
+                        tag: m, hasVisibilityToggle: true,
+                        initialVisibility: m.Visible));
             project.Children.Add(monitors);
 
             // ── Detectors ──────────────────────────────────────────────────
@@ -185,7 +189,8 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
                     detectors.Children.Add(new ProjectTreeNode(
                         "det:" + d.Id, LeafIcon,
                         string.IsNullOrEmpty(d.Name) ? "(detector)" : d.Name,
-                        tag: d));
+                        tag: d, hasVisibilityToggle: true,
+                        initialVisibility: d.Visible));
             project.Children.Add(detectors);
 
             // ── Wind Rose ──────────────────────────────────────────────────

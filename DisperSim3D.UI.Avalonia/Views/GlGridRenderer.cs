@@ -42,7 +42,8 @@ namespace DisperSim3D.UI.Avalonia.Views
                 if (isOrigin) continue; // axes drawn separately
 
                 bool isMajor = MathF.Abs(v % majorStep) < 0.01f;
-                float c = isMajor ? 0.28f : 0.16f;
+                // Line brightness tuned for light sky + ground plane
+                float c = isMajor ? 0.42f : 0.52f;
 
                 // Line parallel to X axis (at y = v)
                 AddLine(verts, -half, v, 0f, half, v, 0f, c, c, c, 1f);

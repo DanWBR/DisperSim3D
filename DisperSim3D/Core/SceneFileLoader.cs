@@ -56,6 +56,8 @@ namespace DisperSim3D.Core
             DeserializeMonitorPoints(root, inv, scene);
             DeserializeFireScenario(root, inv, scene);
             DeserializeGasDetectors(root, inv, scene);
+            DeserializeDecorations(root, inv, scene);
+            DeserializeEnvironment(root, inv, scene);
 
             return scene;
         }
@@ -523,6 +525,98 @@ namespace DisperSim3D.Core
                     ThresholdKgM3 = double.Parse((string)de.Attribute("Threshold") ?? "0.033", inv)
                 });
             }
+        }
+
+        private static void DeserializeDecorations(XElement root, CultureInfo inv, Scene3D scene)
+        {
+            var decosEl = root.Element("Decorations");
+            if (decosEl == null) return;
+
+            foreach (var de in decosEl.Elements("Decoration"))
+            {
+                var deco = new Decoration3D
+                {
+                    Id = (string)de.Attribute("Id") ?? Guid.NewGuid().ToString(),
+                    Name = (string)de.Attribute("Name") ?? "",
+                    FilePath = (string)de.Attribute("FilePath") ?? "",
+                    Position = new Point3D(
+                        double.Parse((string)de.Attribute("PosX") ?? "0", inv),
+                        double.Parse((string)de.Attribute("PosY") ?? "0", inv),
+                        double.Parse((string)de.Attribute("PosZ") ?? "0", inv)),
+                    Rotation = new Vector3D(
+                        double.Parse((string)de.Attribute("RotX") ?? "0", inv),
+                        double.Parse((string)de.Attribute("RotY") ?? "0", inv),
+                        double.Parse((string)de.Attribute("RotZ") ?? "0", inv)),
+                    Scale = double.Parse((string)de.Attribute("Scale") ?? "1", inv),
+                    Opacity = double.Parse((string)de.Attribute("Opacity") ?? "1", inv),
+                    SpecularPower = double.Parse((string)de.Attribute("SpecularPower") ?? "40", inv),
+                };
+
+                var clipAttr = (string)de.Attribute("ClipEnabled");
+                if (clipAttr != null)
+                {
+                    deco.ClipEnabled = bool.Parse(clipAttr);
+                    if (Enum.TryParse((string)de.Attribute("ClipAxis") ?? "Y", out ClipAxis ca))
+                        deco.ClipAxis = ca;
+                    deco.ClipValue = double.Parse((string)de.Attribute("ClipValue") ?? "0", inv);
+                    deco.ClipAbove = bool.Parse((string)de.Attribute("ClipAbove") ?? "True");
+                }
+
+                var useCustomAttr = (string)de.Attribute("UseCustomMaterial");
+                if (useCustomAttr != null)
+                {
+                    deco.UseCustomMaterial = bool.Parse(useCustomAttr);
+                    if (Enum.TryParse((string)de.Attribute("MaterialType") ?? "Matte", out MaterialType3D mt))
+                        deco.MaterialType = mt;
+                    try { deco.MaterialColor = Geometry.Color.Parse((string)de.Attribute("MaterialColor") ?? "#FFD3D3D3"); }
+                    catch { deco.MaterialColor = Geometry.Colors.LightGray; }
+                }
+
+                scene.Decorations.Add(deco);
+            }
+        }
+
+        private static void DeserializeEnvironment(XElement root, CultureInfo inv, Scene3D scene)
+        {
+            var el = root.Element("Environment");
+            if (el == null) return;
+
+            var env = scene.Environment ?? new EnvironmentSettings();
+
+            var useSun = (string)el.Attribute("UseSunLighting");
+            if (useSun != null) env.UseSunLighting = bool.Parse(useSun);
+
+            var azimuth = (string)el.Attribute("SunAzimuthDeg");
+            if (azimuth != null) env.SunAzimuthDeg = double.Parse(azimuth, inv);
+
+            var elevation = (string)el.Attribute("SunElevationDeg");
+            if (elevation != null) env.SunElevationDeg = double.Parse(elevation, inv);
+
+            var sunInt = (string)el.Attribute("SunIntensity");
+            if (sunInt != null) env.SunIntensity = double.Parse(sunInt, inv);
+
+            var ambInt = (string)el.Attribute("AmbientIntensity");
+            if (ambInt != null) env.AmbientIntensity = double.Parse(ambInt, inv);
+
+            var skyEnabled = (string)el.Attribute("SkydomeEnabled");
+            if (skyEnabled != null) env.SkydomeEnabled = bool.Parse(skyEnabled);
+
+            var zenith = (string)el.Attribute("SkyZenith");
+            if (zenith != null)
+                try { env.SkyZenithColor = Geometry.Color.Parse(zenith); } catch { }
+
+            var horizon = (string)el.Attribute("SkyHorizon");
+            if (horizon != null)
+                try { env.SkyHorizonColor = Geometry.Color.Parse(horizon); } catch { }
+
+            var ground = (string)el.Attribute("Ground");
+            if (ground != null && Enum.TryParse(ground, out GroundMaterial gm))
+                env.Ground = gm;
+
+            var showGrid = (string)el.Attribute("ShowGridOverlay");
+            if (showGrid != null) env.ShowGridOverlay = bool.Parse(showGrid);
+
+            scene.Environment = env;
         }
     }
 }

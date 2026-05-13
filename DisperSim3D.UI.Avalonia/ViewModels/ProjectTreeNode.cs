@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 
 namespace DisperSim3D.UI.Avalonia.ViewModels
 {
@@ -9,8 +10,10 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
     /// presentation-layer so it can be swapped for a richer ReactiveUI model
     /// later without touching the renderer side.
     /// </summary>
-    public sealed class ProjectTreeNode
+    public sealed class ProjectTreeNode : INotifyPropertyChanged
     {
+        private bool _isVisible3D = true;
+
         /// <summary>Display title shown in the tree row.</summary>
         public string Title { get; }
 
@@ -32,17 +35,39 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
         /// rebuilds (right-click → add → tree refresh shouldn't lose focus).</summary>
         public string NodeId { get; }
 
+        /// <summary>Whether this node represents an object that can be shown/hidden
+        /// in the 3D viewport. Section headers and non-spatial items are false.</summary>
+        public bool HasVisibilityToggle { get; }
+
+        /// <summary>Controls visibility of the corresponding 3D object in the
+        /// viewport. Bound to a CheckBox in the tree item template.</summary>
+        public bool IsVisible3D
+        {
+            get => _isVisible3D;
+            set
+            {
+                if (_isVisible3D == value) return;
+                _isVisible3D = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsVisible3D)));
+            }
+        }
+
         public ObservableCollection<ProjectTreeNode> Children { get; }
             = new ObservableCollection<ProjectTreeNode>();
 
+        public event PropertyChangedEventHandler? PropertyChanged;
+
         public ProjectTreeNode(string nodeId, string icon, string title,
-            string badge = "", object? tag = null)
+            string badge = "", object? tag = null, bool hasVisibilityToggle = false,
+            bool initialVisibility = true)
         {
             NodeId = nodeId;
             Icon = icon;
             Title = title;
             Badge = badge;
             Tag = tag;
+            HasVisibilityToggle = hasVisibilityToggle;
+            _isVisible3D = initialVisibility;
         }
     }
 }

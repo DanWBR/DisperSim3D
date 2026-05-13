@@ -10,6 +10,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.TextFormatting;
 using DisperSim3D.UI.Avalonia.ViewModels;
+using PortableColor = DisperSim3D.Geometry.Color;
 using PortablePoint3D = DisperSim3D.Geometry.Point3D;
 using PortableVector3D = DisperSim3D.Geometry.Vector3D;
 
@@ -174,6 +175,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 case PropertyEditorKind.EnumChoice: return EnumEditor(row);
                 case PropertyEditorKind.Point3D: return Vec3Editor(row, isPoint: true);
                 case PropertyEditorKind.Vector3D: return Vec3Editor(row, isPoint: false);
+                case PropertyEditorKind.Color: return ColorEditor(row);
                 default: return ReadOnlyEditor(row);
             }
         }
@@ -282,6 +284,147 @@ namespace DisperSim3D.UI.Avalonia.Views
                 ShowButtonSpinner = false,
                 MinHeight = 24
             };
+
+        private Control ColorEditor(PropertyRow row)
+        {
+            PortableColor current = row.Getter() is PortableColor c
+                ? c : PortableColor.FromRgb(128, 128, 128);
+
+            var swatch = new Border
+            {
+                Width = 22, Height = 18,
+                CornerRadius = new CornerRadius(2),
+                BorderBrush = new SolidColorBrush(Color.Parse("#888")),
+                BorderThickness = new Thickness(1),
+                Background = new SolidColorBrush(
+                    Color.FromArgb(current.A, current.R, current.G, current.B)),
+                VerticalAlignment = VerticalAlignment.Center,
+                Cursor = new global::Avalonia.Input.Cursor(
+                    global::Avalonia.Input.StandardCursorType.Hand)
+            };
+
+            var hexBox = new TextBox
+            {
+                Text = $"#{current.R:X2}{current.G:X2}{current.B:X2}",
+                MinHeight = 24,
+                MinWidth = 70,
+                FontFamily = new FontFamily("Consolas,Courier New,monospace"),
+                FontSize = 11
+            };
+
+            var panel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 6,
+                Children = { swatch, hexBox }
+            };
+
+            var nr = new NumericUpDown
+            {
+                Value = current.R, Minimum = 0, Maximum = 255,
+                Increment = 1, FormatString = "0", MinHeight = 24,
+                ShowButtonSpinner = true
+            };
+            var ng = new NumericUpDown
+            {
+                Value = current.G, Minimum = 0, Maximum = 255,
+                Increment = 1, FormatString = "0", MinHeight = 24,
+                ShowButtonSpinner = true
+            };
+            var nb = new NumericUpDown
+            {
+                Value = current.B, Minimum = 0, Maximum = 255,
+                Increment = 1, FormatString = "0", MinHeight = 24,
+                ShowButtonSpinner = true
+            };
+            var na = new NumericUpDown
+            {
+                Value = current.A, Minimum = 0, Maximum = 255,
+                Increment = 1, FormatString = "0", MinHeight = 24,
+                ShowButtonSpinner = true
+            };
+
+            var preview = new Border
+            {
+                Width = 40, Height = 24,
+                CornerRadius = new CornerRadius(3),
+                BorderBrush = new SolidColorBrush(Color.Parse("#888")),
+                BorderThickness = new Thickness(1),
+                Background = swatch.Background,
+                Margin = new Thickness(0, 4, 0, 0)
+            };
+
+            var flyoutContent = new StackPanel
+            {
+                Spacing = 4, Width = 180,
+                Children =
+                {
+                    MakeColorChannel("R", nr),
+                    MakeColorChannel("G", ng),
+                    MakeColorChannel("B", nb),
+                    MakeColorChannel("A", na),
+                    preview
+                }
+            };
+
+            var flyout = new Flyout { Content = flyoutContent };
+
+            void ApplyFromRgb()
+            {
+                byte r = (byte)(nr.Value ?? 0);
+                byte g = (byte)(ng.Value ?? 0);
+                byte b = (byte)(nb.Value ?? 0);
+                byte a = (byte)(na.Value ?? 255);
+                var nc = PortableColor.FromArgb(a, r, g, b);
+                var avColor = Color.FromArgb(a, r, g, b);
+                swatch.Background = new SolidColorBrush(avColor);
+                preview.Background = new SolidColorBrush(avColor);
+                hexBox.Text = $"#{r:X2}{g:X2}{b:X2}";
+                TryAssign(row, nc);
+            }
+
+            nr.ValueChanged += (_, _) => ApplyFromRgb();
+            ng.ValueChanged += (_, _) => ApplyFromRgb();
+            nb.ValueChanged += (_, _) => ApplyFromRgb();
+            na.ValueChanged += (_, _) => ApplyFromRgb();
+
+            hexBox.LostFocus += (_, _) =>
+            {
+                try
+                {
+                    var parsed = PortableColor.Parse(hexBox.Text ?? "#808080");
+                    nr.Value = parsed.R;
+                    ng.Value = parsed.G;
+                    nb.Value = parsed.B;
+                    na.Value = parsed.A;
+                    var avColor = Color.FromArgb(parsed.A, parsed.R, parsed.G, parsed.B);
+                    swatch.Background = new SolidColorBrush(avColor);
+                    preview.Background = new SolidColorBrush(avColor);
+                    TryAssign(row, parsed);
+                }
+                catch { /* ignore bad input */ }
+            };
+
+            swatch.PointerPressed += (_, _) => flyout.ShowAt(swatch);
+
+            return panel;
+        }
+
+        private static Grid MakeColorChannel(string label, NumericUpDown nud)
+        {
+            var g = new Grid { ColumnDefinitions = new ColumnDefinitions("24,*") };
+            var lbl = new TextBlock
+            {
+                Text = label, VerticalAlignment = VerticalAlignment.Center,
+                FontWeight = FontWeight.SemiBold, FontSize = 11,
+                Foreground = new SolidColorBrush(Color.Parse("#666"))
+            };
+            Grid.SetColumn(lbl, 0);
+            Grid.SetColumn(nud, 1);
+            g.Children.Add(lbl);
+            g.Children.Add(nud);
+            return g;
+        }
 
         private Control ReadOnlyEditor(PropertyRow row)
         {

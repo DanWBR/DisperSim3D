@@ -40,13 +40,25 @@ namespace DisperSim3D.UI.Avalonia.Views
         private string? _projectPath;
         private bool _isDirty;
 
+        // ── Playback state ──────────────────────────────────────────────
+        private Simulation? _playbackSim;
+        private OpenFoamResult? _playbackResult;
+        private List<DispersionThreshold>? _playbackThresholds;
+        private DispatcherTimer? _playbackTimer;
+        private double _playbackTimeS;
+        private double _playbackSpeedFactor = 1.0;
+        private bool _playbackPlaying;
+
         public MainWindow()
         {
             InitializeComponent();
             StatusEnv.Text = BuildEnvLine();
             Inspector.ValueChanged += (_, _) =>
             {
-                if (_scene != null && !_isDirty) { _isDirty = true; UpdateTitle(); }
+                if (_scene == null) return;
+                if (!_isDirty) { _isDirty = true; UpdateTitle(); }
+                RebuildTree();
+                Viewport3D.PopulateScene(_scene);
             };
             RebuildTree();
         }
@@ -70,8 +82,193 @@ namespace DisperSim3D.UI.Avalonia.Views
             string name = _projectPath is null
                 ? "Untitled"
                 : Path.GetFileNameWithoutExtension(_projectPath);
-            ProjectTree.ItemsSource = ProjectTreeBuilder.Build(_scene, name);
+            var nodes = ProjectTreeBuilder.Build(_scene, name);
+            ProjectTree.ItemsSource = nodes;
+            // Subscribe to visibility toggles so the viewport updates
+            SubscribeVisibilityToggles(nodes);
             UpdateTitle();
+        }
+
+        /// <summary>
+        /// Walk the tree and subscribe to <see cref="ProjectTreeNode.IsVisible3D"/>
+        /// changes so each checkbox toggle updates the matching
+        /// <see cref="SceneObject.Visible"/> flag in the viewport.
+        /// </summary>
+        private void SubscribeVisibilityToggles(
+            System.Collections.ObjectModel.ObservableCollection<ProjectTreeNode> roots)
+        {
+            foreach (var root in roots)
+                WalkAndSubscribe(root);
+
+            void WalkAndSubscribe(ProjectTreeNode node)
+            {
+                if (node.HasVisibilityToggle)
+                {
+                    node.PropertyChanged += (s, e) =>
+                    {
+                        if (e.PropertyName != nameof(ProjectTreeNode.IsVisible3D)) return;
+                        var n = (ProjectTreeNode)s!;
+                        SetSceneObjectsVisibility(n.NodeId, n.IsVisible3D);
+                        SyncModelVisibility(n.Tag, n.IsVisible3D);
+                        if (!_isDirty) { _isDirty = true; UpdateTitle(); }
+                    };
+                }
+                foreach (var child in node.Children)
+                    WalkAndSubscribe(child);
+            }
+        }
+
+        /// <summary>
+        /// Map a tree node id ("src:guid", "mon:guid", "deco:guid") to the
+        /// viewport's SceneObject tag ("source:0", "monitor:0", "deco:0").
+        /// </summary>
+        private SceneObject? FindSceneObjectForNode(string nodeId)
+        {
+            // nodeId = "src:guid", "fire:guid", "mon:guid", "det:guid", "deco:guid"
+            // SceneObject.Tag = "source:idx", "fire:idx", "monitor:idx", "detector:idx", "deco:idx"
+            int colon = nodeId.IndexOf(':');
+            if (colon < 0) return null;
+            string kind = nodeId.Substring(0, colon);
+            string guid = nodeId.Substring(colon + 1);
+
+            // Resolve the index by matching the GUID against the scene list
+            string? sceneTag = null;
+            if (_scene == null) return null;
+
+            switch (kind)
+            {
+                case "src":
+                    if (_scene.TopLevelSources != null)
+                        for (int i = 0; i < _scene.TopLevelSources.Count; i++)
+                            if (_scene.TopLevelSources[i].Id == guid) { sceneTag = "source:" + i; break; }
+                    break;
+                case "fire":
+                    if (_scene.FireScenario?.Sources != null)
+                        for (int i = 0; i < _scene.FireScenario.Sources.Count; i++)
+                            if (_scene.FireScenario.Sources[i].Id == guid) { sceneTag = "fire:" + i; break; }
+                    break;
+                case "mon":
+                    if (_scene.MonitorPoints != null)
+                        for (int i = 0; i < _scene.MonitorPoints.Count; i++)
+                            if (_scene.MonitorPoints[i].Id == guid) { sceneTag = "monitor:" + i; break; }
+                    break;
+                case "det":
+                    if (_scene.GasDetectors != null)
+                        for (int i = 0; i < _scene.GasDetectors.Count; i++)
+                            if (_scene.GasDetectors[i].Id == guid) { sceneTag = "detector:" + i; break; }
+                    break;
+                case "deco":
+                    if (_scene.Decorations != null)
+                        for (int i = 0; i < _scene.Decorations.Count; i++)
+                            if (_scene.Decorations[i].Id == guid) { sceneTag = "deco:" + i; break; }
+                    break;
+                case "wind":
+                    foreach (var obj in Viewport3D.SceneObjects)
+                        if (obj.Tag == "wind") return obj;
+                    return null;
+                case "view":
+                    foreach (var obj in Viewport3D.SceneObjects)
+                        if (obj.Tag != null && obj.Tag.EndsWith(guid)) return obj;
+                    return null;
+            }
+
+            if (sceneTag == null) return null;
+            foreach (var obj in Viewport3D.SceneObjects)
+                if (obj.Tag == sceneTag) return obj;
+            return null;
+        }
+
+        /// <summary>
+        /// Toggle visibility on ALL scene objects that belong to the given
+        /// tree node. Sources have a sphere + direction arrow; views may have
+        /// iso/contour variants.
+        /// </summary>
+        private void SetSceneObjectsVisibility(string nodeId, bool visible)
+        {
+            int colon = nodeId.IndexOf(':');
+            if (colon < 0) return;
+            string kind = nodeId.Substring(0, colon);
+            string guid = nodeId.Substring(colon + 1);
+            if (_scene == null) return;
+
+            bool any = false;
+
+            switch (kind)
+            {
+                case "src":
+                    // Source has "source:N" + "sourcearrow:N"
+                    if (_scene.TopLevelSources != null)
+                    {
+                        for (int i = 0; i < _scene.TopLevelSources.Count; i++)
+                        {
+                            if (_scene.TopLevelSources[i].Id != guid) continue;
+                            string tagSphere = "source:" + i;
+                            string tagArrow  = "sourcearrow:" + i;
+                            foreach (var obj in Viewport3D.SceneObjects)
+                            {
+                                if (obj.Tag == tagSphere || obj.Tag == tagArrow)
+                                { obj.Visible = visible; any = true; }
+                            }
+                            break;
+                        }
+                    }
+                    break;
+
+                case "wind":
+                    foreach (var obj in Viewport3D.SceneObjects)
+                    {
+                        if (obj.Tag == "wind")
+                        { obj.Visible = visible; any = true; }
+                    }
+                    break;
+
+                case "sim":
+                    foreach (var obj in Viewport3D.SceneObjects)
+                    {
+                        if (obj.Tag != null && obj.Tag.StartsWith("dispersion:"))
+                        { obj.Visible = visible; any = true; }
+                    }
+                    if (!visible && _playbackSim != null)
+                    {
+                        // Also find matching sim to check if it's the active playback
+                        if (_scene?.Simulations != null)
+                        {
+                            var matchedSim = _scene.Simulations.FirstOrDefault(s => s.Id == guid);
+                            if (matchedSim == _playbackSim)
+                                StopAndHidePlayback();
+                        }
+                    }
+                    break;
+
+                case "view":
+                    foreach (var obj in Viewport3D.SceneObjects)
+                    {
+                        if (obj.Tag != null && obj.Tag.EndsWith(guid))
+                        { obj.Visible = visible; any = true; }
+                    }
+                    break;
+
+                default:
+                    // Single-object types: find and toggle
+                    var sceneObj = FindSceneObjectForNode(nodeId);
+                    if (sceneObj != null)
+                    { sceneObj.Visible = visible; any = true; }
+                    break;
+            }
+
+            if (any) Viewport3D.RequestNextFrameRendering();
+        }
+
+        private static void SyncModelVisibility(object? tag, bool visible)
+        {
+            switch (tag)
+            {
+                case ReleaseSource3D src: src.IsVisible = visible; break;
+                case Simulation sim: sim.IsVisible = visible; break;
+                case Models.View view: view.IsVisible = visible; break;
+                case MonitorPoint3D mon: mon.Visible = visible; break;
+                case GasDetector3D det: det.Visible = visible; break;
+            }
         }
 
         private void UpdateTitle()
@@ -103,11 +300,114 @@ namespace DisperSim3D.UI.Avalonia.Views
             }
 
             Inspector.SetTarget(node.Tag);
+
+            if (node.Tag is Simulation sim && sim.Status == SimulationStatus.Completed)
+                InitPlayback(sim);
+            else if (_playbackSim != null && node.Tag is not Simulation)
+                StopAndHidePlayback();
+        }
+
+        // ── Unsaved-changes guard ────────────────────────────────────────────
+
+        private enum SavePromptResult { Save, Discard, Cancel }
+
+        private async Task<SavePromptResult> AskSaveIfDirtyAsync()
+        {
+            if (!_isDirty || _scene is null)
+                return SavePromptResult.Discard;
+
+            string fileName = _projectPath is null
+                ? "Untitled"
+                : Path.GetFileName(_projectPath);
+
+            var dlg = new Window
+            {
+                Title = "Unsaved Changes",
+                Width = 420, Height = 160,
+                CanResize = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                SystemDecorations = SystemDecorations.BorderOnly
+            };
+
+            var result = SavePromptResult.Cancel;
+
+            var btnSave = new Button { Content = "Save", Width = 90 };
+            var btnDiscard = new Button { Content = "Discard", Width = 90 };
+            var btnCancel = new Button { Content = "Cancel", Width = 90 };
+
+            btnSave.Click += (_, _) => { result = SavePromptResult.Save; dlg.Close(); };
+            btnDiscard.Click += (_, _) => { result = SavePromptResult.Discard; dlg.Close(); };
+            btnCancel.Click += (_, _) => { result = SavePromptResult.Cancel; dlg.Close(); };
+
+            var buttons = new StackPanel
+            {
+                Orientation = global::Avalonia.Layout.Orientation.Horizontal,
+                HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Right,
+                Spacing = 8,
+                Margin = new Thickness(0, 12, 0, 0),
+                Children = { btnCancel, btnDiscard, btnSave }
+            };
+
+            dlg.Content = new StackPanel
+            {
+                Margin = new Thickness(20),
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = $"Save changes to \"{fileName}\"?",
+                        FontSize = 14,
+                        TextWrapping = global::Avalonia.Media.TextWrapping.Wrap
+                    },
+                    buttons
+                }
+            };
+
+            await dlg.ShowDialog(this);
+            return result;
+        }
+
+        protected override async void OnClosing(WindowClosingEventArgs e)
+        {
+            if (_isDirty && _scene != null)
+            {
+                e.Cancel = true;
+                var answer = await AskSaveIfDirtyAsync();
+                if (answer == SavePromptResult.Cancel) return;
+                if (answer == SavePromptResult.Save)
+                {
+                    if (string.IsNullOrEmpty(_projectPath))
+                        MenuFileSaveAs_Click(null, new RoutedEventArgs());
+                    else
+                        await SaveAsync(_projectPath);
+                    if (_isDirty) return;
+                }
+                _isDirty = false;
+                Close();
+            }
+            else
+            {
+                base.OnClosing(e);
+            }
         }
 
         // ── File menu ────────────────────────────────────────────────────────
-        private void MenuFileNew_Click(object? sender, RoutedEventArgs e)
+        private async void MenuFileNew_Click(object? sender, RoutedEventArgs e)
         {
+            if (_scene != null && _isDirty)
+            {
+                var answer = await AskSaveIfDirtyAsync();
+                if (answer == SavePromptResult.Cancel) return;
+                if (answer == SavePromptResult.Save)
+                {
+                    if (string.IsNullOrEmpty(_projectPath))
+                        MenuFileSaveAs_Click(sender, e);
+                    else
+                        await SaveAsync(_projectPath);
+                    if (_isDirty) return;
+                }
+            }
+
             _scene = new Scene3D();
             _projectPath = null;
             _isDirty = false;
@@ -118,6 +418,20 @@ namespace DisperSim3D.UI.Avalonia.Views
 
         private async void MenuFileOpen_Click(object? sender, RoutedEventArgs e)
         {
+            if (_scene != null && _isDirty)
+            {
+                var answer = await AskSaveIfDirtyAsync();
+                if (answer == SavePromptResult.Cancel) return;
+                if (answer == SavePromptResult.Save)
+                {
+                    if (string.IsNullOrEmpty(_projectPath))
+                        MenuFileSaveAs_Click(sender, e);
+                    else
+                        await SaveAsync(_projectPath);
+                    if (_isDirty) return;
+                }
+            }
+
             var top = TopLevel.GetTopLevel(this);
             if (top is null) return;
 
@@ -532,20 +846,71 @@ namespace DisperSim3D.UI.Avalonia.Views
         {
             if (_scene is null) { StatusText.Text = "Open or create a project first."; return; }
 
-            // Seed the dialog's Azimuth with the project's wind direction so
-            // the new source faces "downwind" — matches WinForms behaviour.
+            StatusText.Text = "Click on a surface to place the source (right-click to cancel)...";
+            var tcs = new TaskCompletionSource<(System.Numerics.Vector3 pos, System.Numerics.Vector3 normal)?>();
+
+            void OnPick(System.Numerics.Vector3 pos, System.Numerics.Vector3 normal)
+            {
+                tcs.TrySetResult((pos, normal));
+            }
+            void OnCancel()
+            {
+                if (!tcs.Task.IsCompleted) tcs.TrySetResult(null);
+            }
+
+            Viewport3D.PickCompleted += OnPick;
+            EventHandler<global::Avalonia.Input.KeyEventArgs>? keyHandler = null;
+            keyHandler = (s, e) =>
+            {
+                if (e.Key == global::Avalonia.Input.Key.Escape)
+                {
+                    Viewport3D.ExitPickMode();
+                    OnCancel();
+                }
+            };
+            KeyDown += keyHandler;
+
+            Viewport3D.EnterPickMode();
+
+            var result = await tcs.Task;
+
+            Viewport3D.PickCompleted -= OnPick;
+            KeyDown -= keyHandler;
+
+            if (result == null)
+            {
+                StatusText.Text = "Source placement cancelled.";
+                return;
+            }
+
+            var (hitPos, hitNormal) = result.Value;
+            var (az, el) = NormalToAzimuthElevation(hitNormal);
+
             double windDirSeed = 0;
             if (_scene.WindFieldScenarios?.Count > 0 && _scene.WindFieldScenarios[0].Meteo != null)
                 windDirSeed = _scene.WindFieldScenarios[0].Meteo.WindDirectionDeg;
             else if (_scene.GeneralSettings?.DefaultMeteo != null)
                 windDirSeed = _scene.GeneralSettings.DefaultMeteo.WindDirectionDeg;
 
-            var dlg = new DispersionSourceDialog(windDirSeed);
+            var dlg = new DispersionSourceDialog(windDirSeed, az, el);
             if (!await dlg.ShowDialog<bool>(this)) return;
 
             var src = dlg.BuildSource();
+            src.Position = new DisperSim3D.Geometry.Point3D(hitPos.X, hitPos.Y, hitPos.Z);
             _scene.TopLevelSources.Add(src);
             MarkDirtyAndRefresh("Added source: " + src.Name);
+        }
+
+        private static (double azimuthDeg, double elevationDeg) NormalToAzimuthElevation(
+            System.Numerics.Vector3 n)
+        {
+            n = System.Numerics.Vector3.Normalize(n);
+            double elRad = Math.Asin(Math.Clamp(n.Z, -1.0, 1.0));
+            double azRad = Math.Atan2(n.X, n.Y);
+            double azDeg = azRad * 180.0 / Math.PI;
+            if (azDeg < 0) azDeg += 360.0;
+            double elDeg = elRad * 180.0 / Math.PI;
+            return (azDeg, elDeg);
         }
 
         private async Task AddGasAsync()
@@ -1048,6 +1413,329 @@ namespace DisperSim3D.UI.Avalonia.Views
             RebuildTree();
             Viewport3D.PopulateScene(_scene);
             StatusText.Text = status;
+        }
+
+        // ── Simulation playback ─────────────────────────────────────────────
+
+        private void InitPlayback(Simulation sim)
+        {
+            StopPlaybackTimer();
+
+            _playbackSim = sim;
+            _playbackThresholds = sim.SnapshotThresholds ?? new List<DispersionThreshold>();
+
+            OpenFoamResult? result = sim.ResultTag as OpenFoamResult;
+            if (result == null && !string.IsNullOrEmpty(sim.CasePath)
+                && Directory.Exists(sim.CasePath))
+            {
+                int nx = sim.SnapshotGridResolution > 0 ? sim.SnapshotGridResolution : 60;
+                int ny = nx;
+                int nz = Math.Max(1, nx / 2);
+                double half = sim.SnapshotDomainSizeM > 0 ? sim.SnapshotDomainSizeM : 200;
+
+                // Resolve species field name for OpenFOAM (CH4, SF6, s, etc.)
+                string speciesName = "CH4";
+                try
+                {
+                    if (sim.SnapshotSource != null)
+                        speciesName = OpenFoamCaseGenerator.ResolveOpenFoamSpecies(sim.SnapshotSource);
+                }
+                catch { }
+
+                // Try OpenFOAM time-directory layout first
+                result = OpenFoamResultReader.ReadResults(
+                    sim.CasePath, nx, ny, nz, half, scalarFieldName: speciesName);
+
+                // Fall back to FluidX3D flat-bin layout
+                if (result == null || !result.IsLoaded || result.TimeSteps.Count == 0)
+                {
+                    result = GlViewport.TryLoadFlatBinCasePublic(
+                        sim.CasePath, ref nx, ref ny, ref nz, half, false);
+                }
+
+                if (result != null && result.IsLoaded)
+                    sim.ResultTag = result;
+            }
+
+            _playbackResult = result;
+
+            if (result == null || !result.IsLoaded || result.TimeSteps.Count == 0)
+            {
+                PlaybackPanel.IsVisible = false;
+                LegendPanel.IsVisible = false;
+                StatusText.Text = $"No result data found for '{sim.Name}'";
+                return;
+            }
+
+            double lastTime = result.TimeSteps[result.TimeSteps.Count - 1];
+            PlaybackTotalLabel.Text = $"/ {lastTime:F1} s  ({result.TimeSteps.Count} steps)";
+            _playbackTimeS = result.TimeSteps[0];
+
+            PlaybackPanel.IsVisible = true;
+            _playbackPlaying = false;
+            PlayPauseIcon.Value = "mdi-play";
+
+            // Build effective thresholds: user-defined + built-in layers
+            _playbackEffectiveThresholds = BuildEffectiveThresholds(result);
+            BuildLegend();
+            RenderPlaybackFrame(_playbackTimeS);
+        }
+
+        private List<DispersionThreshold>? _playbackEffectiveThresholds;
+
+        private List<DispersionThreshold> BuildEffectiveThresholds(OpenFoamResult result)
+        {
+            // Find peak concentration across all time steps (sample last step)
+            double maxConc = 0;
+            var lastField = result.GetField(result.TimeSteps[result.TimeSteps.Count - 1]);
+            if (lastField != null)
+            {
+                int nx = lastField.GetLength(0), ny = lastField.GetLength(1), nz = lastField.GetLength(2);
+                for (int i = 0; i < nx; i++)
+                    for (int j = 0; j < ny; j++)
+                        for (int k = 0; k < nz; k++)
+                            if (lastField[i, j, k] > maxConc) maxConc = lastField[i, j, k];
+            }
+
+            var thresholds = new List<DispersionThreshold>();
+
+            // Add user-defined thresholds
+            if (_playbackThresholds != null)
+            {
+                foreach (var t in _playbackThresholds)
+                    if (t.Visible && t.ConcentrationValue > 0)
+                        thresholds.Add(t);
+            }
+
+            // If no user thresholds, add built-in layers like WPF ComputeCloudVisual
+            if (thresholds.Count == 0 && maxConc > 0)
+            {
+                var builtinFracs = new[] { 0.50, 0.20, 0.08, 0.03, 0.01, 0.003 };
+                var builtinColors = new[]
+                {
+                    DisperSim3D.Geometry.Color.FromArgb(200, 220, 40, 40),    // dark red
+                    DisperSim3D.Geometry.Color.FromArgb(180, 255, 100, 30),   // orange
+                    DisperSim3D.Geometry.Color.FromArgb(160, 255, 200, 50),   // yellow
+                    DisperSim3D.Geometry.Color.FromArgb(140, 100, 220, 100),  // green
+                    DisperSim3D.Geometry.Color.FromArgb(120, 80, 160, 255),   // light blue
+                    DisperSim3D.Geometry.Color.FromArgb(100, 180, 180, 220),  // pale blue
+                };
+                var builtinNames = new[] { "50%", "20%", "8%", "3%", "1%", "0.3%" };
+                var builtinOpacity = new[] { 0.40, 0.35, 0.30, 0.25, 0.20, 0.15 };
+
+                for (int i = 0; i < builtinFracs.Length; i++)
+                {
+                    thresholds.Add(new DispersionThreshold
+                    {
+                        Name = builtinNames[i] + " max",
+                        ConcentrationValue = maxConc * builtinFracs[i],
+                        Color = builtinColors[i],
+                        Opacity = builtinOpacity[i],
+                        Visible = true
+                    });
+                }
+            }
+
+            // Sort descending by concentration (render inner shells first)
+            thresholds.Sort((a, b) => b.ConcentrationValue.CompareTo(a.ConcentrationValue));
+            return thresholds;
+        }
+
+        private void StopAndHidePlayback()
+        {
+            StopPlaybackTimer();
+            _playbackSim = null;
+            _playbackResult = null;
+            _playbackEffectiveThresholds = null;
+            _playbackPlaying = false;
+            PlaybackPanel.IsVisible = false;
+            LegendPanel.IsVisible = false;
+            Viewport3D.ClearDispersionFrame();
+        }
+
+        private void BuildLegend()
+        {
+            LegendItems.Children.Clear();
+
+            var thresholds = _playbackEffectiveThresholds;
+            if (thresholds == null || thresholds.Count == 0)
+            {
+                LegendPanel.IsVisible = false;
+                return;
+            }
+
+            foreach (var th in thresholds)
+            {
+                if (!th.Visible) continue;
+
+                var swatch = new Border
+                {
+                    Width = 14, Height = 14,
+                    CornerRadius = new CornerRadius(2),
+                    BorderBrush = global::Avalonia.Media.Brushes.DarkGray,
+                    BorderThickness = new Thickness(0.5),
+                    Background = new global::Avalonia.Media.SolidColorBrush(
+                        global::Avalonia.Media.Color.FromArgb(
+                            (byte)(Math.Max(th.Opacity, 0.6) * 255),
+                            th.Color.R, th.Color.G, th.Color.B)),
+                    VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 6, 0)
+                };
+
+                string valText;
+                double v = th.ConcentrationValue;
+                if (v >= 0.01) valText = v.ToString("F3", CultureInfo.InvariantCulture);
+                else if (v >= 1e-6) valText = v.ToString("E2", CultureInfo.InvariantCulture);
+                else valText = v.ToString("E1", CultureInfo.InvariantCulture);
+
+                var label = new TextBlock
+                {
+                    Text = $"{th.Name}: {valText}",
+                    FontSize = 11,
+                    VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Center
+                };
+
+                var row = new StackPanel
+                {
+                    Orientation = global::Avalonia.Layout.Orientation.Horizontal,
+                    Margin = new Thickness(0, 2)
+                };
+                row.Children.Add(swatch);
+                row.Children.Add(label);
+                LegendItems.Children.Add(row);
+            }
+
+            LegendPanel.IsVisible = LegendItems.Children.Count > 0;
+        }
+
+        private void StopPlaybackTimer()
+        {
+            if (_playbackTimer != null)
+            {
+                _playbackTimer.Stop();
+                _playbackTimer.Tick -= PlaybackTimer_Tick;
+                _playbackTimer = null;
+            }
+        }
+
+        private void BtnPlayPause_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_playbackResult == null || _playbackResult.TimeSteps.Count == 0)
+                return;
+
+            if (_playbackPlaying)
+            {
+                _playbackPlaying = false;
+                StopPlaybackTimer();
+                PlayPauseIcon.Value = "mdi-play";
+            }
+            else
+            {
+                _playbackPlaying = true;
+                PlayPauseIcon.Value = "mdi-pause";
+
+                double lastTime = _playbackResult.TimeSteps[_playbackResult.TimeSteps.Count - 1];
+                if (_playbackTimeS >= lastTime - 0.001)
+                    _playbackTimeS = _playbackResult.TimeSteps[0];
+
+                _playbackTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
+                _playbackTimer.Tick += PlaybackTimer_Tick;
+                _playbackTimer.Start();
+            }
+        }
+
+        private void BtnStop_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_playbackResult == null) return;
+            _playbackPlaying = false;
+            StopPlaybackTimer();
+            PlayPauseIcon.Value = "mdi-play";
+            _playbackTimeS = _playbackResult.TimeSteps.Count > 0
+                ? _playbackResult.TimeSteps[0] : 0;
+            UpdatePlaybackSlider();
+            RenderPlaybackFrame(_playbackTimeS);
+        }
+
+        private void PlaybackTimer_Tick(object? sender, EventArgs e)
+        {
+            if (_playbackResult == null || _playbackResult.TimeSteps.Count < 2)
+                return;
+
+            double firstTime = _playbackResult.TimeSteps[0];
+            double lastTime = _playbackResult.TimeSteps[_playbackResult.TimeSteps.Count - 1];
+            double duration = lastTime - firstTime;
+            if (duration <= 0) return;
+
+            double dtReal = 0.033 * _playbackSpeedFactor * duration / 10.0;
+            _playbackTimeS += dtReal;
+
+            if (_playbackTimeS >= lastTime)
+            {
+                _playbackTimeS = lastTime;
+                _playbackPlaying = false;
+                StopPlaybackTimer();
+                PlayPauseIcon.Value = "mdi-play";
+            }
+
+            UpdatePlaybackSlider();
+            RenderPlaybackFrame(_playbackTimeS);
+        }
+
+        private void PlaybackSlider_ValueChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+        {
+            if (e.Property.Name != "Value") return;
+            if (PlaybackSlider == null || _playbackPlaying || _playbackResult == null
+                || _playbackResult.TimeSteps.Count == 0) return;
+
+            double fraction = PlaybackSlider.Value / 1000.0;
+            double firstTime = _playbackResult.TimeSteps[0];
+            double lastTime = _playbackResult.TimeSteps[_playbackResult.TimeSteps.Count - 1];
+            _playbackTimeS = firstTime + fraction * (lastTime - firstTime);
+            RenderPlaybackFrame(_playbackTimeS);
+        }
+
+        private void PlaybackSpeed_Changed(object? sender, SelectionChangedEventArgs e)
+        {
+            if (PlaybackSpeed == null) return;
+            _playbackSpeedFactor = PlaybackSpeed.SelectedIndex switch
+            {
+                0 => 0.25, 1 => 0.5, 2 => 1.0, 3 => 2.0, 4 => 5.0, _ => 1.0
+            };
+        }
+
+        private void UpdatePlaybackSlider()
+        {
+            if (_playbackResult == null || _playbackResult.TimeSteps.Count == 0) return;
+            double firstTime = _playbackResult.TimeSteps[0];
+            double lastTime = _playbackResult.TimeSteps[_playbackResult.TimeSteps.Count - 1];
+            double duration = lastTime - firstTime;
+            double fraction = duration > 0 ? (_playbackTimeS - firstTime) / duration : 0;
+            PlaybackSlider.Value = fraction * 1000.0;
+            PlaybackTimeLabel.Text = $"{_playbackTimeS:F1} s";
+        }
+
+        private void RenderPlaybackFrame(double timeS)
+        {
+            if (_playbackResult == null || _playbackResult.TimeSteps.Count == 0
+                || _playbackEffectiveThresholds == null || _playbackSim == null) return;
+
+            double bestT = _playbackResult.TimeSteps[0];
+            double bestDelta = Math.Abs(timeS - bestT);
+            foreach (var t in _playbackResult.TimeSteps)
+            {
+                double d = Math.Abs(timeS - t);
+                if (d < bestDelta) { bestDelta = d; bestT = t; }
+            }
+
+            var field = _playbackResult.GetField(bestT);
+            if (field == null) return;
+
+            double half = _playbackSim.SnapshotDomainSizeM > 0
+                ? _playbackSim.SnapshotDomainSizeM : 200;
+
+            PlaybackTimeLabel.Text = $"{bestT:F1} s";
+
+            Viewport3D.UpdateDispersionFrame(field, _playbackEffectiveThresholds, half);
         }
 
         // ── Help menu ────────────────────────────────────────────────────────

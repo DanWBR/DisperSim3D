@@ -103,5 +103,36 @@ namespace DisperSim3D.UI.Avalonia.Views
             Distance  = 120f;
             Target    = Vector3.Zero;
         }
+
+        /// <summary>
+        /// Apply a saved camera preset. Converts the preset's Position +
+        /// LookDirection (WPF-style) to the turntable's Azimuth / Elevation /
+        /// Distance / Target representation.
+        /// </summary>
+        public void ApplyPreset(DisperSim3D.Models.CameraPreset preset)
+        {
+            if (preset is null) return;
+
+            var pos = new Vector3(
+                (float)preset.Position.X,
+                (float)preset.Position.Y,
+                (float)preset.Position.Z);
+            var look = new Vector3(
+                (float)preset.LookDirection.X,
+                (float)preset.LookDirection.Y,
+                (float)preset.LookDirection.Z);
+
+            float lookLen = look.Length();
+            if (lookLen < 1e-6f) return;
+
+            // Target = position + lookDirection (look is the direction vector)
+            Target = pos + look;
+            Distance = lookLen;
+
+            // Compute direction from eye to target
+            var dir = Vector3.Normalize(look);
+            Elevation = MathF.Asin(Math.Clamp(dir.Z, -1f, 1f));
+            Azimuth = MathF.Atan2(dir.Y, dir.X) + MathF.PI; // flip: camera looks toward target
+        }
     }
 }
