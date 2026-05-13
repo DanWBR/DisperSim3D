@@ -60,7 +60,14 @@ dotnet run -c Release
 
 On WSL2 the window appears on your Windows desktop via WSLg. On bare-metal Linux
 it opens through X11 or Wayland. On macOS it uses CoreGraphics. Same source, same
-binary across all three.
+binary across all three. The 4 panels turn green left-to-right, top-to-bottom:
+
+1. **Portable geometry self-test** — 19/19 PASS on `DisperSim3D.Geometry.Point3D` / `Vector3D` operators (matches the WPF semantics exactly so engine code is bit-equivalent on either type).
+2. **IOGP 434-01 risk frequency self-test** — 27/27 PASS round-tripping the embedded leak-frequency database against published values.
+3. **FluidX3D — list OpenCL devices** — JSON describing every OpenCL device the host exposes. Requires `libFluidX3D.so` / `.dylib` next to the .NET binary (auto-copied if the `make-disp-bridge.sh --copy` step below has run) plus an OpenCL ICD installed on the host.
+4. **Engine end-to-end (Gaussian plume)** — synthetic methane scenario on a 32³ grid; reports `MaxC` and its location. Sanity check: `MaxC > 0` and the X-coord should be downwind (`+x` since wind comes from 270°).
+
+The same numeric result for `MaxC` should appear on Windows when you run the equivalent code path through `DisperSim3D.App` or `DisperSim3D.CLI` — that's the cross-platform-arithmetic guarantee in action.
 
 ### Cross-platform build (Linux / macOS)
 

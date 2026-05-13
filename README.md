@@ -2,9 +2,19 @@
 
 An interactive 3D gas dispersion analysis tool for process safety. Build a project, define release sources and gases, run Gaussian, CFD or GPU LBM dispersion simulations, visualize concentration fields, and optimize gas detector placement.
 
-Built on **.NET 10** with **HelixToolkit.WPF** for 3D rendering, **DockPanelSuite** for the docked layout, **OpenFOAM** for CFD-based wind fields and reactive transport, and **FluidX3D** (GPU lattice Boltzmann) for fast wind, dispersion and fire-plume runs.
+Built on **.NET 10** with **HelixToolkit.WPF** for 3D rendering on Windows, **Avalonia 11** as the cross-platform UI proof of concept, **OpenFOAM** for CFD-based wind fields and reactive transport, and **FluidX3D** (GPU lattice Boltzmann) for fast wind, dispersion and fire-plume runs.
 
-The **calculation engine and headless CLI are cross-platform** (`net10.0`); the **WinForms + WPF desktop UI** is Windows-only. The solution splits cleanly into a portable engine (`DisperSim3D.csproj` multi-targeting `net10.0;net10.0-windows`) and a WPF UI library (`DisperSim3D.UI.Wpf.csproj`, Windows-only) so the engine compiles on Linux/macOS without dragging in the Windows desktop SDK.
+**Cross-platform status — validated end-to-end on Ubuntu 24.04 / WSL2:**
+
+| Component | TFM / build | Windows | Linux | macOS |
+|---|---|:-:|:-:|:-:|
+| `DisperSim3D` (engine) | `net10.0` + `net10.0-windows` | ✅ | ✅ | ✅ |
+| `DisperSim3D.CLI` (headless) | `net10.0` | ✅ | ✅ | ✅ |
+| `DisperSim3D.UI.Avalonia` (cross-plat smoke) | `net10.0` + Avalonia 11 | ✅ | ✅ (WSLg) | ✅ |
+| `DisperSim3D.UI.Wpf` + `DisperSim3D.App` (WinForms shell) | `net10.0-windows` | ✅ | — | — |
+| `FluidX3D` native (`FluidX3D.dll` / `libFluidX3D.so` / `.dylib`) | C++ / OpenCL | MSVC | `g++` via `make-disp-bridge.sh` | `g++` via `make-disp-bridge.sh` |
+
+The solution splits cleanly into a **portable engine** (`DisperSim3D.csproj` multi-targeting `net10.0;net10.0-windows`) and a **Windows-only UI library** (`DisperSim3D.UI.Wpf.csproj`) so the engine compiles on Linux/macOS without dragging in the Windows desktop SDK. The Avalonia smoke window (`DisperSim3D.UI.Avalonia.csproj`) proves the engine works behind a non-WPF UI on the same source.
 
 Full project documentation is published on **[GitHub Pages](https://danwbr.github.io/DisperSim3D/)**. For a detailed description of physical models, file format, OpenFOAM case structure, and validation, see [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md).
 
@@ -202,15 +212,20 @@ DisperSim3D.UI.Wpf/                # WPF + WinForms UI library — net10.0-windo
 │   └── ...
 └── PropertyAdapters/               # HandyControl property-grid bridges
 
-FluidX3D/                          # Sibling C++ project — FluidX3D.dll (Windows-only build for now)
-├── src/disp_bridge.{h,cpp}        # C-ABI bridge exposed to C#
+FluidX3D/                          # Sibling C++ project — cross-platform native LBM
+├── src/disp_bridge.{h,cpp}        # C-ABI bridge exposed to C# (Windows + POSIX)
 ├── src/defines.hpp                # Feature flags (D3Q19 FP32, VOLUME_FORCE, SUBGRID, …)
+├── make-disp-bridge.sh            # Linux/macOS: builds libFluidX3D.{so,dylib}
+├── FluidX3D.vcxproj               # Windows: builds FluidX3D.dll
 └── …                              # Upstream FluidX3D from ProjectPhysX
 
 DisperSim3D.CLI/                   # Headless batch runner — net10.0 (cross-platform)
                                    # --list / --simulation / --allocation / --validate /
                                    # --list-gpus / --iogp-selftest / --geometry-selftest /
                                    # --list-iogp / --memory-estimate
+DisperSim3D.UI.Avalonia/           # Cross-platform Avalonia 11 smoke window — net10.0
+                                   # 4-panel proof window: geometry, IOGP, OpenCL devices,
+                                   # Gaussian plume. Same engine binary as the WinForms App.
 DisperSim3D.App/                   # WinForms host that embeds the editor panel — net10.0-windows
                                    # References both DisperSim3D and DisperSim3D.UI.Wpf
 docs/                              # GitHub Pages site (Jekyll + Just the Docs)
@@ -233,6 +248,10 @@ dotnet build DisperSim3D/DisperSim3D.csproj      # multi-targets net10.0 + net10
 dotnet build DisperSim3D.CLI/DisperSim3D.CLI.csproj   # plain net10.0
 ```
 
+For the complete Linux / WSL2 recipe including the FluidX3D native build, OpenCL
+ICD setup and the Avalonia smoke window — with the actual validation screenshots
+from Ubuntu 24.04 / WSL2 — see [docs/cross-platform.md](docs/cross-platform.md).
+
 Both succeed without the Windows desktop SDK. The CLI binary lands in
 `DisperSim3D.CLI/bin/Release/net10.0/`. On Linux, run smoke tests with:
 
@@ -251,13 +270,37 @@ dotnet DisperSim3D.CLI.dll --iogp-selftest       # 27/27 IOGP 434-01 frequency c
 | **OpenFOAM v2512+** _(optional)_ | Required only for the CFD solver family. WSL2/Docker/native Windows builds supported. |
 | **Windows 10/11** | Only required to run **DisperSim3D.App** (WinForms shell + WPF viewport). The engine and headless CLI run on Linux/macOS. |
 
-### Cross-platform status
+### Cross-platform smoke recipe (Linux / WSL2)
 
-- ✅ **`DisperSim3D`** (engine, models, validation, Gaussian/CFD/OpenFOAM I/O) — builds on Linux/macOS via the `net10.0` target.
-- ✅ **`DisperSim3D.CLI`** (headless runner: `--list`, `--simulation`, `--allocation`, `--validate`, `--iogp-selftest`, `--geometry-selftest`, `--list-iogp`, `--memory-estimate`) — pure `net10.0`, cross-platform.
-- 🪟 **`DisperSim3D.UI.Wpf`** + **`DisperSim3D.App`** — `net10.0-windows` only (WPF + WinForms).
-- ✅ **`libFluidX3D.so` / `.dylib`** — now buildable on Linux/macOS via `FluidX3D/make-disp-bridge.sh` (wraps a `disp-bridge-Linux` / `disp-bridge-macOS` makefile target that produces the same C-ABI exposed by the Windows `FluidX3D.dll`). FluidX3D solvers (`FX3DWN`/`FX3DDP`/`FX3DDS`/`FX3DFR`) work cross-platform once the native library sits next to `DisperSim3D.CLI.dll`. Validated end-to-end on Ubuntu/WSL2 via `pocl-opencl-icd` (CPU OpenCL — universal) or any GPU vendor ICD (NVIDIA, AMD ROCm, Intel) for production speed. See [docs/solvers-fluidx3d.md](docs/solvers-fluidx3d.md#building-fluidx3d-on-linux--macos).
-- ✅ **`DisperSim3D.UI.Avalonia`** — cross-platform Avalonia 11 smoke window (`net10.0`, runs on Windows / Linux / macOS / WSL2 via WSLg). Exercises the portable geometry types, IOGP database, FluidX3D bridge and a Gaussian-plume run from one window. Not a replacement for the full WinForms UI — it's a proof that the engine is genuinely portable. `dotnet run -c Release` from inside the project directory.
+End-to-end recipe that's been validated on Ubuntu 24.04 (WSL2 on Windows 11):
+
+```bash
+# 1) Engine + CLI (~30 seconds)
+dotnet build DisperSim3D/DisperSim3D.csproj -c Release
+dotnet build DisperSim3D.CLI/DisperSim3D.CLI.csproj -c Release
+
+# 2) FluidX3D native library (~1 minute, requires g++ + make)
+sudo apt install -y build-essential pocl-opencl-icd ocl-icd-libopencl1
+cd FluidX3D && ./make-disp-bridge.sh --copy && cd ..
+
+# 3) Smoke tests (must all exit 0)
+dotnet DisperSim3D.CLI/bin/Release/net10.0/DisperSim3D.CLI.dll --geometry-selftest   # 19/19 PASS
+dotnet DisperSim3D.CLI/bin/Release/net10.0/DisperSim3D.CLI.dll --iogp-selftest       # 27/27 PASS
+dotnet DisperSim3D.CLI/bin/Release/net10.0/DisperSim3D.CLI.dll --list-gpus           # JSON device list
+
+# 4) (Optional) Avalonia smoke window — opens via WSLg on the Windows desktop
+dotnet build DisperSim3D.UI.Avalonia/DisperSim3D.UI.Avalonia.csproj -c Release
+dotnet DisperSim3D.UI.Avalonia/bin/Release/net10.0/DisperSim3D.UI.Avalonia.dll
+```
+
+The Avalonia smoke window opens a 4-panel proof that exercises:
+
+1. **Portable geometry** — 19 operator-level checks on `DisperSim3D.Geometry.Point3D` / `Vector3D`
+2. **IOGP 434-01 frequency database** — 27 published-value round-trips
+3. **FluidX3D OpenCL probe** — calls `[DllImport("FluidX3D")]` → resolves `libFluidX3D.so` → enumerates devices
+4. **Gaussian plume end-to-end** — synthetic methane scenario, 32³ grid, `MaxC` and location reported
+
+Same source code as the WinForms `DisperSim3D.App`, compiled for the cross-platform TFM. See [docs/solvers-fluidx3d.md](docs/solvers-fluidx3d.md#building-fluidx3d-on-linux--macos) for the FluidX3D native build details and OpenCL ICD options (PoCL for universal CPU, NVIDIA/AMD/Intel for GPU performance).
 
 ---
 

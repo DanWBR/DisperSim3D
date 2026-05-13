@@ -24,10 +24,14 @@ placement.
 
 DisperSim 3D is a .NET 10 desktop application for simulating accidental gas
 releases and their atmospheric dispersion in industrial environments. The
-**WinForms + WPF UI is Windows-only**, but the **calculation engine and
-headless CLI are cross-platform** (`net10.0`): the engine multi-targets
-`net10.0;net10.0-windows` and the CLI is plain `net10.0`, so both build on
-Linux / macOS without the Windows desktop SDK.
+**WinForms + WPF desktop UI is Windows-only**, but everything else —
+**the calculation engine, the FluidX3D GPU bridge, the headless CLI, and an
+Avalonia cross-platform UI smoke** — runs on Windows, Linux and macOS from
+the same source. The engine multi-targets `net10.0;net10.0-windows`, the
+CLI and Avalonia smoke are plain `net10.0`, and FluidX3D builds as
+`libFluidX3D.so` / `.dylib` from the same C++ sources that produce the
+Windows `FluidX3D.dll`. Validated end-to-end on Ubuntu 24.04 / WSL2 — see
+[Getting started](getting-started) for the cross-platform recipe.
 
 It combines three solver families inside a single project-centric workflow:
 
@@ -63,6 +67,7 @@ dispersion modelling, area classification and gas-detector siting studies.
 | [GPU &amp; Memory](gpu-memory) | OpenCL device selection, RAM/VRAM/disk estimator |
 | [Validation](validation) | Hanna SPMs, `.dsbench` files, bundled benchmarks |
 | [Project File Format](file-format) | XML schema, `.dsproj` bundle, migration rules |
+| [Cross-platform](cross-platform) | Solution layout, end-to-end Linux/WSL2 recipe, validation screenshots, architecture decisions |
 | [References](references) | Bibliography and bundled PDFs |
 
 ## License and contributions
