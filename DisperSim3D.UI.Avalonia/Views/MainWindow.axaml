@@ -1,0 +1,206 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:DisperSim3D.UI.Avalonia.ViewModels"
+        xmlns:views="using:DisperSim3D.UI.Avalonia.Views"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="800"
+        x:Class="DisperSim3D.UI.Avalonia.Views.MainWindow"
+        Title="DisperSim 3D"
+        Icon="/Assets/Air.ico"
+        Width="1280" Height="800"
+        WindowStartupLocation="CenterScreen"
+        MinWidth="900" MinHeight="600">
+
+  <Window.Styles>
+    <Style Selector="TreeViewItem">
+      <Setter Property="IsExpanded" Value="True" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel>
+
+    <!-- Top: menu bar ─────────────────────────────────────────────────
+         MenuItem.Icon takes any Control; we feed it Projektanker's i:Icon
+         which the Fluent MenuItem template renders left of the header. -->
+    <Menu DockPanel.Dock="Top">
+      <MenuItem Header="_File">
+        <MenuItem Header="_New Project" x:Name="MenuFileNew" Click="MenuFileNew_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-file-plus-outline" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="_Open Project..." x:Name="MenuFileOpen" Click="MenuFileOpen_Click" InputGesture="Ctrl+O">
+          <MenuItem.Icon><i:Icon Value="mdi-folder-open-outline" /></MenuItem.Icon>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="_Save" x:Name="MenuFileSave" Click="MenuFileSave_Click" InputGesture="Ctrl+S" IsEnabled="False">
+          <MenuItem.Icon><i:Icon Value="mdi-content-save-outline" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="Save _As..." x:Name="MenuFileSaveAs" Click="MenuFileSaveAs_Click" IsEnabled="False">
+          <MenuItem.Icon><i:Icon Value="mdi-content-save-edit-outline" /></MenuItem.Icon>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="E_xit" x:Name="MenuFileExit" Click="MenuFileExit_Click" InputGesture="Alt+F4">
+          <MenuItem.Icon><i:Icon Value="mdi-exit-to-app" /></MenuItem.Icon>
+        </MenuItem>
+      </MenuItem>
+
+      <MenuItem Header="_View">
+        <MenuItem Header="Refresh Project Tree" x:Name="MenuViewRefresh" Click="MenuViewRefresh_Click" InputGesture="F5">
+          <MenuItem.Icon><i:Icon Value="mdi-refresh" /></MenuItem.Icon>
+        </MenuItem>
+      </MenuItem>
+
+      <MenuItem Header="_Tools">
+        <MenuItem Header="Add Release _Source..." x:Name="MenuToolsAddSource" Click="MenuToolsAddSource_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-water-plus-outline" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="Add _Fire Source..." x:Name="MenuToolsAddFire" Click="MenuToolsAddFire_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-fire" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="Add Si_mulation..." x:Name="MenuToolsAddSim" Click="MenuToolsAddSim_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-play-circle-outline" /></MenuItem.Icon>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="Manage Wind _Fields..." x:Name="MenuToolsWindFieldMgr" Click="MenuToolsWindFieldMgr_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-weather-windy" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="Manage S_cenarios..." x:Name="MenuToolsScenarioMgr" Click="MenuToolsScenarioMgr_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-format-list-bulleted-type" /></MenuItem.Icon>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="Add _View..." x:Name="MenuToolsAddView" Click="MenuToolsAddView_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-image-plus-outline" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="Edit Dispersion _Thresholds..." x:Name="MenuToolsThresholds" Click="MenuToolsThresholds_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-tune-variant" /></MenuItem.Icon>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="Add Dispersion S_tudy..." x:Name="MenuToolsAddStudy" Click="MenuToolsAddStudy_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-chart-line" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="Edit Transient _Wind / ESD..." x:Name="MenuToolsTransient" Click="MenuToolsTransient_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-weather-windy-variant" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="Show _Exceedance Curves..." x:Name="MenuToolsExceedance" Click="MenuToolsExceedance_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-chart-bell-curve-cumulative" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="Show _Detector Results..." x:Name="MenuToolsDetectorResults" Click="MenuToolsDetectorResults_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-radar" /></MenuItem.Icon>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="Edit Wind _Rose..." x:Name="MenuToolsWindRose" Click="MenuToolsWindRose_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-compass-outline" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="_Batch Export Images..." x:Name="MenuToolsBatchExport" Click="MenuToolsBatchExport_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-image-multiple-outline" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="Va_lidate Benchmarks..." x:Name="MenuToolsValidate" Click="MenuToolsValidate_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-check-decagram-outline" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="_Optimize Detector Placement..." x:Name="MenuToolsOptimize" Click="MenuToolsOptimize_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-target-account" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="Detector A_llocation..." x:Name="MenuToolsAllocate" Click="MenuToolsAllocate_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-target" /></MenuItem.Icon>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="_CFD Settings..." x:Name="MenuToolsCfd" Click="MenuToolsCfd_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-cog-outline" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="D_WSIM Settings..." x:Name="MenuToolsDwsim" Click="MenuToolsDwsim_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-flask-outline" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="_GPU / Performance..." x:Name="MenuToolsGpu" Click="MenuToolsGpu_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-expansion-card-variant" /></MenuItem.Icon>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="Build Mi_xture from DWSIM..." x:Name="MenuToolsBuildMix" Click="MenuToolsBuildMix_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-test-tube" /></MenuItem.Icon>
+        </MenuItem>
+      </MenuItem>
+
+      <MenuItem Header="_Help">
+        <MenuItem Header="_Diagnostics..." x:Name="MenuHelpDiag" Click="MenuHelpDiag_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-stethoscope" /></MenuItem.Icon>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="_About" x:Name="MenuHelpAbout" Click="MenuHelpAbout_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-information-outline" /></MenuItem.Icon>
+        </MenuItem>
+      </MenuItem>
+    </Menu>
+
+    <!-- Bottom: status bar ──────────────────────────────────────────── -->
+    <Border DockPanel.Dock="Bottom" Background="#F5F5F5" BorderBrush="#DDD" BorderThickness="0,1,0,0">
+      <Grid Margin="8,3" ColumnDefinitions="*,Auto,Auto,Auto">
+        <TextBlock Grid.Column="0" x:Name="StatusText"
+                   Text="Ready" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="1" x:Name="StatusSelection"
+                   Margin="12,0" VerticalAlignment="Center" Foreground="#666" />
+        <Border Grid.Column="2" Width="1" Background="#DDD" Margin="6,2" />
+        <TextBlock Grid.Column="3" x:Name="StatusEnv"
+                   VerticalAlignment="Center" Foreground="#666" />
+      </Grid>
+    </Border>
+
+    <!-- Center: 3-pane split ────────────────────────────────────────── -->
+    <Grid ColumnDefinitions="280,4,*,4,360">
+
+      <!-- Left dock: project tree -->
+      <Border Grid.Column="0" BorderBrush="#DDD" BorderThickness="0,0,1,0">
+        <DockPanel>
+          <Border DockPanel.Dock="Top" Background="#FAFAFA" BorderBrush="#DDD"
+                  BorderThickness="0,0,0,1" Padding="8,5">
+            <TextBlock Text="Project" FontWeight="Bold" />
+          </Border>
+          <TreeView x:Name="ProjectTree" BorderThickness="0"
+                    Background="Transparent"
+                    SelectionChanged="ProjectTree_SelectionChanged"
+                    ContextRequested="ProjectTree_ContextRequested"
+                    DoubleTapped="ProjectTree_DoubleTapped">
+            <TreeView.ItemTemplate>
+              <TreeDataTemplate DataType="vm:ProjectTreeNode" ItemsSource="{Binding Children}">
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                  <!-- Material Design Icon resolved via Projektanker.Icons.Avalonia.
+                       The TreeNode.Icon property carries the "mdi-..." string. -->
+                  <i:Icon Value="{Binding Icon}" FontSize="14"
+                          Foreground="#666" VerticalAlignment="Center" />
+                  <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+                  <Border Background="#EAEAEA" CornerRadius="6"
+                          Padding="6,1" VerticalAlignment="Center"
+                          IsVisible="{Binding Badge, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                    <TextBlock Text="{Binding Badge}" FontSize="10" Foreground="#666" />
+                  </Border>
+                </StackPanel>
+              </TreeDataTemplate>
+            </TreeView.ItemTemplate>
+          </TreeView>
+        </DockPanel>
+      </Border>
+
+      <GridSplitter Grid.Column="1" Background="Transparent" />
+
+      <!-- Center dock: 3D viewport (OpenGL via OpenGlControlBase) -->
+      <Border Grid.Column="2" Background="#1A1A1A">
+        <views:GlViewport x:Name="Viewport3D" />
+      </Border>
+
+      <GridSplitter Grid.Column="3" Background="Transparent" />
+
+      <!-- Right dock: property grid -->
+      <Border Grid.Column="4" BorderBrush="#DDD" BorderThickness="1,0,0,0">
+        <DockPanel>
+          <Border DockPanel.Dock="Top" Background="#FAFAFA" BorderBrush="#DDD"
+                  BorderThickness="0,0,0,1" Padding="8,5">
+            <TextBlock Text="Inspector" FontWeight="Bold" />
+          </Border>
+          <views:PropertyEditor x:Name="Inspector" />
+        </DockPanel>
+      </Border>
+
+    </Grid>
+
+  </DockPanel>
+
+</Window>

@@ -1,0 +1,228 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="640"
+        x:Class="DisperSim3D.UI.Avalonia.Views.CfdSettingsDialog"
+        Title="CFD Settings (OpenFOAM)"
+        Icon="/Assets/Air.ico"
+        Width="1000" Height="660"
+        MinWidth="820" MinHeight="540"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.field">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#444" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Foreground" Value="#888" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="6,0,0,0" />
+    </Style>
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="#222" />
+      <Setter Property="Margin" Value="0,8,0,4" />
+    </Style>
+    <Style Selector="TextBlock.desc">
+      <Setter Property="Foreground" Value="#666" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,0,0,6" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="12">
+
+    <!-- Buttons row -->
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </StackPanel>
+    </Border>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+      <Grid ColumnDefinitions="*,16,*">
+
+        <!-- LEFT COLUMN: Environment + Solver -->
+        <StackPanel Grid.Column="0" Spacing="2">
+
+          <TextBlock Classes="section" Text="OpenFOAM Environment" />
+          <TextBlock Classes="desc"
+                     Text="Configure how OpenFOAM is invoked. Required for CFD solvers (scalarTransportFoam, buoyantPimpleFoam, etc.)." />
+
+          <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="140,*" RowSpacing="6">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Environment:" />
+            <ComboBox  Grid.Row="0" Grid.Column="1" x:Name="CmbEnvType" HorizontalAlignment="Stretch"
+                       SelectionChanged="CmbEnvType_SelectionChanged">
+              <ComboBoxItem Content="None" />
+              <ComboBoxItem Content="Native Windows" />
+              <ComboBoxItem Content="WSL2" />
+              <ComboBoxItem Content="Docker" />
+              <ComboBoxItem Content="BlueCFD" />
+            </ComboBox>
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Path / Image:" />
+            <Grid      Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="4">
+              <TextBox Grid.Column="0" x:Name="TxtPath" />
+              <Button  Grid.Column="1" x:Name="BtnBrowse" Content="..." MinWidth="32" Click="BtnBrowse_Click" />
+            </Grid>
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="WSL Distro:" x:Name="LblWslDistro" />
+            <TextBox   Grid.Row="2" Grid.Column="1" x:Name="TxtWslDistro" Text="Ubuntu" />
+
+            <TextBlock Grid.Row="3" Grid.Column="0" Classes="field" Text="Status:" />
+            <Grid      Grid.Row="3" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="4">
+              <TextBlock Grid.Column="0" x:Name="LblEnvStatus" Foreground="#888"
+                         VerticalAlignment="Center" TextWrapping="Wrap"
+                         Text="No OpenFOAM environment configured." />
+              <Button    Grid.Column="1" x:Name="BtnTest" Content="Test" MinWidth="60" Click="BtnTest_Click" />
+            </Grid>
+          </Grid>
+
+          <TextBlock Classes="section" Text="Solver Settings" />
+          <TextBlock Classes="desc"
+                     Text="Numerical parameters for the CFD solver. Hover each field for guidance." />
+
+          <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                ColumnDefinitions="140,Auto,*" RowSpacing="6">
+
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Diffusivity:" />
+            <TextBox   Grid.Row="0" Grid.Column="1" x:Name="TxtDiffusivity" Width="100"
+                       ToolTip.Tip="Molecular diffusivity (DT) of transported scalar in m²/s. Air: ~2E-05; heavy gases: ~1E-05." />
+            <TextBlock Grid.Row="0" Grid.Column="2" Classes="hint" Text="m²/s" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Write Interval:" />
+            <TextBox   Grid.Row="1" Grid.Column="1" x:Name="TxtWriteInterval" Width="100"
+                       ToolTip.Tip="How often OpenFOAM writes results. 'auto' = duration/100 (1% steps)." />
+            <TextBlock Grid.Row="1" Grid.Column="2" Classes="hint" Text="s (or 'auto')" />
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="Grid Resolution:" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" x:Name="NudGridRes"
+                           Minimum="10" Maximum="500" Increment="10" Width="100"
+                           ValueChanged="NudGridRes_ValueChanged"
+                           ToolTip.Tip="Cells per axis. Z uses half. 20-40 fast; 100+ slow." />
+            <TextBlock Grid.Row="2" Grid.Column="2" Classes="hint" x:Name="LblCellEstimate" Text="" />
+
+            <TextBlock Grid.Row="3" Grid.Column="0" Classes="field" Text="Parallel CPUs:" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" x:Name="NudProcessors"
+                           Minimum="1" Maximum="64" Increment="1" Width="100"
+                           ToolTip.Tip="MPI ranks. 1 = serial. Recommended: half of available cores." />
+            <TextBlock Grid.Row="3" Grid.Column="2" Classes="hint" x:Name="LblCpuRange" Text="" />
+
+            <TextBlock Grid.Row="4" Grid.Column="0" Classes="field" Text="Solver Tolerance:" />
+            <TextBox   Grid.Row="4" Grid.Column="1" x:Name="TxtSolverTolerance" Width="100"
+                       ToolTip.Tip="PBiCGStab convergence tolerance. 1E-06 fast, 1E-08 default, 1E-10 tight." />
+            <TextBlock Grid.Row="4" Grid.Column="2" Classes="hint" Text="(e.g. 1E-08)" />
+
+            <TextBlock Grid.Row="5" Grid.Column="0" Classes="field" Text="Num. Scheme:" />
+            <ComboBox  Grid.Row="5" Grid.Column="1" x:Name="CmbScheme" Width="180"
+                       ToolTip.Tip="Convection discretization. linearUpwind = default (2nd-order, stable).">
+              <ComboBoxItem Content="linearUpwind" />
+              <ComboBoxItem Content="upwind" />
+              <ComboBoxItem Content="linear" />
+              <ComboBoxItem Content="limitedLinear 1" />
+              <ComboBoxItem Content="vanLeer" />
+            </ComboBox>
+
+            <CheckBox  Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3" x:Name="ChkAdjustableDt"
+                       Content="Adjustable Time Step"
+                       IsCheckedChanged="ChkAdjustableDt_Changed"
+                       ToolTip.Tip="Auto-adjusts deltaT to keep Courant under the cap. Recommended ON for transient." />
+
+            <TextBlock Grid.Row="7" Grid.Column="0" Classes="field" Text="Max Courant:" />
+            <TextBox   Grid.Row="7" Grid.Column="1" x:Name="TxtMaxCourant" Width="100"
+                       ToolTip.Tip="Maximum Co = U·dt/dx. 0.5 default, &gt;1 unstable, 0.2 safe." />
+            <TextBlock Grid.Row="7" Grid.Column="2" Classes="hint" Text="(0.1–1.0, lower = safer)" />
+
+          </Grid>
+
+          <Grid RowDefinitions="Auto" ColumnDefinitions="140,Auto,*" RowSpacing="6" Margin="0,6,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Purge Write:" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="NudPurgeWrite"
+                           Minimum="0" Maximum="1000" Increment="1" Width="100"
+                           ToolTip.Tip="Time-step dirs to keep. 0 = all." />
+            <TextBlock Grid.Row="0" Grid.Column="2" Classes="hint" Text="(0 = keep all timesteps)" />
+          </Grid>
+
+        </StackPanel>
+
+        <!-- RIGHT COLUMN: Atm BL + Optimization -->
+        <StackPanel Grid.Column="2" Spacing="2">
+
+          <TextBlock Classes="section" Text="Atmospheric Boundary Layer" />
+          <TextBlock Classes="desc"
+                     Text="Validated defaults (Mack &amp; Spruijt 2013, Vu 2019, Schalau 2021). Solver-specific presets are applied automatically; these fields override them." />
+
+          <CheckBox x:Name="ChkAtmBL"
+                    Content="Use atmospheric BL inlet + rough-wall functions"
+                    ToolTip.Tip="atmBoundaryLayerInlet* + atmNutkWallFunction(z0) + kEpsilonCoeffs sigma_eps." />
+
+          <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                ColumnDefinitions="160,Auto" RowSpacing="6" Margin="0,4,0,0">
+
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Sc_t (turb Schmidt):" />
+            <TextBox   Grid.Row="0" Grid.Column="1" x:Name="TxtSct" Width="100"
+                       ToolTip.Tip="0.7 passive, 0.3 dense, 0.15 LNG (Vu 2019)." />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Pr_t (turb Prandtl):" />
+            <TextBox   Grid.Row="1" Grid.Column="1" x:Name="TxtPrt" Width="100"
+                       ToolTip.Tip="Turbulent Prandtl. Default 0.85." />
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="sigma_eps:" />
+            <TextBox   Grid.Row="2" Grid.Column="1" x:Name="TxtSigmaEps" Width="100"
+                       ToolTip.Tip="k-eps sigma_eps. OpenFOAM default 1.3; Vu 2019 → 1.167 for HHTSL." />
+
+            <TextBlock Grid.Row="3" Grid.Column="0" Classes="field" Text="Ceps3 (buoyancy):" />
+            <TextBox   Grid.Row="3" Grid.Column="1" x:Name="TxtCeps3" Width="100"
+                       ToolTip.Tip="Empty = OF default. Mack &amp; Spruijt: -0.33 for heavy gas." />
+
+            <TextBlock Grid.Row="4" Grid.Column="0" Classes="field" Text="Ground thermal BC:" />
+            <ComboBox  Grid.Row="4" Grid.Column="1" x:Name="CmbGroundBC" Width="180">
+              <ComboBoxItem Content="Adiabatic" />
+              <ComboBoxItem Content="FixedTemperature" />
+              <ComboBoxItem Content="FixedFlux" />
+            </ComboBox>
+
+            <TextBlock Grid.Row="5" Grid.Column="0" Classes="field" Text="Ground T (K):" />
+            <TextBox   Grid.Row="5" Grid.Column="1" x:Name="TxtGroundT" Width="100" />
+
+            <TextBlock Grid.Row="6" Grid.Column="0" Classes="field" Text="Ground q'' (W/m²):" />
+            <TextBox   Grid.Row="6" Grid.Column="1" x:Name="TxtGroundQ" Width="100" />
+          </Grid>
+
+          <TextBlock Classes="section" Text="Optimization" />
+          <TextBlock Classes="desc"
+                     Text="Speed-up options that pre-compute plume bounds or wind fields before the main CFD run." />
+
+          <CheckBox x:Name="ChkSubgrid"
+                    Content="Use Gaussian Plume subgrid"
+                    IsCheckedChanged="ChkSubgrid_Changed"
+                    ToolTip.Tip="Pre-estimates plume bounds so the CFD mesh only covers that region." />
+
+          <Grid RowDefinitions="Auto" ColumnDefinitions="160,Auto,*" RowSpacing="6" Margin="0,4,0,0">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Subgrid Margin:" />
+            <TextBox   Grid.Row="0" Grid.Column="1" x:Name="TxtSubgridMargin" Width="100"
+                       ToolTip.Tip="1.0 = exact, 1.5 = +50% (default), 2.0 = +100%." />
+            <TextBlock Grid.Row="0" Grid.Column="2" Classes="hint" Text="factor (1.0-3.0)" />
+          </Grid>
+
+          <CheckBox x:Name="ChkWindField" Margin="0,8,0,0"
+                    Content="Pre-compute wind field for Gaussian Puff"
+                    ToolTip.Tip="Runs steady-state CFD (simpleFoam) first to build a wind-field around obstacles." />
+
+        </StackPanel>
+
+      </Grid>
+    </ScrollViewer>
+
+  </DockPanel>
+</Window>

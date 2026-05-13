@@ -1,0 +1,131 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        mc:Ignorable="d" d:DesignWidth="780" d:DesignHeight="500"
+        x:Class="DisperSim3D.UI.Avalonia.Views.GpuPerformanceSettingsDialog"
+        Title="GPU Performance Settings (Application)"
+        Icon="/Assets/Air.ico"
+        Width="820" Height="540"
+        MinWidth="700" MinHeight="460"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.field">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#444" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Foreground" Value="#888" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="12">
+
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </StackPanel>
+    </Border>
+
+    <TabControl>
+
+      <!-- ── Tab 1: Compute GPU ──────────────────────────── -->
+      <TabItem Header="Compute GPU">
+        <DockPanel Margin="6">
+          <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
+                     Text="OpenCL devices available to FluidX3D. Selecting a specific device pins every FluidX3D run (wind, dispersion, fire) to that GPU." />
+
+          <TextBlock DockPanel.Dock="Bottom" x:Name="LblGpuStatus"
+                     Foreground="#888" Margin="0,4,0,0" TextWrapping="Wrap" />
+
+          <Grid DockPanel.Dock="Bottom" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6" Margin="0,10,0,0">
+            <TextBlock Grid.Column="0" Classes="field" Text="Preferred compute device:" />
+            <ComboBox  Grid.Column="1" x:Name="CmbPreferred" HorizontalAlignment="Stretch" />
+            <Button    Grid.Column="2" x:Name="BtnRefresh" Click="BtnRefresh_Click">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <i:Icon Value="mdi-refresh" />
+                <TextBlock Text="Refresh" />
+              </StackPanel>
+            </Button>
+          </Grid>
+
+          <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" ColumnSpacing="8" Margin="0,12,0,0">
+            <TextBlock Grid.Column="0" Classes="hint" VerticalAlignment="Center"
+                       Text="3D viewport rendering uses the Windows default GPU. To force the discrete GPU, pin DisperSim3D.exe in Windows Graphics Settings." />
+            <Button Grid.Column="1" x:Name="BtnWinGfx" Click="BtnWinGfx_Click">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <i:Icon Value="mdi-cog-outline" />
+                <TextBlock Text="Open Windows Graphics Settings" />
+              </StackPanel>
+            </Button>
+          </Grid>
+
+          <DataGrid x:Name="GridDevices"
+                    AutoGenerateColumns="False"
+                    IsReadOnly="True"
+                    CanUserResizeColumns="True" CanUserReorderColumns="False"
+                    GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                    RowHeight="22" />
+        </DockPanel>
+      </TabItem>
+
+      <!-- ── Tab 2: Memory Estimator ─────────────────────── -->
+      <TabItem Header="Memory Estimator">
+        <Grid Margin="6" ColumnDefinitions="0.45*,0.55*">
+
+          <StackPanel Grid.Column="0" Spacing="6" Margin="0,0,8,0">
+            <Grid ColumnDefinitions="160,180" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="6">
+              <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Solver:" />
+              <ComboBox  Grid.Row="0" Grid.Column="1" x:Name="CmbSolver"
+                         SelectionChanged="EstimateInput_Changed" />
+
+              <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Grid resolution (N):" />
+              <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="NudGrid"
+                             Minimum="10" Maximum="1024" Value="40" Increment="1"
+                             FormatString="F0"
+                             ValueChanged="EstimateInput_Changed_Numeric" />
+
+              <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="FluidX3D Quality:" />
+              <ComboBox  Grid.Row="2" Grid.Column="1" x:Name="CmbQuality"
+                         SelectionChanged="EstimateInput_Changed" />
+
+              <TextBlock Grid.Row="3" Grid.Column="0" Classes="field" Text="Snapshot count:" />
+              <NumericUpDown Grid.Row="3" Grid.Column="1" x:Name="NudSnapshots"
+                             Minimum="1" Maximum="1000" Value="20" Increment="1"
+                             FormatString="F0"
+                             ValueChanged="EstimateInput_Changed_Numeric" />
+
+              <TextBlock Grid.Row="4" Grid.Column="0" Classes="field" Text="OF mesh refinement:" />
+              <NumericUpDown Grid.Row="4" Grid.Column="1" x:Name="NudRefinement"
+                             Minimum="0" Maximum="3" Value="0" Increment="1"
+                             FormatString="F0"
+                             ValueChanged="EstimateInput_Changed_Numeric" />
+            </Grid>
+            <TextBlock Classes="hint" Margin="0,4,0,0"
+                       Text="(0 = base mesh, 1 ≈ 3× cells, 2 ≈ 10× cells. Only used for OpenFOAM solvers.)" />
+          </StackPanel>
+
+          <DockPanel Grid.Column="1">
+            <TextBlock DockPanel.Dock="Top" Text="Estimated consumption:" Margin="0,0,0,4" />
+            <Border Background="White" BorderBrush="#CCC" BorderThickness="1" CornerRadius="3"
+                    Padding="8">
+              <TextBlock x:Name="LblEstimate"
+                         FontFamily="Consolas,Menlo,monospace" FontSize="11"
+                         VerticalAlignment="Top"
+                         TextWrapping="Wrap" />
+            </Border>
+          </DockPanel>
+        </Grid>
+      </TabItem>
+
+    </TabControl>
+  </DockPanel>
+</Window>

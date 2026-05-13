@@ -1,0 +1,108 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="500"
+        x:Class="DisperSim3D.UI.Avalonia.Views.DispersionSourceDialog"
+        Title="Add Release Source"
+        Icon="/Assets/Air.ico"
+        Width="460" SizeToContent="Height"
+        MinHeight="430" MaxHeight="700"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.field">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#444" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="12">
+
+    <!-- Bottom: button row. Cancel left, OK right (user preference). -->
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="BtnCancel" Content="Cancel" MinWidth="80"
+                Click="BtnCancel_Click" />
+        <Button x:Name="BtnOK" Content="OK" MinWidth="80"
+                Click="BtnOK_Click" IsDefault="True"
+                Background="#0078D4" Foreground="White" />
+      </StackPanel>
+    </Border>
+
+    <!-- Top: validation banner (hidden until something fails) -->
+    <Border DockPanel.Dock="Top" x:Name="ErrorBanner"
+            IsVisible="False" Background="#FFE7E7"
+            BorderBrush="#E0A0A0" BorderThickness="1"
+            CornerRadius="3" Padding="8,4" Margin="0,0,0,10">
+      <TextBlock x:Name="ErrorText" Foreground="#A40000" />
+    </Border>
+
+    <!-- Form: 2-column grid, label on left, control on right.
+         RowSpacing is an Avalonia 12 native property (was a 11.3+ preview)
+         so the per-control "Margin" hack we used on 11.2 is gone. -->
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+          ColumnDefinitions="160,*" RowSpacing="6">
+
+      <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Name:" />
+      <TextBox Grid.Row="0" Grid.Column="1" x:Name="TxtName" Text="Source1"
+              />
+
+      <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Gas Preset:" />
+      <ComboBox Grid.Row="1" Grid.Column="1" x:Name="CmbGasPreset"
+                HorizontalAlignment="Stretch" Margin="0,2"
+                SelectionChanged="CmbGasPreset_Changed">
+        <ComboBoxItem Content="Methane" />
+        <ComboBoxItem Content="H2S" />
+        <ComboBoxItem Content="Ammonia" />
+        <ComboBoxItem Content="Custom" />
+      </ComboBox>
+
+      <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="Molar Mass (kg/mol):" />
+      <NumericUpDown Grid.Row="2" Grid.Column="1" x:Name="NudMolarMass"
+                     Minimum="0.001" Maximum="1.0" Value="0.016"
+                     FormatString="0.000" Increment="0.001"/>
+
+      <TextBlock Grid.Row="3" Grid.Column="0" Classes="field" Text="LFL (kg/m³):" />
+      <NumericUpDown Grid.Row="3" Grid.Column="1" x:Name="NudLFL"
+                     Minimum="0" Maximum="10" Value="0.033"
+                     FormatString="0.0000" Increment="0.001"/>
+
+      <TextBlock Grid.Row="4" Grid.Column="0" Classes="field" Text="IDLH (kg/m³):" />
+      <NumericUpDown Grid.Row="4" Grid.Column="1" x:Name="NudIDLH"
+                     Minimum="0" Maximum="10" Value="0.033"
+                     FormatString="0.0000" Increment="0.001"/>
+
+      <TextBlock Grid.Row="5" Grid.Column="0" Classes="field" Text="Release Rate (kg/s):" />
+      <NumericUpDown Grid.Row="5" Grid.Column="1" x:Name="NudReleaseRate"
+                     Minimum="0.001" Maximum="1000" Value="0.5"
+                     FormatString="0.000" Increment="0.1"/>
+
+      <TextBlock Grid.Row="6" Grid.Column="0" Classes="field" Text="Puff Interval (s):" />
+      <NumericUpDown Grid.Row="6" Grid.Column="1" x:Name="NudPuffInterval"
+                     Minimum="0.1" Maximum="60" Value="1.0"
+                     FormatString="0.0" Increment="0.5"/>
+
+      <TextBlock Grid.Row="7" Grid.Column="0" Classes="field" Text="Height Offset (m):" />
+      <NumericUpDown Grid.Row="7" Grid.Column="1" x:Name="NudHeightOffset"
+                     Minimum="0" Maximum="100" Value="2.0"
+                     FormatString="0.0" Increment="0.5"/>
+
+      <TextBlock Grid.Row="8" Grid.Column="0" Classes="field" Text="Release Azimuth (°):" />
+      <NumericUpDown Grid.Row="8" Grid.Column="1" x:Name="NudAzimuth"
+                     Minimum="0" Maximum="359" Value="0"
+                     FormatString="0" Increment="1"/>
+
+      <TextBlock Grid.Row="9" Grid.Column="0" Classes="field" Text="Release Elevation (°):" />
+      <NumericUpDown Grid.Row="9" Grid.Column="1" x:Name="NudElevation"
+                     Minimum="-90" Maximum="90" Value="0"
+                     FormatString="0" Increment="1"/>
+
+    </Grid>
+
+  </DockPanel>
+
+</Window>

@@ -2628,30 +2628,14 @@ namespace DisperSim3D.Controls
         {
             try
             {
-                EmitIoProgress("Save", "Building project XML...", 0.05, false);
-                var doc = BuildSceneXDocument(filePath);
-
-                // Snapshot the previous file (if any) to a sibling .bak so an
-                // accidental save over a working project can be rolled back from
-                // the same folder. Best-effort — never blocks the save.
-                EmitIoProgress("Save", "Backing up previous file...", 0.10, false);
-                BackupExistingProjectFile(filePath);
-
-                if (ProjectBundle.IsBundleFile(filePath))
-                {
-                    // ProjectBundle.Save accepts a progress callback so the bundle
-                    // copy / zip phases can report fine-grained progress mapped
-                    // into the [0.15 .. 0.95] range here.
-                    ProjectBundle.Save(filePath, _scene, doc, (step, frac) =>
-                        EmitIoProgress("Save", step,
-                            0.15 + 0.80 * Math.Max(0, Math.Min(1, frac)), false));
-                }
-                else
-                {
-                    EmitIoProgress("Save", "Writing XML...", 0.50, false);
-                    doc.Save(filePath);
-                }
-                EmitIoProgress("Save", "Saved: " + filePath, 1.0, true);
+                // All XML construction + .bak backup + bundle/plain dispatch
+                // lives in the engine's SceneFileSaver since the cross-platform
+                // port. We just wire the WPF-side progress event into the
+                // engine's callback signature.
+                SceneFileSaver.Save(_scene, filePath,
+                    (step, frac, done) => EmitIoProgress("Save", step, frac, done),
+                    bundleWriter: (path, scene, doc, prog) =>
+                        ProjectBundle.Save(path, scene, doc, prog));
             }
             catch
             {

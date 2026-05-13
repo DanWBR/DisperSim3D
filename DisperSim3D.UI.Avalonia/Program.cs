@@ -1,5 +1,7 @@
 using System;
 using Avalonia;
+using Projektanker.Icons.Avalonia;
+using Projektanker.Icons.Avalonia.MaterialDesign;
 
 namespace DisperSim3D.UI.Avalonia
 {
@@ -14,7 +16,15 @@ namespace DisperSim3D.UI.Avalonia
     {
         [STAThread]
         public static int Main(string[] args)
-            => BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        {
+            // Register the Material Design Icons provider BEFORE building the
+            // app so XAML <i:Icon Value="mdi-..."/> resolves to the bundled
+            // SVG path geometry. Register is additive — chain more providers
+            // (FontAwesome, Lucide, …) here if we need broader coverage.
+            IconProvider.Current.Register<MaterialDesignIconProvider>();
+
+            return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
 
         public static AppBuilder BuildAvaloniaApp()
             => AppBuilder.Configure<App>()

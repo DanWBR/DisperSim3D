@@ -1,0 +1,72 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="320"
+        x:Class="DisperSim3D.UI.Avalonia.Views.MeteorologicalDialog"
+        Title="Meteorological Conditions"
+        Icon="/Assets/Air.ico"
+        Width="460" SizeToContent="Height"
+        MinHeight="280" MaxHeight="480"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.field">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#444" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="12">
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </StackPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Top" x:Name="ErrorBanner"
+            IsVisible="False" Background="#FFE7E7" BorderBrush="#E0A0A0"
+            BorderThickness="1" CornerRadius="3" Padding="8,4" Margin="0,0,0,10">
+      <TextBlock x:Name="ErrorText" Foreground="#A40000" />
+    </Border>
+
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+          ColumnDefinitions="200,*" RowSpacing="6">
+      <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Wind Speed (m/s):" />
+      <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="NudWindSpeed"
+                     Minimum="0.1" Maximum="50" Value="5"
+                     FormatString="0.0" Increment="0.1" />
+
+      <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Wind Direction (°, 0=N):" />
+      <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="NudWindDir"
+                     Minimum="0" Maximum="360" Value="270"
+                     FormatString="0" Increment="1" />
+
+      <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="Stability Class:" />
+      <ComboBox Grid.Row="2" Grid.Column="1" x:Name="CmbStability"
+                HorizontalAlignment="Stretch">
+        <ComboBoxItem Content="A — Very Unstable" />
+        <ComboBoxItem Content="B — Unstable" />
+        <ComboBoxItem Content="C — Slightly Unstable" />
+        <ComboBoxItem Content="D — Neutral" />
+        <ComboBoxItem Content="E — Slightly Stable" />
+        <ComboBoxItem Content="F — Stable" />
+      </ComboBox>
+
+      <TextBlock Grid.Row="3" Grid.Column="0" Classes="field" Text="Temperature (K):" />
+      <NumericUpDown Grid.Row="3" Grid.Column="1" x:Name="NudTemperature"
+                     Minimum="200" Maximum="350" Value="293.15"
+                     FormatString="0.00" Increment="0.5" />
+
+      <TextBlock Grid.Row="4" Grid.Column="0" Classes="field" Text="Pressure (Pa):" />
+      <NumericUpDown Grid.Row="4" Grid.Column="1" x:Name="NudPressure"
+                     Minimum="80000" Maximum="120000" Value="101325"
+                     FormatString="0" Increment="100" />
+    </Grid>
+  </DockPanel>
+</Window>

@@ -1,0 +1,56 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        mc:Ignorable="d" d:DesignWidth="780" d:DesignHeight="540"
+        x:Class="DisperSim3D.UI.Avalonia.Views.WindRoseDialog"
+        Title="Wind Rose"
+        Icon="/Assets/Air.ico"
+        Width="800" Height="560"
+        MinWidth="640" MinHeight="440"
+        WindowStartupLocation="CenterOwner">
+
+  <DockPanel Margin="12">
+
+    <!-- Buttons + preset/generate toggle -->
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" ColumnSpacing="8">
+        <Button Grid.Column="0" x:Name="BtnPreset8" Content="8 Dirs" Click="BtnPreset8_Click" />
+        <Button Grid.Column="1" x:Name="BtnPreset16" Content="16 Dirs" Click="BtnPreset16_Click" />
+        <CheckBox Grid.Column="2" x:Name="ChkGenerate"
+                  Content="Generate scenarios from bins"
+                  VerticalAlignment="Center" />
+        <Button Grid.Column="4" x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button Grid.Column="5" x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </Grid>
+    </Border>
+
+    <!-- Help banner -->
+    <Border DockPanel.Dock="Top" Background="#F7F7F7"
+            BorderBrush="#DDD" BorderThickness="1" CornerRadius="3"
+            Padding="10,6" Margin="0,0,0,8">
+      <TextBlock TextWrapping="Wrap" Foreground="#555" FontSize="10"
+                 Text="Wind rose: directional frequency distribution. Each row defines a bin: Direction (°, meteorological — wind blows FROM), Frequency (% of time), mean Wind Speed (m/s), and Pasquill Stability class. Use '8 Dirs' / '16 Dirs' for standard sectors. 'Generate scenarios from bins' creates one dispersion scenario per row on OK." />
+    </Border>
+
+    <Grid ColumnDefinitions="*,8,*">
+      <!-- Left: bins data grid -->
+      <DataGrid Grid.Column="0" x:Name="GridBins"
+                AutoGenerateColumns="False"
+                CanUserResizeColumns="True" CanUserReorderColumns="False"
+                GridLinesVisibility="All" HeadersVisibility="Column"
+                RowHeight="22" />
+
+      <GridSplitter Grid.Column="1" Background="Transparent" />
+
+      <!-- Right: rose chart -->
+      <Border Grid.Column="2" Background="White" BorderBrush="#CCC" BorderThickness="1">
+        <Canvas x:Name="ChartCanvas" ClipToBounds="True" Background="Transparent" />
+      </Border>
+    </Grid>
+
+  </DockPanel>
+</Window>

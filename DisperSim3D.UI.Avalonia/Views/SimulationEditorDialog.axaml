@@ -1,0 +1,113 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="500"
+        x:Class="DisperSim3D.UI.Avalonia.Views.SimulationEditorDialog"
+        Title="New Simulation"
+        Icon="/Assets/Air.ico"
+        Width="560" SizeToContent="Height"
+        MinHeight="400" MaxHeight="700"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.field">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#444" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Foreground" Value="#888" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,2,0,4" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="12">
+
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </StackPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Top" x:Name="ErrorBanner"
+            IsVisible="False" Background="#FFE7E7" BorderBrush="#E0A0A0"
+            BorderThickness="1" CornerRadius="3" Padding="8,4" Margin="0,0,0,10">
+      <TextBlock x:Name="ErrorText" Foreground="#A40000" />
+    </Border>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+      <StackPanel Spacing="2">
+
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+              ColumnDefinitions="170,*" RowSpacing="4">
+
+          <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Name:" />
+          <TextBox    Grid.Row="0" Grid.Column="1" x:Name="TxtName" />
+          <TextBlock  Grid.Row="1" Grid.Column="1" Classes="hint"
+                      Text="Display name shown in the project tree and result tables." />
+
+          <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="Source:" />
+          <ComboBox  Grid.Row="2" Grid.Column="1" x:Name="CmbSource" HorizontalAlignment="Stretch" />
+
+          <TextBlock Grid.Row="3" Grid.Column="0" Classes="field" Text="Wind Field:" />
+          <ComboBox  Grid.Row="3" Grid.Column="1" x:Name="CmbWindField" HorizontalAlignment="Stretch" />
+
+          <TextBlock Grid.Row="4" Grid.Column="0" Classes="field" Text="Solver:" />
+          <ComboBox  Grid.Row="4" Grid.Column="1" x:Name="CmbSolver" HorizontalAlignment="Stretch">
+            <ComboBoxItem Content="Gaussian Puff (Transient)" />
+            <ComboBoxItem Content="Gaussian Plume (Steady-State)" />
+            <ComboBoxItem Content="CFD Transient (scalarTransportFoam)" />
+            <ComboBoxItem Content="CFD Steady (scalarTransportFoam)" />
+            <ComboBoxItem Content="CFD Steady (simpleFoam + scalar)" />
+            <ComboBoxItem Content="CFD Transient (pimpleFoam)" />
+            <ComboBoxItem Content="CFD Transient (buoyantPimpleFoam)" />
+            <ComboBoxItem Content="CFD Transient (reactingFoam)" />
+            <ComboBoxItem Content="CFD Steady (rhoSimpleFoam)" />
+            <ComboBoxItem Content="CFD Transient (rhoReactingBuoyantFoam) — universal" />
+            <ComboBoxItem Content="★ FluidX3D Wind (GPU LBM)" />
+            <ComboBoxItem Content="★ FluidX3D Dispersion (GPU LBM)" />
+            <ComboBoxItem Content="★ FluidX3D Fire (Hot Buoyant Plume)" />
+            <ComboBoxItem Content="★ FluidX3D Dispersion (Steady State)" />
+          </ComboBox>
+          <TextBlock Grid.Row="5" Grid.Column="1" Classes="hint"
+                     Text="Gaussian models are fast; CFD respects obstacles and is slower. ★ FluidX3D solvers are GPU-accelerated." />
+
+          <TextBlock Grid.Row="6" Grid.Column="0" Classes="field" Text="Duration (s):" />
+          <NumericUpDown Grid.Row="6" Grid.Column="1" x:Name="NudDuration"
+                         Minimum="1" Maximum="100000" Value="300" Increment="1"
+                         FormatString="F0" HorizontalAlignment="Left" Width="160" />
+
+          <TextBlock Grid.Row="7" Grid.Column="0" Classes="field" Text="Time Step (s):" />
+          <NumericUpDown Grid.Row="7" Grid.Column="1" x:Name="NudTimeStep"
+                         Minimum="0.01" Maximum="60" Value="0.5" Increment="0.01"
+                         FormatString="F2" HorizontalAlignment="Left" Width="160" />
+
+          <TextBlock Grid.Row="8" Grid.Column="0" Classes="field" Text="Domain Half-Size (m):" />
+          <NumericUpDown Grid.Row="8" Grid.Column="1" x:Name="NudDomain"
+                         Minimum="10" Maximum="100000" Value="200" Increment="10"
+                         FormatString="F0" HorizontalAlignment="Left" Width="160" />
+        </Grid>
+
+        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="170,*" RowSpacing="4">
+          <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Snapshot Count:" />
+          <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="NudSnapCount"
+                         Minimum="2" Maximum="1000" Value="20" Increment="1"
+                         FormatString="F0" HorizontalAlignment="Left" Width="160" />
+
+          <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Grid Resolution:" />
+          <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="NudGrid"
+                         Minimum="10" Maximum="500" Value="40" Increment="1"
+                         FormatString="F0" HorizontalAlignment="Left" Width="160" />
+        </Grid>
+
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

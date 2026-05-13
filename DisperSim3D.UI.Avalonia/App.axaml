@@ -5,6 +5,75 @@
 
   <Application.Styles>
     <FluentTheme />
+    <!-- DataGrid lives in a separate package (Avalonia.Controls.DataGrid) and
+         its Fluent style is opt-in; without this include the grid renders
+         unthemed (no headers, no row separators). -->
+    <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+
+    <!-- Tighten Avalonia 11's Fluent defaults to something closer to the
+         WinForms WPF density. Avalonia ships FontSize=14 and tall row
+         heights; the WPF host uses ~11 with shorter rows, which fits more
+         on screen and matches user muscle memory from the legacy app. -->
+    <Style Selector="Window">
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+    <Style Selector="UserControl">
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+    <Style Selector="MenuItem">
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+    <Style Selector="TreeViewItem">
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+    <Style Selector="TextBlock">
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+    <!-- Use Height (not MinHeight) so all 3 input types render at the same
+         row height. With MinHeight the NumericUpDown wrapper grows to fit
+         its two stacked RepeatButton spinners (~32px) while TextBox and
+         ComboBox stay at the minimum, producing the mismatched-row look
+         we hit in iteration 4. Forcing Height=24 caps the spinners and
+         gives the form a uniform horizontal grid line per row. -->
+    <Style Selector="TextBox">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Height" Value="24" />
+      <Setter Property="MinHeight" Value="24" />
+      <Setter Property="Padding" Value="5,0" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="NumericUpDown">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Height" Value="24" />
+      <Setter Property="MinHeight" Value="24" />
+    </Style>
+    <!-- NumericUpDown wraps its internal TextBox; override that one too so
+         the wrapper's height actually applies. The inner TextBox would
+         otherwise enforce its own default (~32px) and stretch the wrapper. -->
+    <Style Selector="NumericUpDown /template/ TextBox">
+      <Setter Property="Height" Value="24" />
+      <Setter Property="MinHeight" Value="24" />
+      <Setter Property="Padding" Value="5,0" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="ComboBox">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Height" Value="24" />
+      <Setter Property="MinHeight" Value="24" />
+      <Setter Property="Padding" Value="5,0" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="CheckBox">
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+    <!-- Centre the button label (Avalonia Fluent's default is start-aligned). -->
+    <Style Selector="Button">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="MinHeight" Value="20" />
+      <Setter Property="Padding" Value="10,3" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
   </Application.Styles>
 
 </Application>

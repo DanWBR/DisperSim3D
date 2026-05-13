@@ -1,0 +1,89 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="820" d:DesignHeight="600"
+        x:Class="DisperSim3D.UI.Avalonia.Views.DispersionStudyDialog"
+        Title="Dispersion Study"
+        Icon="/Assets/Air.ico"
+        Width="820" Height="600"
+        MinWidth="660" MinHeight="480"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.field">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#444" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+    <Style Selector="Border.box">
+      <Setter Property="BorderBrush" Value="#DDD" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="10" />
+      <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Margin" Value="0,0,0,6" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="12">
+
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </StackPanel>
+    </Border>
+
+    <!-- Identity -->
+    <Border DockPanel.Dock="Top" Classes="box">
+      <StackPanel>
+        <TextBlock Classes="section" Text="Identity" />
+        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="120,*" RowSpacing="6">
+          <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Name:" />
+          <TextBox   Grid.Row="0" Grid.Column="1" x:Name="TxtName" />
+
+          <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Description:" />
+          <TextBox   Grid.Row="1" Grid.Column="1" x:Name="TxtDescription" />
+        </Grid>
+      </StackPanel>
+    </Border>
+
+    <!-- Detection criterion -->
+    <Border DockPanel.Dock="Top" Classes="box">
+      <StackPanel>
+        <TextBlock Classes="section"
+                   Text="Detection criterion (applied per simulation, with each sim's gas)" />
+        <Grid ColumnDefinitions="Auto,Auto,32,Auto,Auto,Auto,*" RowDefinitions="Auto" ColumnSpacing="6">
+          <TextBlock Grid.Column="0" Classes="field" Text="Quantity:" />
+          <ComboBox  Grid.Column="1" x:Name="CmbQuantity" Width="220"
+                     SelectionChanged="CmbQuantity_SelectionChanged" />
+          <TextBlock Grid.Column="3" Classes="field" Text="Threshold ≥" />
+          <NumericUpDown Grid.Column="4" x:Name="NudThreshold"
+                         Minimum="0" Maximum="1000000000" Value="50" Increment="1"
+                         FormatString="F4" Width="120" />
+          <TextBlock Grid.Column="5" Classes="field" x:Name="LblUnit" Text="" Margin="6,0,0,0" />
+        </Grid>
+      </StackPanel>
+    </Border>
+
+    <!-- Member simulations chooser -->
+    <Border Classes="box">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Classes="section"
+                   Text="Member simulations (check to include — only Completed runs are useful)" />
+        <DataGrid x:Name="GridSims"
+                  AutoGenerateColumns="False"
+                  CanUserResizeColumns="True" CanUserReorderColumns="False"
+                  GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                  RowHeight="22" />
+      </DockPanel>
+    </Border>
+
+  </DockPanel>
+</Window>

@@ -12,17 +12,20 @@ using DisperSim3D.Validation;
 namespace DisperSim3D.UI.Avalonia.Views
 {
     /// <summary>
-    /// Smoke-test window. Each panel exercises a different layer of the engine
+    /// Diagnostics window. Each panel exercises a different layer of the engine
     /// stack so a single visual run-through confirms cross-platform behaviour:
     ///
     ///  1. Portable Point3D/Vector3D operators  (GeometrySelfTest)
     ///  2. Embedded IOGP 434-01 leak-frequency table (IogpTableTests)
     ///  3. Native FluidX3D bridge + OpenCL ICD discovery (FluidX3DBridge)
     ///  4. End-to-end Gaussian plume — gas → source → meteo → engine → MaxC
+    ///
+    /// Opened on demand from the main shell via Help → Diagnostics; not the
+    /// startup window any more.
     /// </summary>
-    public partial class MainWindow : Window
+    public partial class DiagnosticsWindow : Window
     {
-        public MainWindow()
+        public DiagnosticsWindow()
         {
             InitializeComponent();
             EnvLine.Text = BuildEnvironmentLine();

@@ -1,0 +1,56 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="540"
+        x:Class="DisperSim3D.UI.Avalonia.Views.ExceedanceDialog"
+        Title="Exceedance Curves"
+        Icon="/Assets/Air.ico"
+        Width="720" Height="560"
+        MinWidth="560" MinHeight="440"
+        WindowStartupLocation="CenterOwner">
+
+  <DockPanel Margin="12">
+
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="BtnClose" Content="Close" MinWidth="80" Click="BtnClose_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </StackPanel>
+    </Border>
+
+    <!-- Top: descriptive summary -->
+    <Border DockPanel.Dock="Top" Background="#F7F7F7"
+            BorderBrush="#DDD" BorderThickness="1" CornerRadius="3"
+            Padding="10,6" Margin="0,0,0,8">
+      <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="#555" FontSize="11" />
+    </Border>
+
+    <!-- Split: chart on top, data table below -->
+    <Grid RowDefinitions="3*,8,2*">
+
+      <!-- Chart panel: custom-drawn polylines over a Canvas grid -->
+      <Border Grid.Row="0" Background="White" BorderBrush="#CCC" BorderThickness="1">
+        <Grid>
+          <Canvas x:Name="ChartCanvas" Background="Transparent"
+                  ClipToBounds="True" />
+          <TextBlock x:Name="ChartEmpty" IsVisible="False"
+                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                     Foreground="#999" FontStyle="Italic"
+                     Text="No curves to display." />
+        </Grid>
+      </Border>
+
+      <GridSplitter Grid.Row="1" Background="Transparent" ResizeDirection="Rows" />
+
+      <!-- Per-point data table -->
+      <DataGrid Grid.Row="2" x:Name="GridPoints"
+                AutoGenerateColumns="False"
+                IsReadOnly="True"
+                CanUserResizeColumns="True"
+                GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                RowHeight="20" />
+    </Grid>
+  </DockPanel>
+</Window>

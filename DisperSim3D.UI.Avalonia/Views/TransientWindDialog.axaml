@@ -1,0 +1,65 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="460"
+        x:Class="DisperSim3D.UI.Avalonia.Views.TransientWindDialog"
+        Title="Transient Wind Profile / ESD"
+        Icon="/Assets/Air.ico"
+        Width="640" Height="500"
+        MinWidth="540" MinHeight="380"
+        WindowStartupLocation="CenterOwner">
+
+  <DockPanel Margin="12">
+
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="8">
+        <Button Grid.Column="0" x:Name="BtnAdd" Click="BtnAdd_Click">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <i:Icon Value="mdi-plus" />
+            <TextBlock Text="Add" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="1" x:Name="BtnRemove" Click="BtnRemove_Click">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <i:Icon Value="mdi-minus" />
+            <TextBlock Text="Remove Selected" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="3" x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button Grid.Column="4" x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </Grid>
+    </Border>
+
+    <!-- Top toolbar: enable + ESD time -->
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,Auto,Auto,*" ColumnSpacing="8"
+          Margin="0,0,0,8">
+      <CheckBox Grid.Column="0" x:Name="ChkEnabled" Content="Enable transient wind"
+                VerticalAlignment="Center" />
+      <TextBlock Grid.Column="1" Text="ESD time (s):"
+                 VerticalAlignment="Center" Margin="16,0,4,0" />
+      <NumericUpDown Grid.Column="2" x:Name="NudESD"
+                     Minimum="-1" Maximum="100000" Value="-1" Increment="0.1"
+                     FormatString="F1" Width="90" />
+      <TextBlock Grid.Column="3" Text="(-1 = disabled)"
+                 VerticalAlignment="Center" Foreground="#888" FontSize="10" Margin="4,0,0,0" />
+    </Grid>
+
+    <!-- Help banner -->
+    <Border DockPanel.Dock="Top" Background="#F7F7F7"
+            BorderBrush="#DDD" BorderThickness="1" CornerRadius="3"
+            Padding="10,6" Margin="0,0,0,8">
+      <TextBlock TextWrapping="Wrap" Foreground="#555" FontSize="10"
+                 Text="Time-varying wind: each row is a sample (Time, Speed, Direction, Stability). Values between samples are linearly interpolated. Direction follows meteorological convention (0°=N, blowing FROM that bearing). ESD time: emergency-shutdown timestamp at which the source release is cut to zero (-1 disables ESD)." />
+    </Border>
+
+    <DataGrid x:Name="GridEntries"
+              AutoGenerateColumns="False"
+              CanUserResizeColumns="True" CanUserReorderColumns="False"
+              GridLinesVisibility="All" HeadersVisibility="Column"
+              RowHeight="22" />
+  </DockPanel>
+</Window>

@@ -11,29 +11,49 @@
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Title>DisperSim3D.UI.Avalonia</Title>
     <Description>Cross-platform Avalonia UI smoke test for DisperSim 3D — exercises
     the engine, FluidX3D P/Invoke and a Gaussian-plume run on the same code base
     that powers the WinForms app, but compiled for any OS Avalonia targets.</Description>
     <Version>0.1.0</Version>
     <!-- NU1903 fires on Tmds.DBus.Protocol 0.20.0 (Avalonia transitive dep, Linux
-         D-Bus only). Avalonia 11.2.x pins it; suppressed here until upstream
-         updates. -->
+         D-Bus only). Kept suppressed across the 11.2 → 12 upgrade in case it
+         lingers in the new transitive graph; safe to remove if a clean build
+         no longer surfaces it. -->
     <NoWarn>$(NoWarn);NU1903</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.2.3" />
-    <PackageReference Include="Avalonia.Desktop" Version="11.2.3" />
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.3" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.3" />
-    <!-- Diagnostics package only in Debug, per Avalonia docs. -->
-    <PackageReference Include="Avalonia.Diagnostics" Version="11.2.3"
+    <PackageReference Include="Avalonia" Version="11.3.15" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.15" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.15" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.15" />
+    <!-- DataGrid is a separate package; pinned to the 11.3.x line. Used by
+         GasLibraryItemDialog for the mixture component grid. -->
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.13" />
+    <!-- Material Design Icons via Projektanker.Icons.Avalonia: ~7000 SVG
+         vector icons under the Apache 2.0 license. The 9.6.x package line
+         was built against Avalonia 11 — it is binary-incompatible with
+         Avalonia 12 (TemplateBinding.ProvideValue moved). Stay on 11.3.x
+         until the ecosystem catches up. -->
+    <PackageReference Include="Projektanker.Icons.Avalonia" Version="9.6.2" />
+    <PackageReference Include="Projektanker.Icons.Avalonia.MaterialDesign" Version="9.6.2" />
+    <!-- Avalonia.Diagnostics (devtools F12) — Debug only. -->
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.15"
                       Condition="'$(Configuration)' == 'Debug'" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DisperSim3D\DisperSim3D.csproj" />
+  </ItemGroup>
+
+  <!-- Window / taskbar icon — same Air.ico the WinForms App uses, so the
+       two UIs share visual identity in the taskbar / alt-tab. Wired as an
+       AvaloniaResource so it ships inside the assembly and is reachable
+       via the avares:// URI scheme from XAML or code. -->
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\Air.ico" />
   </ItemGroup>
 
   <!-- Auto-copy the FluidX3D native library next to the .NET output so the

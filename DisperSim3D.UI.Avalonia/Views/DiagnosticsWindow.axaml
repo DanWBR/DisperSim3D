@@ -3,10 +3,11 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
-        x:Class="DisperSim3D.UI.Avalonia.Views.MainWindow"
-        Title="DisperSim 3D — Avalonia smoke"
+        x:Class="DisperSim3D.UI.Avalonia.Views.DiagnosticsWindow"
+        Title="DisperSim 3D — Diagnostics"
+        Icon="/Assets/Air.ico"
         Width="980" Height="720"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterOwner">
 
   <DockPanel Margin="12">
     <TextBlock DockPanel.Dock="Top"

@@ -1,0 +1,65 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:DisperSim3D.UI.Avalonia.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="360" d:DesignHeight="600"
+             x:Class="DisperSim3D.UI.Avalonia.Views.PropertyEditor">
+
+  <UserControl.Styles>
+    <Style Selector="TextBlock.fieldLabel">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+      <Setter Property="Foreground" Value="#444" />
+    </Style>
+    <Style Selector="Border.categoryHeader">
+      <Setter Property="Background" Value="#F0F0F0" />
+      <Setter Property="Padding" Value="6,3" />
+      <Setter Property="BorderBrush" Value="#DDD" />
+      <Setter Property="BorderThickness" Value="0,1" />
+    </Style>
+  </UserControl.Styles>
+
+  <DockPanel>
+
+    <!-- Top: type banner -->
+    <Border DockPanel.Dock="Top" x:Name="TypeBanner" Background="#FAFAFA"
+            BorderBrush="#DDD" BorderThickness="0,0,0,1"
+            Padding="8,5">
+      <StackPanel>
+        <TextBlock x:Name="TypeText" Text="(no selection)" FontWeight="Bold" />
+        <TextBlock x:Name="HintText" Text="Select a tree node to inspect."
+                   FontSize="11" Foreground="#666" Margin="0,2,0,0" />
+      </StackPanel>
+    </Border>
+
+    <!-- Bottom: description pane for the currently focused row.
+         Mirrors HandyControl PropertyGrid's footer in the WinForms UI:
+         name in bold + wrapped description from the engine model's
+         [Description] attribute. Empty when no row has been touched. -->
+    <Border DockPanel.Dock="Bottom" Background="#F7F7F7"
+            BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Padding="8,6" MinHeight="64">
+      <StackPanel>
+        <TextBlock x:Name="DescPropName" FontWeight="SemiBold"
+                   Foreground="#333" Text="(no property selected)" />
+        <TextBlock x:Name="DescPropDesc" TextWrapping="Wrap"
+                   Foreground="#555" Margin="0,3,0,0"
+                   Text="Click a row to see its description." />
+      </StackPanel>
+    </Border>
+
+    <!-- Middle: scrollable rows -->
+    <ScrollViewer>
+      <ItemsControl x:Name="Rows">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+      </ItemsControl>
+    </ScrollViewer>
+
+  </DockPanel>
+
+</UserControl>

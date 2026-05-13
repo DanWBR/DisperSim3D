@@ -1,0 +1,99 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="500"
+        x:Class="DisperSim3D.UI.Avalonia.Views.HighPressureSourceDialog"
+        Title="High-Pressure Leak Source"
+        Icon="/Assets/Air.ico"
+        Width="520" SizeToContent="Height"
+        MinHeight="440" MaxHeight="700"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.field">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#444" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="12">
+
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </StackPanel>
+    </Border>
+
+    <!-- Form: 2-column grid + computed-result block -->
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+          ColumnDefinitions="180,*" RowSpacing="6">
+
+      <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Vessel Pressure (Pa):" />
+      <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="NudPressure"
+                     Minimum="100000" Maximum="100000000" Value="1000000"
+                     FormatString="0" Increment="10000" />
+
+      <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Vessel Temperature (K):" />
+      <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="NudTemperature"
+                     Minimum="100" Maximum="1000" Value="293.15"
+                     FormatString="0.00" Increment="0.5" />
+
+      <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="Gamma (Cp/Cv):" />
+      <NumericUpDown Grid.Row="2" Grid.Column="1" x:Name="NudGamma"
+                     Minimum="1.0" Maximum="1.7" Value="1.4"
+                     FormatString="0.00" Increment="0.01" />
+
+      <TextBlock Grid.Row="3" Grid.Column="0" Classes="field" Text="Molar Mass (kg/mol):" />
+      <NumericUpDown Grid.Row="3" Grid.Column="1" x:Name="NudMolarMass"
+                     Minimum="0.002" Maximum="0.2" Value="0.016"
+                     FormatString="0.000" Increment="0.001" />
+
+      <TextBlock Grid.Row="4" Grid.Column="0" Classes="field" Text="Discharge Coefficient:" />
+      <NumericUpDown Grid.Row="4" Grid.Column="1" x:Name="NudDischargeCoeff"
+                     Minimum="0.1" Maximum="1.0" Value="0.65"
+                     FormatString="0.00" Increment="0.05" />
+
+      <TextBlock Grid.Row="5" Grid.Column="0" Classes="field" Text="Vessel Volume (m³):" />
+      <NumericUpDown Grid.Row="5" Grid.Column="1" x:Name="NudVolume"
+                     Minimum="0.01" Maximum="10000" Value="10"
+                     FormatString="0.00" Increment="1" />
+
+      <!-- Input-mode toggle -->
+      <CheckBox Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" x:Name="ChkSpecifyMassFlow"
+                Margin="0,8,0,4"
+                IsCheckedChanged="ChkSpecifyMassFlow_Changed"
+                Content="Specify Mass Flow Rate (back-calculate hole diameter)" />
+
+      <TextBlock Grid.Row="7" Grid.Column="0" Classes="field" Text="Orifice Diameter (m):" />
+      <NumericUpDown Grid.Row="7" Grid.Column="1" x:Name="NudOrifice"
+                     Minimum="0.001" Maximum="0.5" Value="0.025"
+                     FormatString="0.0000" Increment="0.001" />
+
+      <TextBlock Grid.Row="8" Grid.Column="0" Classes="field" Text="Mass Flow Rate (kg/s):" />
+      <NumericUpDown Grid.Row="8" Grid.Column="1" x:Name="NudMassFlowRate"
+                     Minimum="0.0001" Maximum="10000" Value="1"
+                     FormatString="0.0000" Increment="0.1" />
+
+      <!-- Live computed result block — non-editable feedback -->
+      <Border Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="2"
+              Background="#F7F7F7" BorderBrush="#DDD" BorderThickness="1"
+              CornerRadius="3" Padding="10,6" Margin="0,8,0,0">
+        <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="120,*" RowSpacing="4">
+          <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Flow regime:" />
+          <TextBlock Grid.Row="0" Grid.Column="1" x:Name="LblChoked"
+                     FontWeight="SemiBold" Foreground="#0066CC" />
+          <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Computed:" />
+          <TextBlock Grid.Row="1" Grid.Column="1" x:Name="LblFlowRate"
+                     FontWeight="SemiBold" Foreground="#0066CC" />
+        </Grid>
+      </Border>
+
+    </Grid>
+  </DockPanel>
+</Window>

@@ -1,0 +1,151 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="640"
+        x:Class="DisperSim3D.UI.Avalonia.Views.ScenarioManagerDialog"
+        Title="Scenario Manager"
+        Icon="/Assets/Air.ico"
+        Width="820" Height="660"
+        MinWidth="680" MinHeight="520"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.field">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#444" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Margin" Value="0,10,0,4" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Foreground" Value="#888" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,2,0,0" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="12">
+
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </StackPanel>
+    </Border>
+
+    <Grid ColumnDefinitions="280,8,*">
+
+      <DockPanel Grid.Column="0">
+        <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,*,*,*" ColumnSpacing="4" Margin="0,8,0,0">
+          <Button Grid.Column="0" x:Name="BtnNew" Click="BtnNew_Click">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <i:Icon Value="mdi-plus" FontSize="12" />
+              <TextBlock Text="New" />
+            </StackPanel>
+          </Button>
+          <Button Grid.Column="1" x:Name="BtnRename" Click="BtnRename_Click">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <i:Icon Value="mdi-pencil-outline" FontSize="12" />
+              <TextBlock Text="Rename" />
+            </StackPanel>
+          </Button>
+          <Button Grid.Column="2" x:Name="BtnDuplicate" Click="BtnDuplicate_Click">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <i:Icon Value="mdi-content-copy" FontSize="12" />
+              <TextBlock Text="Copy" />
+            </StackPanel>
+          </Button>
+          <Button Grid.Column="3" x:Name="BtnDelete" Click="BtnDelete_Click">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <i:Icon Value="mdi-trash-can-outline" FontSize="12" />
+              <TextBlock Text="Del" />
+            </StackPanel>
+          </Button>
+        </Grid>
+        <Border BorderBrush="#DDD" BorderThickness="1" CornerRadius="3">
+          <ListBox x:Name="LstScenarios" SelectionChanged="LstScenarios_SelectionChanged"
+                   BorderThickness="0" />
+        </Border>
+      </DockPanel>
+
+      <GridSplitter Grid.Column="1" Background="Transparent" />
+
+      <ScrollViewer Grid.Column="2" HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto">
+        <StackPanel x:Name="PropsPanel" IsEnabled="False" Spacing="2">
+
+          <TextBlock Classes="section" Text="Simulation" />
+          <Grid ColumnDefinitions="160,180" RowDefinitions="Auto,Auto" RowSpacing="6">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Duration (s):" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="NudDuration"
+                           Minimum="1" Maximum="100000" Value="300" Increment="1"
+                           FormatString="F0"
+                           ToolTip.Tip="Total simulation time. Transient solvers run from 0 to this value." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Time Step (s):" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="NudTimeStep"
+                           Minimum="0.01" Maximum="60" Value="0.5" Increment="0.01"
+                           FormatString="F2"
+                           ToolTip.Tip="Output write interval. Smaller values = more frames but larger case." />
+          </Grid>
+
+          <TextBlock Classes="section" Text="Domain" />
+          <Grid ColumnDefinitions="160,180" RowDefinitions="Auto,Auto" RowSpacing="6">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Domain Size (m):" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="NudDomainSize"
+                           Minimum="10" Maximum="100000" Value="200" Increment="10"
+                           FormatString="F0"
+                           ToolTip.Tip="Half-extent of the simulation box (full size = 2×)." />
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Grid Resolution:" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="NudGridRes"
+                           Minimum="10" Maximum="1000" Value="80" Increment="1"
+                           FormatString="F0"
+                           ToolTip.Tip="Cells per axis. Higher = finer detail, slower." />
+          </Grid>
+
+          <TextBlock Classes="section" Text="Meteorology" />
+          <Grid ColumnDefinitions="160,180" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Wind Speed (m/s):" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="NudWindSpeed"
+                           Minimum="0.1" Maximum="100" Value="3" Increment="0.1"
+                           FormatString="F1" />
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Wind Direction (°):" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="NudWindDir"
+                           Minimum="0" Maximum="359" Value="270" Increment="1"
+                           FormatString="F0"
+                           ToolTip.Tip="Meteorological: direction wind blows FROM (0°=N, 90°=E)." />
+            <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="Stability Class:" />
+            <ComboBox  Grid.Row="2" Grid.Column="1" x:Name="CmbStability">
+              <ComboBoxItem Content="A" />
+              <ComboBoxItem Content="B" />
+              <ComboBoxItem Content="C" />
+              <ComboBoxItem Content="D" />
+              <ComboBoxItem Content="E" />
+              <ComboBoxItem Content="F" />
+            </ComboBox>
+            <TextBlock Grid.Row="3" Grid.Column="0" Classes="field" Text="Ambient Temp (°C):" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" x:Name="NudAmbientTemp"
+                           Minimum="-50" Maximum="60" Value="20" Increment="0.1"
+                           FormatString="F1" />
+          </Grid>
+
+          <TextBlock Classes="section" Text="Wind Field" />
+          <Grid ColumnDefinitions="160,*" RowDefinitions="Auto,Auto" RowSpacing="4">
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Wind Field:" />
+            <ComboBox  Grid.Row="0" Grid.Column="1" x:Name="CmbWindField" HorizontalAlignment="Stretch" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Classes="hint"
+                       Text="Pre-computed wind field this scenario will advect through. Manage via Tools → Wind Field Manager." />
+          </Grid>
+
+        </StackPanel>
+      </ScrollViewer>
+
+    </Grid>
+  </DockPanel>
+</Window>

@@ -1,0 +1,147 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        mc:Ignorable="d" d:DesignWidth="860" d:DesignHeight="700"
+        x:Class="DisperSim3D.UI.Avalonia.Views.DetectorOptimizationDialog"
+        Title="Gas Detector Placement Optimization"
+        Icon="/Assets/Air.ico"
+        Width="880" Height="720"
+        MinWidth="720" MinHeight="560"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.field">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#444" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Margin" Value="0,0,0,6" />
+    </Style>
+    <Style Selector="Border.box">
+      <Setter Property="BorderBrush" Value="#DDD" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="10" />
+      <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="12">
+
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+        <TextBlock Grid.Column="0" x:Name="LblStatus"
+                   Foreground="#444" VerticalAlignment="Center" TextWrapping="Wrap"
+                   Text="Ready." />
+        <Button Grid.Column="1" x:Name="BtnOptimize" MinWidth="100" Click="BtnOptimize_Click">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <i:Icon Value="mdi-cog-play-outline" />
+            <TextBlock Text="Optimize" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="2" x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button Grid.Column="3" x:Name="BtnAdd" Content="Add as Detectors" MinWidth="140" Click="BtnAdd_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </Grid>
+    </Border>
+
+    <Grid RowDefinitions="*,Auto,2*">
+
+      <!-- Simulation chooser -->
+      <Border Grid.Row="0" Classes="box">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top" Classes="section"
+                     Text="Simulations to consider (Completed only — check to include)" />
+          <Border BorderBrush="#DDD" BorderThickness="1" CornerRadius="3" Padding="2">
+            <ScrollViewer>
+              <ItemsControl x:Name="LstSimulations" />
+            </ScrollViewer>
+          </Border>
+        </DockPanel>
+      </Border>
+
+      <!-- Parameters -->
+      <Border Grid.Row="1" Classes="box">
+        <StackPanel>
+          <TextBlock Classes="section" Text="Parameters" />
+          <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                ColumnDefinitions="Auto,*,Auto,*"
+                ColumnSpacing="6" RowSpacing="6">
+
+            <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="X min (m):" />
+            <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="NudXMin"
+                           Minimum="-100000" Maximum="100000" Value="-50" Increment="1"
+                           FormatString="F1" />
+            <TextBlock Grid.Row="0" Grid.Column="2" Classes="field" Text="X max (m):" />
+            <NumericUpDown Grid.Row="0" Grid.Column="3" x:Name="NudXMax"
+                           Minimum="-100000" Maximum="100000" Value="50" Increment="1"
+                           FormatString="F1" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Y min (m):" />
+            <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="NudYMin"
+                           Minimum="-100000" Maximum="100000" Value="-50" Increment="1"
+                           FormatString="F1" />
+            <TextBlock Grid.Row="1" Grid.Column="2" Classes="field" Text="Y max (m):" />
+            <NumericUpDown Grid.Row="1" Grid.Column="3" x:Name="NudYMax"
+                           Minimum="-100000" Maximum="100000" Value="50" Increment="1"
+                           FormatString="F1" />
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="Z min (m):" />
+            <NumericUpDown Grid.Row="2" Grid.Column="1" x:Name="NudZMin"
+                           Minimum="0" Maximum="100000" Value="0" Increment="1"
+                           FormatString="F1" />
+            <TextBlock Grid.Row="2" Grid.Column="2" Classes="field" Text="Z max (m):" />
+            <NumericUpDown Grid.Row="2" Grid.Column="3" x:Name="NudZMax"
+                           Minimum="0" Maximum="100000" Value="10" Increment="1"
+                           FormatString="F1" />
+
+            <TextBlock Grid.Row="3" Grid.Column="0" Classes="field" Text="Threshold (kg/m³):" />
+            <NumericUpDown Grid.Row="3" Grid.Column="1" x:Name="NudThreshold"
+                           Minimum="0" Maximum="10" Value="0" Increment="0.0001"
+                           FormatString="F4"
+                           ToolTip.Tip="0 → use the gas's LFL." />
+            <TextBlock Grid.Row="3" Grid.Column="2" Classes="field" Text="Mesh L override (m):" />
+            <NumericUpDown Grid.Row="3" Grid.Column="3" x:Name="NudMeshOverride"
+                           Minimum="0" Maximum="100" Value="0" Increment="0.01"
+                           FormatString="F2"
+                           ToolTip.Tip="0 → auto from min cloud volume." />
+
+            <TextBlock Grid.Row="4" Grid.Column="0" Classes="field" Text="Dominance radius (cells):" />
+            <NumericUpDown Grid.Row="4" Grid.Column="1" x:Name="NudRadius"
+                           Minimum="1" Maximum="10" Value="1" Increment="1"
+                           FormatString="F0" />
+            <TextBlock Grid.Row="4" Grid.Column="2" Classes="field" Text="Neighbourhood:" />
+            <ComboBox  Grid.Row="4" Grid.Column="3" x:Name="CmbNeighborhood">
+              <ComboBoxItem Content="Cardinal (6 face-adjacent)" />
+              <ComboBoxItem Content="Moore (26 surrounding)" />
+            </ComboBox>
+          </Grid>
+
+          <CheckBox x:Name="ChkExactSolver" IsChecked="True" Margin="0,8,0,0"
+                    Content="Exact solver (Balas branch-and-bound — slower but optimal)" />
+          <TextBlock Foreground="#888" FontSize="10" Margin="0,4,0,0" TextWrapping="Wrap"
+                     Text="Threshold = 0 → use gas LFL. Mesh = 0 → auto from min cloud volume." />
+        </StackPanel>
+      </Border>
+
+      <!-- Results grid -->
+      <Border Grid.Row="2" Classes="box">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top" Classes="section" Text="Optimal detectors" />
+          <DataGrid x:Name="GridResults"
+                    AutoGenerateColumns="False"
+                    IsReadOnly="True"
+                    CanUserResizeColumns="True" CanUserReorderColumns="False"
+                    GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                    RowHeight="22" />
+        </DockPanel>
+      </Border>
+
+    </Grid>
+  </DockPanel>
+</Window>

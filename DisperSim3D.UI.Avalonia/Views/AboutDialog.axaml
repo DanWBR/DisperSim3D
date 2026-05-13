@@ -1,0 +1,54 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="540" d:DesignHeight="320"
+        x:Class="DisperSim3D.UI.Avalonia.Views.AboutDialog"
+        Title="About DisperSim 3D"
+        Icon="/Assets/Air.ico"
+        Width="560" SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+  <DockPanel Margin="16">
+
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,12,0,0" Padding="0,10,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="BtnWebsite" Content="Visit GitHub" MinWidth="100"
+                Click="BtnWebsite_Click" />
+        <Button x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </StackPanel>
+    </Border>
+
+    <!-- Top: title + version block -->
+    <StackPanel DockPanel.Dock="Top" Spacing="6">
+      <TextBlock x:Name="TxtTitle" FontSize="22" FontWeight="Bold" />
+      <TextBlock x:Name="TxtVersion" Foreground="#555" />
+      <TextBlock x:Name="TxtDescription" TextWrapping="Wrap" Margin="0,4,0,0" />
+      <TextBlock x:Name="TxtCopyright" Foreground="#666" Margin="0,8,0,0" />
+      <TextBlock x:Name="TxtCompany" Foreground="#888" FontSize="10" />
+    </StackPanel>
+
+    <!-- Center: runtime info -->
+    <Border Margin="0,14,0,0" Padding="10" Background="#F7F7F7"
+            BorderBrush="#DDD" BorderThickness="1" CornerRadius="3">
+      <Grid RowDefinitions="Auto,Auto,Auto,Auto"
+            ColumnDefinitions="120,*" RowSpacing="4">
+        <TextBlock Grid.Row="0" Grid.Column="0" Text=".NET runtime:" Foreground="#666" />
+        <TextBlock Grid.Row="0" Grid.Column="1" x:Name="TxtDotNet" />
+
+        <TextBlock Grid.Row="1" Grid.Column="0" Text="Operating system:" Foreground="#666" />
+        <TextBlock Grid.Row="1" Grid.Column="1" x:Name="TxtOs" />
+
+        <TextBlock Grid.Row="2" Grid.Column="0" Text="Avalonia UI:" Foreground="#666" />
+        <TextBlock Grid.Row="2" Grid.Column="1" x:Name="TxtAvalonia" />
+
+        <TextBlock Grid.Row="3" Grid.Column="0" Text="Logical cores:" Foreground="#666" />
+        <TextBlock Grid.Row="3" Grid.Column="1" x:Name="TxtCores" />
+      </Grid>
+    </Border>
+
+  </DockPanel>
+</Window>

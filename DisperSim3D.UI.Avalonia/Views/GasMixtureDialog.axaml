@@ -1,0 +1,59 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="460"
+        x:Class="DisperSim3D.UI.Avalonia.Views.GasMixtureDialog"
+        Title="Gas Mixture Components"
+        Icon="/Assets/Air.ico"
+        Width="620" Height="500"
+        MinWidth="500" MinHeight="380"
+        WindowStartupLocation="CenterOwner">
+
+  <DockPanel Margin="12">
+
+    <!-- Buttons -->
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="8">
+        <Button Grid.Column="0" x:Name="BtnAdd" Click="BtnAdd_Click">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <i:Icon Value="mdi-plus" />
+            <TextBlock Text="Add" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="1" x:Name="BtnRemove" Click="BtnRemove_Click">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <i:Icon Value="mdi-minus" />
+            <TextBlock Text="Remove Selected" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="3" x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button Grid.Column="4" x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </Grid>
+    </Border>
+
+    <!-- Help banner -->
+    <Border DockPanel.Dock="Top" Background="#F7F7F7"
+            BorderBrush="#DDD" BorderThickness="1" CornerRadius="3"
+            Padding="10,6" Margin="0,0,0,8">
+      <TextBlock TextWrapping="Wrap" Foreground="#555" FontSize="10">
+        Define gas mixture components. Mole fractions should sum to 1.0.
+        Individual component concentrations = total concentration × mole fraction.
+        <LineBreak />
+        <Run FontWeight="SemiBold">Molar Mass</Run>: kg/mol (CH₄ = 0.016, H₂S = 0.034).
+        <Run FontWeight="SemiBold">Mole Fraction</Run>: 0–1, fraction of moles in the mixture.
+        <Run FontWeight="SemiBold">LFL</Run>: lower flammability limit (kg/m³).
+        <Run FontWeight="SemiBold">IDLH</Run>: immediately dangerous to life and health (kg/m³).
+      </TextBlock>
+    </Border>
+
+    <DataGrid x:Name="GridComponents"
+              AutoGenerateColumns="False"
+              CanUserResizeColumns="True" CanUserReorderColumns="False"
+              GridLinesVisibility="All" HeadersVisibility="Column"
+              RowHeight="22" />
+  </DockPanel>
+</Window>

@@ -1,0 +1,77 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="540" d:DesignHeight="320"
+        x:Class="DisperSim3D.UI.Avalonia.Views.ViewEditorDialog"
+        Title="New View"
+        Icon="/Assets/Air.ico"
+        Width="540" SizeToContent="Height"
+        MinHeight="300" MaxHeight="500"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.field">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#444" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="12">
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </StackPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Top" x:Name="ErrorBanner"
+            IsVisible="False" Background="#FFE7E7" BorderBrush="#E0A0A0"
+            BorderThickness="1" CornerRadius="3" Padding="8,4" Margin="0,0,0,10">
+      <TextBlock x:Name="ErrorText" Foreground="#A40000" />
+    </Border>
+
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+          ColumnDefinitions="120,*" RowSpacing="6">
+      <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Name:" />
+      <TextBox    Grid.Row="0" Grid.Column="1" x:Name="TxtName" />
+
+      <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Kind:" />
+      <ComboBox Grid.Row="1" Grid.Column="1" x:Name="CmbKind"
+                HorizontalAlignment="Stretch">
+        <ComboBoxItem Content="Isosurface (3D)" />
+        <ComboBoxItem Content="Contour XY (horizontal slice at z = PlanePosition)" />
+        <ComboBoxItem Content="Contour XZ (vertical slice at y = PlanePosition)" />
+        <ComboBoxItem Content="Contour YZ (vertical slice at x = PlanePosition)" />
+      </ComboBox>
+
+      <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="Simulation:" />
+      <ComboBox Grid.Row="2" Grid.Column="1" x:Name="CmbSimulation"
+                HorizontalAlignment="Stretch" />
+
+      <TextBlock Grid.Row="3" Grid.Column="0" Classes="field" Text="Field:" />
+      <ComboBox Grid.Row="3" Grid.Column="1" x:Name="CmbField"
+                HorizontalAlignment="Stretch">
+        <ComboBoxItem Content="Concentration (auto-resolves to source species)" />
+        <ComboBoxItem Content="Temperature (T)" />
+        <ComboBoxItem Content="Wind Speed (|U|)" />
+        <ComboBoxItem Content="Pressure (p_rgh)" />
+        <ComboBoxItem Content="Turbulent K (k)" />
+        <ComboBoxItem Content="Turbulent Epsilon (epsilon)" />
+        <ComboBoxItem Content="Turbulent Viscosity (nut)" />
+      </ComboBox>
+
+      <TextBlock Grid.Row="4" Grid.Column="0" Classes="field" Text="Time Mode:" />
+      <ComboBox Grid.Row="4" Grid.Column="1" x:Name="CmbTimeMode"
+                HorizontalAlignment="Stretch">
+        <ComboBoxItem Content="Peak Over Time (per-cell maximum)" />
+        <ComboBoxItem Content="Final Snapshot (last timestep)" />
+        <ComboBoxItem Content="Specific Time (set seconds in PropertyGrid)" />
+      </ComboBox>
+    </Grid>
+  </DockPanel>
+</Window>

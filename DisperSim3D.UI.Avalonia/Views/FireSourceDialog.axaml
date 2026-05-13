@@ -1,0 +1,74 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="400"
+        x:Class="DisperSim3D.UI.Avalonia.Views.FireSourceDialog"
+        Title="Add Fire Source"
+        Icon="/Assets/Air.ico"
+        Width="500" SizeToContent="Height"
+        MinHeight="380" MaxHeight="600"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.field">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#444" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="12">
+
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </StackPanel>
+    </Border>
+
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+          ColumnDefinitions="180,*" RowSpacing="6">
+      <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Name:" />
+      <TextBox    Grid.Row="0" Grid.Column="1" x:Name="TxtName" Text="JetFire1" />
+
+      <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Mass Flow (kg/s):" />
+      <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="NudMassFlow"
+                     Minimum="0.001" Maximum="1000" Value="1.0"
+                     FormatString="0.000" Increment="0.1" />
+
+      <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="Orifice Diameter (m):" />
+      <NumericUpDown Grid.Row="2" Grid.Column="1" x:Name="NudOrifice"
+                     Minimum="0.001" Maximum="1.0" Value="0.025"
+                     FormatString="0.000" Increment="0.005" />
+
+      <TextBlock Grid.Row="3" Grid.Column="0" Classes="field" Text="Heat of Combustion (J/kg):" />
+      <NumericUpDown Grid.Row="3" Grid.Column="1" x:Name="NudHeatCombustion"
+                     Minimum="1000000" Maximum="100000000" Value="50000000"
+                     FormatString="0" Increment="1000000" />
+
+      <TextBlock Grid.Row="4" Grid.Column="0" Classes="field" Text="Radiative Fraction:" />
+      <NumericUpDown Grid.Row="4" Grid.Column="1" x:Name="NudRadFraction"
+                     Minimum="0.05" Maximum="0.5" Value="0.2"
+                     FormatString="0.00" Increment="0.05" />
+
+      <CheckBox Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" x:Name="ChkPoolFire"
+                Content="Pool fire (uncheck for jet/flare fire)"
+                Margin="0,6,0,2"
+                IsCheckedChanged="ChkPoolFire_Changed" />
+
+      <TextBlock Grid.Row="6" Grid.Column="0" Classes="field" Text="Pool Diameter (m):" />
+      <NumericUpDown Grid.Row="6" Grid.Column="1" x:Name="NudPoolDiameter"
+                     Minimum="0.5" Maximum="100" Value="5.0"
+                     FormatString="0.0" Increment="0.5" IsEnabled="False" />
+
+      <TextBlock Grid.Row="7" Grid.Column="0" Classes="field" Text="Burn Rate (kg/m²/s):" />
+      <NumericUpDown Grid.Row="7" Grid.Column="1" x:Name="NudBurnRate"
+                     Minimum="0.001" Maximum="1.0" Value="0.05"
+                     FormatString="0.000" Increment="0.005" IsEnabled="False" />
+    </Grid>
+  </DockPanel>
+</Window>

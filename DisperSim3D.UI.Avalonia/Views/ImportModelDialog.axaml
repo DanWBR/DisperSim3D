@@ -1,0 +1,111 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="620"
+        x:Class="DisperSim3D.UI.Avalonia.Views.ImportModelDialog"
+        Title="Import 3D Model"
+        Icon="/Assets/Air.ico"
+        Width="540" SizeToContent="Height"
+        MinHeight="540" MaxHeight="780"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.field">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#444" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Margin" Value="0,8,0,4" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Foreground" Value="#666" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,0,0,6" />
+    </Style>
+    <Style Selector="Border.info">
+      <Setter Property="Background" Value="#F7F7F7" />
+      <Setter Property="BorderBrush" Value="#DDD" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="10,6" />
+      <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="12">
+
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button x:Name="BtnOK" Content="Insert" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </StackPanel>
+    </Border>
+
+    <StackPanel Spacing="2">
+
+      <!-- Model info card -->
+      <Border Classes="info">
+        <TextBlock x:Name="LblInfo" Foreground="#444" FontSize="11" />
+      </Border>
+
+      <TextBlock Classes="hint"
+                 Text="Position, rotate and scale the model in scene units (meters). The 3D preview is pending the Avalonia viewport port — values are still applied exactly as in the WinForms importer." />
+
+      <!-- Position -->
+      <TextBlock Classes="section" Text="Position (meters)" />
+      <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="80,*" RowSpacing="4">
+        <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="X:" />
+        <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="NudPosX"
+                       Minimum="-500" Maximum="500" Value="0" Increment="0.1"
+                       FormatString="F1" />
+        <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Y:" />
+        <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="NudPosY"
+                       Minimum="-500" Maximum="500" Value="0" Increment="0.1"
+                       FormatString="F1" />
+        <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="Z:" />
+        <NumericUpDown Grid.Row="2" Grid.Column="1" x:Name="NudPosZ"
+                       Minimum="-500" Maximum="500" Value="0" Increment="0.1"
+                       FormatString="F1" />
+      </Grid>
+
+      <!-- Rotation -->
+      <TextBlock Classes="section" Text="Rotation (degrees)" />
+      <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="80,*" RowSpacing="4">
+        <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="X:" />
+        <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="NudRotX"
+                       Minimum="-360" Maximum="360" Value="0" Increment="1"
+                       FormatString="F0" />
+        <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Y:" />
+        <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="NudRotY"
+                       Minimum="-360" Maximum="360" Value="0" Increment="1"
+                       FormatString="F0" />
+        <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="Z:" />
+        <NumericUpDown Grid.Row="2" Grid.Column="1" x:Name="NudRotZ"
+                       Minimum="-360" Maximum="360" Value="0" Increment="1"
+                       FormatString="F0" />
+      </Grid>
+
+      <!-- Scale -->
+      <TextBlock Classes="section" Text="Scale" />
+      <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="80,*" RowSpacing="4">
+        <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Value:" />
+        <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="NudScale"
+                       Minimum="0.001" Maximum="100" Value="1" Increment="0.01"
+                       FormatString="F4" />
+        <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Slider:" />
+        <Slider Grid.Row="1" Grid.Column="1" x:Name="ScaleSlider"
+                Minimum="1" Maximum="200" Value="120"
+                TickFrequency="20" TickPlacement="BottomRight"
+                ValueChanged="ScaleSlider_ValueChanged" />
+      </Grid>
+
+    </StackPanel>
+  </DockPanel>
+</Window>

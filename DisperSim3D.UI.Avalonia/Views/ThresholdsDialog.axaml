@@ -1,0 +1,62 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        mc:Ignorable="d" d:DesignWidth="660" d:DesignHeight="480"
+        x:Class="DisperSim3D.UI.Avalonia.Views.ThresholdsDialog"
+        Title="Dispersion Thresholds"
+        Icon="/Assets/Air.ico"
+        Width="680" Height="480" MinWidth="520" MinHeight="380"
+        WindowStartupLocation="CenterOwner">
+
+  <DockPanel Margin="12">
+
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="8">
+        <Button Grid.Column="0" x:Name="BtnAdd" Click="BtnAdd_Click">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <i:Icon Value="mdi-plus" />
+            <TextBlock Text="Add" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="1" x:Name="BtnRemove" Click="BtnRemove_Click">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <i:Icon Value="mdi-minus" />
+            <TextBlock Text="Remove Selected" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="3" x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button Grid.Column="4" x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </Grid>
+    </Border>
+
+    <!-- Help banner -->
+    <Border DockPanel.Dock="Top" Background="#F7F7F7"
+            BorderBrush="#DDD" BorderThickness="1" CornerRadius="3"
+            Padding="10,6" Margin="0,0,0,8">
+      <TextBlock TextWrapping="Wrap" Foreground="#555" FontSize="10">
+        Each threshold renders as a 3D isosurface in the visualization.
+        <LineBreak />
+        <Run FontWeight="SemiBold">Name</Run>: legend label (e.g. LFL, IDLH, Low, Medium, High).
+        <LineBreak />
+        <Run FontWeight="SemiBold">Concentration</Run>: kg/m³ value defining the iso-level.
+        <LineBreak />
+        <Run FontWeight="SemiBold">Color (ARGB hex)</Run>: 8 hex digits, e.g. 64FF0000 = semi-transparent red.
+        <LineBreak />
+        <Run FontWeight="SemiBold">Opacity</Run>: 0 (invisible) → 1 (solid).
+        <LineBreak />
+        <Run FontWeight="SemiBold">Visible</Run>: uncheck to hide without deleting.
+      </TextBlock>
+    </Border>
+
+    <DataGrid x:Name="GridThresholds"
+              AutoGenerateColumns="False"
+              CanUserResizeColumns="True" CanUserReorderColumns="False"
+              GridLinesVisibility="All" HeadersVisibility="Column"
+              RowHeight="22" />
+
+  </DockPanel>
+</Window>

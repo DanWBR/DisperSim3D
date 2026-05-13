@@ -1,0 +1,113 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:i="using:Projektanker.Icons.Avalonia"
+        mc:Ignorable="d" d:DesignWidth="960" d:DesignHeight="620"
+        x:Class="DisperSim3D.UI.Avalonia.Views.DwsimMixtureBuilderDialog"
+        Title="Gas Mixture Builder (DWSIM)"
+        Icon="/Assets/Air.ico"
+        Width="980" Height="640"
+        MinWidth="780" MinHeight="520"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.field">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#444" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="12">
+
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+        <TextBlock Grid.Column="0" x:Name="LblStatus"
+                   Foreground="#444" VerticalAlignment="Center" TextWrapping="Wrap" />
+        <Button Grid.Column="1" x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button Grid.Column="2" x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </Grid>
+    </Border>
+
+    <Grid ColumnDefinitions="2*,8,3*">
+
+      <!-- LEFT: compound search + available list + Add row -->
+      <DockPanel Grid.Column="0">
+        <TextBox DockPanel.Dock="Top" x:Name="TxtSearch" Watermark="Search compounds..."
+                 TextChanged="TxtSearch_TextChanged" />
+
+        <Grid DockPanel.Dock="Bottom" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6"
+              Margin="0,6,0,0">
+          <TextBlock Grid.Column="0" Classes="field" Text="Mole fraction:" />
+          <NumericUpDown Grid.Column="1" x:Name="NudFraction"
+                         Minimum="0.0001" Maximum="1" Value="1.0" Increment="0.01"
+                         FormatString="F4" Width="120" />
+          <Button Grid.Column="2" x:Name="BtnAdd" HorizontalAlignment="Right"
+                  Click="BtnAdd_Click">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="Add →" />
+            </StackPanel>
+          </Button>
+        </Grid>
+
+        <Border BorderBrush="#DDD" BorderThickness="1" CornerRadius="3" Margin="0,6,4,0">
+          <ListBox x:Name="LstAvailable" BorderThickness="0" />
+        </Border>
+      </DockPanel>
+
+      <GridSplitter Grid.Column="1" Background="Transparent" />
+
+      <!-- RIGHT: mixture composition + thermo flash + results -->
+      <DockPanel Grid.Column="2">
+
+        <TextBlock DockPanel.Dock="Top" Text="Mixture composition (mole fractions):"
+                   FontWeight="Bold" />
+
+        <Grid DockPanel.Dock="Bottom" ColumnDefinitions="Auto,*" Margin="0,6,0,0">
+          <Button Grid.Column="0" x:Name="BtnRemove" Click="BtnRemove_Click">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <i:Icon Value="mdi-minus" />
+              <TextBlock Text="Remove" />
+            </StackPanel>
+          </Button>
+        </Grid>
+
+        <Grid DockPanel.Dock="Bottom" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto"
+              ColumnSpacing="6" Margin="0,8,0,0">
+          <TextBlock Grid.Column="0" Classes="field" Text="T (K):" />
+          <NumericUpDown Grid.Column="1" x:Name="NudT"
+                         Minimum="100" Maximum="2000" Value="293" Increment="1"
+                         FormatString="F2" Width="100" />
+          <TextBlock Grid.Column="2" Classes="field" Text="P (Pa):" Margin="8,0,0,0" />
+          <NumericUpDown Grid.Column="3" x:Name="NudP"
+                         Minimum="100" Maximum="50000000" Value="101325" Increment="1000"
+                         FormatString="F0" Width="120" />
+          <Button Grid.Column="5" x:Name="BtnCompute" Click="BtnCompute_Click">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <i:Icon Value="mdi-flash" />
+              <TextBlock Text="Run flash" />
+            </StackPanel>
+          </Button>
+        </Grid>
+
+        <TextBlock DockPanel.Dock="Bottom" x:Name="LblResults"
+                   Foreground="#446" FontFamily="Consolas,Menlo,monospace" FontSize="11"
+                   TextWrapping="Wrap" Margin="0,8,0,0"
+                   Text="(No properties computed yet)" />
+
+        <!-- Composition grid -->
+        <Border BorderBrush="#DDD" BorderThickness="1" CornerRadius="3" Margin="0,4,0,0">
+          <DataGrid x:Name="GridComposition"
+                    AutoGenerateColumns="False"
+                    CanUserResizeColumns="True" CanUserReorderColumns="False"
+                    GridLinesVisibility="All" HeadersVisibility="Column"
+                    RowHeight="22" />
+        </Border>
+      </DockPanel>
+
+    </Grid>
+  </DockPanel>
+</Window>
