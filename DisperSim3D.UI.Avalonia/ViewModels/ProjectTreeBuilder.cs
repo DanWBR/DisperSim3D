@@ -76,7 +76,8 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
                     geometry.Children.Add(new ProjectTreeNode(
                         "deco:" + d.Id, LeafIcon,
                         string.IsNullOrEmpty(d.Name) ? "(decoration)" : d.Name,
-                        tag: d, hasVisibilityToggle: true));
+                        tag: d, hasVisibilityToggle: true,
+                        initialVisibility: d.IsVisible));
             project.Children.Add(geometry);
 
             // ── Sources ────────────────────────────────────────────────────
@@ -104,7 +105,8 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
                     fires.Children.Add(new ProjectTreeNode(
                         "fire:" + f.Id, LeafIcon,
                         string.IsNullOrEmpty(f.Name) ? "(fire)" : f.Name,
-                        tag: f, hasVisibilityToggle: true));
+                        tag: f, hasVisibilityToggle: true,
+                        initialVisibility: f.IsVisible));
             project.Children.Add(fires);
 
             // ── Wind Fields ────────────────────────────────────────────────
@@ -115,7 +117,8 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
                     winds.Children.Add(new ProjectTreeNode(
                         "wind:" + w.Id, LeafIcon,
                         string.IsNullOrEmpty(w.Name) ? "(wind field)" : w.Name,
-                        tag: w, hasVisibilityToggle: true));
+                        tag: w, hasVisibilityToggle: true,
+                        initialVisibility: w.IsVisible));
             project.Children.Add(winds);
 
             // ── Simulations ────────────────────────────────────────────────

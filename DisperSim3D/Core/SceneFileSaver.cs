@@ -105,7 +105,8 @@ namespace DisperSim3D.Core
                                 new XAttribute("MaterialType", d.MaterialType.ToString()),
                                 new XAttribute("MaterialColor", d.MaterialColor.ToString()),
                                 new XAttribute("SpecularPower", d.SpecularPower.ToString(inv)),
-                                new XAttribute("Opacity", d.Opacity.ToString(inv))))),
+                                new XAttribute("Opacity", d.Opacity.ToString(inv)),
+                                new XAttribute("IsVisible", d.IsVisible.ToString())))),
 
                     SerializeGeneralSettings(scene, inv),
                     SerializeEnvironment(scene, inv),
@@ -437,6 +438,7 @@ namespace DisperSim3D.Core
                         new XAttribute("EmbedMode", wf.EmbedMode.ToString()),
                         new XAttribute("UseFluidX3D", wf.UseFluidX3D.ToString()),
                         new XAttribute("FluidX3DQuality", wf.FluidX3DQuality.ToString()),
+                        new XAttribute("IsVisible", wf.IsVisible.ToString()),
                         new XElement("Meteo",
                             new XAttribute("WindSpeed", wf.Meteo.WindSpeed.ToString(inv)),
                             new XAttribute("WindDir", wf.Meteo.WindDirectionDeg.ToString(inv)),
@@ -620,7 +622,8 @@ namespace DisperSim3D.Core
                             new XAttribute("RadFrac", f.RadiativeFraction.ToString(inv)),
                             new XAttribute("IsPool", f.IsPoolFire),
                             new XAttribute("PoolDia", f.PoolDiameterM.ToString(inv)),
-                            new XAttribute("BurnRate", f.PoolBurnRateKgM2S.ToString(inv))))));
+                            new XAttribute("BurnRate", f.PoolBurnRateKgM2S.ToString(inv)),
+                            new XAttribute("IsVisible", f.IsVisible)))));
         }
 
         private static XElement? SerializeGasDetectors(Scene3D scene, CultureInfo inv)

@@ -266,6 +266,7 @@ namespace DisperSim3D.Core
                 var mEl = wfEl.Element("Meteo");
                 if (mEl != null) wf.Meteo = ParseMeteo(mEl, inv);
                 wf.CfdConfig = ParseAtmosphericCfd(wfEl, inv);
+                wf.IsVisible = bool.Parse((string)wfEl.Attribute("IsVisible") ?? "True");
                 scene.WindFieldScenarios.Add(wf);
             }
         }
@@ -504,7 +505,8 @@ namespace DisperSim3D.Core
                     RadiativeFraction = double.Parse((string)fe.Attribute("RadFraction") ?? "0.2", inv),
                     IsPoolFire = bool.Parse((string)fe.Attribute("IsPoolFire") ?? "False"),
                     PoolDiameterM = double.Parse((string)fe.Attribute("PoolDia") ?? "5", inv),
-                    PoolBurnRateKgM2S = double.Parse((string)fe.Attribute("BurnRate") ?? "0.05", inv)
+                    PoolBurnRateKgM2S = double.Parse((string)fe.Attribute("BurnRate") ?? "0.05", inv),
+                    IsVisible = bool.Parse((string)fe.Attribute("IsVisible") ?? "True")
                 });
             }
         }
@@ -573,6 +575,7 @@ namespace DisperSim3D.Core
                     catch { deco.MaterialColor = Geometry.Colors.LightGray; }
                 }
 
+                deco.IsVisible = bool.Parse((string)de.Attribute("IsVisible") ?? "True");
                 scene.Decorations.Add(deco);
             }
         }

@@ -86,6 +86,7 @@ namespace DisperSim3D.UI.Avalonia.Views
         private bool _isTextured;
 
         internal SolidVertex[]? CpuVertices { get; private set; }
+        internal TexturedVertex[]? CpuTexturedVertices { get; private set; }
         internal uint[]? CpuIndices { get; private set; }
 
         /// <summary>Number of triangles in this mesh.</summary>
@@ -191,6 +192,7 @@ namespace DisperSim3D.UI.Avalonia.Views
             _indexCount = indices.Length;
             _hasIndices = indices.Length > 0;
             _isTextured = true;
+            CpuTexturedVertices = vertices.ToArray();
 
             _vao = gl.GenVertexArray();
             gl.BindVertexArray(_vao);

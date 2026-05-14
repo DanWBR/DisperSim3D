@@ -304,6 +304,9 @@ namespace DisperSim3D.UI.Avalonia.Views
                 case Models.View view: view.IsVisible = visible; break;
                 case MonitorPoint3D mon: mon.Visible = visible; break;
                 case GasDetector3D det: det.Visible = visible; break;
+                case Decoration3D deco: deco.IsVisible = visible; break;
+                case WindFieldScenario wfs: wfs.IsVisible = visible; break;
+                case FireSource fire: fire.IsVisible = visible; break;
             }
         }
 

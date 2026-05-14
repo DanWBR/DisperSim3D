@@ -79,6 +79,9 @@ namespace DisperSim3D.Models
         /// <summary>Gets or sets a value indicating whether geometry above (true) or below (false) the clip plane is retained.</summary>
         public bool ClipAbove { get; set; }
 
+        /// <summary>Gets or sets a value indicating whether this decoration is visible in the 3D viewport.</summary>
+        public bool IsVisible { get; set; }
+
         /// <summary>
         /// Initializes a new instance of the <see cref="Decoration3D"/> class with default values.
         /// </summary>
@@ -98,6 +101,7 @@ namespace DisperSim3D.Models
             ClipAxis = ClipAxis.Y;
             ClipValue = 0;
             ClipAbove = true;
+            IsVisible = true;
         }
 
     }

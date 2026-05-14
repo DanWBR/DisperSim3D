@@ -53,6 +53,10 @@ namespace DisperSim3D.Models
         [Description("Display name shown in the project tree.")]
         public string Name { get; set; }
 
+        [Category("Identity")]
+        [Description("Whether this wind field is visible in the 3D viewport.")]
+        public bool IsVisible { get; set; } = true;
+
         [Category("Domain")]
         [Description("Meteorological inlet conditions (wind, stability, ambient T/p, z0).")]
         public MeteorologicalConditions Meteo { get; set; }

@@ -21,6 +21,11 @@ namespace DisperSim3D.Models
         public string Name { get; set; } = "JetFire1";
 
         /// <summary>
+        /// Gets or sets a value indicating whether this fire source is visible in the 3D viewport.
+        /// </summary>
+        public bool IsVisible { get; set; } = true;
+
+        /// <summary>
         /// Gets or sets the 3D position of the fire source in the scene, in meters.
         /// </summary>
         [TypeConverter(typeof(DisperSim3D.Core.Point3DStringConverter))]

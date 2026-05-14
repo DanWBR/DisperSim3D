@@ -122,6 +122,7 @@ namespace DisperSim3D.UI.Avalonia.Views
         private delegate void D_glUniform1f(int loc, float v0);
         private delegate void D_glBlendFunc(int sfactor, int dfactor);
         private delegate void D_glCullFace(int mode);
+        private delegate void D_glPolygonOffset(float factor, float units);
         private unsafe delegate void D_glUniformMatrix3fv(
             int loc, int count, bool transpose, float* value);
         private delegate void D_glUniform1i(int loc, int v0);
@@ -131,6 +132,7 @@ namespace DisperSim3D.UI.Avalonia.Views
         private D_glUniform1i? _glUniform1i;
         private D_glBlendFunc? _glBlendFunc;
         private D_glCullFace? _glCullFace;
+        private D_glPolygonOffset? _glPolygonOffset;
         private D_glUniformMatrix3fv? _glUniformMatrix3fv;
 
         // GL texture operations
@@ -147,9 +149,11 @@ namespace DisperSim3D.UI.Avalonia.Views
 
         // Shadow mapping — GL extensions
         private const int GL_DEPTH_COMPONENT_VAL = 0x1902;
+        private const int GL_DEPTH_COMPONENT24_VAL = 0x81A6;
         private const int GL_DEPTH_ATTACHMENT_VAL = 0x8D00;
         private const int GL_NONE_VAL = 0;
         private const int GL_FLOAT_VAL = 0x1406;
+        private const int GL_UNSIGNED_INT_VAL = 0x1405;
         private const int GL_TEXTURE1 = 0x84C1;
         private const int GL_CLAMP_TO_BORDER = 0x812D;
         private const int GL_TEXTURE_BORDER_COLOR = 0x1004;
@@ -159,7 +163,7 @@ namespace DisperSim3D.UI.Avalonia.Views
         private const int GL_TEXTURE_WRAP_T_VAL = 0x2803;
         private const int GL_NEAREST_VAL = 0x2600;
         private const int GL_LINEAR_VAL = 0x2601;
-        private const int SHADOW_MAP_SIZE = 2048;
+        private const int SHADOW_MAP_SIZE = 4096;
 
         private unsafe delegate void D_glGenFramebuffers(int n, int* ids);
         private unsafe delegate void D_glDeleteFramebuffers(int n, int* ids);
@@ -189,6 +193,11 @@ namespace DisperSim3D.UI.Avalonia.Views
         private int _shadowLightVPUniform;
         private int _shadowModelUniform;
         private bool _shadowReady;
+
+        // Shadow catcher — transparent ground overlay that shows only shadows
+        private int _shadowCatcherProgram;
+        private int _scMvpUniform, _scShadowMapUniform, _scLightSpaceUniform, _scStrengthUniform;
+        private GlMeshBuffer? _shadowCatcherMesh;
 
         // Shadow uniforms in lit shaders
         private int _solidShadowMapUniform, _solidLightSpaceUniform, _solidShadowEnabledUniform;
@@ -614,6 +623,56 @@ void main()
 }
 ";
 
+        // ── Shadow catcher shader — transparent layer that only shows shadows ──
+
+        private const string ShadowCatcherVertBody = @"
+layout(location = 0) in vec3 aPos;
+
+uniform mat4 uMVP;
+
+out vec3 vWorldPos;
+
+void main()
+{
+    vWorldPos   = aPos;
+    gl_Position = uMVP * vec4(aPos, 1.0);
+}
+";
+
+        private const string ShadowCatcherFragBody = @"
+in vec3 vWorldPos;
+
+uniform sampler2D uShadowMap;
+uniform mat4  uLightSpaceMat;
+uniform float uShadowStrength;
+
+layout(location = 0) out vec4 fragColor;
+
+void main()
+{
+    vec4 lsPos = uLightSpaceMat * vec4(vWorldPos, 1.0);
+    vec3 pc    = lsPos.xyz / lsPos.w * 0.5 + 0.5;
+
+    if (pc.z > 1.0 || pc.x < 0.0 || pc.x > 1.0 || pc.y < 0.0 || pc.y > 1.0)
+        discard;
+
+    float bias  = 0.003;
+    vec2  texel = 1.0 / vec2(textureSize(uShadowMap, 0));
+    float shadow = 0.0;
+    for (int x = -1; x <= 1; ++x)
+        for (int y = -1; y <= 1; ++y)
+        {
+            float d = texture(uShadowMap, pc.xy + vec2(x, y) * texel).r;
+            shadow += pc.z - bias > d ? 1.0 : 0.0;
+        }
+    shadow /= 9.0;
+
+    if (shadow < 0.01) discard;
+
+    fragColor = vec4(0.0, 0.0, 0.0, shadow * uShadowStrength);
+}
+";
+
         // ── Solid (lit) shader for 3D meshes ────────────────────────────
 
         private const string SolidVertBody = @"
@@ -861,6 +920,9 @@ void main() { }
                 var p3 = gl.GetProcAddress("glCullFace");
                 if (p3 != IntPtr.Zero)
                     _glCullFace = Marshal.GetDelegateForFunctionPointer<D_glCullFace>(p3);
+                var pPO = gl.GetProcAddress("glPolygonOffset");
+                if (pPO != IntPtr.Zero)
+                    _glPolygonOffset = Marshal.GetDelegateForFunctionPointer<D_glPolygonOffset>(pPO);
                 var p4 = gl.GetProcAddress("glUniformMatrix3fv");
                 if (p4 != IntPtr.Zero)
                     _glUniformMatrix3fv = Marshal.GetDelegateForFunctionPointer<D_glUniformMatrix3fv>(p4);
@@ -972,6 +1034,13 @@ void main() { }
                 _shadowModelUniform   = GetUniformLoc(gl, _shadowProgram, "uModel");
                 CreateShadowFbo(gl);
 
+                // ── Compile shadow catcher shader ─────────────────────
+                _shadowCatcherProgram = CompileProgram(gl, ShadowCatcherVertBody, ShadowCatcherFragBody);
+                _scMvpUniform         = GetUniformLoc(gl, _shadowCatcherProgram, "uMVP");
+                _scShadowMapUniform   = GetUniformLoc(gl, _shadowCatcherProgram, "uShadowMap");
+                _scLightSpaceUniform  = GetUniformLoc(gl, _shadowCatcherProgram, "uLightSpaceMat");
+                _scStrengthUniform    = GetUniformLoc(gl, _shadowCatcherProgram, "uShadowStrength");
+
                 // ── Create white 1×1 fallback texture ───────────────────
                 _whiteTexture = GlTextureLoader.CreateWhite1x1(gl);
 
@@ -1074,10 +1143,128 @@ void main() { }
             if (doShadows)
             {
                 var lightDir = new Vector3(sunX, sunY, sunZ);
-                var lightPos = -lightDir * 400f;
+
+                // Compute world-space AABB of shadow-casting objects
+                var bbMin = new Vector3(float.MaxValue);
+                var bbMax = new Vector3(float.MinValue);
+                bool hasCasters = false;
+                foreach (var obj in _sceneObjects)
+                {
+                    if (!obj.Visible || obj.Mesh.IsLineGeometry) continue;
+                    var t = obj.ModelMatrix.Translation;
+                    float radius = 5f;
+                    if (obj.Mesh.CpuVertices != null && obj.Mesh.CpuVertices.Length > 0)
+                    {
+                        var localMin = new Vector3(float.MaxValue);
+                        var localMax = new Vector3(float.MinValue);
+                        foreach (var v in obj.Mesh.CpuVertices)
+                        {
+                            localMin = Vector3.Min(localMin, v.Position);
+                            localMax = Vector3.Max(localMax, v.Position);
+                        }
+                        var worldMin = Vector3.Transform(localMin, obj.ModelMatrix);
+                        var worldMax = Vector3.Transform(localMax, obj.ModelMatrix);
+                        bbMin = Vector3.Min(bbMin, Vector3.Min(worldMin, worldMax));
+                        bbMax = Vector3.Max(bbMax, Vector3.Max(worldMin, worldMax));
+                    }
+                    else if (obj.Mesh.CpuTexturedVertices != null && obj.Mesh.CpuTexturedVertices.Length > 0)
+                    {
+                        var localMin = new Vector3(float.MaxValue);
+                        var localMax = new Vector3(float.MinValue);
+                        foreach (var v in obj.Mesh.CpuTexturedVertices)
+                        {
+                            localMin = Vector3.Min(localMin, v.Position);
+                            localMax = Vector3.Max(localMax, v.Position);
+                        }
+                        var worldMin = Vector3.Transform(localMin, obj.ModelMatrix);
+                        var worldMax = Vector3.Transform(localMax, obj.ModelMatrix);
+                        bbMin = Vector3.Min(bbMin, Vector3.Min(worldMin, worldMax));
+                        bbMax = Vector3.Max(bbMax, Vector3.Max(worldMin, worldMax));
+                    }
+                    else
+                    {
+                        bbMin = Vector3.Min(bbMin, t - new Vector3(radius));
+                        bbMax = Vector3.Max(bbMax, t + new Vector3(radius));
+                    }
+                    hasCasters = true;
+                }
+
+                if (!hasCasters)
+                {
+                    bbMin = new Vector3(-50f);
+                    bbMax = new Vector3(50f);
+                }
+
+                // Include ground plane (Z ≈ −0.02) so the shadow frustum
+                // covers the surface that receives cast shadows.
+                bbMin = new Vector3(bbMin.X, bbMin.Y, MathF.Min(bbMin.Z, -0.1f));
+
+                // Project the 4 top AABB corners along the light direction
+                // onto the ground (Z = 0) to include the shadow footprint.
+                // Without this, low-sun shadows fall far from the objects
+                // and outside the shadow frustum.
+                if (lightDir.Z > 0.01f)
+                {
+                    float topZ = MathF.Max(bbMax.Z, 0.1f);
+                    float maxT = MathF.Min(topZ / lightDir.Z, 400f);
+                    for (int cx = 0; cx < 2; cx++)
+                        for (int cy = 0; cy < 2; cy++)
+                        {
+                            float px = cx == 0 ? bbMin.X : bbMax.X;
+                            float py = cy == 0 ? bbMin.Y : bbMax.Y;
+                            float sx = px - lightDir.X * maxT;
+                            float sy = py - lightDir.Y * maxT;
+                            bbMin = Vector3.Min(bbMin, new Vector3(sx, sy, bbMin.Z));
+                            bbMax = Vector3.Max(bbMax, new Vector3(sx, sy, bbMax.Z));
+                        }
+                }
+
+                var sceneCenter = (bbMin + bbMax) * 0.5f;
+                var sceneExtent = bbMax - bbMin;
+                float sceneRadius = sceneExtent.Length() * 0.5f;
+
+                // Place light on the sun's side of the scene so depth
+                // ordering is correct: objects near the sun get small depth
+                // values and the ground behind them gets large values.
                 var up = MathF.Abs(sunZ) > 0.99f ? Vector3.UnitY : Vector3.UnitZ;
-                var lightView = Matrix4x4.CreateLookAt(lightPos, Vector3.Zero, up);
-                var lightProj = Matrix4x4.CreateOrthographic(400f, 400f, 1f, 800f);
+                var lightView = Matrix4x4.CreateLookAt(
+                    sceneCenter + lightDir * (sceneRadius + 10f), sceneCenter, up);
+
+                // Transform all 8 AABB corners into light-view space to get a
+                // tight frustum that covers the actual scene content.
+                var lvMin = new Vector3(float.MaxValue);
+                var lvMax = new Vector3(float.MinValue);
+                for (int c = 0; c < 8; c++)
+                {
+                    var corner = new Vector3(
+                        (c & 1) == 0 ? bbMin.X : bbMax.X,
+                        (c & 2) == 0 ? bbMin.Y : bbMax.Y,
+                        (c & 4) == 0 ? bbMin.Z : bbMax.Z);
+                    var lv = Vector3.Transform(corner, lightView);
+                    lvMin = Vector3.Min(lvMin, lv);
+                    lvMax = Vector3.Max(lvMax, lv);
+                }
+
+                float margin = 10f;
+                float lLeft   = lvMin.X - margin;
+                float lRight  = lvMax.X + margin;
+                float lBottom = lvMin.Y - margin;
+                float lTop    = lvMax.Y + margin;
+                float lNear   = -lvMax.Z - margin;
+                float lFar    = -lvMin.Z + margin;
+                lNear = MathF.Max(lNear, 0.1f);
+                if (lFar <= lNear) lFar = lNear + 100f;
+
+                // OpenGL-convention ortho: maps Z to [-1, 1] so the full depth
+                // buffer range is used and the shader's *0.5+0.5 works directly.
+                float w2 = lRight - lLeft;
+                float h2 = lTop - lBottom;
+                float d2 = lFar - lNear;
+                var lightProj = new Matrix4x4(
+                    2f / w2, 0, 0, 0,
+                    0, 2f / h2, 0, 0,
+                    0, 0, -2f / d2, 0,
+                    -(lRight + lLeft) / w2, -(lTop + lBottom) / h2, -(lFar + lNear) / d2, 1f);
                 lightSpaceMat = lightView * lightProj;
 
                 gl.BindFramebuffer(GL_FRAMEBUFFER, _shadowFbo);
@@ -1086,8 +1273,9 @@ void main() { }
                 gl.Enable(GL_DEPTH_TEST);
                 gl.DepthFunc(GL_LEQUAL);
                 gl.DepthMask(1);
-                gl.Enable(GL_CULL_FACE);
-                _glCullFace?.Invoke(0x0404); // GL_FRONT — reduce shadow acne
+                gl.Disable(GL_CULL_FACE);
+                gl.Enable(0x8037); // GL_POLYGON_OFFSET_FILL
+                _glPolygonOffset?.Invoke(2.0f, 4.0f);
 
                 gl.UseProgram(_shadowProgram);
                 SetMatrixUniform(gl, _shadowLightVPUniform, lightSpaceMat);
@@ -1100,7 +1288,7 @@ void main() { }
                 }
 
                 gl.UseProgram(0);
-                _glCullFace?.Invoke(GL_BACK);
+                gl.Disable(0x8037); // GL_POLYGON_OFFSET_FILL
 
                 // Restore Avalonia's framebuffer and viewport
                 gl.BindFramebuffer(GL_FRAMEBUFFER, fb);
@@ -1133,7 +1321,7 @@ void main() { }
                 }
 
                 var camPos = _camera.Eye;
-                var skyModel = Matrix4x4.CreateTranslation(camPos);
+                var skyModel = Matrix4x4.CreateTranslation(camPos.X, camPos.Y, 0f);
                 var skyMvp = skyModel * view * proj;
                 SetMatrixUniform(gl, _skyMvpUniform, skyMvp);
 
@@ -1213,6 +1401,32 @@ void main() { }
                     _glActiveTexture?.Invoke(GL_TEXTURE0);
                 }
 
+                gl.UseProgram(0);
+            }
+
+            // ── 2b. Shadow catcher — transparent overlay that projects shadows ─
+            if (doShadows && _shadowCatcherMesh != null && _shadowCatcherProgram != 0)
+            {
+                gl.UseProgram(_shadowCatcherProgram);
+                SetMatrixUniform(gl, _scMvpUniform, mvp);
+                SetMatrixUniform(gl, _scLightSpaceUniform, lightSpaceMat);
+                _glUniform1f?.Invoke(_scStrengthUniform, 0.55f);
+
+                _glActiveTexture?.Invoke(GL_TEXTURE0);
+                _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, _shadowDepthTex);
+                _glUniform1i?.Invoke(_scShadowMapUniform, 0);
+
+                gl.Enable(GL_BLEND);
+                _glBlendFunc?.Invoke(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                gl.DepthMask(0);
+                gl.Disable(GL_CULL_FACE);
+
+                _shadowCatcherMesh.Draw(gl);
+
+                gl.DepthMask(1);
+                gl.Disable(GL_BLEND);
+                _glActiveTexture?.Invoke(GL_TEXTURE0);
+                _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, 0);
                 gl.UseProgram(0);
             }
 
@@ -1487,6 +1701,13 @@ void main() { }
             _textureCache.Clear();
             DeleteGlTexture(_whiteTexture);
             _whiteTexture = 0;
+            _shadowCatcherMesh?.Cleanup(gl);
+            _shadowCatcherMesh = null;
+            if (_shadowCatcherProgram != 0)
+            {
+                gl.DeleteProgram(_shadowCatcherProgram);
+                _shadowCatcherProgram = 0;
+            }
             CleanupShadowFbo(gl);
             if (_shadowProgram != 0)
             {
@@ -1577,6 +1798,24 @@ void main() { }
                 _groundPlaneMesh.Upload(gl, gndV, gndI, keepCpuCopy: true);
             }
 
+            // Shadow catcher — transparent quad just above ground for shadow projection
+            _shadowCatcherMesh?.Cleanup(gl);
+            _shadowCatcherMesh = null;
+            {
+                float sc = 500f;
+                float z  = 0.01f;
+                var scV = new SolidVertex[]
+                {
+                    new(new Vector3(-sc, -sc, z), Vector3.UnitZ, Vector4.Zero),
+                    new(new Vector3( sc, -sc, z), Vector3.UnitZ, Vector4.Zero),
+                    new(new Vector3( sc,  sc, z), Vector3.UnitZ, Vector4.Zero),
+                    new(new Vector3(-sc,  sc, z), Vector3.UnitZ, Vector4.Zero),
+                };
+                var scI = new uint[] { 0, 1, 2, 0, 2, 3 };
+                _shadowCatcherMesh = new GlMeshBuffer();
+                _shadowCatcherMesh.Upload(gl, scV, scI);
+            }
+
             // Grass blades — independent toggle; exclusion zones come from decorations
             _grassMesh?.Cleanup(gl);
             _grassMesh = null;
@@ -1598,6 +1837,7 @@ void main() { }
                 for (int i = 0; i < scene.TopLevelSources.Count; i++)
                 {
                     var src = scene.TopLevelSources[i];
+                    if (!src.IsVisible) continue;
                     var epos = src.EffectivePosition;
                     float x = (float)epos.X, y = (float)epos.Y, z = (float)epos.Z;
                     var center = new Vector3(x, y, z);
@@ -1633,6 +1873,7 @@ void main() { }
                 for (int i = 0; i < scene.FireScenario.Sources.Count; i++)
                 {
                     var fire = scene.FireScenario.Sources[i];
+                    if (!fire.IsVisible) continue;
                     var pos = fire.Position;
                     float x = (float)pos.X, y = (float)pos.Y, z = (float)pos.Z;
 
@@ -1652,6 +1893,7 @@ void main() { }
                 for (int i = 0; i < scene.MonitorPoints.Count; i++)
                 {
                     var mon = scene.MonitorPoints[i];
+                    if (!mon.Visible) continue;
                     var pos = mon.Position;
                     float x = (float)pos.X, y = (float)pos.Y, z = (float)pos.Z;
 
@@ -1671,6 +1913,7 @@ void main() { }
                 for (int i = 0; i < scene.GasDetectors.Count; i++)
                 {
                     var det = scene.GasDetectors[i];
+                    if (!det.Visible) continue;
                     var pos = det.Position;
                     float x = (float)pos.X, y = (float)pos.Y, z = (float)pos.Z;
 
@@ -1691,6 +1934,7 @@ void main() { }
                 for (int i = 0; i < scene.Decorations.Count; i++)
                 {
                     var deco = scene.Decorations[i];
+                    if (!deco.IsVisible) continue;
                     if (string.IsNullOrEmpty(deco.FilePath)) continue;
 
                     // Build model matrix: Scale → RotateZ → RotateY → RotateX → Translate
@@ -1769,6 +2013,7 @@ void main() { }
             {
                 foreach (var wfs in scene.WindFieldScenarios)
                 {
+                    if (!wfs.IsVisible) continue;
                     if (wfs.WindField == null && !string.IsNullOrEmpty(wfs.CasePath))
                     {
                         wfs.WindField = FluidX3DWindFieldRunner.LoadFromCase(wfs)
@@ -2444,9 +2689,9 @@ void main() { }
 
             _shadowDepthTex = gl.GenTexture();
             _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, _shadowDepthTex);
-            _glTexImage2D(GL_TEXTURE_2D_VAL, 0, GL_DEPTH_COMPONENT_VAL,
+            _glTexImage2D(GL_TEXTURE_2D_VAL, 0, GL_DEPTH_COMPONENT24_VAL,
                 SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, 0,
-                GL_DEPTH_COMPONENT_VAL, GL_FLOAT_VAL, IntPtr.Zero);
+                GL_DEPTH_COMPONENT_VAL, GL_UNSIGNED_INT_VAL, IntPtr.Zero);
             _glTexParameteri(GL_TEXTURE_2D_VAL, GL_TEXTURE_MIN_FILTER_VAL, GL_NEAREST_VAL);
             _glTexParameteri(GL_TEXTURE_2D_VAL, GL_TEXTURE_MAG_FILTER_VAL, GL_NEAREST_VAL);
             _glTexParameteri(GL_TEXTURE_2D_VAL, GL_TEXTURE_WRAP_S_VAL, GL_CLAMP_TO_BORDER);
@@ -2466,7 +2711,16 @@ void main() { }
             if (_glCheckFramebufferStatus != null)
             {
                 int status = _glCheckFramebufferStatus(GL_FRAMEBUFFER);
-                _shadowReady = status == 0x8CD5; // GL_FRAMEBUFFER_COMPLETE
+                if (status != 0x8CD5)
+                {
+                    _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, _shadowDepthTex);
+                    _glTexImage2D(GL_TEXTURE_2D_VAL, 0, GL_DEPTH_COMPONENT_VAL,
+                        SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, 0,
+                        GL_DEPTH_COMPONENT_VAL, GL_FLOAT_VAL, IntPtr.Zero);
+                    _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, 0);
+                    status = _glCheckFramebufferStatus(GL_FRAMEBUFFER);
+                }
+                _shadowReady = status == 0x8CD5;
             }
             else
                 _shadowReady = true;
