@@ -40,6 +40,21 @@ namespace DisperSim3D.UI.Avalonia.Views
     /// decorations, isosurfaces, etc.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
+    public struct TexturedVertex
+    {
+        public Vector3 Position;
+        public Vector3 Normal;
+        public Vector2 TexCoord;
+
+        public TexturedVertex(Vector3 pos, Vector3 normal, Vector2 uv)
+        {
+            Position = pos;
+            Normal = normal;
+            TexCoord = uv;
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     internal struct LineVertex
     {
         public Vector3 Position;
@@ -68,6 +83,7 @@ namespace DisperSim3D.UI.Avalonia.Views
         private int _vertexCount;
         private bool _hasIndices;
         private bool _isLineGeometry;
+        private bool _isTextured;
 
         internal SolidVertex[]? CpuVertices { get; private set; }
         internal uint[]? CpuIndices { get; private set; }
@@ -163,6 +179,52 @@ namespace DisperSim3D.UI.Avalonia.Views
         }
 
         public bool IsLineGeometry => _isLineGeometry;
+        public bool IsTextured => _isTextured;
+
+        public unsafe void UploadTextured(
+            GlInterface gl,
+            ReadOnlySpan<TexturedVertex> vertices,
+            ReadOnlySpan<uint> indices)
+        {
+            Cleanup(gl);
+            _vertexCount = vertices.Length;
+            _indexCount = indices.Length;
+            _hasIndices = indices.Length > 0;
+            _isTextured = true;
+
+            _vao = gl.GenVertexArray();
+            gl.BindVertexArray(_vao);
+
+            _vbo = gl.GenBuffer();
+            gl.BindBuffer(GL_ARRAY_BUFFER, _vbo);
+            fixed (TexturedVertex* ptr = vertices)
+                gl.BufferData(GL_ARRAY_BUFFER,
+                    (IntPtr)(vertices.Length * sizeof(TexturedVertex)),
+                    (IntPtr)ptr, GL_STATIC_DRAW);
+
+            const int stride = 8 * sizeof(float); // 32 bytes
+
+            gl.VertexAttribPointer(0, 3, GL_FLOAT, 0, stride, IntPtr.Zero);
+            gl.EnableVertexAttribArray(0);
+            gl.VertexAttribPointer(1, 3, GL_FLOAT, 0, stride, (IntPtr)(3 * sizeof(float)));
+            gl.EnableVertexAttribArray(1);
+            gl.VertexAttribPointer(2, 2, GL_FLOAT, 0, stride, (IntPtr)(6 * sizeof(float)));
+            gl.EnableVertexAttribArray(2);
+
+            if (_hasIndices)
+            {
+                _ibo = gl.GenBuffer();
+                gl.BindBuffer(GL_ELEMENT_ARRAY, _ibo);
+                fixed (uint* ptr = indices)
+                    gl.BufferData(GL_ELEMENT_ARRAY,
+                        (IntPtr)(indices.Length * sizeof(uint)),
+                        (IntPtr)ptr, GL_STATIC_DRAW);
+            }
+
+            gl.BindVertexArray(0);
+            gl.BindBuffer(GL_ARRAY_BUFFER, 0);
+            if (_hasIndices) gl.BindBuffer(GL_ELEMENT_ARRAY, 0);
+        }
 
         public unsafe void UploadLines(GlInterface gl, ReadOnlySpan<LineVertex> vertices)
         {
@@ -855,19 +917,38 @@ namespace DisperSim3D.UI.Avalonia.Views
         }
 
         public static (SolidVertex[] verts, uint[] indices) GenerateGrassBlades(
-            float halfSize, int bladeCount, uint seed = 12345)
+            float halfSize, int bladeCount, uint seed = 12345,
+            List<(float minX, float minY, float maxX, float maxY)>? exclusionZones = null)
         {
-            var verts = new SolidVertex[bladeCount * 4];
-            var indices = new uint[bladeCount * 6];
+            var vertList = new List<SolidVertex>(bladeCount * 4);
+            var idxList = new List<uint>(bladeCount * 6);
 
             uint rng = seed;
             uint NextRng() { rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5; return rng; }
             float Rand01() => (NextRng() & 0x7FFF) / 32767f;
 
-            for (int b = 0; b < bladeCount; b++)
+            int placed = 0;
+            int attempts = 0;
+            int maxAttempts = bladeCount * 3;
+
+            while (placed < bladeCount && attempts < maxAttempts)
             {
+                attempts++;
                 float bx = (Rand01() * 2f - 1f) * halfSize;
                 float by = (Rand01() * 2f - 1f) * halfSize;
+
+                if (exclusionZones != null)
+                {
+                    bool excluded = false;
+                    for (int ez = 0; ez < exclusionZones.Count; ez++)
+                    {
+                        var z = exclusionZones[ez];
+                        if (bx >= z.minX && bx <= z.maxX &&
+                            by >= z.minY && by <= z.maxY)
+                        { excluded = true; break; }
+                    }
+                    if (excluded) continue;
+                }
                 float height = 0.3f + Rand01() * 0.7f;
                 float width = 0.06f + Rand01() * 0.06f;
                 float angle = Rand01() * MathF.PI * 2f;
@@ -877,28 +958,26 @@ namespace DisperSim3D.UI.Avalonia.Views
                 var darkGreen = new Vector4(0.18f, 0.32f, 0.10f, 1f);
                 var lightGreen = new Vector4(0.35f, 0.55f, 0.20f, 0.9f);
 
-                int vi = b * 4;
-                // aNorm.z encodes height factor: 0 at base, 1 at tip
-                verts[vi + 0] = new SolidVertex(
+                uint bi = (uint)vertList.Count;
+                vertList.Add(new SolidVertex(
                     new Vector3(bx - dx, by - dy, 0f),
-                    new Vector3(0, 0, 0f), darkGreen);
-                verts[vi + 1] = new SolidVertex(
+                    new Vector3(0, 0, 0f), darkGreen));
+                vertList.Add(new SolidVertex(
                     new Vector3(bx + dx, by + dy, 0f),
-                    new Vector3(0, 0, 0f), darkGreen);
-                verts[vi + 2] = new SolidVertex(
+                    new Vector3(0, 0, 0f), darkGreen));
+                vertList.Add(new SolidVertex(
                     new Vector3(bx + dx * 0.3f, by + dy * 0.3f, height),
-                    new Vector3(0, 0, 1f), lightGreen);
-                verts[vi + 3] = new SolidVertex(
+                    new Vector3(0, 0, 1f), lightGreen));
+                vertList.Add(new SolidVertex(
                     new Vector3(bx - dx * 0.3f, by - dy * 0.3f, height),
-                    new Vector3(0, 0, 1f), lightGreen);
+                    new Vector3(0, 0, 1f), lightGreen));
 
-                uint bi = (uint)(b * 4);
-                int ii = b * 6;
-                indices[ii + 0] = bi; indices[ii + 1] = bi + 1; indices[ii + 2] = bi + 2;
-                indices[ii + 3] = bi; indices[ii + 4] = bi + 2; indices[ii + 5] = bi + 3;
+                idxList.Add(bi); idxList.Add(bi + 1); idxList.Add(bi + 2);
+                idxList.Add(bi); idxList.Add(bi + 2); idxList.Add(bi + 3);
+                placed++;
             }
 
-            return (verts, indices);
+            return (vertList.ToArray(), idxList.ToArray());
         }
 
         private static void MarchStreamline(

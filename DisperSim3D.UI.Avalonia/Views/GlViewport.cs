@@ -48,11 +48,16 @@ namespace DisperSim3D.UI.Avalonia.Views
         private int _lineAnimScaleUniform;
         private bool _hasWindLines;
 
-        // Shader state — sky dome (procedural clouds + sun)
+        // Shader state — sky dome (procedural clouds + sun + panorama texture)
         private int _skyProgram;
         private int _skyMvpUniform;
         private int _skySunDirUniform;
         private int _skyTimeUniform;
+        private int _skyShowCloudsUniform;
+        private int _skyCloudSpeedUniform;
+        private int _skyUseSkyTextureUniform;
+        private int _skySkyTextureUniform;
+        private int _skyTextureId;
 
         // Shader state — grass blades (animated sway)
         private int _grassProgram;
@@ -69,6 +74,12 @@ namespace DisperSim3D.UI.Avalonia.Views
         private int _groundAmbientUniform;
         private int _groundMaterialUniform;
         private int _groundGridOverlayUniform;
+        private int _groundUseTextureUniform;
+        private int _groundTextureUniform;
+        private int _groundTileSizeUniform;
+        private int _groundGridMinorUniform;
+        private int _groundGridMajorUniform;
+        private int _groundTextureId;
         private int _groundMaterialIndex;
         private bool _groundShowGridOverlay;
 
@@ -83,6 +94,18 @@ namespace DisperSim3D.UI.Avalonia.Views
         private int _solidRimDirUniform;
         private int _solidRimColorUniform;
         private int _solidAlphaUniform;
+
+        // Shader state — textured (lit) program for OBJ+MTL meshes
+        private int _texProgram;
+        private int _texMvpUniform;
+        private int _texModelUniform;
+        private int _texNormalMatUniform;
+        private int _texSunDirUniform;
+        private int _texSunColorUniform;
+        private int _texAmbientUniform;
+        private int _texTintUniform;
+        private int _texAlphaUniform;
+        private int _texTextureUniform;
 
         // Environment meshes — persist across scene rebuilds
         private GlMeshBuffer? _skyDomeMesh;
@@ -103,6 +126,22 @@ namespace DisperSim3D.UI.Avalonia.Views
         private D_glCullFace? _glCullFace;
         private D_glUniformMatrix3fv? _glUniformMatrix3fv;
 
+        // GL texture operations
+        private const int GL_TEXTURE_2D_VAL = 0x0DE1;
+        private const int GL_TEXTURE0 = 0x84C0;
+        private delegate void D_glBindTexture(int target, int texture);
+        private delegate void D_glActiveTexture(int texture);
+        private delegate void D_glUniform4f(int loc, float v0, float v1, float v2, float v3);
+        private unsafe delegate void D_glDeleteTextures(int n, int* textures);
+        private D_glBindTexture? _glBindTexture;
+        private D_glActiveTexture? _glActiveTexture;
+        private D_glUniform4f? _glUniform4f;
+        private D_glDeleteTextures? _glDeleteTextures;
+
+        // Texture cache (path → GL texture ID) + white 1×1 fallback
+        private readonly Dictionary<string, int> _textureCache = new();
+        private int _whiteTexture;
+
         private bool _initOk;
 
         // Scene population state — set via PopulateScene(), consumed in
@@ -118,6 +157,13 @@ namespace DisperSim3D.UI.Avalonia.Views
 
         // Wind animation state (kept for future use)
         private readonly System.Diagnostics.Stopwatch _animClock = System.Diagnostics.Stopwatch.StartNew();
+
+        private int _frameCount;
+        private double _fpsAccumulator;
+        private double _lastFps;
+        private double _lastFrameTime;
+
+        public double CurrentFps => _lastFps;
 
         // Mouse interaction state
         private Point _lastMouse;
@@ -213,8 +259,14 @@ in vec4 vVertCol;
 
 uniform vec3  uSunDir;
 uniform float uTime;
+uniform float uShowClouds;
+uniform float uCloudSpeed;
+uniform float uUseSkyTexture;
+uniform sampler2D uSkyTexture;
 
 layout(location = 0) out vec4 fragColor;
+
+const float PI = 3.14159265359;
 
 float hash21(vec2 p)
 {
@@ -245,6 +297,16 @@ float fbm(vec2 p)
 void main()
 {
     vec3 dir = normalize(vDir);
+
+    // --- equirectangular panorama texture ---
+    if (uUseSkyTexture > 0.5)
+    {
+        float u = atan(dir.y, dir.x) / (2.0 * PI) + 0.5;
+        float v = asin(clamp(dir.z, -1.0, 1.0)) / PI + 0.5;
+        fragColor = texture(uSkyTexture, vec2(u, v));
+        return;
+    }
+
     float el = max(dir.z, 0.0);
 
     // --- sky gradient (deep blue zenith -> light horizon) ---
@@ -270,7 +332,8 @@ void main()
 
     // --- clouds (FBM noise on projected dome coords) ---
     vec2 cuv = dir.xy / (dir.z + 0.25) * 2.5;
-    cuv += vec2(uTime * 0.008, uTime * 0.003);
+    float cspd = uTime * uCloudSpeed;
+    cuv += vec2(cspd * 0.008, cspd * 0.003);
 
     float c1 = fbm(cuv * 1.8);
     float c2 = fbm(cuv * 3.5 + 7.7);
@@ -284,7 +347,7 @@ void main()
     // cloud lit side vs shadow
     float cLit = 0.6 + 0.4 * max(dot(vec3(0, 0, 1), sd), 0.0);
     vec3 cloudCol = vec3(cLit, cLit, cLit * 0.98);
-    sky = mix(sky, cloudCol, cloud * 0.75);
+    sky = mix(sky, cloudCol, cloud * 0.75 * uShowClouds);
 
     fragColor = vec4(sky, 1.0);
 }
@@ -360,6 +423,11 @@ uniform vec3  uSunColor;
 uniform vec3  uAmbient;
 uniform int   uMaterial;
 uniform float uGridOverlay;
+uniform float uUseGroundTexture;
+uniform sampler2D uGroundTexture;
+uniform float uGroundTileSize;
+uniform float uGridMinor;
+uniform float uGridMajor;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -399,7 +467,14 @@ void main()
     vec2 uv = vWorldPos.xy;
     vec3 col;
 
-    if (uMaterial == 1) // Grass
+    // --- user-supplied ground texture (tiled) ---
+    if (uUseGroundTexture > 0.5)
+    {
+        float ts = max(uGroundTileSize, 1.0);
+        vec2 tuv = fract(uv / ts);
+        col = texture(uGroundTexture, tuv).rgb;
+    }
+    else if (uMaterial == 1) // Grass
     {
         float n  = fbm(uv * 0.4);
         float d  = vnoise(uv * 3.0);
@@ -435,9 +510,9 @@ void main()
     // Grid overlay (5 m minor, 25 m major)
     if (uGridOverlay > 0.5)
     {
-        vec2 g5  = abs(fract(uv / 5.0  + 0.5) - 0.5);
+        vec2 g5  = abs(fract(uv / uGridMinor + 0.5) - 0.5);
         float l5 = 1.0 - smoothstep(0.015, 0.04, min(g5.x, g5.y));
-        vec2 g25 = abs(fract(uv / 25.0 + 0.5) - 0.5);
+        vec2 g25 = abs(fract(uv / uGridMajor + 0.5) - 0.5);
         float l25= 1.0 - smoothstep(0.008, 0.025, min(g25.x, g25.y));
         col = mix(col, vec3(0.25), l5  * 0.2);
         col = mix(col, vec3(0.15), l25 * 0.3);
@@ -494,6 +569,55 @@ void main()
     float rim  = max(dot(N, normalize(uRimDir)), 0.0);
     vec3 light = uAmbient + uSunColor * diff + uRimColor * rim;
     fragColor  = vec4(vCol.rgb * light, vCol.a * uAlpha);
+}
+";
+
+        // ── Textured (lit) shader for OBJ+MTL meshes ────────────────────
+
+        private const string TexVertBody = @"
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNorm;
+layout(location = 2) in vec2 aUV;
+
+uniform mat4 uMVP;
+uniform mat4 uModel;
+uniform mat3 uNormalMat;
+
+out vec3 vNorm;
+out vec2 vUV;
+
+void main()
+{
+    vNorm = uNormalMat * aNorm;
+    vUV   = aUV;
+    gl_Position = uMVP * vec4(aPos, 1.0);
+}
+";
+
+        private const string TexFragBody = @"
+in vec3 vNorm;
+in vec2 vUV;
+
+uniform sampler2D uTexture;
+uniform vec4  uTint;
+uniform vec3  uSunDir;
+uniform vec3  uSunColor;
+uniform vec3  uAmbient;
+uniform float uAlpha;
+
+layout(location = 0) out vec4 fragColor;
+
+void main()
+{
+    vec4 texel = texture(uTexture, vUV);
+    if (texel.a < 0.1) discard;
+
+    vec3 N    = normalize(vNorm);
+    float diff = max(dot(N, normalize(uSunDir)), 0.0);
+    vec3 light = uAmbient + uSunColor * diff;
+
+    vec3 col = texel.rgb * uTint.rgb * light;
+    fragColor = vec4(col, texel.a * uTint.a * uAlpha);
 }
 ";
 
@@ -581,6 +705,18 @@ void main()
                 var p5 = gl.GetProcAddress("glUniform1i");
                 if (p5 != IntPtr.Zero)
                     _glUniform1i = Marshal.GetDelegateForFunctionPointer<D_glUniform1i>(p5);
+                var pBT = gl.GetProcAddress("glBindTexture");
+                if (pBT != IntPtr.Zero)
+                    _glBindTexture = Marshal.GetDelegateForFunctionPointer<D_glBindTexture>(pBT);
+                var pAT = gl.GetProcAddress("glActiveTexture");
+                if (pAT != IntPtr.Zero)
+                    _glActiveTexture = Marshal.GetDelegateForFunctionPointer<D_glActiveTexture>(pAT);
+                var pU4f = gl.GetProcAddress("glUniform4f");
+                if (pU4f != IntPtr.Zero)
+                    _glUniform4f = Marshal.GetDelegateForFunctionPointer<D_glUniform4f>(pU4f);
+                var pDT = gl.GetProcAddress("glDeleteTextures");
+                if (pDT != IntPtr.Zero)
+                    _glDeleteTextures = Marshal.GetDelegateForFunctionPointer<D_glDeleteTextures>(pDT);
 
                 // ── Compile line shader ─────────────────────────────────
                 _lineProgram = CompileProgram(gl, LineVertBody, LineFragBody);
@@ -601,10 +737,14 @@ void main()
                 _solidAlphaUniform   = GetUniformLoc(gl, _solidProgram, "uAlpha");
 
                 // ── Compile sky shader ──────────────────────────────────
-                _skyProgram       = CompileProgram(gl, SkyVertBody, SkyFragBody);
-                _skyMvpUniform    = GetUniformLoc(gl, _skyProgram, "uMVP");
-                _skySunDirUniform = GetUniformLoc(gl, _skyProgram, "uSunDir");
-                _skyTimeUniform   = GetUniformLoc(gl, _skyProgram, "uTime");
+                _skyProgram          = CompileProgram(gl, SkyVertBody, SkyFragBody);
+                _skyMvpUniform       = GetUniformLoc(gl, _skyProgram, "uMVP");
+                _skySunDirUniform    = GetUniformLoc(gl, _skyProgram, "uSunDir");
+                _skyTimeUniform      = GetUniformLoc(gl, _skyProgram, "uTime");
+                _skyShowCloudsUniform = GetUniformLoc(gl, _skyProgram, "uShowClouds");
+                _skyCloudSpeedUniform = GetUniformLoc(gl, _skyProgram, "uCloudSpeed");
+                _skyUseSkyTextureUniform = GetUniformLoc(gl, _skyProgram, "uUseSkyTexture");
+                _skySkyTextureUniform = GetUniformLoc(gl, _skyProgram, "uSkyTexture");
 
                 // ── Compile grass shader ─────────────────────────────────
                 _grassProgram       = CompileProgram(gl, GrassVertBody, GrassFragBody);
@@ -620,8 +760,32 @@ void main()
                 _groundAmbientUniform    = GetUniformLoc(gl, _groundProgram, "uAmbient");
                 _groundMaterialUniform   = GetUniformLoc(gl, _groundProgram, "uMaterial");
                 _groundGridOverlayUniform = GetUniformLoc(gl, _groundProgram, "uGridOverlay");
+                _groundUseTextureUniform = GetUniformLoc(gl, _groundProgram, "uUseGroundTexture");
+                _groundTextureUniform    = GetUniformLoc(gl, _groundProgram, "uGroundTexture");
+                _groundTileSizeUniform   = GetUniformLoc(gl, _groundProgram, "uGroundTileSize");
+                _groundGridMinorUniform  = GetUniformLoc(gl, _groundProgram, "uGridMinor");
+                _groundGridMajorUniform  = GetUniformLoc(gl, _groundProgram, "uGridMajor");
+
+                // ── Compile textured shader ────────────────────────────
+                _texProgram          = CompileProgram(gl, TexVertBody, TexFragBody);
+                _texMvpUniform       = GetUniformLoc(gl, _texProgram, "uMVP");
+                _texModelUniform     = GetUniformLoc(gl, _texProgram, "uModel");
+                _texNormalMatUniform = GetUniformLoc(gl, _texProgram, "uNormalMat");
+                _texSunDirUniform    = GetUniformLoc(gl, _texProgram, "uSunDir");
+                _texSunColorUniform  = GetUniformLoc(gl, _texProgram, "uSunColor");
+                _texAmbientUniform   = GetUniformLoc(gl, _texProgram, "uAmbient");
+                _texTintUniform      = GetUniformLoc(gl, _texProgram, "uTint");
+                _texAlphaUniform     = GetUniformLoc(gl, _texProgram, "uAlpha");
+                _texTextureUniform   = GetUniformLoc(gl, _texProgram, "uTexture");
+
+                // ── Create white 1×1 fallback texture ───────────────────
+                _whiteTexture = GlTextureLoader.CreateWhite1x1(gl);
 
                 // ── Build grid geometry ─────────────────────────────────
+                var initEnv = _pendingScene?.Environment ?? new EnvironmentSettings();
+                _grid.HalfSize = (float)initEnv.GridHalfSize;
+                _grid.MinorStep = (float)initEnv.GridMinorSpacing;
+                _grid.MajorStep = (float)initEnv.GridMajorSpacing;
                 _grid.Init(gl);
 
                 // ── Build default environment (sky dome + ground) ───────
@@ -682,8 +846,14 @@ void main()
             var env = _pendingScene?.Environment ?? _loadedEnv ?? new EnvironmentSettings();
 
             // Compute sun direction from azimuth + elevation
-            float azRad  = (float)(env.SunAzimuthDeg * Math.PI / 180.0);
-            float elRad  = (float)(env.SunElevationDeg * Math.PI / 180.0);
+            double sunAz, sunEl;
+            if (env.UseSolarClock)
+                (sunAz, sunEl) = env.ComputeSolarPosition();
+            else
+                (sunAz, sunEl) = (env.SunAzimuthDeg, env.SunElevationDeg);
+
+            float azRad  = (float)(sunAz * Math.PI / 180.0);
+            float elRad  = (float)(sunEl * Math.PI / 180.0);
             float cosEl  = MathF.Cos(elRad);
             float sunX   = cosEl * MathF.Sin(azRad);
             float sunY   = cosEl * MathF.Cos(azRad);
@@ -707,6 +877,17 @@ void main()
                 float timeSky = (float)_animClock.Elapsed.TotalSeconds;
                 _glUniform3f?.Invoke(_skySunDirUniform, sunX, sunY, sunZ);
                 _glUniform1f?.Invoke(_skyTimeUniform, timeSky);
+                _glUniform1f?.Invoke(_skyShowCloudsUniform, env.ShowClouds ? 1f : 0f);
+                _glUniform1f?.Invoke(_skyCloudSpeedUniform, (float)env.CloudSpeed);
+
+                bool useSkyTex = _skyTextureId != 0;
+                _glUniform1f?.Invoke(_skyUseSkyTextureUniform, useSkyTex ? 1f : 0f);
+                if (useSkyTex)
+                {
+                    _glActiveTexture?.Invoke(GL_TEXTURE0);
+                    _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, _skyTextureId);
+                    _glUniform1i?.Invoke(_skySkyTextureUniform, 0);
+                }
 
                 var camPos = _camera.Eye;
                 var skyModel = Matrix4x4.CreateTranslation(camPos);
@@ -715,6 +896,9 @@ void main()
 
                 gl.Disable(GL_CULL_FACE);
                 _skyDomeMesh.Draw(gl);
+
+                if (useSkyTex)
+                    _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, 0);
 
                 gl.UseProgram(0);
             }
@@ -733,17 +917,33 @@ void main()
                 _glUniform1i?.Invoke(_groundMaterialUniform, _groundMaterialIndex);
                 _glUniform1f?.Invoke(_groundGridOverlayUniform,
                     _groundShowGridOverlay ? 1f : 0f);
+                _glUniform1f?.Invoke(_groundGridMinorUniform, (float)env.GridMinorSpacing);
+                _glUniform1f?.Invoke(_groundGridMajorUniform, (float)env.GridMajorSpacing);
                 _glUniform3f?.Invoke(_groundSunDirUniform, sunX, sunY, sunZ);
                 _glUniform3f?.Invoke(_groundSunColorUniform,
                     warmR * sunI, warmG * sunI, warmB * sunI);
                 _glUniform3f?.Invoke(_groundAmbientUniform,
                     0.431f * ambI, 0.490f * ambI, 0.588f * ambI);
 
+                bool useGndTex = _groundTextureId != 0;
+                _glUniform1f?.Invoke(_groundUseTextureUniform, useGndTex ? 1f : 0f);
+                if (useGndTex)
+                {
+                    _glActiveTexture?.Invoke(GL_TEXTURE0);
+                    _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, _groundTextureId);
+                    _glUniform1i?.Invoke(_groundTextureUniform, 0);
+                    _glUniform1f?.Invoke(_groundTileSizeUniform,
+                        (float)(env.GroundTextureTileSize > 0 ? env.GroundTextureTileSize : 25.0));
+                }
+
                 SetMatrixUniform(gl, _groundMvpUniform, mvp);
 
                 gl.Enable(GL_CULL_FACE);
                 _glCullFace?.Invoke(GL_BACK);
                 _groundPlaneMesh.Draw(gl);
+
+                if (useGndTex)
+                    _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, 0);
 
                 gl.UseProgram(0);
             }
@@ -797,7 +997,7 @@ void main()
 
                 foreach (var obj in _sceneObjects)
                 {
-                    if (!obj.Visible || obj.Mesh.IsLineGeometry) continue;
+                    if (!obj.Visible || obj.Mesh.IsLineGeometry || obj.Mesh.IsTextured) continue;
 
                     var model = obj.ModelMatrix;
 
@@ -828,6 +1028,64 @@ void main()
 
                 gl.Disable(GL_CULL_FACE);
                 gl.Disable(GL_BLEND);
+            }
+
+            // ── 4b. Textured scene objects (OBJ+MTL decorations) ────────
+            if (_texProgram != 0)
+            {
+                bool hasTextured = false;
+                foreach (var obj in _sceneObjects)
+                {
+                    if (obj.Visible && obj.Mesh.IsTextured && !obj.Mesh.IsLineGeometry)
+                    { hasTextured = true; break; }
+                }
+
+                if (hasTextured)
+                {
+                    gl.UseProgram(_texProgram);
+
+                    _glUniform3f?.Invoke(_texSunDirUniform, sunX, sunY, sunZ);
+                    _glUniform3f?.Invoke(_texSunColorUniform,
+                        warmR * sunI, warmG * sunI, warmB * sunI);
+                    _glUniform3f?.Invoke(_texAmbientUniform,
+                        0.431f * ambI, 0.490f * ambI, 0.588f * ambI);
+                    _glUniform1i?.Invoke(_texTextureUniform, 0);
+
+                    gl.Disable(GL_CULL_FACE);
+                    gl.Enable(GL_BLEND);
+                    _glBlendFunc?.Invoke(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+                    foreach (var obj in _sceneObjects)
+                    {
+                        if (!obj.Visible || !obj.Mesh.IsTextured || obj.Mesh.IsLineGeometry)
+                            continue;
+
+                        var model = obj.ModelMatrix;
+                        var objMvp = model * view * proj;
+                        SetMatrixUniform(gl, _texMvpUniform, objMvp);
+                        SetMatrixUniform(gl, _texModelUniform, model);
+
+                        if (Matrix4x4.Invert(model, out var inv))
+                        {
+                            var normalMat = Matrix4x4.Transpose(inv);
+                            SetMatrix3Uniform(gl, _texNormalMatUniform, normalMat);
+                        }
+
+                        _glActiveTexture?.Invoke(GL_TEXTURE0);
+                        _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, obj.TextureId);
+
+                        var tint = obj.Tint;
+                        _glUniform4f?.Invoke(_texTintUniform,
+                            tint.X, tint.Y, tint.Z, tint.W);
+                        _glUniform1f?.Invoke(_texAlphaUniform, 1.0f);
+
+                        obj.Mesh.Draw(gl);
+                    }
+
+                    _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, 0);
+                    gl.Disable(GL_BLEND);
+                    gl.UseProgram(0);
+                }
             }
 
             // ── 5. Line scene objects (wind streamlines, animated rainbow) ─
@@ -861,6 +1119,16 @@ void main()
 
             // ── Cleanup state ───────────────────────────────────────────
             gl.UseProgram(0);
+
+            _frameCount++;
+            _fpsAccumulator += _animClock.Elapsed.TotalSeconds - _lastFrameTime;
+            if (_fpsAccumulator >= 0.5)
+            {
+                _lastFps = _frameCount / _fpsAccumulator;
+                _frameCount = 0;
+                _fpsAccumulator = 0;
+            }
+            _lastFrameTime = _animClock.Elapsed.TotalSeconds;
 
             if (_hasWindLines || _grassMesh != null || _skyDomeMesh != null)
                 RequestNextFrameRendering();
@@ -903,6 +1171,19 @@ void main()
             }
             _grassMesh?.Cleanup(gl);
             _grassMesh = null;
+            if (_texProgram != 0)
+            {
+                gl.DeleteProgram(_texProgram);
+                _texProgram = 0;
+            }
+            DeleteGlTexture(_skyTextureId);
+            _skyTextureId = 0;
+            DeleteGlTexture(_groundTextureId);
+            _groundTextureId = 0;
+            CleanupTextureCache();
+            _textureCache.Clear();
+            DeleteGlTexture(_whiteTexture);
+            _whiteTexture = 0;
             _initOk = false;
         }
 
@@ -927,6 +1208,10 @@ void main()
                 obj.Mesh.Cleanup(gl);
             _sceneObjects.Clear();
 
+            // Release cached textures from previous scene
+            CleanupTextureCache();
+            _textureCache.Clear();
+
             // ── Environment: sky dome + ground plane ──────────────────
             var env = scene?.Environment ?? new EnvironmentSettings();
             _loadedEnv = env;
@@ -948,6 +1233,24 @@ void main()
                 _skyDomeMesh.Upload(gl, skyV, skyI);
             }
 
+            // Sky panorama texture
+            DeleteGlTexture(_skyTextureId);
+            _skyTextureId = 0;
+            {
+                var skyPath = BuiltinAssetResolver.Resolve(env.SkyTexturePath);
+                if (!string.IsNullOrEmpty(skyPath) && System.IO.File.Exists(skyPath))
+                    _skyTextureId = GlTextureLoader.LoadFromFile(gl, skyPath);
+            }
+
+            // Ground texture
+            DeleteGlTexture(_groundTextureId);
+            _groundTextureId = 0;
+            {
+                var gndPath = BuiltinAssetResolver.Resolve(env.GroundTexturePath);
+                if (!string.IsNullOrEmpty(gndPath) && System.IO.File.Exists(gndPath))
+                    _groundTextureId = GlTextureLoader.LoadFromFile(gl, gndPath);
+            }
+
             // Ground plane — procedural shader handles material appearance
             _groundPlaneMesh?.Cleanup(gl);
             _groundPlaneMesh = null;
@@ -961,12 +1264,15 @@ void main()
                 _groundPlaneMesh.Upload(gl, gndV, gndI, keepCpuCopy: true);
             }
 
-            // Grass blades — only for Grass material
+            // Grass blades — independent toggle; exclusion zones come from decorations
             _grassMesh?.Cleanup(gl);
             _grassMesh = null;
-            if (env.Ground == GroundMaterial.Grass)
+            if (env.ShowGrassBlades && scene != null)
             {
-                var (gV, gI) = GlMeshBuffer.GenerateGrassBlades(80f, 18000);
+                var exclusions = BuildDecorationFootprints(scene);
+                int bladeCount = Math.Clamp(env.GrassBladeCount, 500, 100000);
+                var (gV, gI) = GlMeshBuffer.GenerateGrassBlades(80f, bladeCount,
+                    exclusionZones: exclusions);
                 _grassMesh = new GlMeshBuffer();
                 _grassMesh.Upload(gl, gV, gI);
             }
@@ -1074,19 +1380,6 @@ void main()
                     var deco = scene.Decorations[i];
                     if (string.IsNullOrEmpty(deco.FilePath)) continue;
 
-                    // Material color from decoration, with opacity
-                    var mc = deco.MaterialColor;
-                    var decoColor = new Vector4(
-                        mc.ScR, mc.ScG, mc.ScB,
-                        (float)deco.Opacity);
-
-                    var loaded = MeshFileLoader.Load(deco.FilePath, decoColor);
-                    if (loaded == null) continue;
-
-                    var mesh = new GlMeshBuffer();
-                    mesh.Upload(gl, loaded.Value.verts, loaded.Value.indices,
-                        keepCpuCopy: true);
-
                     // Build model matrix: Scale → RotateZ → RotateY → RotateX → Translate
                     float scale = (float)deco.Scale;
                     float rx = (float)(deco.Rotation.X * Math.PI / 180.0);
@@ -1102,8 +1395,59 @@ void main()
                             (float)deco.Position.Y,
                             (float)deco.Position.Z);
 
+                    // Try textured loading first (OBJ with MTL/textures)
+                    var texturedSubs = MeshFileLoader.LoadTextured(deco.FilePath);
+                    if (texturedSubs != null)
+                    {
+                        // Standalone TexturePath overrides all MTL textures
+                        string? overrideTex = !string.IsNullOrEmpty(deco.TexturePath)
+                            && File.Exists(deco.TexturePath) ? deco.TexturePath : null;
+
+                        for (int s = 0; s < texturedSubs.Count; s++)
+                        {
+                            var sub = texturedSubs[s];
+                            var mesh = new GlMeshBuffer();
+                            mesh.UploadTextured(gl, sub.Vertices, sub.Indices);
+
+                            string? texPath = overrideTex ?? sub.TexturePath;
+                            int texId = 0;
+                            if (texPath != null)
+                            {
+                                if (!_textureCache.TryGetValue(texPath, out texId))
+                                {
+                                    texId = GlTextureLoader.LoadFromFile(gl, texPath);
+                                    if (texId > 0)
+                                        _textureCache[texPath] = texId;
+                                }
+                            }
+                            if (texId == 0)
+                                texId = _whiteTexture;
+
+                            var obj = new SceneObject(mesh, model, $"deco:{i}:{s}")
+                            {
+                                TextureId = texId,
+                                Tint = overrideTex != null ? Vector4.One : sub.DiffuseColor
+                            };
+                            _sceneObjects.Add(obj);
+                        }
+                        continue;
+                    }
+
+                    // Fall back to solid (untextured) loading
+                    var mc = deco.MaterialColor;
+                    var decoColor = new Vector4(
+                        mc.ScR, mc.ScG, mc.ScB,
+                        (float)deco.Opacity);
+
+                    var loaded = MeshFileLoader.Load(deco.FilePath, decoColor);
+                    if (loaded == null) continue;
+
+                    var solidMesh = new GlMeshBuffer();
+                    solidMesh.Upload(gl, loaded.Value.verts, loaded.Value.indices,
+                        keepCpuCopy: true);
+
                     _sceneObjects.Add(new SceneObject(
-                        mesh, model, "deco:" + i));
+                        solidMesh, model, "deco:" + i));
                 }
             }
 
@@ -1860,6 +2204,56 @@ void main()
 
             _glUniformMatrix3fv(location, 1, false, buf);
         }
+
+        private unsafe void DeleteGlTexture(int texId)
+        {
+            if (_glDeleteTextures == null || texId <= 0) return;
+            int t = texId;
+            _glDeleteTextures(1, &t);
+        }
+
+        private void CleanupTextureCache()
+        {
+            foreach (var texId in _textureCache.Values)
+                DeleteGlTexture(texId);
+        }
+
+        private static List<(float minX, float minY, float maxX, float maxY)>
+            BuildDecorationFootprints(Scene3D scene)
+        {
+            var result = new List<(float, float, float, float)>();
+            if (scene.Decorations == null) return result;
+
+            foreach (var deco in scene.Decorations)
+            {
+                var bb = deco.BoundingBox;
+                if (bb != null)
+                {
+                    float s = (float)deco.Scale;
+                    float px = (float)deco.Position.X;
+                    float py = (float)deco.Position.Y;
+                    float x0 = (float)bb.Min.X * s + px;
+                    float y0 = (float)bb.Min.Y * s + py;
+                    float x1 = (float)bb.Max.X * s + px;
+                    float y1 = (float)bb.Max.Y * s + py;
+                    if (x0 > x1) (x0, x1) = (x1, x0);
+                    if (y0 > y1) (y0, y1) = (y1, y0);
+                    result.Add((x0, y0, x1, y1));
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(deco.FilePath))
+                {
+                    float s = (float)deco.Scale;
+                    float px = (float)deco.Position.X;
+                    float py = (float)deco.Position.Y;
+                    result.Add((px - 5f * s, py - 5f * s,
+                                px + 5f * s, py + 5f * s));
+                }
+            }
+
+            return result;
+        }
     }
 
     // ── Scene object ────────────────────────────────────────────────────
@@ -1891,6 +2285,12 @@ void main()
         /// engine data (e.g. "source:0", "monitor:3", "detector:7").
         /// </summary>
         public string? Tag { get; set; }
+
+        /// <summary>GL texture ID for textured meshes (0 = no texture).</summary>
+        public int TextureId { get; set; }
+
+        /// <summary>Material tint multiplied with texture colour.</summary>
+        public Vector4 Tint { get; set; } = Vector4.One;
 
     }
 }

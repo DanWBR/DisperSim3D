@@ -13,6 +13,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using DisperSim3D.Core;
@@ -78,6 +79,10 @@ namespace DisperSim3D.UI.Avalonia.Views
                 Viewport3D.PopulateScene(_scene);
             };
             RebuildTree();
+
+            var fpsTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            fpsTimer.Tick += (_, _) => FpsLabel.Text = $"{Viewport3D.CurrentFps:F0} FPS";
+            fpsTimer.Start();
         }
 
         private static string BuildEnvLine()
@@ -340,17 +345,32 @@ namespace DisperSim3D.UI.Avalonia.Views
             var dlg = new Window
             {
                 Title = "Unsaved Changes",
-                Width = 420, Height = 160,
+                Width = 440, Height = 190,
                 CanResize = false,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                SystemDecorations = SystemDecorations.BorderOnly
+                SystemDecorations = SystemDecorations.BorderOnly,
+                Background = new SolidColorBrush(Color.FromRgb(250, 250, 250))
             };
 
             var result = SavePromptResult.Cancel;
 
-            var btnSave = new Button { Content = "Save", Width = 90 };
-            var btnDiscard = new Button { Content = "Discard", Width = 90 };
-            var btnCancel = new Button { Content = "Cancel", Width = 90 };
+            var btnSave = new Button
+            {
+                Content = "Save", MinWidth = 90, Height = 32,
+                Background = new SolidColorBrush(Color.FromRgb(0, 120, 212)),
+                Foreground = Brushes.White, FontWeight = FontWeight.SemiBold,
+                HorizontalContentAlignment = global::Avalonia.Layout.HorizontalAlignment.Center
+            };
+            var btnDiscard = new Button
+            {
+                Content = "Discard", MinWidth = 90, Height = 32,
+                HorizontalContentAlignment = global::Avalonia.Layout.HorizontalAlignment.Center
+            };
+            var btnCancel = new Button
+            {
+                Content = "Cancel", MinWidth = 90, Height = 32,
+                HorizontalContentAlignment = global::Avalonia.Layout.HorizontalAlignment.Center
+            };
 
             btnSave.Click += (_, _) => { result = SavePromptResult.Save; dlg.Close(); };
             btnDiscard.Click += (_, _) => { result = SavePromptResult.Discard; dlg.Close(); };
@@ -361,22 +381,52 @@ namespace DisperSim3D.UI.Avalonia.Views
                 Orientation = global::Avalonia.Layout.Orientation.Horizontal,
                 HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Right,
                 Spacing = 8,
-                Margin = new Thickness(0, 12, 0, 0),
                 Children = { btnCancel, btnDiscard, btnSave }
             };
 
-            dlg.Content = new StackPanel
+            var icon = new Projektanker.Icons.Avalonia.Icon
             {
-                Margin = new Thickness(20),
+                Value = "mdi-alert-circle-outline",
+                FontSize = 32,
+                Foreground = new SolidColorBrush(Color.FromRgb(200, 150, 0)),
+                VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Top,
+                Margin = new Thickness(0, 2, 14, 0)
+            };
+
+            var textPanel = new StackPanel
+            {
+                Spacing = 6,
                 Children =
                 {
                     new TextBlock
                     {
-                        Text = $"Save changes to \"{fileName}\"?",
-                        FontSize = 14,
-                        TextWrapping = global::Avalonia.Media.TextWrapping.Wrap
+                        Text = "Unsaved Changes",
+                        FontSize = 15, FontWeight = FontWeight.SemiBold
                     },
-                    buttons
+                    new TextBlock
+                    {
+                        Text = $"Save changes to \"{fileName}\" before closing?",
+                        FontSize = 13,
+                        Foreground = new SolidColorBrush(Color.FromRgb(100, 100, 100)),
+                        TextWrapping = global::Avalonia.Media.TextWrapping.Wrap
+                    }
+                }
+            };
+
+            var header = new StackPanel
+            {
+                Orientation = global::Avalonia.Layout.Orientation.Horizontal,
+                Children = { icon, textPanel }
+            };
+
+            dlg.Content = new DockPanel
+            {
+                Margin = new Thickness(24, 20, 24, 16),
+                LastChildFill = true,
+                Children =
+                {
+                    new Border { Child = buttons, [DockPanel.DockProperty] = Dock.Bottom, Margin = new Thickness(0, 18, 0, 0) },
+                    header
                 }
             };
 
@@ -817,6 +867,16 @@ namespace DisperSim3D.UI.Avalonia.Views
                     AddItem("Save Camera Preset…", "mdi-camera-plus-outline",
                         (_, _) => MenuViewSavePreset_Click(null, new RoutedEventArgs()));
                     return;
+                case "geometry":
+                    foreach (var preset in BuiltinAssetResolver.DecorationPresets)
+                    {
+                        var p = preset;
+                        AddItem("Add " + p.Label, p.Icon,
+                            (_, _) => AddBuiltinDecoration(p));
+                    }
+                    AddItem("Add from OBJ File…", "mdi-file-import-outline",
+                        (_, _) => _ = AddDecorationFromFileAsync());
+                    return;
                 case "windrose":
                     // The wind-rose section node IS the rose — there is at
                     // most one per scene. Context menu opens the editor.
@@ -1156,6 +1216,54 @@ namespace DisperSim3D.UI.Avalonia.Views
             var dlg = new SimulationEditorDialog(_scene, sim);
             if (!await dlg.ShowDialog<bool>(this)) return;
             MarkDirtyAndRefresh("Updated simulation: " + sim.Name);
+        }
+
+        // ── Decoration presets ────────────────────────────────────────────────
+
+        private void AddBuiltinDecoration(DecorationPreset preset)
+        {
+            if (_scene is null) { StatusText.Text = "Open or create a project first."; return; }
+            var resolved = BuiltinAssetResolver.Resolve(preset.ObjKey);
+            if (!System.IO.File.Exists(resolved))
+            {
+                StatusText.Text = $"Asset not found: {preset.Label}. Check the 3D Props folder.";
+                return;
+            }
+            var deco = new DisperSim3D.Models.Decoration3D
+            {
+                Name = preset.Label,
+                FilePath = resolved,
+                Scale = preset.DefaultScale
+            };
+            _scene.Decorations.Add(deco);
+            MarkDirtyAndRefresh("Added decoration: " + preset.Label);
+        }
+
+        private async Task AddDecorationFromFileAsync()
+        {
+            if (_scene is null) { StatusText.Text = "Open or create a project first."; return; }
+            var top = TopLevel.GetTopLevel(this);
+            if (top is null) return;
+            var files = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Select 3D Model",
+                AllowMultiple = false,
+                FileTypeFilter = new[]
+                {
+                    new FilePickerFileType("3D Models") { Patterns = new[] { "*.obj", "*.stl", "*.3ds" } },
+                    new FilePickerFileType("All Files") { Patterns = new[] { "*.*" } }
+                }
+            });
+            if (files.Count == 0) return;
+            var path = files[0].Path.LocalPath;
+            var name = System.IO.Path.GetFileNameWithoutExtension(path);
+            var deco = new DisperSim3D.Models.Decoration3D
+            {
+                Name = name,
+                FilePath = path
+            };
+            _scene.Decorations.Add(deco);
+            MarkDirtyAndRefresh("Added decoration: " + name);
         }
 
         // ── Simulation execution ─────────────────────────────────────────────

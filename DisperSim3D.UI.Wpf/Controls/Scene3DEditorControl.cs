@@ -2721,6 +2721,7 @@ namespace DisperSim3D.Controls
                                 new System.Xml.Linq.XAttribute("Id", d.Id),
                                 new System.Xml.Linq.XAttribute("Name", d.Name ?? ""),
                                 new System.Xml.Linq.XAttribute("FilePath", d.FilePath ?? ""),
+                                new System.Xml.Linq.XAttribute("TexturePath", d.TexturePath ?? ""),
                                 new System.Xml.Linq.XAttribute("PosX", d.Position.X.ToString(inv)),
                                 new System.Xml.Linq.XAttribute("PosY", d.Position.Y.ToString(inv)),
                                 new System.Xml.Linq.XAttribute("PosZ", d.Position.Z.ToString(inv)),
@@ -4283,6 +4284,7 @@ namespace DisperSim3D.Controls
                         deco.Id = (string)de.Attribute("Id") ?? Guid.NewGuid().ToString();
                         deco.Name = (string)de.Attribute("Name") ?? "";
                         deco.FilePath = (string)de.Attribute("FilePath") ?? "";
+                        deco.TexturePath = (string)de.Attribute("TexturePath") ?? "";
                         deco.Position = new Point3D(
                             double.Parse((string)de.Attribute("PosX") ?? "0", inv),
                             double.Parse((string)de.Attribute("PosY") ?? "0", inv),
@@ -5467,7 +5469,27 @@ namespace DisperSim3D.Controls
                 if (deco.Model3D != null)
                 {
                     var decoModel = deco.Model3D as System.Windows.Media.Media3D.Model3DGroup;
-                    if (deco.UseCustomMaterial && decoModel != null)
+
+                    if (!string.IsNullOrEmpty(deco.TexturePath) &&
+                        System.IO.File.Exists(deco.TexturePath) && decoModel != null)
+                    {
+                        var bmp = new System.Windows.Media.Imaging.BitmapImage(
+                            new Uri(deco.TexturePath, UriKind.Absolute));
+                        var brush = new System.Windows.Media.ImageBrush(bmp)
+                        {
+                            ViewportUnits = System.Windows.Media.BrushMappingMode.Absolute
+                        };
+                        var texMat = new System.Windows.Media.Media3D.DiffuseMaterial(brush);
+                        foreach (var child in decoModel.Children)
+                        {
+                            if (child is System.Windows.Media.Media3D.GeometryModel3D gm)
+                            {
+                                gm.Material = texMat;
+                                gm.BackMaterial = texMat;
+                            }
+                        }
+                    }
+                    else if (deco.UseCustomMaterial && decoModel != null)
                     {
                         var mat = Core.MaterialHelper.CreateMaterial(
                             deco.MaterialType, deco.MaterialColor, deco.SpecularPower, deco.Opacity);

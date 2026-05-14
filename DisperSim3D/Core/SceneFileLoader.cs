@@ -539,6 +539,7 @@ namespace DisperSim3D.Core
                     Id = (string)de.Attribute("Id") ?? Guid.NewGuid().ToString(),
                     Name = (string)de.Attribute("Name") ?? "",
                     FilePath = (string)de.Attribute("FilePath") ?? "",
+                    TexturePath = (string)de.Attribute("TexturePath") ?? "",
                     Position = new Point3D(
                         double.Parse((string)de.Attribute("PosX") ?? "0", inv),
                         double.Parse((string)de.Attribute("PosY") ?? "0", inv),
@@ -598,6 +599,18 @@ namespace DisperSim3D.Core
             var ambInt = (string)el.Attribute("AmbientIntensity");
             if (ambInt != null) env.AmbientIntensity = double.Parse(ambInt, inv);
 
+            var solarClock = (string)el.Attribute("UseSolarClock");
+            if (solarClock != null) env.UseSolarClock = bool.Parse(solarClock);
+
+            var lat = (string)el.Attribute("Latitude");
+            if (lat != null) env.Latitude = double.Parse(lat, inv);
+
+            var doy = (string)el.Attribute("DayOfYear");
+            if (doy != null) env.DayOfYear = int.Parse(doy, inv);
+
+            var tod = (string)el.Attribute("TimeOfDayHours");
+            if (tod != null) env.TimeOfDayHours = double.Parse(tod, inv);
+
             var skyEnabled = (string)el.Attribute("SkydomeEnabled");
             if (skyEnabled != null) env.SkydomeEnabled = bool.Parse(skyEnabled);
 
@@ -615,6 +628,36 @@ namespace DisperSim3D.Core
 
             var showGrid = (string)el.Attribute("ShowGridOverlay");
             if (showGrid != null) env.ShowGridOverlay = bool.Parse(showGrid);
+
+            var showClouds = (string)el.Attribute("ShowClouds");
+            if (showClouds != null) env.ShowClouds = bool.Parse(showClouds);
+
+            var cloudSpeed = (string)el.Attribute("CloudSpeed");
+            if (cloudSpeed != null) env.CloudSpeed = double.Parse(cloudSpeed, inv);
+
+            var showGrass = (string)el.Attribute("ShowGrassBlades");
+            if (showGrass != null) env.ShowGrassBlades = bool.Parse(showGrass);
+
+            var grassCount = (string)el.Attribute("GrassBladeCount");
+            if (grassCount != null) env.GrassBladeCount = int.Parse(grassCount, inv);
+
+            var skyTex = (string)el.Attribute("SkyTexturePath");
+            if (skyTex != null) env.SkyTexturePath = skyTex;
+
+            var gndTex = (string)el.Attribute("GroundTexturePath");
+            if (gndTex != null) env.GroundTexturePath = gndTex;
+
+            var gndTile = (string)el.Attribute("GroundTextureTileSize");
+            if (gndTile != null) env.GroundTextureTileSize = double.Parse(gndTile, inv);
+
+            var gridMinor = (string)el.Attribute("GridMinorSpacing");
+            if (gridMinor != null) env.GridMinorSpacing = double.Parse(gridMinor, inv);
+
+            var gridMajor = (string)el.Attribute("GridMajorSpacing");
+            if (gridMajor != null) env.GridMajorSpacing = double.Parse(gridMajor, inv);
+
+            var gridHalf = (string)el.Attribute("GridHalfSize");
+            if (gridHalf != null) env.GridHalfSize = double.Parse(gridHalf, inv);
 
             scene.Environment = env;
         }

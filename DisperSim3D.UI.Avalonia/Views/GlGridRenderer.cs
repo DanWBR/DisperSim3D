@@ -23,14 +23,17 @@ namespace DisperSim3D.UI.Avalonia.Views
         /// <summary>Half-extent of the grid in meters (grid spans -Half to +Half).</summary>
         public float HalfSize { get; set; } = 100f;
 
+        public float MinorStep { get; set; } = 2f;
+        public float MajorStep { get; set; } = 10f;
+
         /// <summary>
         /// Build grid geometry and upload to GPU.  Call once from OnOpenGlInit.
         /// </summary>
         public unsafe void Init(GlInterface gl)
         {
             float half = HalfSize;
-            const float minorStep = 2f;
-            const float majorStep = 10f;
+            float minorStep = MinorStep;
+            float majorStep = MajorStep;
 
             // Pre-allocate: ~100 lines per direction * 2 verts * 7 floats
             var verts = new List<float>(8000);

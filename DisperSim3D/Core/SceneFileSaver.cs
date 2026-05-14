@@ -89,6 +89,7 @@ namespace DisperSim3D.Core
                                 new XAttribute("Id", d.Id),
                                 new XAttribute("Name", d.Name ?? ""),
                                 new XAttribute("FilePath", d.FilePath ?? ""),
+                                new XAttribute("TexturePath", d.TexturePath ?? ""),
                                 new XAttribute("PosX", d.Position.X.ToString(inv)),
                                 new XAttribute("PosY", d.Position.Y.ToString(inv)),
                                 new XAttribute("PosZ", d.Position.Z.ToString(inv)),
@@ -147,11 +148,25 @@ namespace DisperSim3D.Core
                 new XAttribute("SunElevationDeg", e.SunElevationDeg.ToString(inv)),
                 new XAttribute("SunIntensity", e.SunIntensity.ToString(inv)),
                 new XAttribute("AmbientIntensity", e.AmbientIntensity.ToString(inv)),
+                new XAttribute("UseSolarClock", e.UseSolarClock.ToString()),
+                new XAttribute("Latitude", e.Latitude.ToString(inv)),
+                new XAttribute("DayOfYear", e.DayOfYear.ToString(inv)),
+                new XAttribute("TimeOfDayHours", e.TimeOfDayHours.ToString(inv)),
                 new XAttribute("SkydomeEnabled", e.SkydomeEnabled.ToString()),
                 new XAttribute("SkyZenith", e.SkyZenithColor.ToString()),
                 new XAttribute("SkyHorizon", e.SkyHorizonColor.ToString()),
                 new XAttribute("Ground", e.Ground.ToString()),
-                new XAttribute("ShowGridOverlay", e.ShowGridOverlay.ToString()));
+                new XAttribute("ShowGridOverlay", e.ShowGridOverlay.ToString()),
+                new XAttribute("ShowClouds", e.ShowClouds.ToString()),
+                new XAttribute("CloudSpeed", e.CloudSpeed.ToString(inv)),
+                new XAttribute("ShowGrassBlades", e.ShowGrassBlades.ToString()),
+                new XAttribute("GrassBladeCount", e.GrassBladeCount.ToString(inv)),
+                new XAttribute("SkyTexturePath", e.SkyTexturePath ?? ""),
+                new XAttribute("GroundTexturePath", e.GroundTexturePath ?? ""),
+                new XAttribute("GroundTextureTileSize", e.GroundTextureTileSize.ToString(inv)),
+                new XAttribute("GridMinorSpacing", e.GridMinorSpacing.ToString(inv)),
+                new XAttribute("GridMajorSpacing", e.GridMajorSpacing.ToString(inv)),
+                new XAttribute("GridHalfSize", e.GridHalfSize.ToString(inv)));
         }
 
         private static XElement? SerializeGeneralSettings(Scene3D scene, CultureInfo inv)

@@ -23,6 +23,11 @@ namespace DisperSim3D.Models
         /// <summary>Gets or sets the file path to the 3D model asset.</summary>
         public string FilePath { get; set; }
 
+        /// <summary>Gets or sets an optional texture image path (PNG/JPG) applied
+        /// to the model, overriding any MTL-embedded textures. Only effective for
+        /// OBJ models that have UV coordinates.</summary>
+        public string TexturePath { get; set; }
+
         /// <summary>Gets or sets the world-space position of this decoration.</summary>
         [TypeConverter(typeof(DisperSim3D.Core.Point3DStringConverter))]
         [Editor("DisperSim3D.Controls.Point3DPropertyEditor, DisperSim3D.UI.Wpf",
@@ -82,6 +87,7 @@ namespace DisperSim3D.Models
             Id = Guid.NewGuid().ToString();
             Name = "Decoration";
             FilePath = string.Empty;
+            TexturePath = string.Empty;
             Scale = 1.0;
             MaterialType = MaterialType3D.Matte;
             MaterialColor = Colors.LightGray;

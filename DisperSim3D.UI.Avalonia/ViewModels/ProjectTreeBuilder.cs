@@ -30,6 +30,7 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
         private const string SectionIconMonitor   = "mdi-circle-medium";
         private const string SectionIconDetector  = "mdi-radar";
         private const string SectionIconWindRose  = "mdi-compass-outline";
+        private const string SectionIconEnv       = "mdi-weather-partly-cloudy";
         private const string ProjectIcon          = "mdi-folder-outline";
         private const string LeafIcon             = "mdi-chevron-right";
 
@@ -50,6 +51,11 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
             project.Children.Add(new ProjectTreeNode(
                 "general", SectionIconGeneral, "General Settings",
                 tag: scene.GeneralSettings));
+
+            // ── Environment ───────────────────────────────────────────────
+            project.Children.Add(new ProjectTreeNode(
+                "environment", SectionIconEnv, "Environment",
+                tag: scene.Environment));
 
             // ── Gases ──────────────────────────────────────────────────────
             var gases = new ProjectTreeNode("gases", SectionIconGas,

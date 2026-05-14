@@ -245,6 +245,14 @@
         </Border>
         <Grid Background="#C8CDD4">
           <views:GlViewport x:Name="Viewport3D" />
+          <!-- FPS counter overlay (bottom-left) -->
+          <TextBlock x:Name="FpsLabel"
+                     HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                     Margin="8,0,0,6"
+                     FontSize="11" FontFamily="Consolas,Courier New,monospace"
+                     Foreground="#88FFFFFF"
+                     IsHitTestVisible="False"
+                     Text="-- FPS" />
           <!-- Concentration legend overlay (top-right) -->
           <Border x:Name="LegendPanel" IsVisible="False"
                   HorizontalAlignment="Right" VerticalAlignment="Top"

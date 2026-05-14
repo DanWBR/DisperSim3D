@@ -9,6 +9,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.TextFormatting;
+using Avalonia.Platform.Storage;
 using DisperSim3D.UI.Avalonia.ViewModels;
 using PortableColor = DisperSim3D.Geometry.Color;
 using PortablePoint3D = DisperSim3D.Geometry.Point3D;
@@ -176,6 +177,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 case PropertyEditorKind.Point3D: return Vec3Editor(row, isPoint: true);
                 case PropertyEditorKind.Vector3D: return Vec3Editor(row, isPoint: false);
                 case PropertyEditorKind.Color: return ColorEditor(row);
+                case PropertyEditorKind.FilePath: return FilePathEditor(row);
                 default: return ReadOnlyEditor(row);
             }
         }
@@ -424,6 +426,138 @@ namespace DisperSim3D.UI.Avalonia.Views
             g.Children.Add(lbl);
             g.Children.Add(nud);
             return g;
+        }
+
+        private Control FilePathEditor(PropertyRow row)
+        {
+            var presets = row.FilePresets ?? Array.Empty<string>();
+            var presetLabels = row.FilePresetLabels ?? Array.Empty<string>();
+
+            var items = new List<string>(presetLabels);
+            items.Add("Browse…");
+
+            string currentValue = row.Getter()?.ToString() ?? "";
+
+            var fileLabel = new TextBlock
+            {
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = new SolidColorBrush(Color.Parse("#555")),
+                FontSize = 11,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = 120,
+                Text = GetFileDisplayName(currentValue, presets, presetLabels)
+            };
+
+            var cbx = new ComboBox
+            {
+                ItemsSource = items,
+                MinHeight = 24,
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+
+            int presetIndex = -1;
+            for (int i = 0; i < presets.Count; i++)
+            {
+                if (presets[i] == currentValue) { presetIndex = i; break; }
+            }
+            if (presetIndex >= 0)
+                cbx.SelectedIndex = presetIndex;
+
+            cbx.SelectionChanged += (_, _) =>
+            {
+                int idx = cbx.SelectedIndex;
+                if (idx < 0) return;
+
+                if (idx < presets.Count)
+                {
+                    TryAssign(row, presets[idx]);
+                    fileLabel.Text = GetFileDisplayName(presets[idx], presets, presetLabels);
+                }
+                else
+                {
+                    BrowseForFile(row, fileLabel, cbx, presets, presetLabels);
+                }
+            };
+
+            var panel = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            };
+            Grid.SetColumn(cbx, 0);
+            Grid.SetColumn(fileLabel, 1);
+            fileLabel.Margin = new Thickness(6, 0, 0, 0);
+            panel.Children.Add(cbx);
+            panel.Children.Add(fileLabel);
+
+            return panel;
+        }
+
+        private static string GetFileDisplayName(string value,
+            IReadOnlyList<string> presets, IReadOnlyList<string> presetLabels)
+        {
+            if (string.IsNullOrEmpty(value)) return "";
+            for (int i = 0; i < presets.Count; i++)
+            {
+                if (presets[i] == value)
+                    return presetLabels.Count > i ? presetLabels[i] : value;
+            }
+            try { return System.IO.Path.GetFileName(value); }
+            catch { return value; }
+        }
+
+        private async void BrowseForFile(PropertyRow row, TextBlock fileLabel,
+            ComboBox cbx, IReadOnlyList<string> presets, IReadOnlyList<string> presetLabels)
+        {
+            try
+            {
+                var topLevel = TopLevel.GetTopLevel(this);
+                if (topLevel == null) return;
+
+                var patterns = new List<string>();
+                string filterName = "All files";
+                if (!string.IsNullOrEmpty(row.FileFilter))
+                {
+                    var parts = row.FileFilter!.Split('|');
+                    if (parts.Length >= 2)
+                    {
+                        filterName = parts[0];
+                        foreach (var ext in parts[1].Split(';'))
+                            patterns.Add(ext.Trim());
+                    }
+                }
+                if (patterns.Count == 0)
+                    patterns.Add("*.*");
+
+                var files = await topLevel.StorageProvider.OpenFilePickerAsync(
+                    new FilePickerOpenOptions
+                    {
+                        Title = "Select file",
+                        AllowMultiple = false,
+                        FileTypeFilter = new[]
+                        {
+                            new FilePickerFileType(filterName) { Patterns = patterns }
+                        }
+                    });
+
+                if (files.Count > 0)
+                {
+                    string path = files[0].Path.LocalPath;
+                    TryAssign(row, path);
+                    fileLabel.Text = System.IO.Path.GetFileName(path);
+                    cbx.SelectedIndex = -1;
+                }
+                else
+                {
+                    string current = row.Getter()?.ToString() ?? "";
+                    int idx = -1;
+                    for (int i = 0; i < presets.Count; i++)
+                    {
+                        if (presets[i] == current) { idx = i; break; }
+                    }
+                    cbx.SelectedIndex = idx;
+                }
+            }
+            catch { /* dialog cancelled or failed */ }
         }
 
         private Control ReadOnlyEditor(PropertyRow row)

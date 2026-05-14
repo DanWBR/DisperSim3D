@@ -23,6 +23,7 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
         Point3D,     // DisperSim3D.Geometry.Point3D (3 numeric fields)
         Vector3D,    // DisperSim3D.Geometry.Vector3D (3 numeric fields)
         Color,       // DisperSim3D.Geometry.Color (swatch + hex + RGB flyout)
+        FilePath,    // string property with [FilePathEditor] — combo presets + Browse dialog
         ReadOnly     // collections, complex objects — shows a short summary
     }
 
@@ -43,6 +44,10 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
         /// <see cref="PropertyEditorKind.EnumChoice"/>).</summary>
         public IReadOnlyList<string> EnumOptions { get; }
 
+        public string? FileFilter { get; }
+        public IReadOnlyList<string>? FilePresets { get; }
+        public IReadOnlyList<string>? FilePresetLabels { get; }
+
         /// <summary>Reads the current value from the target object.</summary>
         public Func<object?> Getter { get; }
 
@@ -53,11 +58,16 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
         private PropertyRow(string name, string category, string description,
             PropertyEditorKind kind, bool readOnly,
             IReadOnlyList<string> enumOptions,
+            string? fileFilter, IReadOnlyList<string>? filePresets,
+            IReadOnlyList<string>? filePresetLabels,
             Func<object?> getter, Action<object?> setter)
         {
             Name = name; Category = category; Description = description;
             Kind = kind; IsReadOnly = readOnly;
-            EnumOptions = enumOptions; Getter = getter; Setter = setter;
+            EnumOptions = enumOptions;
+            FileFilter = fileFilter; FilePresets = filePresets;
+            FilePresetLabels = filePresetLabels;
+            Getter = getter; Setter = setter;
         }
 
         /// <summary>Reflects one property on <paramref name="target"/> and
@@ -77,8 +87,40 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
 
             PropertyEditorKind kind;
             IReadOnlyList<string> enumOpts = Array.Empty<string>();
+            string? fileFilter = null;
+            IReadOnlyList<string>? filePresets = null;
+            IReadOnlyList<string>? filePresetLabels = null;
 
-            if (ut == typeof(string)) kind = PropertyEditorKind.Text;
+            bool isFilePath = false;
+            if (ut == typeof(string))
+            {
+                var fpAttr = prop.GetCustomAttribute<DisperSim3D.Models.FilePathEditorAttribute>();
+                if (fpAttr != null)
+                {
+                    isFilePath = true;
+                    fileFilter = fpAttr.Filter;
+                    filePresets = fpAttr.Presets;
+                    filePresetLabels = fpAttr.PresetLabels;
+                }
+                else
+                {
+                    foreach (var a in prop.GetCustomAttributes(true))
+                    {
+                        if (a.GetType().FullName == "DisperSim3D.Models.FilePathEditorAttribute")
+                        {
+                            isFilePath = true;
+                            var at = a.GetType();
+                            fileFilter = at.GetProperty("Filter")?.GetValue(a) as string;
+                            filePresets = at.GetProperty("Presets")?.GetValue(a) as string[];
+                            filePresetLabels = at.GetProperty("PresetLabels")?.GetValue(a) as string[];
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (isFilePath) kind = PropertyEditorKind.FilePath;
+            else if (ut == typeof(string)) kind = PropertyEditorKind.Text;
             else if (ut == typeof(bool)) kind = PropertyEditorKind.Boolean;
             else if (ut == typeof(int) || ut == typeof(long) || ut == typeof(short) ||
                      ut == typeof(uint) || ut == typeof(ulong) || ut == typeof(ushort) ||
@@ -97,6 +139,7 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
 
             return new PropertyRow(
                 prop.Name, category, desc, kind, readOnly, enumOpts,
+                fileFilter, filePresets, filePresetLabels,
                 getter: () => { try { return prop.GetValue(target); } catch { return null; } },
                 setter: v =>
                 {
