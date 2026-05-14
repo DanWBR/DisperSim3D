@@ -80,6 +80,8 @@ namespace DisperSim3D.Models
             "Image files|*.jpg;*.jpeg;*.png;*.hdr",
             new[] { "", "builtin:sky_clear_day", "builtin:sky_sunset", "builtin:sky_snowy_mountains" },
             new[] { "(None — Procedural Sky)", "Clear Day Road", "Sunset Rocky Coast", "Snowy Mountains" })]
+        [Editor("DisperSim3D.Controls.FilePathPropertyEditor, DisperSim3D.UI.Wpf",
+            "HandyControl.Controls.PropertyEditorBase, HandyControl")]
         public string SkyTexturePath { get; set; } = string.Empty;
 
         [Category("Sky")]
@@ -114,6 +116,8 @@ namespace DisperSim3D.Models
             "Image files|*.jpg;*.jpeg;*.png",
             new[] { "", "builtin:ground_woodland" },
             new[] { "(None — Procedural)", "Woodland Terrain" })]
+        [Editor("DisperSim3D.Controls.FilePathPropertyEditor, DisperSim3D.UI.Wpf",
+            "HandyControl.Controls.PropertyEditorBase, HandyControl")]
         public string GroundTexturePath { get; set; } = string.Empty;
 
         [Category("Ground")]

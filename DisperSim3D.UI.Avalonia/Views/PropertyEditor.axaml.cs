@@ -434,78 +434,70 @@ namespace DisperSim3D.UI.Avalonia.Views
             var presetLabels = row.FilePresetLabels ?? Array.Empty<string>();
 
             var items = new List<string>(presetLabels);
-            items.Add("Browse…");
-
             string currentValue = row.Getter()?.ToString() ?? "";
 
-            var fileLabel = new TextBlock
+            // If current value is a custom file path (not a preset), add it as
+            // a display entry so the ComboBox shows the filename.
+            int customIdx = -1;
+            bool isCustom = !string.IsNullOrEmpty(currentValue);
+            if (isCustom)
             {
-                VerticalAlignment = VerticalAlignment.Center,
-                Foreground = new SolidColorBrush(Color.Parse("#555")),
-                FontSize = 11,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                MaxWidth = 120,
-                Text = GetFileDisplayName(currentValue, presets, presetLabels)
-            };
+                bool found = false;
+                for (int i = 0; i < presets.Count; i++)
+                    if (presets[i] == currentValue) { found = true; break; }
+                if (!found)
+                {
+                    string displayName;
+                    try { displayName = System.IO.Path.GetFileName(currentValue); }
+                    catch { displayName = currentValue; }
+                    customIdx = items.Count;
+                    items.Add(displayName);
+                }
+            }
+
+            items.Add("Browse…");
+            int browseIdx = items.Count - 1;
 
             var cbx = new ComboBox
             {
                 ItemsSource = items,
-                MinHeight = 24,
-                HorizontalAlignment = HorizontalAlignment.Stretch
+                MinHeight = 26,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                PlaceholderText = "(select)"
             };
 
-            int presetIndex = -1;
-            for (int i = 0; i < presets.Count; i++)
+            // Set initial selection
+            if (customIdx >= 0)
             {
-                if (presets[i] == currentValue) { presetIndex = i; break; }
+                cbx.SelectedIndex = customIdx;
             }
-            if (presetIndex >= 0)
-                cbx.SelectedIndex = presetIndex;
+            else
+            {
+                for (int i = 0; i < presets.Count; i++)
+                {
+                    if (presets[i] == currentValue) { cbx.SelectedIndex = i; break; }
+                }
+            }
 
             cbx.SelectionChanged += (_, _) =>
             {
                 int idx = cbx.SelectedIndex;
                 if (idx < 0) return;
 
-                if (idx < presets.Count)
+                if (idx == browseIdx)
+                {
+                    BrowseForFile(row, cbx, presets, presetLabels);
+                }
+                else if (idx < presets.Count)
                 {
                     TryAssign(row, presets[idx]);
-                    fileLabel.Text = GetFileDisplayName(presets[idx], presets, presetLabels);
-                }
-                else
-                {
-                    BrowseForFile(row, fileLabel, cbx, presets, presetLabels);
                 }
             };
 
-            var panel = new Grid
-            {
-                ColumnDefinitions = new ColumnDefinitions("*,Auto"),
-            };
-            Grid.SetColumn(cbx, 0);
-            Grid.SetColumn(fileLabel, 1);
-            fileLabel.Margin = new Thickness(6, 0, 0, 0);
-            panel.Children.Add(cbx);
-            panel.Children.Add(fileLabel);
-
-            return panel;
+            return cbx;
         }
 
-        private static string GetFileDisplayName(string value,
-            IReadOnlyList<string> presets, IReadOnlyList<string> presetLabels)
-        {
-            if (string.IsNullOrEmpty(value)) return "";
-            for (int i = 0; i < presets.Count; i++)
-            {
-                if (presets[i] == value)
-                    return presetLabels.Count > i ? presetLabels[i] : value;
-            }
-            try { return System.IO.Path.GetFileName(value); }
-            catch { return value; }
-        }
-
-        private async void BrowseForFile(PropertyRow row, TextBlock fileLabel,
+        private async void BrowseForFile(PropertyRow row,
             ComboBox cbx, IReadOnlyList<string> presets, IReadOnlyList<string> presetLabels)
         {
             try
@@ -543,8 +535,14 @@ namespace DisperSim3D.UI.Avalonia.Views
                 {
                     string path = files[0].Path.LocalPath;
                     TryAssign(row, path);
-                    fileLabel.Text = System.IO.Path.GetFileName(path);
-                    cbx.SelectedIndex = -1;
+                    string displayName;
+                    try { displayName = System.IO.Path.GetFileName(path); }
+                    catch { displayName = path; }
+                    var updatedItems = new List<string>(presetLabels);
+                    updatedItems.Add(displayName);
+                    updatedItems.Add("Browse…");
+                    cbx.ItemsSource = updatedItems;
+                    cbx.SelectedIndex = presetLabels.Count;
                 }
                 else
                 {

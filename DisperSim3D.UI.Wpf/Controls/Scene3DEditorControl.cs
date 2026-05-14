@@ -5367,7 +5367,8 @@ namespace DisperSim3D.Controls
             var env = _scene?.Environment;
             System.Windows.Media.Brush brush;
             if (env != null)
-                brush = Core.EnvironmentRenderer.BuildGroundBrush(env.Ground, _groundSize, env.ShowGridOverlay);
+                brush = Core.EnvironmentRenderer.BuildGroundBrush(env.Ground, _groundSize, env.ShowGridOverlay,
+                    env.GroundTexturePath, env.GroundTextureTileSize);
             else
                 brush = Core.EnvironmentRenderer.BuildGroundBrush(Models.GroundMaterial.Grid, _groundSize, false);
 

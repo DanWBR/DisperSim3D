@@ -92,30 +92,18 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
             IReadOnlyList<string>? filePresetLabels = null;
 
             bool isFilePath = false;
-            if (ut == typeof(string))
+            if (ut == typeof(string) && prop.Name.EndsWith("Path", StringComparison.Ordinal))
             {
-                var fpAttr = prop.GetCustomAttribute<DisperSim3D.Models.FilePathEditorAttribute>();
-                if (fpAttr != null)
+                isFilePath = true;
+
+                foreach (var cad in CustomAttributeData.GetCustomAttributes(prop))
                 {
-                    isFilePath = true;
-                    fileFilter = fpAttr.Filter;
-                    filePresets = fpAttr.Presets;
-                    filePresetLabels = fpAttr.PresetLabels;
-                }
-                else
-                {
-                    foreach (var a in prop.GetCustomAttributes(true))
-                    {
-                        if (a.GetType().FullName == "DisperSim3D.Models.FilePathEditorAttribute")
-                        {
-                            isFilePath = true;
-                            var at = a.GetType();
-                            fileFilter = at.GetProperty("Filter")?.GetValue(a) as string;
-                            filePresets = at.GetProperty("Presets")?.GetValue(a) as string[];
-                            filePresetLabels = at.GetProperty("PresetLabels")?.GetValue(a) as string[];
-                            break;
-                        }
-                    }
+                    if (cad.AttributeType.Name != "FilePathEditorAttribute") continue;
+                    var args = cad.ConstructorArguments;
+                    if (args.Count >= 1) fileFilter = args[0].Value as string;
+                    if (args.Count >= 2) filePresets = ReadStringArray(args[1]);
+                    if (args.Count >= 3) filePresetLabels = ReadStringArray(args[2]);
+                    break;
                 }
             }
 
@@ -149,9 +137,19 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
                 });
         }
 
-        /// <summary>Converts a UI-supplied value (typically string / double /
-        /// bool / int from an editor control) into the property's CLR type.
-        /// Returns null on failure — callers should swallow and revert.</summary>
+        private static string[]? ReadStringArray(CustomAttributeTypedArgument arg)
+        {
+            if (arg.Value is IReadOnlyCollection<CustomAttributeTypedArgument> elems)
+            {
+                var result = new string[elems.Count];
+                int i = 0;
+                foreach (var e in elems)
+                    result[i++] = e.Value as string ?? "";
+                return result;
+            }
+            return null;
+        }
+
         private static object? Coerce(object? raw, Type targetType)
         {
             if (raw == null) return null;

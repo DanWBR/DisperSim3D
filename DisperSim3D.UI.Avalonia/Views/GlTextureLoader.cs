@@ -53,7 +53,12 @@ namespace DisperSim3D.UI.Avalonia.Views
         }
 
         public static unsafe int LoadFromFile(GlInterface gl, string path)
+            => LoadFromFile(gl, path, out _, out _);
+
+        public static unsafe int LoadFromFile(GlInterface gl, string path,
+            out int width, out int height)
         {
+            width = 0; height = 0;
             if (!File.Exists(path)) return 0;
             EnsureLoaded(gl);
             if (_bindTex == null || _texImage2D == null) return 0;
@@ -69,6 +74,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 if (rgba == null) return 0;
 
                 int w = rgba.Width, h = rgba.Height;
+                width = w; height = h;
                 var pixels = rgba.GetPixelSpan();
 
                 int tex = gl.GenTexture();

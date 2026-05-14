@@ -105,6 +105,19 @@ namespace DisperSim3D.UI.Avalonia.Views
         }
 
         /// <summary>
+        /// Frame the camera to show the given bounding box (min/max corners).
+        /// Keeps the current azimuth/elevation angles; adjusts target and distance.
+        /// </summary>
+        public void ZoomToFit(Vector3 bbMin, Vector3 bbMax, float padding = 1.4f)
+        {
+            Target = (bbMin + bbMax) * 0.5f;
+            float radius = (bbMax - bbMin).Length() * 0.5f;
+            if (radius < 1f) radius = 50f;
+            Distance = radius * padding / MathF.Tan(FieldOfView * 0.5f);
+            Distance = Math.Clamp(Distance, 5f, 50000f);
+        }
+
+        /// <summary>
         /// Create a <see cref="CameraPreset"/> from the current turntable state.
         /// Converts Azimuth/Elevation/Distance/Target back to the WPF-style
         /// Position + LookDirection representation used by the model.
@@ -147,10 +160,11 @@ namespace DisperSim3D.UI.Avalonia.Views
             Target = pos + look;
             Distance = lookLen;
 
-            // Compute direction from eye to target
+            // dir points from eye toward target; the turntable stores
+            // the *reverse* direction (target→eye), so negate dir.Z for elevation.
             var dir = Vector3.Normalize(look);
-            Elevation = MathF.Asin(Math.Clamp(dir.Z, -1f, 1f));
-            Azimuth = MathF.Atan2(dir.Y, dir.X) + MathF.PI; // flip: camera looks toward target
+            Elevation = MathF.Asin(Math.Clamp(-dir.Z, -1f, 1f));
+            Azimuth = MathF.Atan2(dir.Y, dir.X) + MathF.PI;
         }
     }
 }

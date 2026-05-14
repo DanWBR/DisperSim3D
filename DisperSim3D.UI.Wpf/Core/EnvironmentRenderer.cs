@@ -1,6 +1,8 @@
 using System;
+using System.IO;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
 using DisperSim3D.Models;
 
@@ -62,6 +64,27 @@ namespace DisperSim3D.Core
             return new ModelVisual3D { Content = group };
         }
 
+        private static BitmapSource LoadImageSafe(string path, int maxPixelWidth)
+        {
+            try
+            {
+                using var stream = File.OpenRead(path);
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.StreamSource = stream;
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                if (maxPixelWidth > 0)
+                    bmp.DecodePixelWidth = maxPixelWidth;
+                bmp.EndInit();
+                bmp.Freeze();
+                return bmp;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         /// <summary>Builds the sky-dome visual: a large sphere centred on origin
         /// painted on the INSIDE with a vertical zenith→horizon gradient. The dome
         /// radius is sized to enclose <paramref name="sceneHalfM"/> with margin so
@@ -70,13 +93,25 @@ namespace DisperSim3D.Core
         {
             if (env == null || !env.SkydomeEnabled) return null;
 
+            bool useTexture = !string.IsNullOrEmpty(env.SkyTexturePath);
+            BitmapSource skyBmp = null;
+            if (useTexture)
+            {
+                string resolved = BuiltinAssetResolver.Resolve(env.SkyTexturePath);
+                if (File.Exists(resolved))
+                    skyBmp = LoadImageSafe(resolved, 4096);
+            }
+
+            bool isFullSphere = skyBmp != null;
             double radius = Math.Max(500.0, sceneHalfM * 5.0);
-            int stacks = 24, slices = 32;
+            int stacks = isFullSphere ? 48 : 24;
+            int slices = isFullSphere ? 64 : 32;
+            double maxPhi = isFullSphere ? Math.PI : Math.PI * 0.5;
 
             var mesh = new MeshGeometry3D();
             for (int s = 0; s <= stacks; s++)
             {
-                double phi = Math.PI * 0.5 * s / stacks; // 0=top, π/2=horizon
+                double phi = maxPhi * s / stacks;
                 double sinP = Math.Sin(phi);
                 double cosP = Math.Cos(phi);
                 for (int sl = 0; sl <= slices; sl++)
@@ -86,8 +121,12 @@ namespace DisperSim3D.Core
                         radius * sinP * Math.Cos(theta),
                         radius * sinP * Math.Sin(theta),
                         radius * cosP));
-                    // V coord = s/stacks → 0 at zenith, 1 at horizon.
-                    mesh.TextureCoordinates.Add(new Point((double)sl / slices, (double)s / stacks));
+
+                    double u = (double)sl / slices;
+                    double v = isFullSphere
+                        ? (double)s / stacks
+                        : (double)s / stacks;
+                    mesh.TextureCoordinates.Add(new Point(u, v));
                 }
             }
             int cols = slices + 1;
@@ -99,18 +138,29 @@ namespace DisperSim3D.Core
                     int b = a + 1;
                     int c = a + cols;
                     int d = c + 1;
-                    // Wind triangles so the INSIDE faces the camera (skydome is viewed from inside).
                     mesh.TriangleIndices.Add(a); mesh.TriangleIndices.Add(c); mesh.TriangleIndices.Add(b);
                     mesh.TriangleIndices.Add(b); mesh.TriangleIndices.Add(c); mesh.TriangleIndices.Add(d);
                 }
             }
 
-            var gradient = new LinearGradientBrush(env.SkyZenithColor, env.SkyHorizonColor,
-                new Point(0.5, 0), new Point(0.5, 1));
-            gradient.Freeze();
-            // Emissive so it doesn't pick up Sun shading.
-            var mat = new EmissiveMaterial(gradient);
+            Brush brush;
+            if (skyBmp != null)
+            {
+                brush = new ImageBrush(skyBmp)
+                {
+                    TileMode = TileMode.None,
+                    Stretch = Stretch.Fill
+                };
+                ((ImageBrush)brush).Freeze();
+            }
+            else
+            {
+                brush = new LinearGradientBrush(env.SkyZenithColor, env.SkyHorizonColor,
+                    new Point(0.5, 0), new Point(0.5, 1));
+                brush.Freeze();
+            }
 
+            var mat = new EmissiveMaterial(brush);
             var geom = new GeometryModel3D
             {
                 Geometry = mesh,
@@ -124,6 +174,34 @@ namespace DisperSim3D.Core
         /// All textures are generated in-memory (no external image files).</summary>
         public static Brush BuildGroundBrush(GroundMaterial mat, double sizeM, bool overlayGrid)
         {
+            return BuildGroundBrush(mat, sizeM, overlayGrid, null, 25.0);
+        }
+
+        public static Brush BuildGroundBrush(GroundMaterial mat, double sizeM, bool overlayGrid,
+            string groundTexturePath, double tileSize)
+        {
+            if (!string.IsNullOrEmpty(groundTexturePath))
+            {
+                string resolved = BuiltinAssetResolver.Resolve(groundTexturePath);
+                if (File.Exists(resolved))
+                {
+                    var bmp = LoadImageSafe(resolved, 2048);
+                    if (bmp != null)
+                    {
+                        double tiles = Math.Max(1.0, sizeM / tileSize);
+                        var brush = new ImageBrush(bmp)
+                        {
+                            TileMode = TileMode.Tile,
+                            Stretch = Stretch.Fill,
+                            Viewport = new Rect(0, 0, 1.0 / tiles, 1.0 / tiles),
+                            ViewportUnits = BrushMappingMode.RelativeToBoundingBox
+                        };
+                        brush.Freeze();
+                        return brush;
+                    }
+                }
+            }
+
             switch (mat)
             {
                 case GroundMaterial.Grass:    return MakeGrassBrush(sizeM, overlayGrid);

@@ -79,7 +79,10 @@ namespace DisperSim3D.UI.Avalonia.Views
         private int _groundTileSizeUniform;
         private int _groundGridMinorUniform;
         private int _groundGridMajorUniform;
+        private int _groundGridHalfUniform;
         private int _groundTextureId;
+        private int _groundTexWidth;
+        private int _groundTexHeight;
         private int _groundMaterialIndex;
         private bool _groundShowGridOverlay;
 
@@ -113,6 +116,7 @@ namespace DisperSim3D.UI.Avalonia.Views
 
         // GL extension: functions not in Avalonia's GlInterface
         private delegate void D_glUniform3f(int loc, float v0, float v1, float v2);
+        private delegate void D_glUniform2f(int loc, float v0, float v1);
         private delegate void D_glUniform1f(int loc, float v0);
         private delegate void D_glBlendFunc(int sfactor, int dfactor);
         private delegate void D_glCullFace(int mode);
@@ -120,6 +124,7 @@ namespace DisperSim3D.UI.Avalonia.Views
             int loc, int count, bool transpose, float* value);
         private delegate void D_glUniform1i(int loc, int v0);
         private D_glUniform3f? _glUniform3f;
+        private D_glUniform2f? _glUniform2f;
         private D_glUniform1f? _glUniform1f;
         private D_glUniform1i? _glUniform1i;
         private D_glBlendFunc? _glBlendFunc;
@@ -147,6 +152,7 @@ namespace DisperSim3D.UI.Avalonia.Views
         // Scene population state — set via PopulateScene(), consumed in
         // OnOpenGlRender (GPU uploads require the GL context).
         private Scene3D? _pendingScene;
+        private Scene3D? _loadedScene;
         private bool _sceneNeedsRebuild;
 
         // Cached environment settings from the last loaded scene
@@ -425,9 +431,10 @@ uniform int   uMaterial;
 uniform float uGridOverlay;
 uniform float uUseGroundTexture;
 uniform sampler2D uGroundTexture;
-uniform float uGroundTileSize;
+uniform vec2  uGroundTileSize;
 uniform float uGridMinor;
 uniform float uGridMajor;
+uniform float uGridHalf;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -467,10 +474,10 @@ void main()
     vec2 uv = vWorldPos.xy;
     vec3 col;
 
-    // --- user-supplied ground texture (tiled) ---
+    // --- user-supplied ground texture (tiled, aspect-correct) ---
     if (uUseGroundTexture > 0.5)
     {
-        float ts = max(uGroundTileSize, 1.0);
+        vec2 ts = max(uGroundTileSize, vec2(1.0));
         vec2 tuv = fract(uv / ts);
         col = texture(uGroundTexture, tuv).rgb;
     }
@@ -507,8 +514,8 @@ void main()
         col = vCol.rgb;
     }
 
-    // Grid overlay (5 m minor, 25 m major)
-    if (uGridOverlay > 0.5)
+    // Grid overlay — limited to the GridHalfSize area
+    if (uGridOverlay > 0.5 && abs(uv.x) < uGridHalf && abs(uv.y) < uGridHalf)
     {
         vec2 g5  = abs(fract(uv / uGridMinor + 0.5) - 0.5);
         float l5 = 1.0 - smoothstep(0.015, 0.04, min(g5.x, g5.y));
@@ -648,6 +655,11 @@ void main()
         public void ResetView()
         {
             _camera.Reset();
+            if (_loadedScene != null)
+            {
+                var (bbMin, bbMax) = ComputeSceneBounds(_loadedScene);
+                _camera.ZoomToFit(bbMin, bbMax);
+            }
             RequestNextFrameRendering();
         }
 
@@ -693,6 +705,9 @@ void main()
                 var p1b = gl.GetProcAddress("glUniform1f");
                 if (p1b != IntPtr.Zero)
                     _glUniform1f = Marshal.GetDelegateForFunctionPointer<D_glUniform1f>(p1b);
+                var p1c = gl.GetProcAddress("glUniform2f");
+                if (p1c != IntPtr.Zero)
+                    _glUniform2f = Marshal.GetDelegateForFunctionPointer<D_glUniform2f>(p1c);
                 var p2 = gl.GetProcAddress("glBlendFunc");
                 if (p2 != IntPtr.Zero)
                     _glBlendFunc = Marshal.GetDelegateForFunctionPointer<D_glBlendFunc>(p2);
@@ -765,6 +780,7 @@ void main()
                 _groundTileSizeUniform   = GetUniformLoc(gl, _groundProgram, "uGroundTileSize");
                 _groundGridMinorUniform  = GetUniformLoc(gl, _groundProgram, "uGridMinor");
                 _groundGridMajorUniform  = GetUniformLoc(gl, _groundProgram, "uGridMajor");
+                _groundGridHalfUniform   = GetUniformLoc(gl, _groundProgram, "uGridHalf");
 
                 // ── Compile textured shader ────────────────────────────
                 _texProgram          = CompileProgram(gl, TexVertBody, TexFragBody);
@@ -919,6 +935,7 @@ void main()
                     _groundShowGridOverlay ? 1f : 0f);
                 _glUniform1f?.Invoke(_groundGridMinorUniform, (float)env.GridMinorSpacing);
                 _glUniform1f?.Invoke(_groundGridMajorUniform, (float)env.GridMajorSpacing);
+                _glUniform1f?.Invoke(_groundGridHalfUniform, (float)env.GridHalfSize);
                 _glUniform3f?.Invoke(_groundSunDirUniform, sunX, sunY, sunZ);
                 _glUniform3f?.Invoke(_groundSunColorUniform,
                     warmR * sunI, warmG * sunI, warmB * sunI);
@@ -932,8 +949,13 @@ void main()
                     _glActiveTexture?.Invoke(GL_TEXTURE0);
                     _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, _groundTextureId);
                     _glUniform1i?.Invoke(_groundTextureUniform, 0);
-                    _glUniform1f?.Invoke(_groundTileSizeUniform,
-                        (float)(env.GroundTextureTileSize > 0 ? env.GroundTextureTileSize : 25.0));
+
+                    int tw = _groundTexWidth > 0 ? _groundTexWidth : 1;
+                    int th = _groundTexHeight > 0 ? _groundTexHeight : 1;
+                    float pixelsPerMeter = 100f;
+                    float tileSizeX = tw / pixelsPerMeter;
+                    float tileSizeY = th / pixelsPerMeter;
+                    _glUniform2f?.Invoke(_groundTileSizeUniform, tileSizeX, tileSizeY);
                 }
 
                 SetMatrixUniform(gl, _groundMvpUniform, mvp);
@@ -1203,6 +1225,8 @@ void main()
         /// </summary>
         private void RebuildSceneObjects(GlInterface gl, Scene3D? scene)
         {
+            _loadedScene = scene;
+
             // Release existing GPU resources
             foreach (var obj in _sceneObjects)
                 obj.Mesh.Cleanup(gl);
@@ -1245,10 +1269,12 @@ void main()
             // Ground texture
             DeleteGlTexture(_groundTextureId);
             _groundTextureId = 0;
+            _groundTexWidth = 0; _groundTexHeight = 0;
             {
                 var gndPath = BuiltinAssetResolver.Resolve(env.GroundTexturePath);
                 if (!string.IsNullOrEmpty(gndPath) && System.IO.File.Exists(gndPath))
-                    _groundTextureId = GlTextureLoader.LoadFromFile(gl, gndPath);
+                    _groundTextureId = GlTextureLoader.LoadFromFile(gl, gndPath,
+                        out _groundTexWidth, out _groundTexHeight);
             }
 
             // Ground plane — procedural shader handles material appearance
@@ -1259,7 +1285,7 @@ void main()
             {
                 var fallback = new Vector4(0.48f, 0.58f, 0.35f, 1f);
                 var (gndV, gndI) = GlMeshBuffer.GenerateGroundQuad(
-                    200f, fallback);
+                    500f, fallback);
                 _groundPlaneMesh = new GlMeshBuffer();
                 _groundPlaneMesh.Upload(gl, gndV, gndI, keepCpuCopy: true);
             }
@@ -1524,10 +1550,16 @@ void main()
                 }
             }
 
-            // ── Apply first camera preset if available ────────────────
+            // ── Camera: apply preset, or zoom to fit scene content ───
             if (scene.CameraPresets != null && scene.CameraPresets.Count > 0)
             {
                 _camera.ApplyPreset(scene.CameraPresets[0]);
+            }
+            else
+            {
+                var (bbMin, bbMax) = ComputeSceneBounds(scene);
+                _camera.Reset();
+                _camera.ZoomToFit(bbMin, bbMax);
             }
 
             // ── Ghost preview for pick mode ──────────────────────────────
@@ -2253,6 +2285,49 @@ void main()
             }
 
             return result;
+        }
+
+        private static (Vector3 min, Vector3 max) ComputeSceneBounds(Scene3D scene)
+        {
+            float xMin = -50, yMin = -50, zMin = 0;
+            float xMax = 50, yMax = 50, zMax = 10;
+
+            void Expand(float x, float y, float z, float r = 0)
+            {
+                xMin = MathF.Min(xMin, x - r);
+                yMin = MathF.Min(yMin, y - r);
+                zMin = MathF.Min(zMin, z);
+                xMax = MathF.Max(xMax, x + r);
+                yMax = MathF.Max(yMax, y + r);
+                zMax = MathF.Max(zMax, z + r);
+            }
+
+            if (scene.TopLevelSources != null)
+                foreach (var src in scene.TopLevelSources)
+                {
+                    var p = src.EffectivePosition;
+                    Expand((float)p.X, (float)p.Y, (float)p.Z, 5f);
+                }
+
+            if (scene.Decorations != null)
+                foreach (var d in scene.Decorations)
+                {
+                    float s = (float)d.Scale;
+                    Expand((float)d.Position.X, (float)d.Position.Y,
+                           (float)d.Position.Z, 10f * s);
+                }
+
+            if (scene.MonitorPoints != null)
+                foreach (var m in scene.MonitorPoints)
+                    Expand((float)m.Position.X, (float)m.Position.Y,
+                           (float)m.Position.Z, 2f);
+
+            if (scene.GasDetectors != null)
+                foreach (var g in scene.GasDetectors)
+                    Expand((float)g.Position.X, (float)g.Position.Y,
+                           (float)g.Position.Z, 2f);
+
+            return (new Vector3(xMin, yMin, zMin), new Vector3(xMax, yMax, zMax));
         }
     }
 
