@@ -75,22 +75,34 @@ namespace DisperSim3D.Models
         public double CloudSpeed { get; set; } = 1.0;
 
         [Category("Sky")]
+        [Description("Brightness multiplier for the sky texture (0.0 = black, 1.0 = full brightness, >1.0 = overbright). Only applies when a sky texture is set.")]
+        public double SkyTextureBrightness { get; set; } = 0.25;
+
+        [Category("Sky")]
+        [Description("Vertical offset for the sky texture (0.0 = centered, positive = shifts horizon up). Typical range: −0.3 to 0.3.")]
+        public double SkyTextureVOffset { get; set; } = 0.0;
+
+        [Category("Sky")]
         [Description("Path to an equirectangular panorama image (JPG/PNG, 2:1 aspect ratio) used as the sky background. Leave empty to use the procedural sky.")]
         [FilePathEditor(
-            "Image files|*.jpg;*.jpeg;*.png;*.hdr",
-            new[] { "", "builtin:sky_clear_day", "builtin:sky_sunset", "builtin:sky_snowy_mountains" },
-            new[] { "(None — Procedural Sky)", "Clear Day Road", "Sunset Rocky Coast", "Snowy Mountains" })]
+            "Image files|*.jpg;*.jpeg;*.png",
+            new[] { "", "builtin:sky_clear_day", "builtin:sky_sunset" },
+            new[] { "(None — Procedural Sky)", "Clear Day Road", "Sunset Rocky Coast" })]
         [Editor("DisperSim3D.Controls.FilePathPropertyEditor, DisperSim3D.UI.Wpf",
             "HandyControl.Controls.PropertyEditorBase, HandyControl")]
         public string SkyTexturePath { get; set; } = string.Empty;
 
         [Category("Sky")]
         [Description("Zenith colour (top of the sky dome).")]
+        [Editor("DisperSim3D.Controls.GeometryColorPickerPropertyEditor, DisperSim3D.UI.Wpf",
+            "HandyControl.Controls.PropertyEditorBase, HandyControl")]
         public DisperSim3D.Geometry.Color SkyZenithColor { get; set; }
             = DisperSim3D.Geometry.Color.FromRgb(80, 130, 200);
 
         [Category("Sky")]
         [Description("Horizon colour (bottom of the sky dome — blends into the ground).")]
+        [Editor("DisperSim3D.Controls.GeometryColorPickerPropertyEditor, DisperSim3D.UI.Wpf",
+            "HandyControl.Controls.PropertyEditorBase, HandyControl")]
         public DisperSim3D.Geometry.Color SkyHorizonColor { get; set; }
             = DisperSim3D.Geometry.Color.FromRgb(220, 225, 230);
 
@@ -122,7 +134,7 @@ namespace DisperSim3D.Models
 
         [Category("Ground")]
         [Description("World-space tile size in metres for the ground texture. Smaller = more repetitions.")]
-        public double GroundTextureTileSize { get; set; } = 25.0;
+        public double GroundTextureTileSize { get; set; } = 500.0;
 
         [Category("Ground")]
         [Description("Minor grid line spacing in metres.")]

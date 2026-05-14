@@ -525,7 +525,11 @@ namespace DisperSim3D.Controls
                 // ApplyEnvironment rebuilds the lighting + sky + ground visuals.
                 if (_propertyGrid.SelectedObject is EnvironmentSettings)
                 {
-                    try { _editor?.ApplyEnvironment(); } catch { }
+                    try { _editor?.ApplyEnvironment(); }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[ENV] ApplyEnvironment FAILED: {ex}");
+                    }
                 }
                 // Any edit on an object whose label appears in the tree (project name,
                 // gas/source/sim names, …) should refresh the tree so it stays in sync.
@@ -537,7 +541,11 @@ namespace DisperSim3D.Controls
                 }
                 // SolverType change → user can manually invoke
                 // "Apply atmospheric defaults" from the simulation context menu in the tree.
-                _editor.RefreshViewport();
+                try { _editor.RefreshViewport(); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ENV] RefreshViewport FAILED: {ex}");
+                }
             };
 
             // --- Monitor dock panel ---

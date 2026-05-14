@@ -82,10 +82,12 @@ namespace DisperSim3D.Controls
 
         private GridLinesVisual3D _gridVisual;
         private System.Windows.Media.Media3D.ModelVisual3D _groundPlaneVisual;
+        private System.Windows.Media.Media3D.ModelVisual3D _outerGroundVisual;
         private System.Windows.Media.Media3D.Visual3D _defaultLightsVisual;
         private System.Windows.Media.Media3D.ModelVisual3D _envLightsVisual;
         private System.Windows.Media.Media3D.ModelVisual3D _skyDomeVisual;
         private readonly List<Visual3D> _compassVisuals = new List<Visual3D>();
+        private bool _applyingEnvironment;
         private bool _showGroundPlane = true;
         private double _groundSize = 200;
 
@@ -5304,36 +5306,81 @@ namespace DisperSim3D.Controls
         public void ApplyEnvironment()
         {
             if (_viewport == null) return;
+            if (_applyingEnvironment)
+            {
+                System.Diagnostics.Debug.WriteLine("[ENV] ApplyEnvironment SKIPPED (re-entrant)");
+                return;
+            }
+            _applyingEnvironment = true;
+            try
+            {
+                ApplyEnvironmentCore();
+            }
+            finally
+            {
+                _applyingEnvironment = false;
+            }
+        }
+
+        private void ApplyEnvironmentCore()
+        {
             var env = _scene?.Environment;
+            System.Diagnostics.Debug.WriteLine($"[ENV] ApplyEnvironment called. env={env != null}, " +
+                $"SkyTexturePath='{env?.SkyTexturePath}', SkydomeEnabled={env?.SkydomeEnabled}, " +
+                $"Ground={env?.Ground}, GroundTexturePath='{env?.GroundTexturePath}'");
 
             // Lights — remove every prior lighting visual.
-            if (_defaultLightsVisual != null)
-            { _viewport.Children.Remove(_defaultLightsVisual); _defaultLightsVisual = null; }
-            if (_envLightsVisual != null)
-            { _viewport.Children.Remove(_envLightsVisual); _envLightsVisual = null; }
+            try
+            {
+                if (_defaultLightsVisual != null)
+                { _viewport.Children.Remove(_defaultLightsVisual); _defaultLightsVisual = null; }
+                if (_envLightsVisual != null)
+                { _viewport.Children.Remove(_envLightsVisual); _envLightsVisual = null; }
 
-            if (env != null && env.UseSunLighting)
-            {
-                _envLightsVisual = Core.EnvironmentRenderer.BuildLighting(env);
-                if (_envLightsVisual != null) _viewport.Children.Add(_envLightsVisual);
+                if (env != null && env.UseSunLighting)
+                {
+                    _envLightsVisual = Core.EnvironmentRenderer.BuildLighting(env);
+                    if (_envLightsVisual != null) _viewport.Children.Add(_envLightsVisual);
+                }
+                else
+                {
+                    _defaultLightsVisual = new DefaultLights();
+                    _viewport.Children.Add(_defaultLightsVisual);
+                }
+                System.Diagnostics.Debug.WriteLine("[ENV] Lighting OK");
             }
-            else
+            catch (Exception ex)
             {
-                _defaultLightsVisual = new DefaultLights();
-                _viewport.Children.Add(_defaultLightsVisual);
+                System.Diagnostics.Debug.WriteLine($"[ENV] Lighting FAILED: {ex}");
             }
 
             // Sky dome.
-            if (_skyDomeVisual != null)
-            { _viewport.Children.Remove(_skyDomeVisual); _skyDomeVisual = null; }
-            if (env != null)
+            try
             {
-                _skyDomeVisual = Core.EnvironmentRenderer.BuildSkyDome(env, _groundSize);
-                if (_skyDomeVisual != null) _viewport.Children.Add(_skyDomeVisual);
+                if (_skyDomeVisual != null)
+                { _viewport.Children.Remove(_skyDomeVisual); _skyDomeVisual = null; }
+                if (env != null)
+                {
+                    _skyDomeVisual = Core.EnvironmentRenderer.BuildSkyDome(env, _groundSize);
+                    if (_skyDomeVisual != null) _viewport.Children.Add(_skyDomeVisual);
+                }
+                System.Diagnostics.Debug.WriteLine($"[ENV] SkyDome OK (visual={_skyDomeVisual != null})");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ENV] SkyDome FAILED: {ex}");
             }
 
             // Ground (texture may have changed).
-            UpdateGroundPlane();
+            try
+            {
+                UpdateGroundPlane();
+                System.Diagnostics.Debug.WriteLine("[ENV] Ground OK");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ENV] Ground FAILED: {ex}");
+            }
         }
 
         private void UpdateGroundPlane()
@@ -5345,12 +5392,18 @@ namespace DisperSim3D.Controls
                 _viewport.Children.Remove(_groundPlaneVisual);
                 _groundPlaneVisual = null;
             }
+            if (_outerGroundVisual != null)
+            {
+                _viewport.Children.Remove(_outerGroundVisual);
+                _outerGroundVisual = null;
+            }
 
             if (!_showGroundPlane) return;
 
             double elev = _scene?.CurrentWorkPlane?.Elevation ?? 0;
             double half = _groundSize * 0.5;
 
+            // ── Inner ground (detailed: procedural texture + grid overlay) ──
             var mesh = new System.Windows.Media.Media3D.MeshGeometry3D();
             mesh.Positions.Add(new Point3D(-half, -half, elev));
             mesh.Positions.Add(new Point3D(half, -half, elev));
@@ -5385,6 +5438,54 @@ namespace DisperSim3D.Controls
             _groundPlaneVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
                 new Visual3DTag("GroundPlane", "ground"));
             _viewport.Children.Add(_groundPlaneVisual);
+
+            // ── Outer ground (circular disc extending to sky dome radius) ──
+            double outerRadius = Math.Max(500.0, _groundSize * 5.0);
+            if (outerRadius > half + 1.0)
+            {
+                const int segments = 128;
+                var outerMesh = new System.Windows.Media.Media3D.MeshGeometry3D();
+
+                outerMesh.Positions.Add(new Point3D(0, 0, elev - 0.02));
+                outerMesh.TextureCoordinates.Add(new System.Windows.Point(0.5, 0.5));
+
+                for (int i = 0; i <= segments; i++)
+                {
+                    double angle = 2 * Math.PI * i / segments;
+                    outerMesh.Positions.Add(new Point3D(
+                        outerRadius * Math.Cos(angle),
+                        outerRadius * Math.Sin(angle),
+                        elev - 0.02));
+                    outerMesh.TextureCoordinates.Add(new System.Windows.Point(
+                        0.5 + 0.5 * Math.Cos(angle),
+                        0.5 + 0.5 * Math.Sin(angle)));
+                }
+
+                for (int i = 0; i < segments; i++)
+                {
+                    outerMesh.TriangleIndices.Add(0);
+                    outerMesh.TriangleIndices.Add(i + 1);
+                    outerMesh.TriangleIndices.Add(i + 2);
+                }
+
+                System.Windows.Media.Brush outerBrush;
+                if (env != null && !string.IsNullOrEmpty(env.GroundTexturePath))
+                    outerBrush = Core.EnvironmentRenderer.BuildGroundBrush(
+                        env.Ground, outerRadius * 2, false, env.GroundTexturePath, env.GroundTextureTileSize);
+                else
+                    outerBrush = Core.EnvironmentRenderer.BuildGroundBrush(
+                        env?.Ground ?? Models.GroundMaterial.Grass, outerRadius * 2, false);
+
+                var outerMat = new System.Windows.Media.Media3D.DiffuseMaterial(outerBrush);
+                var outerGeom = new System.Windows.Media.Media3D.GeometryModel3D
+                {
+                    Geometry = outerMesh,
+                    Material = outerMat,
+                    BackMaterial = outerMat
+                };
+                _outerGroundVisual = new System.Windows.Media.Media3D.ModelVisual3D { Content = outerGeom };
+                _viewport.Children.Add(_outerGroundVisual);
+            }
 
             UpdateCompassLabels(elev, half);
         }

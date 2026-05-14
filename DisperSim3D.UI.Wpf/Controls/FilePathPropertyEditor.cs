@@ -45,46 +45,57 @@ namespace DisperSim3D.Controls
         private void RebuildItems()
         {
             _suppressSync = true;
-            Items.Clear();
-
-            for (int i = 0; i < _presetLabels.Length; i++)
-                Items.Add(_presetLabels[i]);
-
-            string current = FilePathValue ?? "";
-            int customIdx = -1;
-            if (!string.IsNullOrEmpty(current))
+            try
             {
-                bool found = _presetValues.Contains(current);
-                if (!found)
+                Items.Clear();
+
+                for (int i = 0; i < _presetLabels.Length; i++)
+                    Items.Add(_presetLabels[i]);
+
+                string current = FilePathValue ?? "";
+                int customIdx = -1;
+                if (!string.IsNullOrEmpty(current))
                 {
-                    string display;
-                    try { display = System.IO.Path.GetFileName(current); }
-                    catch { display = current; }
-                    customIdx = Items.Count;
-                    Items.Add(display);
+                    bool found = _presetValues.Contains(current);
+                    if (!found)
+                    {
+                        string display;
+                        try { display = System.IO.Path.GetFileName(current); }
+                        catch { display = current; }
+                        customIdx = Items.Count;
+                        Items.Add(display);
+                    }
+                }
+
+                Items.Add("Browse…");
+
+                if (customIdx >= 0)
+                    SelectedIndex = customIdx;
+                else
+                {
+                    for (int i = 0; i < _presetValues.Length; i++)
+                        if (_presetValues[i] == current) { SelectedIndex = i; break; }
                 }
             }
-
-            Items.Add("Browse…");
-
-            if (customIdx >= 0)
-                SelectedIndex = customIdx;
-            else
+            finally
             {
-                for (int i = 0; i < _presetValues.Length; i++)
-                    if (_presetValues[i] == current) { SelectedIndex = i; break; }
+                _suppressSync = false;
             }
-
-            _suppressSync = false;
         }
 
         private void PushValue(string value)
         {
             _suppressSync = true;
-            FilePathValue = value;
-            try { if (BoundPropertyItem != null) BoundPropertyItem.Value = value; }
-            catch { }
-            _suppressSync = false;
+            try
+            {
+                FilePathValue = value;
+                try { if (BoundPropertyItem != null) BoundPropertyItem.Value = value; }
+                catch { }
+            }
+            finally
+            {
+                _suppressSync = false;
+            }
         }
 
         protected override void OnSelectionChanged(SelectionChangedEventArgs e)
