@@ -105,6 +105,24 @@ namespace DisperSim3D.UI.Avalonia.Views
         }
 
         /// <summary>
+        /// Create a <see cref="CameraPreset"/> from the current turntable state.
+        /// Converts Azimuth/Elevation/Distance/Target back to the WPF-style
+        /// Position + LookDirection representation used by the model.
+        /// </summary>
+        public DisperSim3D.Models.CameraPreset CreatePreset(string name)
+        {
+            var eye = Eye;
+            var lookDir = Target - eye;
+            return new DisperSim3D.Models.CameraPreset
+            {
+                Name = name,
+                Position = new DisperSim3D.Geometry.Point3D(eye.X, eye.Y, eye.Z),
+                LookDirection = new DisperSim3D.Geometry.Vector3D(lookDir.X, lookDir.Y, lookDir.Z),
+                UpDirection = new DisperSim3D.Geometry.Vector3D(0, 0, 1)
+            };
+        }
+
+        /// <summary>
         /// Apply a saved camera preset. Converts the preset's Position +
         /// LookDirection (WPF-style) to the turntable's Azimuth / Elevation /
         /// Distance / Target representation.

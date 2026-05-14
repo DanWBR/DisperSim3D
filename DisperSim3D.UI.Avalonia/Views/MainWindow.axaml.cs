@@ -40,6 +40,23 @@ namespace DisperSim3D.UI.Avalonia.Views
         private string? _projectPath;
         private bool _isDirty;
 
+        // ── Simulation manager ──────────────────────────────────────────
+        private Core.SimulationManager? _simulationManager;
+        private SimulationManagerPanel? _simManagerPanel;
+
+        private Core.SimulationManager SimulationManager
+        {
+            get
+            {
+                if (_simulationManager == null)
+                {
+                    _simulationManager = new Core.SimulationManager(2);
+                    _simulationManager.JobCompleted += OnSimManagerJobCompleted;
+                }
+                return _simulationManager;
+            }
+        }
+
         // ── Playback state ──────────────────────────────────────────────
         private Simulation? _playbackSim;
         private OpenFoamResult? _playbackResult;
@@ -570,6 +587,67 @@ namespace DisperSim3D.UI.Avalonia.Views
             StatusText.Text = "Tree refreshed";
         }
 
+        private async void MenuViewSavePreset_Click(object? sender, RoutedEventArgs e)
+        {
+            if (_scene is null) { StatusText.Text = "Open or create a project first."; return; }
+
+            string defaultName = "Camera " + (_scene.CameraPresets.Count + 1);
+            var dlg = new Window
+            {
+                Title = "Save Camera Preset",
+                Width = 360, Height = 140,
+                CanResize = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                SystemDecorations = SystemDecorations.BorderOnly
+            };
+
+            string? resultName = null;
+            var tb = new TextBox { Text = defaultName, Margin = new Thickness(0, 0, 0, 12) };
+            var btnOk = new Button { Content = "OK", Width = 80 };
+            var btnCancel = new Button { Content = "Cancel", Width = 80 };
+            btnOk.Click += (_, _) => { resultName = tb.Text; dlg.Close(); };
+            btnCancel.Click += (_, _) => dlg.Close();
+
+            var buttons = new StackPanel
+            {
+                Orientation = global::Avalonia.Layout.Orientation.Horizontal,
+                HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Right,
+                Spacing = 8,
+                Children = { btnCancel, btnOk }
+            };
+
+            dlg.Content = new StackPanel
+            {
+                Margin = new Thickness(20),
+                Children =
+                {
+                    new TextBlock { Text = "Preset name:", Margin = new Thickness(0, 0, 0, 4) },
+                    tb,
+                    buttons
+                }
+            };
+
+            await dlg.ShowDialog(this);
+            if (string.IsNullOrWhiteSpace(resultName)) return;
+
+            var preset = Viewport3D.SaveCameraPreset(resultName.Trim());
+            _scene.CameraPresets.Add(preset);
+            MarkDirtyAndRefresh("Saved camera preset: " + preset.Name);
+        }
+
+        private void MenuViewResetCam_Click(object? sender, RoutedEventArgs e)
+        {
+            Viewport3D.ResetView();
+            StatusText.Text = "Camera reset to default view";
+        }
+
+        private void ApplyCameraPreset(ProjectTreeNode node)
+        {
+            if (node.Tag is not CameraPreset preset) return;
+            Viewport3D.ApplyCameraPreset(preset);
+            StatusText.Text = "Applied camera preset: " + preset.Name;
+        }
+
         // ── Tools menu ───────────────────────────────────────────────────────
         private async void MenuToolsAddSource_Click(object? sender, RoutedEventArgs e)
             => await AddReleaseSourceAsync();
@@ -684,6 +762,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 case "study":_ = EditDispersionStudyAsync(node); break;
                 case "alloc":_ = EditDetectorAllocationAsync(node); break;
                 case "windrose": _ = EditWindRoseAsync(); break;
+                case "cam":  ApplyCameraPreset(node); break;
                 // Other types don't have edit dialogs yet — fall through
                 // (the inspector pane already shows their properties).
             }
@@ -733,6 +812,10 @@ namespace DisperSim3D.UI.Avalonia.Views
                 case "allocations":
                     AddItem("New Detector Allocation…", "mdi-target",
                         (_, _) => _ = ShowDetectorAllocationAsync());
+                    return;
+                case "cameras":
+                    AddItem("Save Camera Preset…", "mdi-camera-plus-outline",
+                        (_, _) => MenuViewSavePreset_Click(null, new RoutedEventArgs()));
                     return;
                 case "windrose":
                     // The wind-rose section node IS the rose — there is at
@@ -789,8 +872,12 @@ namespace DisperSim3D.UI.Avalonia.Views
                         (_, _) => DeleteFromList(_scene!.WindFieldScenarios, node));
                     return;
                 case "sim":
+                    AddItem("Run", "mdi-play",
+                        (_, _) => RunSimulation(node));
                     AddItem("Configure…", "mdi-pencil-outline",
                         (_, _) => _ = EditSimulationAsync(node));
+                    AddItem("Simulation Manager…", "mdi-playlist-play",
+                        (_, _) => ShowSimulationManager());
                     AddItem("Delete", "mdi-trash-can-outline",
                         (_, _) => DeleteFromList(_scene!.Simulations, node));
                     return;
@@ -805,6 +892,12 @@ namespace DisperSim3D.UI.Avalonia.Views
                         (_, _) => _ = EditDetectorAllocationAsync(node));
                     AddItem("Delete", "mdi-trash-can-outline",
                         (_, _) => DeleteFromList(_scene!.DetectorAllocations, node));
+                    return;
+                case "cam":
+                    AddItem("Apply Preset", "mdi-camera-outline",
+                        (_, _) => ApplyCameraPreset(node));
+                    AddItem("Delete", "mdi-trash-can-outline",
+                        (_, _) => DeleteFromList(_scene!.CameraPresets, node));
                     return;
                 case "view":
                     AddItem("Show in inspector", "mdi-eye-outline",
@@ -1060,12 +1153,107 @@ namespace DisperSim3D.UI.Avalonia.Views
         private async Task EditSimulationAsync(ProjectTreeNode node)
         {
             if (_scene is null || node.Tag is not Simulation sim) return;
-            // The editing constructor preserves Id; on OK the dialog mutates
-            // the same instance in place so anything holding a reference (e.g.
-            // a running progress panel) doesn't see it swapped out.
             var dlg = new SimulationEditorDialog(_scene, sim);
             if (!await dlg.ShowDialog<bool>(this)) return;
             MarkDirtyAndRefresh("Updated simulation: " + sim.Name);
+        }
+
+        // ── Simulation execution ─────────────────────────────────────────────
+
+        private void RunSimulation(ProjectTreeNode node)
+        {
+            if (_scene is null || node.Tag is not Simulation sim) return;
+
+            var scenario = _scene.DispersionScenario;
+            if (scenario == null || scenario.Sources.Count == 0)
+            {
+                StatusText.Text = "No sources defined — cannot run simulation.";
+                return;
+            }
+
+            var config = sim.SnapshotCfdConfig ?? scenario.CfdConfig ?? new CfdConfiguration();
+
+            var obstacles = new List<BoundingBox>();
+            foreach (var deco in _scene.Decorations)
+            {
+                if (deco.BoundingBox != null)
+                    obstacles.Add(deco.BoundingBox);
+            }
+
+            Dictionary<string, double[]>? hpProfiles = null;
+            foreach (var src in scenario.Sources)
+            {
+                if (src.HighPressureLeak != null)
+                {
+                    hpProfiles ??= new Dictionary<string, double[]>();
+                    var profile = HighPressureLeakModel.ComputeBlowdownProfile(
+                        src.HighPressureLeak, scenario.SimulationDurationS, scenario.TimeStepS);
+                    hpProfiles[src.Id] = profile;
+                }
+            }
+
+            SimulationManager.Enqueue(
+                scenario, sim.SolverType, config, _scene, null,
+                obstacles, hpProfiles);
+
+            ShowSimulationManager();
+            StatusText.Text = $"Simulation enqueued: {sim.Name}";
+        }
+
+        private void MenuToolsSimManager_Click(object? sender, RoutedEventArgs e)
+            => ShowSimulationManager();
+
+        private void ShowSimulationManager()
+        {
+            if (_simManagerPanel == null)
+            {
+                _simManagerPanel = new SimulationManagerPanel(SimulationManager);
+                _simManagerPanel.PlayResultRequested += (_, entry) =>
+                {
+                    if (entry.Tag is OpenFoamResult result)
+                    {
+                        var fakeSim = new Simulation
+                        {
+                            Name = entry.Name ?? "Simulation",
+                            Status = SimulationStatus.Completed,
+                            CasePath = entry.CasePath
+                        };
+                        fakeSim.ResultTag = result;
+                        InitPlayback(fakeSim);
+                    }
+                };
+                SimManagerHost.Child = _simManagerPanel;
+            }
+
+            SimManagerHost.IsVisible = true;
+        }
+
+        private void OnSimManagerJobCompleted(object? sender, Core.SimulationJob job)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (job.Status == Core.SimulationJobStatus.Completed)
+                {
+                    StatusText.Text = $"Simulation completed: {job.Name}";
+
+                    if (job.ResultEntry != null && _scene != null)
+                    {
+                        var sim = _scene.Simulations.FirstOrDefault(s =>
+                            s.SolverType == job.SolverType && s.Name == job.Scenario?.Name);
+                        if (sim != null)
+                        {
+                            sim.Status = SimulationStatus.Completed;
+                            sim.ResultTag = job.ResultEntry.Tag;
+                            sim.CasePath = job.ResultEntry.CasePath ?? "";
+                            RebuildTree();
+                        }
+                    }
+                }
+                else if (job.Status == Core.SimulationJobStatus.Failed)
+                {
+                    StatusText.Text = $"Simulation failed: {job.Name}";
+                }
+            });
         }
 
         // ── Gas mixture editor (per gas-library item) ────────────────────────

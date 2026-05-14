@@ -11,7 +11,7 @@
         Icon="/Assets/Air.ico"
         Width="1280" Height="800"
         WindowStartupLocation="CenterScreen"
-        MinWidth="900" MinHeight="600">
+>
 
   <Window.Styles>
     <Style Selector="TreeViewItem">
@@ -48,6 +48,13 @@
       <MenuItem Header="_View">
         <MenuItem Header="Refresh Project Tree" x:Name="MenuViewRefresh" Click="MenuViewRefresh_Click" InputGesture="F5">
           <MenuItem.Icon><i:Icon Value="mdi-refresh" /></MenuItem.Icon>
+        </MenuItem>
+        <Separator />
+        <MenuItem Header="Save Camera _Preset..." x:Name="MenuViewSavePreset" Click="MenuViewSavePreset_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-camera-plus-outline" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="Reset _Camera" x:Name="MenuViewResetCam" Click="MenuViewResetCam_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-camera-flip-outline" /></MenuItem.Icon>
         </MenuItem>
       </MenuItem>
 
@@ -105,6 +112,10 @@
           <MenuItem.Icon><i:Icon Value="mdi-target" /></MenuItem.Icon>
         </MenuItem>
         <Separator />
+        <MenuItem Header="_Simulation Manager..." x:Name="MenuToolsSimManager" Click="MenuToolsSimManager_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-playlist-play" /></MenuItem.Icon>
+        </MenuItem>
+        <Separator />
         <MenuItem Header="_CFD Settings..." x:Name="MenuToolsCfd" Click="MenuToolsCfd_Click">
           <MenuItem.Icon><i:Icon Value="mdi-cog-outline" /></MenuItem.Icon>
         </MenuItem>
@@ -143,6 +154,11 @@
                    VerticalAlignment="Center" Foreground="#666" />
       </Grid>
     </Border>
+
+    <!-- Bottom dock: simulation manager panel (hidden by default) -->
+    <Border DockPanel.Dock="Bottom" x:Name="SimManagerHost"
+            IsVisible="False" BorderBrush="#CCC" BorderThickness="0,1,0,0"
+            Height="220" />
 
     <!-- Center: 3-pane split ────────────────────────────────────────── -->
     <Grid ColumnDefinitions="280,4,*,4,360">

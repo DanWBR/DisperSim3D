@@ -48,6 +48,30 @@ namespace DisperSim3D.UI.Avalonia.Views
         private int _lineAnimScaleUniform;
         private bool _hasWindLines;
 
+        // Shader state — sky dome (procedural clouds + sun)
+        private int _skyProgram;
+        private int _skyMvpUniform;
+        private int _skySunDirUniform;
+        private int _skyTimeUniform;
+
+        // Shader state — grass blades (animated sway)
+        private int _grassProgram;
+        private int _grassMvpUniform;
+        private int _grassTimeUniform;
+        private int _grassWindDirUniform;
+        private GlMeshBuffer? _grassMesh;
+
+        // Shader state — ground plane (procedural textures)
+        private int _groundProgram;
+        private int _groundMvpUniform;
+        private int _groundSunDirUniform;
+        private int _groundSunColorUniform;
+        private int _groundAmbientUniform;
+        private int _groundMaterialUniform;
+        private int _groundGridOverlayUniform;
+        private int _groundMaterialIndex;
+        private bool _groundShowGridOverlay;
+
         // Shader state — solid (lit) program with sun + rim light
         private int _solidProgram;
         private int _solidMvpUniform;
@@ -71,8 +95,10 @@ namespace DisperSim3D.UI.Avalonia.Views
         private delegate void D_glCullFace(int mode);
         private unsafe delegate void D_glUniformMatrix3fv(
             int loc, int count, bool transpose, float* value);
+        private delegate void D_glUniform1i(int loc, int v0);
         private D_glUniform3f? _glUniform3f;
         private D_glUniform1f? _glUniform1f;
+        private D_glUniform1i? _glUniform1i;
         private D_glBlendFunc? _glBlendFunc;
         private D_glCullFace? _glCullFace;
         private D_glUniformMatrix3fv? _glUniformMatrix3fv;
@@ -161,6 +187,271 @@ void main()
 }
 ";
 
+        // ── Sky dome shader (procedural clouds + sun) ──────────────────
+
+        private const string SkyVertBody = @"
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNorm;
+layout(location = 2) in vec4 aCol;
+
+uniform mat4 uMVP;
+
+out vec3 vDir;
+out vec4 vVertCol;
+
+void main()
+{
+    vDir     = normalize(aPos);
+    vVertCol = aCol;
+    gl_Position = uMVP * vec4(aPos, 1.0);
+}
+";
+
+        private const string SkyFragBody = @"
+in vec3 vDir;
+in vec4 vVertCol;
+
+uniform vec3  uSunDir;
+uniform float uTime;
+
+layout(location = 0) out vec4 fragColor;
+
+float hash21(vec2 p)
+{
+    p = fract(p * vec2(234.34, 435.345));
+    p += dot(p, p + 34.23);
+    return fract(p.x * p.y);
+}
+
+float vnoise(vec2 p)
+{
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash21(i);
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbm(vec2 p)
+{
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i < 5; i++) { v += a * vnoise(p); p *= 2.03; a *= 0.5; }
+    return v;
+}
+
+void main()
+{
+    vec3 dir = normalize(vDir);
+    float el = max(dir.z, 0.0);
+
+    // --- sky gradient (deep blue zenith -> light horizon) ---
+    vec3 zenith  = vec3(0.22, 0.40, 0.82);
+    vec3 horizon = vec3(0.68, 0.80, 0.94);
+    vec3 sky = mix(horizon, zenith, pow(el, 0.55));
+
+    // subtle warm band near horizon (atmospheric scatter)
+    float hBand = exp(-el * 12.0);
+    sky += vec3(0.12, 0.06, 0.0) * hBand;
+
+    // --- sun disc + glow + halo ---
+    vec3 sd = normalize(uSunDir);
+    float cosA = dot(dir, sd);
+
+    float disc = smoothstep(0.9996, 0.9999, cosA);
+    float glow = pow(max(cosA, 0.0), 128.0) * 0.8;
+    float halo = pow(max(cosA, 0.0), 12.0) * 0.25;
+
+    vec3 sunCol  = vec3(1.0, 0.97, 0.88);
+    vec3 haloCol = vec3(1.0, 0.85, 0.55);
+    sky += sunCol * disc + sunCol * glow + haloCol * halo;
+
+    // --- clouds (FBM noise on projected dome coords) ---
+    vec2 cuv = dir.xy / (dir.z + 0.25) * 2.5;
+    cuv += vec2(uTime * 0.008, uTime * 0.003);
+
+    float c1 = fbm(cuv * 1.8);
+    float c2 = fbm(cuv * 3.5 + 7.7);
+    float cloud = smoothstep(0.42, 0.72, c1);
+    cloud += smoothstep(0.50, 0.78, c2) * 0.4;
+    cloud = clamp(cloud, 0.0, 1.0);
+
+    // fade clouds near horizon to avoid hard edge
+    cloud *= smoothstep(0.0, 0.18, el);
+
+    // cloud lit side vs shadow
+    float cLit = 0.6 + 0.4 * max(dot(vec3(0, 0, 1), sd), 0.0);
+    vec3 cloudCol = vec3(cLit, cLit, cLit * 0.98);
+    sky = mix(sky, cloudCol, cloud * 0.75);
+
+    fragColor = vec4(sky, 1.0);
+}
+";
+
+        // ── Grass blade shader (animated sway) ─────────────────────────
+
+        private const string GrassVertBody = @"
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNorm;
+layout(location = 2) in vec4 aCol;
+
+uniform mat4  uMVP;
+uniform float uTime;
+uniform vec3  uWindDir;
+
+out vec4 vCol;
+
+void main()
+{
+    vec3 pos = aPos;
+    float h = clamp(aNorm.z, 0.0, 1.0);
+
+    float p1 = uTime * 1.8 + pos.x * 0.45 + pos.y * 0.32;
+    float p2 = uTime * 1.1 + pos.x * 0.65 - pos.y * 0.48;
+    float s1 = sin(p1) * h * h;
+    float s2 = sin(p2) * h * h * 0.55;
+
+    pos.x += uWindDir.x * s1 * 0.45 + (-uWindDir.y) * s2 * 0.22;
+    pos.y += uWindDir.y * s1 * 0.45 +   uWindDir.x  * s2 * 0.22;
+    pos.z += cos(p1) * h * 0.04;
+
+    vCol = aCol;
+    gl_Position = uMVP * vec4(pos, 1.0);
+}
+";
+
+        private const string GrassFragBody = @"
+in vec4 vCol;
+layout(location = 0) out vec4 fragColor;
+void main() { fragColor = vCol; }
+";
+
+        // ── Ground plane shader (procedural textures) ──────────────────
+
+        private const string GroundVertBody = @"
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNorm;
+layout(location = 2) in vec4 aCol;
+
+uniform mat4 uMVP;
+
+out vec3 vWorldPos;
+out vec3 vNorm;
+out vec4 vCol;
+
+void main()
+{
+    vWorldPos = aPos;
+    vNorm     = aNorm;
+    vCol      = aCol;
+    gl_Position = uMVP * vec4(aPos, 1.0);
+}
+";
+
+        private const string GroundFragBody = @"
+in vec3 vWorldPos;
+in vec3 vNorm;
+in vec4 vCol;
+
+uniform vec3  uSunDir;
+uniform vec3  uSunColor;
+uniform vec3  uAmbient;
+uniform int   uMaterial;
+uniform float uGridOverlay;
+
+layout(location = 0) out vec4 fragColor;
+
+float hash21(vec2 p)
+{
+    p = fract(p * vec2(234.34, 435.345));
+    p += dot(p, p + 34.23);
+    return fract(p.x * p.y);
+}
+
+float vnoise(vec2 p)
+{
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash21(i);
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbm(vec2 p)
+{
+    float v = 0.0, a = 0.5;
+    for (int i = 0; i < 4; i++)
+    {
+        v += a * vnoise(p);
+        p *= 2.01;
+        a *= 0.5;
+    }
+    return v;
+}
+
+void main()
+{
+    vec2 uv = vWorldPos.xy;
+    vec3 col;
+
+    if (uMaterial == 1) // Grass
+    {
+        float n  = fbm(uv * 0.4);
+        float d  = vnoise(uv * 3.0);
+        col = mix(vec3(0.30, 0.44, 0.20), vec3(0.50, 0.62, 0.30), n);
+        col += vec3(-0.02, 0.02, -0.01) * d;
+    }
+    else if (uMaterial == 2) // Concrete
+    {
+        float n = vnoise(uv * 2.0) * 0.04;
+        col = vec3(0.74 + n, 0.74 + n, 0.72 + n);
+        vec2 g = fract(uv / 5.0);
+        float joint = 1.0 - smoothstep(0.0, 0.06, min(g.x, g.y));
+        joint = max(joint, 1.0 - smoothstep(0.94, 1.0, max(g.x, g.y)));
+        col = mix(col, vec3(0.52, 0.52, 0.50), joint * 0.55);
+    }
+    else if (uMaterial == 3) // Sand
+    {
+        float n = fbm(uv * 0.8);
+        float grain = vnoise(uv * 8.0) * 0.06;
+        col = vec3(0.84, 0.77, 0.58) + vec3(0.04, 0.02, -0.02) * n + grain;
+    }
+    else if (uMaterial == 4) // Asphalt
+    {
+        float n = vnoise(uv * 4.0) * 0.05;
+        float stones = vnoise(uv * 12.0) * 0.03;
+        col = vec3(0.24 + n, 0.24 + n, 0.26 + n) + stones;
+    }
+    else // Grid or fallback
+    {
+        col = vCol.rgb;
+    }
+
+    // Grid overlay (5 m minor, 25 m major)
+    if (uGridOverlay > 0.5)
+    {
+        vec2 g5  = abs(fract(uv / 5.0  + 0.5) - 0.5);
+        float l5 = 1.0 - smoothstep(0.015, 0.04, min(g5.x, g5.y));
+        vec2 g25 = abs(fract(uv / 25.0 + 0.5) - 0.5);
+        float l25= 1.0 - smoothstep(0.008, 0.025, min(g25.x, g25.y));
+        col = mix(col, vec3(0.25), l5  * 0.2);
+        col = mix(col, vec3(0.15), l25 * 0.3);
+    }
+
+    // Sun + ambient lighting
+    vec3 N    = normalize(vNorm);
+    float diff = max(dot(N, normalize(uSunDir)), 0.0);
+    vec3 light = uAmbient + uSunColor * diff;
+
+    fragColor = vec4(col * light, 1.0);
+}
+";
+
         // ── Solid (lit) shader for 3D meshes ────────────────────────────
 
         private const string SolidVertBody = @"
@@ -246,6 +537,12 @@ void main()
         }
 
         /// <summary>
+        /// Create a <see cref="CameraPreset"/> from the current view.
+        /// </summary>
+        public CameraPreset SaveCameraPreset(string name)
+            => _camera.CreatePreset(name);
+
+        /// <summary>
         /// Populate the viewport with 3D markers for every object in the
         /// given scene (sources, monitors, detectors, fire sources).
         /// The actual GPU upload is deferred to the next render frame
@@ -281,6 +578,9 @@ void main()
                 var p4 = gl.GetProcAddress("glUniformMatrix3fv");
                 if (p4 != IntPtr.Zero)
                     _glUniformMatrix3fv = Marshal.GetDelegateForFunctionPointer<D_glUniformMatrix3fv>(p4);
+                var p5 = gl.GetProcAddress("glUniform1i");
+                if (p5 != IntPtr.Zero)
+                    _glUniform1i = Marshal.GetDelegateForFunctionPointer<D_glUniform1i>(p5);
 
                 // ── Compile line shader ─────────────────────────────────
                 _lineProgram = CompileProgram(gl, LineVertBody, LineFragBody);
@@ -299,6 +599,27 @@ void main()
                 _solidRimDirUniform  = GetUniformLoc(gl, _solidProgram, "uRimDir");
                 _solidRimColorUniform = GetUniformLoc(gl, _solidProgram, "uRimColor");
                 _solidAlphaUniform   = GetUniformLoc(gl, _solidProgram, "uAlpha");
+
+                // ── Compile sky shader ──────────────────────────────────
+                _skyProgram       = CompileProgram(gl, SkyVertBody, SkyFragBody);
+                _skyMvpUniform    = GetUniformLoc(gl, _skyProgram, "uMVP");
+                _skySunDirUniform = GetUniformLoc(gl, _skyProgram, "uSunDir");
+                _skyTimeUniform   = GetUniformLoc(gl, _skyProgram, "uTime");
+
+                // ── Compile grass shader ─────────────────────────────────
+                _grassProgram       = CompileProgram(gl, GrassVertBody, GrassFragBody);
+                _grassMvpUniform    = GetUniformLoc(gl, _grassProgram, "uMVP");
+                _grassTimeUniform   = GetUniformLoc(gl, _grassProgram, "uTime");
+                _grassWindDirUniform = GetUniformLoc(gl, _grassProgram, "uWindDir");
+
+                // ── Compile ground shader ──────────────────────────────
+                _groundProgram           = CompileProgram(gl, GroundVertBody, GroundFragBody);
+                _groundMvpUniform        = GetUniformLoc(gl, _groundProgram, "uMVP");
+                _groundSunDirUniform     = GetUniformLoc(gl, _groundProgram, "uSunDir");
+                _groundSunColorUniform   = GetUniformLoc(gl, _groundProgram, "uSunColor");
+                _groundAmbientUniform    = GetUniformLoc(gl, _groundProgram, "uAmbient");
+                _groundMaterialUniform   = GetUniformLoc(gl, _groundProgram, "uMaterial");
+                _groundGridOverlayUniform = GetUniformLoc(gl, _groundProgram, "uGridOverlay");
 
                 // ── Build grid geometry ─────────────────────────────────
                 _grid.Init(gl);
@@ -375,34 +696,23 @@ void main()
             float warmG = 0.85f + 0.15f * MathF.Min(1f, elRad / 1.0f);
             float warmB = 0.70f + 0.30f * MathF.Min(1f, elRad / 1.0f);
 
-            // ── 1. Sky dome (drawn first, no depth write) ───────────────
-            if (env.SkydomeEnabled && _skyDomeMesh != null && _solidProgram != 0)
+            // ── 1. Sky dome (procedural clouds + sun, no depth write) ───
+            if (env.SkydomeEnabled && _skyDomeMesh != null && _skyProgram != 0)
             {
                 gl.Disable(GL_DEPTH_TEST);
-                gl.DepthMask(0); // don't write depth
+                gl.DepthMask(0);
 
-                gl.UseProgram(_solidProgram);
+                gl.UseProgram(_skyProgram);
 
-                // Emissive: ambient = (1,1,1), sun = (0,0,0), rim = (0,0,0)
-                _glUniform1f?.Invoke(_solidAlphaUniform, 1.0f);
-                _glUniform3f?.Invoke(_solidAmbientUniform, 1f, 1f, 1f);
-                _glUniform3f?.Invoke(_solidSunColorUniform, 0f, 0f, 0f);
-                _glUniform3f?.Invoke(_solidSunDirUniform, 0f, 0f, 1f);
-                _glUniform3f?.Invoke(_solidRimColorUniform, 0f, 0f, 0f);
-                _glUniform3f?.Invoke(_solidRimDirUniform, 0f, 0f, -1f);
+                float timeSky = (float)_animClock.Elapsed.TotalSeconds;
+                _glUniform3f?.Invoke(_skySunDirUniform, sunX, sunY, sunZ);
+                _glUniform1f?.Invoke(_skyTimeUniform, timeSky);
 
-                // Sky dome follows camera position (always around the viewer)
                 var camPos = _camera.Eye;
                 var skyModel = Matrix4x4.CreateTranslation(camPos);
                 var skyMvp = skyModel * view * proj;
-                SetMatrixUniform(gl, _solidMvpUniform, skyMvp);
-                SetMatrixUniform(gl, _solidModelUniform, skyModel);
+                SetMatrixUniform(gl, _skyMvpUniform, skyMvp);
 
-                float* identMat3 = stackalloc float[9]
-                    { 1,0,0, 0,1,0, 0,0,1 };
-                _glUniformMatrix3fv?.Invoke(_solidNormalMatUniform, 1, false, identMat3);
-
-                // Disable culling — hemisphere is viewed from inside
                 gl.Disable(GL_CULL_FACE);
                 _skyDomeMesh.Draw(gl);
 
@@ -415,29 +725,21 @@ void main()
             gl.DepthMask(1);
             gl.Clear(GL_DEPTH_BUFFER_BIT); // reset depth after sky
 
-            // ── 2. Ground plane (lit, responds to sun) ──────────────────
-            if (_groundPlaneMesh != null && _solidProgram != 0)
+            // ── 2. Ground plane (procedural textures + lighting) ──────────
+            if (_groundPlaneMesh != null && _groundProgram != 0)
             {
-                gl.UseProgram(_solidProgram);
+                gl.UseProgram(_groundProgram);
 
-                _glUniform1f?.Invoke(_solidAlphaUniform, 1.0f);
-                // Set full scene lighting for ground
-                _glUniform3f?.Invoke(_solidSunDirUniform, sunX, sunY, sunZ);
-                _glUniform3f?.Invoke(_solidSunColorUniform,
+                _glUniform1i?.Invoke(_groundMaterialUniform, _groundMaterialIndex);
+                _glUniform1f?.Invoke(_groundGridOverlayUniform,
+                    _groundShowGridOverlay ? 1f : 0f);
+                _glUniform3f?.Invoke(_groundSunDirUniform, sunX, sunY, sunZ);
+                _glUniform3f?.Invoke(_groundSunColorUniform,
                     warmR * sunI, warmG * sunI, warmB * sunI);
-                _glUniform3f?.Invoke(_solidAmbientUniform,
+                _glUniform3f?.Invoke(_groundAmbientUniform,
                     0.431f * ambI, 0.490f * ambI, 0.588f * ambI);
-                // Rim light: opposite sun, cool blue, 25% intensity
-                _glUniform3f?.Invoke(_solidRimDirUniform, -sunX, -sunY, sunZ * 0.5f);
-                _glUniform3f?.Invoke(_solidRimColorUniform,
-                    0.549f * 0.25f, 0.627f * 0.25f, 0.784f * 0.25f);
 
-                SetMatrixUniform(gl, _solidMvpUniform, mvp);
-                SetMatrixUniform(gl, _solidModelUniform, Matrix4x4.Identity);
-
-                float* identMat3g = stackalloc float[9]
-                    { 1,0,0, 0,1,0, 0,0,1 };
-                _glUniformMatrix3fv?.Invoke(_solidNormalMatUniform, 1, false, identMat3g);
+                SetMatrixUniform(gl, _groundMvpUniform, mvp);
 
                 gl.Enable(GL_CULL_FACE);
                 _glCullFace?.Invoke(GL_BACK);
@@ -452,6 +754,25 @@ void main()
             _glUniform1f?.Invoke(_lineAnimScaleUniform, 0f);
             SetMatrixUniform(gl, _mvpUniform, mvp);
             _grid.Render(gl);
+
+            // ── 3b. Animated grass blades ───────────────────────────────
+            if (_grassMesh != null && _grassProgram != 0)
+            {
+                gl.UseProgram(_grassProgram);
+
+                float grassTime = (float)_animClock.Elapsed.TotalSeconds;
+                _glUniform1f?.Invoke(_grassTimeUniform, grassTime);
+                _glUniform3f?.Invoke(_grassWindDirUniform, 0.7f, 0.7f, 0f);
+                SetMatrixUniform(gl, _grassMvpUniform, mvp);
+
+                gl.Disable(GL_CULL_FACE);
+                gl.Enable(GL_BLEND);
+                _glBlendFunc?.Invoke(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                _grassMesh.Draw(gl);
+                gl.Disable(GL_BLEND);
+
+                gl.UseProgram(0);
+            }
 
             // ── 4. Solid scene objects ───────────────────────────────────
             if (_sceneObjects.Count > 0 && _solidProgram != 0)
@@ -541,7 +862,7 @@ void main()
             // ── Cleanup state ───────────────────────────────────────────
             gl.UseProgram(0);
 
-            if (_hasWindLines)
+            if (_hasWindLines || _grassMesh != null || _skyDomeMesh != null)
                 RequestNextFrameRendering();
         }
 
@@ -565,6 +886,23 @@ void main()
                 gl.DeleteProgram(_solidProgram);
                 _solidProgram = 0;
             }
+            if (_skyProgram != 0)
+            {
+                gl.DeleteProgram(_skyProgram);
+                _skyProgram = 0;
+            }
+            if (_grassProgram != 0)
+            {
+                gl.DeleteProgram(_grassProgram);
+                _grassProgram = 0;
+            }
+            if (_groundProgram != 0)
+            {
+                gl.DeleteProgram(_groundProgram);
+                _groundProgram = 0;
+            }
+            _grassMesh?.Cleanup(gl);
+            _grassMesh = null;
             _initOk = false;
         }
 
@@ -610,27 +948,27 @@ void main()
                 _skyDomeMesh.Upload(gl, skyV, skyI);
             }
 
-            // Ground plane — colour depends on material type
+            // Ground plane — procedural shader handles material appearance
             _groundPlaneMesh?.Cleanup(gl);
             _groundPlaneMesh = null;
-            // Ground colours — brighter than raw material tones because
-            // directional lighting will darken shadowed areas. These values
-            // are tuned so that under the default sun (azimuth 135°,
-            // elevation 55°) the visible result approximates the WPF
-            // EnvironmentRenderer's procedural textures.
-            Vector4 groundColor = env.Ground switch
+            _groundMaterialIndex = (int)env.Ground;
+            _groundShowGridOverlay = env.ShowGridOverlay;
             {
-                GroundMaterial.Grass    => new Vector4(0.48f, 0.58f, 0.35f, 1f),
-                GroundMaterial.Concrete => new Vector4(0.78f, 0.78f, 0.76f, 1f),
-                GroundMaterial.Sand     => new Vector4(0.87f, 0.80f, 0.63f, 1f),
-                GroundMaterial.Asphalt  => new Vector4(0.28f, 0.28f, 0.30f, 1f),
-                _                       => new Vector4(0.48f, 0.58f, 0.35f, 1f)
-            };
-            {
+                var fallback = new Vector4(0.48f, 0.58f, 0.35f, 1f);
                 var (gndV, gndI) = GlMeshBuffer.GenerateGroundQuad(
-                    200f, groundColor);
+                    200f, fallback);
                 _groundPlaneMesh = new GlMeshBuffer();
                 _groundPlaneMesh.Upload(gl, gndV, gndI, keepCpuCopy: true);
+            }
+
+            // Grass blades — only for Grass material
+            _grassMesh?.Cleanup(gl);
+            _grassMesh = null;
+            if (env.Ground == GroundMaterial.Grass)
+            {
+                var (gV, gI) = GlMeshBuffer.GenerateGrassBlades(80f, 18000);
+                _grassMesh = new GlMeshBuffer();
+                _grassMesh.Upload(gl, gV, gI);
             }
 
             if (scene is null) return;

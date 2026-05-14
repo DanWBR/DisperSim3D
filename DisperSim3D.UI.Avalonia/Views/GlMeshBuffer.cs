@@ -854,6 +854,53 @@ namespace DisperSim3D.UI.Avalonia.Views
             return lineVerts.ToArray();
         }
 
+        public static (SolidVertex[] verts, uint[] indices) GenerateGrassBlades(
+            float halfSize, int bladeCount, uint seed = 12345)
+        {
+            var verts = new SolidVertex[bladeCount * 4];
+            var indices = new uint[bladeCount * 6];
+
+            uint rng = seed;
+            uint NextRng() { rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5; return rng; }
+            float Rand01() => (NextRng() & 0x7FFF) / 32767f;
+
+            for (int b = 0; b < bladeCount; b++)
+            {
+                float bx = (Rand01() * 2f - 1f) * halfSize;
+                float by = (Rand01() * 2f - 1f) * halfSize;
+                float height = 0.3f + Rand01() * 0.7f;
+                float width = 0.06f + Rand01() * 0.06f;
+                float angle = Rand01() * MathF.PI * 2f;
+                float ca = MathF.Cos(angle), sa = MathF.Sin(angle);
+                float dx = -sa * width * 0.5f, dy = ca * width * 0.5f;
+
+                var darkGreen = new Vector4(0.18f, 0.32f, 0.10f, 1f);
+                var lightGreen = new Vector4(0.35f, 0.55f, 0.20f, 0.9f);
+
+                int vi = b * 4;
+                // aNorm.z encodes height factor: 0 at base, 1 at tip
+                verts[vi + 0] = new SolidVertex(
+                    new Vector3(bx - dx, by - dy, 0f),
+                    new Vector3(0, 0, 0f), darkGreen);
+                verts[vi + 1] = new SolidVertex(
+                    new Vector3(bx + dx, by + dy, 0f),
+                    new Vector3(0, 0, 0f), darkGreen);
+                verts[vi + 2] = new SolidVertex(
+                    new Vector3(bx + dx * 0.3f, by + dy * 0.3f, height),
+                    new Vector3(0, 0, 1f), lightGreen);
+                verts[vi + 3] = new SolidVertex(
+                    new Vector3(bx - dx * 0.3f, by - dy * 0.3f, height),
+                    new Vector3(0, 0, 1f), lightGreen);
+
+                uint bi = (uint)(b * 4);
+                int ii = b * 6;
+                indices[ii + 0] = bi; indices[ii + 1] = bi + 1; indices[ii + 2] = bi + 2;
+                indices[ii + 3] = bi; indices[ii + 4] = bi + 2; indices[ii + 5] = bi + 3;
+            }
+
+            return (verts, indices);
+        }
+
         private static void MarchStreamline(
             WindField3D wf,
             double x0, double y0, double z0,

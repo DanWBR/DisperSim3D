@@ -164,7 +164,7 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
             if (scene.CameraPresets != null)
                 foreach (var c in scene.CameraPresets)
                     cams.Children.Add(new ProjectTreeNode(
-                        "cam:" + c.Name, LeafIcon,
+                        "cam:" + c.Id, LeafIcon,
                         string.IsNullOrEmpty(c.Name) ? "(camera)" : c.Name,
                         tag: c));
             project.Children.Add(cams);
