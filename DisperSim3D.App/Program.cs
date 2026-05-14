@@ -34,6 +34,8 @@ namespace DisperSim3D.App
             {
                 SetProcessDPIAware();
             }
+            DisperSim3D.Core.TempManager.StartupPurge();
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new MainForm());

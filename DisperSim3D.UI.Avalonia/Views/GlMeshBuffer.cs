@@ -680,20 +680,32 @@ namespace DisperSim3D.UI.Avalonia.Views
         }
 
         /// <summary>
-        /// Generate a flat ground quad at Z = <paramref name="elevation"/>
-        /// with the specified half-size and colour.
+        /// Generate a flat circular ground disc at Z = <paramref name="elevation"/>
+        /// with the specified radius and colour (128 segments).
         /// </summary>
-        public static (SolidVertex[] verts, uint[] indices) GenerateGroundQuad(
-            float halfSize, Vector4 color, float elevation = -0.02f)
+        public static (SolidVertex[] verts, uint[] indices) GenerateGroundDisc(
+            float radius, Vector4 color, float elevation = -0.02f, int segments = 128)
         {
-            var n = Vector3.UnitZ; // facing up
-            var verts = new SolidVertex[4];
-            verts[0] = new SolidVertex(new Vector3(-halfSize, -halfSize, elevation), n, color);
-            verts[1] = new SolidVertex(new Vector3(+halfSize, -halfSize, elevation), n, color);
-            verts[2] = new SolidVertex(new Vector3(+halfSize, +halfSize, elevation), n, color);
-            verts[3] = new SolidVertex(new Vector3(-halfSize, +halfSize, elevation), n, color);
+            var n = Vector3.UnitZ;
+            var verts = new SolidVertex[segments + 2];
+            verts[0] = new SolidVertex(new Vector3(0, 0, elevation), n, color);
 
-            var indices = new uint[] { 0, 1, 2, 0, 2, 3 };
+            for (int i = 0; i <= segments; i++)
+            {
+                float angle = 2f * MathF.PI * i / segments;
+                float x = radius * MathF.Cos(angle);
+                float y = radius * MathF.Sin(angle);
+                verts[i + 1] = new SolidVertex(new Vector3(x, y, elevation), n, color);
+            }
+
+            var indices = new uint[segments * 3];
+            for (int i = 0; i < segments; i++)
+            {
+                indices[i * 3] = 0;
+                indices[i * 3 + 1] = (uint)(i + 1);
+                indices[i * 3 + 2] = (uint)(i + 2);
+            }
+
             return (verts, indices);
         }
 

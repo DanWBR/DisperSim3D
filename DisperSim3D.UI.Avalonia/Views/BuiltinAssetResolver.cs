@@ -36,11 +36,6 @@ namespace DisperSim3D.UI.Avalonia.Views
                 @"Assets\Sky\Sunset Rocky Coast.jpg",
                 @"Sky\Sunset Rocky Coast.jpg"
             },
-            ["builtin:sky_snowy_mountains"] = new[]
-            {
-                @"Assets\Sky\Snowy Mountains.hdr",
-                @"Sky\Snowy Mountains.hdr"
-            },
             ["builtin:ground_woodland"] = new[]
             {
                 @"Assets\Ground\Woodland Terrain_Diffuse.png",

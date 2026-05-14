@@ -57,6 +57,8 @@ namespace DisperSim3D.UI.Avalonia.Views
         private int _skyCloudSpeedUniform;
         private int _skyUseSkyTextureUniform;
         private int _skySkyTextureUniform;
+        private int _skyBrightnessUniform;
+        private int _skyVOffsetUniform;
         private int _skyTextureId;
 
         // Shader state — grass blades (animated sway)
@@ -142,6 +144,56 @@ namespace DisperSim3D.UI.Avalonia.Views
         private D_glActiveTexture? _glActiveTexture;
         private D_glUniform4f? _glUniform4f;
         private D_glDeleteTextures? _glDeleteTextures;
+
+        // Shadow mapping — GL extensions
+        private const int GL_DEPTH_COMPONENT_VAL = 0x1902;
+        private const int GL_DEPTH_ATTACHMENT_VAL = 0x8D00;
+        private const int GL_NONE_VAL = 0;
+        private const int GL_FLOAT_VAL = 0x1406;
+        private const int GL_TEXTURE1 = 0x84C1;
+        private const int GL_CLAMP_TO_BORDER = 0x812D;
+        private const int GL_TEXTURE_BORDER_COLOR = 0x1004;
+        private const int GL_TEXTURE_MIN_FILTER_VAL = 0x2801;
+        private const int GL_TEXTURE_MAG_FILTER_VAL = 0x2800;
+        private const int GL_TEXTURE_WRAP_S_VAL = 0x2802;
+        private const int GL_TEXTURE_WRAP_T_VAL = 0x2803;
+        private const int GL_NEAREST_VAL = 0x2600;
+        private const int GL_LINEAR_VAL = 0x2601;
+        private const int SHADOW_MAP_SIZE = 2048;
+
+        private unsafe delegate void D_glGenFramebuffers(int n, int* ids);
+        private unsafe delegate void D_glDeleteFramebuffers(int n, int* ids);
+        private delegate void D_glFramebufferTexture2D(int target, int attachment,
+            int textarget, int texture, int level);
+        private delegate void D_glDrawBuffer(int mode);
+        private delegate int D_glCheckFramebufferStatus(int target);
+        private unsafe delegate void D_glTexImage2D_Shadow(int target, int level,
+            int internalformat, int width, int height, int border,
+            int format, int type, IntPtr data);
+        private unsafe delegate void D_glTexParameteri(int target, int pname, int param);
+        private unsafe delegate void D_glTexParameterfv(int target, int pname, float* pparams);
+
+        private D_glGenFramebuffers? _glGenFramebuffers;
+        private D_glDeleteFramebuffers? _glDeleteFramebuffers;
+        private D_glFramebufferTexture2D? _glFramebufferTexture2D;
+        private D_glDrawBuffer? _glDrawBuffer;
+        private D_glCheckFramebufferStatus? _glCheckFramebufferStatus;
+        private D_glTexImage2D_Shadow? _glTexImage2D;
+        private D_glTexParameteri? _glTexParameteri;
+        private D_glTexParameterfv? _glTexParameterfv;
+
+        // Shadow mapping — state
+        private int _shadowFbo;
+        private int _shadowDepthTex;
+        private int _shadowProgram;
+        private int _shadowLightVPUniform;
+        private int _shadowModelUniform;
+        private bool _shadowReady;
+
+        // Shadow uniforms in lit shaders
+        private int _solidShadowMapUniform, _solidLightSpaceUniform, _solidShadowEnabledUniform;
+        private int _groundShadowMapUniform, _groundLightSpaceUniform, _groundShadowEnabledUniform;
+        private int _texShadowMapUniform, _texLightSpaceUniform, _texShadowEnabledUniform;
 
         // Texture cache (path → GL texture ID) + white 1×1 fallback
         private readonly Dictionary<string, int> _textureCache = new();
@@ -269,6 +321,8 @@ uniform float uShowClouds;
 uniform float uCloudSpeed;
 uniform float uUseSkyTexture;
 uniform sampler2D uSkyTexture;
+uniform float uSkyBrightness;
+uniform float uSkyVOffset;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -308,8 +362,11 @@ void main()
     if (uUseSkyTexture > 0.5)
     {
         float u = atan(dir.y, dir.x) / (2.0 * PI) + 0.5;
-        float v = asin(clamp(dir.z, -1.0, 1.0)) / PI + 0.5;
-        fragColor = texture(uSkyTexture, vec2(u, v));
+        float v = 0.5 - asin(clamp(dir.z, -1.0, 1.0)) / PI;
+        v = clamp(v + uSkyVOffset, 0.0, 1.0);
+        vec4 texCol = texture(uSkyTexture, vec2(u, v));
+        float gamma = 1.0 / max(0.01, uSkyBrightness);
+        fragColor = vec4(pow(texCol.rgb, vec3(gamma)), texCol.a);
         return;
     }
 
@@ -435,6 +492,9 @@ uniform vec2  uGroundTileSize;
 uniform float uGridMinor;
 uniform float uGridMajor;
 uniform float uGridHalf;
+uniform sampler2D uShadowMap;
+uniform mat4 uLightSpaceMat;
+uniform float uShadowEnabled;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -525,10 +585,30 @@ void main()
         col = mix(col, vec3(0.15), l25 * 0.3);
     }
 
+    // Shadow
+    float shadow = 0.0;
+    if (uShadowEnabled > 0.5)
+    {
+        vec4 lsPos = uLightSpaceMat * vec4(vWorldPos, 1.0);
+        vec3 pc = lsPos.xyz / lsPos.w * 0.5 + 0.5;
+        if (pc.z <= 1.0 && pc.x >= 0.0 && pc.x <= 1.0 && pc.y >= 0.0 && pc.y <= 1.0)
+        {
+            float bias = 0.003;
+            vec2 texel = 1.0 / vec2(textureSize(uShadowMap, 0));
+            for (int x = -1; x <= 1; ++x)
+                for (int y = -1; y <= 1; ++y)
+                {
+                    float d = texture(uShadowMap, pc.xy + vec2(x, y) * texel).r;
+                    shadow += pc.z - bias > d ? 1.0 : 0.0;
+                }
+            shadow /= 9.0;
+        }
+    }
+
     // Sun + ambient lighting
     vec3 N    = normalize(vNorm);
     float diff = max(dot(N, normalize(uSunDir)), 0.0);
-    vec3 light = uAmbient + uSunColor * diff;
+    vec3 light = uAmbient + uSunColor * diff * (1.0 - shadow * 0.7);
 
     fragColor = vec4(col * light, 1.0);
 }
@@ -547,9 +627,11 @@ uniform mat3 uNormalMat;
 
 out vec3 vNorm;
 out vec4 vCol;
+out vec3 vWorldPos;
 
 void main()
 {
+    vWorldPos = (uModel * vec4(aPos, 1.0)).xyz;
     vNorm = uNormalMat * aNorm;
     vCol  = aCol;
     gl_Position = uMVP * vec4(aPos, 1.0);
@@ -559,6 +641,7 @@ void main()
         private const string SolidFragBody = @"
 in vec3 vNorm;
 in vec4 vCol;
+in vec3 vWorldPos;
 
 uniform vec3 uSunDir;
 uniform vec3 uSunColor;
@@ -566,15 +649,39 @@ uniform vec3 uAmbient;
 uniform vec3 uRimDir;
 uniform vec3 uRimColor;
 uniform float uAlpha;
+uniform sampler2D uShadowMap;
+uniform mat4 uLightSpaceMat;
+uniform float uShadowEnabled;
 
 layout(location = 0) out vec4 fragColor;
+
+float calcShadow()
+{
+    if (uShadowEnabled < 0.5) return 0.0;
+    vec4 lsPos = uLightSpaceMat * vec4(vWorldPos, 1.0);
+    vec3 pc = lsPos.xyz / lsPos.w * 0.5 + 0.5;
+    if (pc.z > 1.0 || pc.x < 0.0 || pc.x > 1.0 || pc.y < 0.0 || pc.y > 1.0)
+        return 0.0;
+    vec3 N = normalize(vNorm);
+    float bias = max(0.005 * (1.0 - dot(N, normalize(uSunDir))), 0.001);
+    float shadow = 0.0;
+    vec2 texel = 1.0 / vec2(textureSize(uShadowMap, 0));
+    for (int x = -1; x <= 1; ++x)
+        for (int y = -1; y <= 1; ++y)
+        {
+            float d = texture(uShadowMap, pc.xy + vec2(x, y) * texel).r;
+            shadow += pc.z - bias > d ? 1.0 : 0.0;
+        }
+    return shadow / 9.0;
+}
 
 void main()
 {
     vec3 N    = normalize(vNorm);
     float diff = max(dot(N, normalize(uSunDir)), 0.0);
     float rim  = max(dot(N, normalize(uRimDir)), 0.0);
-    vec3 light = uAmbient + uSunColor * diff + uRimColor * rim;
+    float shadow = calcShadow();
+    vec3 light = uAmbient + (uSunColor * diff + uRimColor * rim) * (1.0 - shadow * 0.7);
     fragColor  = vec4(vCol.rgb * light, vCol.a * uAlpha);
 }
 ";
@@ -592,9 +699,11 @@ uniform mat3 uNormalMat;
 
 out vec3 vNorm;
 out vec2 vUV;
+out vec3 vWorldPos;
 
 void main()
 {
+    vWorldPos = (uModel * vec4(aPos, 1.0)).xyz;
     vNorm = uNormalMat * aNorm;
     vUV   = aUV;
     gl_Position = uMVP * vec4(aPos, 1.0);
@@ -604,6 +713,7 @@ void main()
         private const string TexFragBody = @"
 in vec3 vNorm;
 in vec2 vUV;
+in vec3 vWorldPos;
 
 uniform sampler2D uTexture;
 uniform vec4  uTint;
@@ -611,8 +721,31 @@ uniform vec3  uSunDir;
 uniform vec3  uSunColor;
 uniform vec3  uAmbient;
 uniform float uAlpha;
+uniform sampler2D uShadowMap;
+uniform mat4 uLightSpaceMat;
+uniform float uShadowEnabled;
 
 layout(location = 0) out vec4 fragColor;
+
+float calcShadow()
+{
+    if (uShadowEnabled < 0.5) return 0.0;
+    vec4 lsPos = uLightSpaceMat * vec4(vWorldPos, 1.0);
+    vec3 pc = lsPos.xyz / lsPos.w * 0.5 + 0.5;
+    if (pc.z > 1.0 || pc.x < 0.0 || pc.x > 1.0 || pc.y < 0.0 || pc.y > 1.0)
+        return 0.0;
+    vec3 N = normalize(vNorm);
+    float bias = max(0.005 * (1.0 - dot(N, normalize(uSunDir))), 0.001);
+    float shadow = 0.0;
+    vec2 texel = 1.0 / vec2(textureSize(uShadowMap, 0));
+    for (int x = -1; x <= 1; ++x)
+        for (int y = -1; y <= 1; ++y)
+        {
+            float d = texture(uShadowMap, pc.xy + vec2(x, y) * texel).r;
+            shadow += pc.z - bias > d ? 1.0 : 0.0;
+        }
+    return shadow / 9.0;
+}
 
 void main()
 {
@@ -621,11 +754,25 @@ void main()
 
     vec3 N    = normalize(vNorm);
     float diff = max(dot(N, normalize(uSunDir)), 0.0);
-    vec3 light = uAmbient + uSunColor * diff;
+    float shadow = calcShadow();
+    vec3 light = uAmbient + uSunColor * diff * (1.0 - shadow * 0.7);
 
     vec3 col = texel.rgb * uTint.rgb * light;
     fragColor = vec4(col, texel.a * uTint.a * uAlpha);
 }
+";
+
+        // ── Shadow depth shader ─────────────────────────────────────────
+
+        private const string ShadowVertBody = @"
+layout(location = 0) in vec3 aPos;
+uniform mat4 uLightVP;
+uniform mat4 uModel;
+void main() { gl_Position = uLightVP * uModel * vec4(aPos, 1.0); }
+";
+
+        private const string ShadowFragBody = @"
+void main() { }
 ";
 
         // ── Construction ────────────────────────────────────────────────
@@ -733,6 +880,16 @@ void main()
                 if (pDT != IntPtr.Zero)
                     _glDeleteTextures = Marshal.GetDelegateForFunctionPointer<D_glDeleteTextures>(pDT);
 
+                // ── Load shadow mapping GL extensions ──────────────────
+                LoadProc(gl, "glGenFramebuffers", out _glGenFramebuffers);
+                LoadProc(gl, "glDeleteFramebuffers", out _glDeleteFramebuffers);
+                LoadProc(gl, "glFramebufferTexture2D", out _glFramebufferTexture2D);
+                LoadProc(gl, "glDrawBuffer", out _glDrawBuffer);
+                LoadProc(gl, "glCheckFramebufferStatus", out _glCheckFramebufferStatus);
+                LoadProc(gl, "glTexImage2D", out _glTexImage2D);
+                LoadProc(gl, "glTexParameteri", out _glTexParameteri);
+                LoadProc(gl, "glTexParameterfv", out _glTexParameterfv);
+
                 // ── Compile line shader ─────────────────────────────────
                 _lineProgram = CompileProgram(gl, LineVertBody, LineFragBody);
                 _mvpUniform  = GetUniformLoc(gl, _lineProgram, "uMVP");
@@ -760,6 +917,8 @@ void main()
                 _skyCloudSpeedUniform = GetUniformLoc(gl, _skyProgram, "uCloudSpeed");
                 _skyUseSkyTextureUniform = GetUniformLoc(gl, _skyProgram, "uUseSkyTexture");
                 _skySkyTextureUniform = GetUniformLoc(gl, _skyProgram, "uSkyTexture");
+                _skyBrightnessUniform = GetUniformLoc(gl, _skyProgram, "uSkyBrightness");
+                _skyVOffsetUniform = GetUniformLoc(gl, _skyProgram, "uSkyVOffset");
 
                 // ── Compile grass shader ─────────────────────────────────
                 _grassProgram       = CompileProgram(gl, GrassVertBody, GrassFragBody);
@@ -793,6 +952,25 @@ void main()
                 _texTintUniform      = GetUniformLoc(gl, _texProgram, "uTint");
                 _texAlphaUniform     = GetUniformLoc(gl, _texProgram, "uAlpha");
                 _texTextureUniform   = GetUniformLoc(gl, _texProgram, "uTexture");
+
+                // ── Shadow uniforms in lit shaders ─────────────────────
+                _solidShadowMapUniform     = GetUniformLoc(gl, _solidProgram, "uShadowMap");
+                _solidLightSpaceUniform    = GetUniformLoc(gl, _solidProgram, "uLightSpaceMat");
+                _solidShadowEnabledUniform = GetUniformLoc(gl, _solidProgram, "uShadowEnabled");
+
+                _groundShadowMapUniform     = GetUniformLoc(gl, _groundProgram, "uShadowMap");
+                _groundLightSpaceUniform    = GetUniformLoc(gl, _groundProgram, "uLightSpaceMat");
+                _groundShadowEnabledUniform = GetUniformLoc(gl, _groundProgram, "uShadowEnabled");
+
+                _texShadowMapUniform     = GetUniformLoc(gl, _texProgram, "uShadowMap");
+                _texLightSpaceUniform    = GetUniformLoc(gl, _texProgram, "uLightSpaceMat");
+                _texShadowEnabledUniform = GetUniformLoc(gl, _texProgram, "uShadowEnabled");
+
+                // ── Compile shadow depth shader + create FBO ────────────
+                _shadowProgram = CompileProgram(gl, ShadowVertBody, ShadowFragBody);
+                _shadowLightVPUniform = GetUniformLoc(gl, _shadowProgram, "uLightVP");
+                _shadowModelUniform   = GetUniformLoc(gl, _shadowProgram, "uModel");
+                CreateShadowFbo(gl);
 
                 // ── Create white 1×1 fallback texture ───────────────────
                 _whiteTexture = GlTextureLoader.CreateWhite1x1(gl);
@@ -877,10 +1055,57 @@ void main()
             float sunI   = (float)env.SunIntensity;
             float ambI   = (float)env.AmbientIntensity;
 
+            // When sun lighting is disabled, use flat ambient only
+            if (!env.UseSunLighting)
+            {
+                sunI = 0f;
+                ambI = 1f;
+            }
+
             // Warm sun tint (more orange at low elevation)
             float warmR = 1.0f;
             float warmG = 0.85f + 0.15f * MathF.Min(1f, elRad / 1.0f);
             float warmB = 0.70f + 0.30f * MathF.Min(1f, elRad / 1.0f);
+
+            // ── 0. Shadow depth pass ────────────────────────────────────
+            bool doShadows = env.ShadowsEnabled && env.UseSunLighting &&
+                             _shadowReady && _shadowProgram != 0 && sunZ > 0.01f;
+            Matrix4x4 lightSpaceMat = Matrix4x4.Identity;
+            if (doShadows)
+            {
+                var lightDir = new Vector3(sunX, sunY, sunZ);
+                var lightPos = -lightDir * 400f;
+                var up = MathF.Abs(sunZ) > 0.99f ? Vector3.UnitY : Vector3.UnitZ;
+                var lightView = Matrix4x4.CreateLookAt(lightPos, Vector3.Zero, up);
+                var lightProj = Matrix4x4.CreateOrthographic(400f, 400f, 1f, 800f);
+                lightSpaceMat = lightView * lightProj;
+
+                gl.BindFramebuffer(GL_FRAMEBUFFER, _shadowFbo);
+                gl.Viewport(0, 0, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+                gl.Clear(GL_DEPTH_BUFFER_BIT);
+                gl.Enable(GL_DEPTH_TEST);
+                gl.DepthFunc(GL_LEQUAL);
+                gl.DepthMask(1);
+                gl.Enable(GL_CULL_FACE);
+                _glCullFace?.Invoke(0x0404); // GL_FRONT — reduce shadow acne
+
+                gl.UseProgram(_shadowProgram);
+                SetMatrixUniform(gl, _shadowLightVPUniform, lightSpaceMat);
+
+                foreach (var obj in _sceneObjects)
+                {
+                    if (!obj.Visible || obj.Mesh.IsLineGeometry) continue;
+                    SetMatrixUniform(gl, _shadowModelUniform, obj.ModelMatrix);
+                    obj.Mesh.Draw(gl);
+                }
+
+                gl.UseProgram(0);
+                _glCullFace?.Invoke(GL_BACK);
+
+                // Restore Avalonia's framebuffer and viewport
+                gl.BindFramebuffer(GL_FRAMEBUFFER, fb);
+                gl.Viewport(0, 0, w, h);
+            }
 
             // ── 1. Sky dome (procedural clouds + sun, no depth write) ───
             if (env.SkydomeEnabled && _skyDomeMesh != null && _skyProgram != 0)
@@ -898,6 +1123,8 @@ void main()
 
                 bool useSkyTex = _skyTextureId != 0;
                 _glUniform1f?.Invoke(_skyUseSkyTextureUniform, useSkyTex ? 1f : 0f);
+                _glUniform1f?.Invoke(_skyBrightnessUniform, (float)env.SkyTextureBrightness);
+                _glUniform1f?.Invoke(_skyVOffsetUniform, (float)env.SkyTextureVOffset);
                 if (useSkyTex)
                 {
                     _glActiveTexture?.Invoke(GL_TEXTURE0);
@@ -942,6 +1169,16 @@ void main()
                 _glUniform3f?.Invoke(_groundAmbientUniform,
                     0.431f * ambI, 0.490f * ambI, 0.588f * ambI);
 
+                // Shadow map
+                _glUniform1f?.Invoke(_groundShadowEnabledUniform, doShadows ? 1f : 0f);
+                if (doShadows)
+                {
+                    _glActiveTexture?.Invoke(GL_TEXTURE1);
+                    _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, _shadowDepthTex);
+                    _glUniform1i?.Invoke(_groundShadowMapUniform, 1);
+                    SetMatrixUniform(gl, _groundLightSpaceUniform, lightSpaceMat);
+                }
+
                 bool useGndTex = _groundTextureId != 0;
                 _glUniform1f?.Invoke(_groundUseTextureUniform, useGndTex ? 1f : 0f);
                 if (useGndTex)
@@ -965,7 +1202,16 @@ void main()
                 _groundPlaneMesh.Draw(gl);
 
                 if (useGndTex)
+                {
+                    _glActiveTexture?.Invoke(GL_TEXTURE0);
                     _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, 0);
+                }
+                if (doShadows)
+                {
+                    _glActiveTexture?.Invoke(GL_TEXTURE1);
+                    _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, 0);
+                    _glActiveTexture?.Invoke(GL_TEXTURE0);
+                }
 
                 gl.UseProgram(0);
             }
@@ -1011,6 +1257,17 @@ void main()
                 _glUniform3f?.Invoke(_solidRimColorUniform,
                     0.549f * 0.25f, 0.627f * 0.25f, 0.784f * 0.25f);
 
+                // Shadow map
+                _glUniform1f?.Invoke(_solidShadowEnabledUniform, doShadows ? 1f : 0f);
+                if (doShadows)
+                {
+                    _glActiveTexture?.Invoke(GL_TEXTURE1);
+                    _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, _shadowDepthTex);
+                    _glUniform1i?.Invoke(_solidShadowMapUniform, 1);
+                    SetMatrixUniform(gl, _solidLightSpaceUniform, lightSpaceMat);
+                    _glActiveTexture?.Invoke(GL_TEXTURE0);
+                }
+
                 gl.Enable(GL_CULL_FACE);
                 _glCullFace?.Invoke(GL_BACK);
 
@@ -1048,6 +1305,13 @@ void main()
                     obj.Mesh.Draw(gl);
                 }
 
+                if (doShadows)
+                {
+                    _glActiveTexture?.Invoke(GL_TEXTURE1);
+                    _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, 0);
+                    _glActiveTexture?.Invoke(GL_TEXTURE0);
+                }
+
                 gl.Disable(GL_CULL_FACE);
                 gl.Disable(GL_BLEND);
             }
@@ -1072,6 +1336,17 @@ void main()
                     _glUniform3f?.Invoke(_texAmbientUniform,
                         0.431f * ambI, 0.490f * ambI, 0.588f * ambI);
                     _glUniform1i?.Invoke(_texTextureUniform, 0);
+
+                    // Shadow map
+                    _glUniform1f?.Invoke(_texShadowEnabledUniform, doShadows ? 1f : 0f);
+                    if (doShadows)
+                    {
+                        _glActiveTexture?.Invoke(GL_TEXTURE1);
+                        _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, _shadowDepthTex);
+                        _glUniform1i?.Invoke(_texShadowMapUniform, 1);
+                        SetMatrixUniform(gl, _texLightSpaceUniform, lightSpaceMat);
+                        _glActiveTexture?.Invoke(GL_TEXTURE0);
+                    }
 
                     gl.Disable(GL_CULL_FACE);
                     gl.Enable(GL_BLEND);
@@ -1105,6 +1380,12 @@ void main()
                     }
 
                     _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, 0);
+                    if (doShadows)
+                    {
+                        _glActiveTexture?.Invoke(GL_TEXTURE1);
+                        _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, 0);
+                        _glActiveTexture?.Invoke(GL_TEXTURE0);
+                    }
                     gl.Disable(GL_BLEND);
                     gl.UseProgram(0);
                 }
@@ -1206,6 +1487,12 @@ void main()
             _textureCache.Clear();
             DeleteGlTexture(_whiteTexture);
             _whiteTexture = 0;
+            CleanupShadowFbo(gl);
+            if (_shadowProgram != 0)
+            {
+                gl.DeleteProgram(_shadowProgram);
+                _shadowProgram = 0;
+            }
             _initOk = false;
         }
 
@@ -1284,7 +1571,7 @@ void main()
             _groundShowGridOverlay = env.ShowGridOverlay;
             {
                 var fallback = new Vector4(0.48f, 0.58f, 0.35f, 1f);
-                var (gndV, gndI) = GlMeshBuffer.GenerateGroundQuad(
+                var (gndV, gndI) = GlMeshBuffer.GenerateGroundDisc(
                     500f, fallback);
                 _groundPlaneMesh = new GlMeshBuffer();
                 _groundPlaneMesh.Upload(gl, gndV, gndI, keepCpuCopy: true);
@@ -2135,6 +2422,73 @@ void main()
         }
 
         // ── GL helper methods ───────────────────────────────────────────
+
+        private static void LoadProc<T>(GlInterface gl, string name, out T? del)
+            where T : Delegate
+        {
+            var p = gl.GetProcAddress(name);
+            del = p != IntPtr.Zero
+                ? Marshal.GetDelegateForFunctionPointer<T>(p) : null;
+        }
+
+        private unsafe void CreateShadowFbo(GlInterface gl)
+        {
+            _shadowReady = false;
+            if (_glGenFramebuffers == null || _glFramebufferTexture2D == null ||
+                _glTexImage2D == null || _glTexParameteri == null) return;
+
+            int fbo = 0;
+            _glGenFramebuffers(1, &fbo);
+            if (fbo == 0) return;
+            _shadowFbo = fbo;
+
+            _shadowDepthTex = gl.GenTexture();
+            _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, _shadowDepthTex);
+            _glTexImage2D(GL_TEXTURE_2D_VAL, 0, GL_DEPTH_COMPONENT_VAL,
+                SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, 0,
+                GL_DEPTH_COMPONENT_VAL, GL_FLOAT_VAL, IntPtr.Zero);
+            _glTexParameteri(GL_TEXTURE_2D_VAL, GL_TEXTURE_MIN_FILTER_VAL, GL_NEAREST_VAL);
+            _glTexParameteri(GL_TEXTURE_2D_VAL, GL_TEXTURE_MAG_FILTER_VAL, GL_NEAREST_VAL);
+            _glTexParameteri(GL_TEXTURE_2D_VAL, GL_TEXTURE_WRAP_S_VAL, GL_CLAMP_TO_BORDER);
+            _glTexParameteri(GL_TEXTURE_2D_VAL, GL_TEXTURE_WRAP_T_VAL, GL_CLAMP_TO_BORDER);
+            if (_glTexParameterfv != null)
+            {
+                float* border = stackalloc float[4] { 1f, 1f, 1f, 1f };
+                _glTexParameterfv(GL_TEXTURE_2D_VAL, GL_TEXTURE_BORDER_COLOR, border);
+            }
+            _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, 0);
+
+            gl.BindFramebuffer(GL_FRAMEBUFFER, _shadowFbo);
+            _glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT_VAL,
+                GL_TEXTURE_2D_VAL, _shadowDepthTex, 0);
+            _glDrawBuffer?.Invoke(GL_NONE_VAL);
+
+            if (_glCheckFramebufferStatus != null)
+            {
+                int status = _glCheckFramebufferStatus(GL_FRAMEBUFFER);
+                _shadowReady = status == 0x8CD5; // GL_FRAMEBUFFER_COMPLETE
+            }
+            else
+                _shadowReady = true;
+
+            gl.BindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+
+        private unsafe void CleanupShadowFbo(GlInterface gl)
+        {
+            if (_shadowDepthTex != 0)
+            {
+                gl.DeleteTexture(_shadowDepthTex);
+                _shadowDepthTex = 0;
+            }
+            if (_shadowFbo != 0 && _glDeleteFramebuffers != null)
+            {
+                int fbo = _shadowFbo;
+                _glDeleteFramebuffers(1, &fbo);
+                _shadowFbo = 0;
+            }
+            _shadowReady = false;
+        }
 
         /// <summary>Upload a System.Numerics Matrix4x4 to a mat4 uniform.</summary>
         private static unsafe void SetMatrixUniform(

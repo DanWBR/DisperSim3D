@@ -76,11 +76,11 @@ namespace DisperSim3D.Models
 
         [Category("Sky")]
         [Description("Brightness multiplier for the sky texture (0.0 = black, 1.0 = full brightness, >1.0 = overbright). Only applies when a sky texture is set.")]
-        public double SkyTextureBrightness { get; set; } = 0.25;
+        public double SkyTextureBrightness { get; set; } = 1.0;
 
         [Category("Sky")]
         [Description("Vertical offset for the sky texture (0.0 = centered, positive = shifts horizon up). Typical range: −0.3 to 0.3.")]
-        public double SkyTextureVOffset { get; set; } = 0.0;
+        public double SkyTextureVOffset { get; set; } = 0.1;
 
         [Category("Sky")]
         [Description("Path to an equirectangular panorama image (JPG/PNG, 2:1 aspect ratio) used as the sky background. Leave empty to use the procedural sky.")]
@@ -105,6 +105,10 @@ namespace DisperSim3D.Models
             "HandyControl.Controls.PropertyEditorBase, HandyControl")]
         public DisperSim3D.Geometry.Color SkyHorizonColor { get; set; }
             = DisperSim3D.Geometry.Color.FromRgb(220, 225, 230);
+
+        [Category("Lighting")]
+        [Description("Cast shadows from the sun onto the ground and objects. Requires UseSunLighting.")]
+        public bool ShadowsEnabled { get; set; } = true;
 
         [Category("Ground")]
         [Description("Procedural ground material drawn on the editor's ground plane.")]

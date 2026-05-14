@@ -90,6 +90,8 @@ namespace DisperSim3D.Controls
         private bool _applyingEnvironment;
         private bool _showGroundPlane = true;
         private double _groundSize = 200;
+        private readonly List<System.Windows.Media.Media3D.ModelVisual3D> _shadowVisuals
+            = new List<System.Windows.Media.Media3D.ModelVisual3D>();
 
         // CFD (OpenFOAM) fields
         private OpenFoamEnvironment _cfdEnvironment;
@@ -5381,6 +5383,17 @@ namespace DisperSim3D.Controls
             {
                 System.Diagnostics.Debug.WriteLine($"[ENV] Ground FAILED: {ex}");
             }
+
+            // Shadows (depend on sun direction, which may have changed).
+            try
+            {
+                RebuildShadows();
+                System.Diagnostics.Debug.WriteLine("[ENV] Shadows OK");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ENV] Shadows FAILED: {ex}");
+            }
         }
 
         private void UpdateGroundPlane()
@@ -5936,6 +5949,61 @@ namespace DisperSim3D.Controls
                 dVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
                     new Visual3DTag("GasDetector", det.Id));
                 _viewport.Children.Add(dVisual);
+            }
+
+            RebuildShadows();
+        }
+
+        private void RebuildShadows()
+        {
+            foreach (var sv in _shadowVisuals)
+                _viewport.Children.Remove(sv);
+            _shadowVisuals.Clear();
+
+            var env = _scene?.Environment;
+            if (env == null || !env.ShadowsEnabled || !env.UseSunLighting) return;
+
+            var sunDir = ShadowRenderer.GetSunDirection(env);
+            if (sunDir.Z <= 0.05) return;
+
+            double groundZ = (_scene?.CurrentWorkPlane?.Elevation ?? 0) + 0.01;
+
+            foreach (var deco in _scene.Decorations)
+            {
+                if (deco.Model3D is System.Windows.Media.Media3D.Model3DGroup model)
+                {
+                    var shadow = ShadowRenderer.ProjectShadow(
+                        model, deco.GetWorldTransform(), sunDir, groundZ);
+                    if (shadow != null)
+                    {
+                        shadow.SetValue(System.Windows.FrameworkElement.TagProperty,
+                            new Visual3DTag("Shadow", deco.Id));
+                        _viewport.Children.Add(shadow);
+                        _shadowVisuals.Add(shadow);
+                    }
+                }
+            }
+
+            var shadowSources = new List<ReleaseSource3D>();
+            if (_scene.TopLevelSources != null && _scene.TopLevelSources.Count > 0)
+                shadowSources.AddRange(_scene.TopLevelSources);
+            else if (_scene.DispersionScenario?.Sources != null)
+                shadowSources.AddRange(_scene.DispersionScenario.Sources);
+
+            foreach (var source in shadowSources)
+            {
+                if (!source.IsVisible) continue;
+                var pos = source.EffectivePosition;
+                var shadow = ShadowRenderer.ProjectSphereShadow(
+                    new System.Windows.Media.Media3D.Point3D(pos.X, pos.Y, pos.Z),
+                    1.5, sunDir, groundZ);
+                if (shadow != null)
+                {
+                    shadow.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("Shadow", source.Id));
+                    _viewport.Children.Add(shadow);
+                    _shadowVisuals.Add(shadow);
+                }
             }
         }
 

@@ -123,7 +123,7 @@ namespace DisperSim3D.Core
 
                     _casePath = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
                         "DisperSim3D_fx3dsteady_sim_" + (scenario.Id ?? Guid.NewGuid().ToString("N")));
-                    try { System.IO.Directory.CreateDirectory(_casePath); }
+                    try { System.IO.Directory.CreateDirectory(_casePath); TempManager.RegisterActive(_casePath); }
                     catch { _casePath = null; }
 
                     var result = new OpenFoamResult

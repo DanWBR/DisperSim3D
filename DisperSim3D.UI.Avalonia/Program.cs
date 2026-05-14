@@ -23,6 +23,8 @@ namespace DisperSim3D.UI.Avalonia
             // (FontAwesome, Lucide, …) here if we need broader coverage.
             IconProvider.Current.Register<MaterialDesignIconProvider>();
 
+            DisperSim3D.Core.TempManager.StartupPurge();
+
             return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         }
 
