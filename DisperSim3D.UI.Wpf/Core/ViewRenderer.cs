@@ -17,7 +17,7 @@ namespace DisperSim3D.Core
     /// </summary>
     public static class ViewRenderer
     {
-        private static readonly string _logPath = Path.Combine(Path.GetTempPath(), "dispersim3d_view.log");
+        private static readonly string _logPath = Path.Combine(DisperSim3D.Core.TempManager.GetWorkDir(), "dispersim3d_view.log");
         private static void LogView(string msg)
         {
             try { File.AppendAllText(_logPath, $"[{DateTime.Now:HH:mm:ss.fff}] {msg}\r\n"); } catch { }

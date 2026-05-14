@@ -155,7 +155,7 @@ namespace DisperSim3D.Core
                     // Surface parameters in the status so we can verify they reach the DLL.
                     int steadySteps = Math.Max(2000, qStepsPerCell * Math.Max(nx, ny));
                     string logPath = System.IO.Path.Combine(
-                        System.IO.Path.GetTempPath(), "fluidx3d_bridge.log");
+                        TempManager.GetWorkDir(), "fluidx3d_bridge.log");
                     windScenario.StatusMessage = string.Format(
                         "FluidX3D running {0}x{1}x{2}, {3} steps, {4} obstacle boxes: U_lat=({5:F4},{6:F4},{7:F4}) nu_lat={8:F4} dx={9:F2}m dt={10:F4}s  log={11}",
                         nx, ny, nz, steadySteps, obstacleBoxes, uxLat, uyLat, uzLat, nuLat, units.DxSi, units.DtSi, logPath);
@@ -215,11 +215,12 @@ namespace DisperSim3D.Core
                     // Persist the result so reopening the project doesn't require re-running
                     // the GPU LBM. Stored as windfield.bin in a temp case dir owned by this
                     // wind scenario (one per wf.Id).
-                    string saveDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                    string saveDir = System.IO.Path.Combine(TempManager.GetWorkDir(),
                         "DisperSim3D_fx3d_" + (windScenario.Id ?? Guid.NewGuid().ToString("N")));
                     try
                     {
                         System.IO.Directory.CreateDirectory(saveDir);
+                        TempManager.RegisterActive(saveDir);
                         WindFieldSerializer.Save(System.IO.Path.Combine(saveDir, "windfield.bin"),
                             uxArr, uyArr, uzArr, -domain, domain, -domain, domain, height);
                         windScenario.CasePath = saveDir;

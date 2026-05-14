@@ -129,6 +129,13 @@
         <MenuItem Header="Build Mi_xture from DWSIM..." x:Name="MenuToolsBuildMix" Click="MenuToolsBuildMix_Click">
           <MenuItem.Icon><i:Icon Value="mdi-test-tube" /></MenuItem.Icon>
         </MenuItem>
+        <Separator />
+        <MenuItem Header="_Working Directory..." x:Name="MenuToolsWorkDir" Click="MenuToolsWorkDir_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-folder-cog-outline" /></MenuItem.Icon>
+        </MenuItem>
+        <MenuItem Header="Clean _Temp Files..." x:Name="MenuToolsCleanTemp" Click="MenuToolsCleanTemp_Click">
+          <MenuItem.Icon><i:Icon Value="mdi-delete-sweep-outline" /></MenuItem.Icon>
+        </MenuItem>
       </MenuItem>
 
       <MenuItem Header="_Help">
@@ -144,13 +151,18 @@
 
     <!-- Bottom: status bar ──────────────────────────────────────────── -->
     <Border DockPanel.Dock="Bottom" Background="#F5F5F5" BorderBrush="#DDD" BorderThickness="0,1,0,0">
-      <Grid Margin="8,3" ColumnDefinitions="*,Auto,Auto,Auto">
+      <Grid Margin="8,3" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto">
         <TextBlock Grid.Column="0" x:Name="StatusText"
                    Text="Ready" VerticalAlignment="Center" />
         <TextBlock Grid.Column="1" x:Name="StatusSelection"
                    Margin="12,0" VerticalAlignment="Center" Foreground="#666" />
         <Border Grid.Column="2" Width="1" Background="#DDD" Margin="6,2" />
-        <TextBlock Grid.Column="3" x:Name="StatusEnv"
+        <TextBlock Grid.Column="3" x:Name="StatusWorkDir"
+                   Margin="4,0" VerticalAlignment="Center" Foreground="#888"
+                   FontSize="11" Cursor="Hand"
+                   ToolTip.Tip="Click to open working directory" />
+        <Border Grid.Column="4" Width="1" Background="#DDD" Margin="6,2" />
+        <TextBlock Grid.Column="5" x:Name="StatusEnv"
                    VerticalAlignment="Center" Foreground="#666" />
       </Grid>
     </Border>

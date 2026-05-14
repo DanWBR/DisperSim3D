@@ -121,7 +121,7 @@ namespace DisperSim3D.Core
                     int stepsPerChunk = Math.Max(1, (int)Math.Ceiling(chunk / dtMax));
                     double dt = chunk / stepsPerChunk;
 
-                    _casePath = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                    _casePath = System.IO.Path.Combine(TempManager.GetWorkDir(),
                         "DisperSim3D_fx3dsteady_sim_" + (scenario.Id ?? Guid.NewGuid().ToString("N")));
                     try { System.IO.Directory.CreateDirectory(_casePath); TempManager.RegisterActive(_casePath); }
                     catch { _casePath = null; }

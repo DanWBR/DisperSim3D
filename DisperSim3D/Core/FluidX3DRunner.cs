@@ -123,7 +123,7 @@ namespace DisperSim3D.Core
                     // per snapshot, written via the same OpenFoamResult.SaveBinaryField
                     // helper the Gaussian Puff path uses — that way LoadCfdSimulation can
                     // reuse its existing scan-the-directory path.
-                    _casePath = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                    _casePath = System.IO.Path.Combine(TempManager.GetWorkDir(),
                         "DisperSim3D_fx3d_sim_" + (scenario.Id ?? Guid.NewGuid().ToString("N")));
                     try { System.IO.Directory.CreateDirectory(_casePath); TempManager.RegisterActive(_casePath); }
                     catch { _casePath = null; }

@@ -281,7 +281,7 @@ namespace DisperSim3D.Core
 
         private static string CreateSessionTempDir(string prefix = null)
         {
-            string baseDir = Path.Combine(Path.GetTempPath(), "DisperSim3D");
+            string baseDir = Path.Combine(TempManager.GetWorkDir(), "DisperSim3D");
             Directory.CreateDirectory(baseDir);
             PurgeStaleSessions(baseDir, TimeSpan.FromDays(7));
             string name = (prefix ?? "") + Guid.NewGuid().ToString("N");

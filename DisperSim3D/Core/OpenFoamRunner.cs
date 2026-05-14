@@ -149,6 +149,9 @@ namespace DisperSim3D.Core
                             break;
                     }
 
+                    if (!string.IsNullOrEmpty(_casePath))
+                        TempManager.RegisterActive(_casePath);
+
                     if (_worker.CancellationPending) { e.Cancel = true; return; }
 
                     ReportProgress(0.02, "Running blockMesh...", "");
@@ -304,6 +307,9 @@ namespace DisperSim3D.Core
                             _casePath = OpenFoamCaseGenerator.GenerateSteadyState(scenario, config);
                             break;
                     }
+
+                    if (!string.IsNullOrEmpty(_casePath))
+                        TempManager.RegisterActive(_casePath);
 
                     if (_worker.CancellationPending) { e.Cancel = true; return; }
 

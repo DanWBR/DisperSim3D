@@ -207,7 +207,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 // blockMesh -help has somewhere to chdir to. The command itself
                 // doesn't actually mesh anything; we only want to confirm the
                 // OpenFOAM toolchain responds.
-                string tempCase = Path.Combine(Path.GetTempPath(),
+                string tempCase = Path.Combine(DisperSim3D.Core.TempManager.GetWorkDir(),
                     "DisperSim_OF_test_" + Guid.NewGuid().ToString("N").Substring(0, 8));
                 Directory.CreateDirectory(Path.Combine(tempCase, "system"));
                 File.WriteAllText(Path.Combine(tempCase, "system", "controlDict"), "");

@@ -21,6 +21,8 @@ namespace DisperSim3D.Controls
         private ToolStripStatusLabel _statusLabel;
         private ToolStripStatusLabel _dispersionTimeLabel;
         private ToolStripProgressBar _ioProgressBar;
+        private ToolStripStatusLabel _workDirLabel;
+        private Timer _workDirTimer;
         private ToolStripButton _btnRun;
         private ToolStripButton _btnPlay;
         private ToolStripButton _btnPause;
@@ -119,9 +121,20 @@ namespace DisperSim3D.Controls
                 Style = ProgressBarStyle.Continuous,
                 Alignment = ToolStripItemAlignment.Right
             };
+            _workDirLabel = new ToolStripStatusLabel("")
+            {
+                ForeColor = System.Drawing.Color.Gray,
+                Alignment = ToolStripItemAlignment.Right
+            };
             _statusStrip.Items.Add(_statusLabel);
             _statusStrip.Items.Add(_ioProgressBar);
             _statusStrip.Items.Add(_dispersionTimeLabel);
+            _statusStrip.Items.Add(_workDirLabel);
+            RefreshWorkDirStatus();
+
+            _workDirTimer = new Timer { Interval = 30000 };
+            _workDirTimer.Tick += (s, e) => RefreshWorkDirStatus();
+            _workDirTimer.Start();
 
             // === MenuStrip ===
             _menuStrip = new MenuStrip { Font = toolFont };
@@ -142,6 +155,9 @@ namespace DisperSim3D.Controls
                 new ToolStripMenuItem("Import 3D Model...", Img("icons8-import.png"), (s, e) => DoImport3D()),
                 new ToolStripSeparator(),
                 new ToolStripMenuItem("Batch Export Images...", Img("icons8-export.png"), (s, e) => DoBatchExport()),
+                new ToolStripSeparator(),
+                new ToolStripMenuItem("Working Directory...", null, (s, e) => DoWorkingDirectory()),
+                new ToolStripMenuItem("Clean Temp Files...", null, (s, e) => DoCleanTempFiles()),
                 new ToolStripSeparator(),
                 new ToolStripMenuItem("E&xit", Img("cross.png"), (s, e) => DoExit())
             });
@@ -935,8 +951,77 @@ namespace DisperSim3D.Controls
                 ClearScene();
         }
 
+        private void DoWorkingDirectory()
+        {
+            using (var dlg = new FolderBrowserDialog
+            {
+                Description = "Choose the DisperSim 3D working directory for simulation files.",
+                SelectedPath = DisperSim3D.Core.AppSettings.Instance.WorkingDirectory,
+                ShowNewFolderButton = true
+            })
+            {
+                long size = DisperSim3D.Core.TempManager.GetWorkDirSize();
+                dlg.Description += $"\n\nCurrent size: {DisperSim3D.Core.TempManager.FormatBytes(size)}";
+
+                if (dlg.ShowDialog() == DialogResult.OK && !string.IsNullOrWhiteSpace(dlg.SelectedPath))
+                {
+                    DisperSim3D.Core.AppSettings.Instance.WorkingDirectory = dlg.SelectedPath;
+                    DisperSim3D.Core.AppSettings.Instance.Save();
+                    try { System.IO.Directory.CreateDirectory(dlg.SelectedPath); } catch { }
+                    RefreshWorkDirStatus();
+                    UpdateStatus($"Working directory set to: {dlg.SelectedPath}");
+                }
+            }
+        }
+
+        private void DoCleanTempFiles()
+        {
+            var (totalBytes, entryCount, byCategory) = DisperSim3D.Core.TempManager.GetSummary();
+
+            if (totalBytes == 0)
+            {
+                MessageBox.Show("No temporary files found.", "Clean Temp Files",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"DisperSim 3D is using {DisperSim3D.Core.TempManager.FormatBytes(totalBytes)} in {entryCount} temp entries:\n");
+            foreach (var kv in byCategory.OrderByDescending(x => x.Value))
+                sb.AppendLine($"  {kv.Key}: {DisperSim3D.Core.TempManager.FormatBytes(kv.Value)}");
+            sb.AppendLine("\nDelete all temp files older than 24 hours?\n");
+            sb.AppendLine("Yes = delete entries older than 24 h");
+            sb.AppendLine("No = delete ALL entries (including recent)");
+            sb.AppendLine("Cancel = do nothing");
+
+            var answer = MessageBox.Show(sb.ToString(), "Clean Temp Files",
+                MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+
+            if (answer == DialogResult.Cancel) return;
+
+            var (deleted, freed) = answer == DialogResult.No
+                ? DisperSim3D.Core.TempManager.PurgeAll()
+                : DisperSim3D.Core.TempManager.PurgeOlderThan(TimeSpan.FromHours(24));
+
+            MessageBox.Show($"Deleted {deleted} entries, freed {DisperSim3D.Core.TempManager.FormatBytes(freed)}.",
+                "Clean Temp Files", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            RefreshWorkDirStatus();
+        }
+
+        private void RefreshWorkDirStatus()
+        {
+            try
+            {
+                long size = DisperSim3D.Core.TempManager.GetWorkDirSize();
+                _workDirLabel.Text = $"Work: {DisperSim3D.Core.TempManager.FormatBytes(size)}";
+            }
+            catch { _workDirLabel.Text = ""; }
+        }
+
         private void DoExit()
         {
+            try { DisperSim3D.Core.TempManager.PurgeOlderThan(TimeSpan.FromDays(7)); }
+            catch { }
             // Close the host form if any (DisperSim3D.App wraps the panel in a Form);
             // otherwise fall back to terminating the application loop.
             var form = this.FindForm();

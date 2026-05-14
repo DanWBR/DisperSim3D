@@ -71,6 +71,16 @@ namespace DisperSim3D.UI.Avalonia.Views
         {
             InitializeComponent();
             StatusEnv.Text = BuildEnvLine();
+            RefreshWorkDirStatus();
+            StatusWorkDir.PointerPressed += (_, _) =>
+            {
+                try
+                {
+                    var dir = DisperSim3D.Core.TempManager.GetWorkDir();
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dir) { UseShellExecute = true });
+                }
+                catch { }
+            };
             Inspector.ValueChanged += (_, _) =>
             {
                 if (_scene == null) return;
@@ -83,6 +93,10 @@ namespace DisperSim3D.UI.Avalonia.Views
             var fpsTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
             fpsTimer.Tick += (_, _) => FpsLabel.Text = $"{Viewport3D.CurrentFps:F0} FPS";
             fpsTimer.Start();
+
+            var workDirTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+            workDirTimer.Tick += (_, _) => RefreshWorkDirStatus();
+            workDirTimer.Start();
         }
 
         private static string BuildEnvLine()
@@ -454,7 +468,22 @@ namespace DisperSim3D.UI.Avalonia.Views
             }
             else
             {
+                try { DisperSim3D.Core.TempManager.PurgeOlderThan(TimeSpan.FromDays(7)); }
+                catch { }
                 base.OnClosing(e);
+            }
+        }
+
+        private void RefreshWorkDirStatus()
+        {
+            try
+            {
+                long size = DisperSim3D.Core.TempManager.GetWorkDirSize();
+                StatusWorkDir.Text = $"Work: {DisperSim3D.Core.TempManager.FormatBytes(size)}";
+            }
+            catch
+            {
+                StatusWorkDir.Text = "";
             }
         }
 
@@ -758,6 +787,250 @@ namespace DisperSim3D.UI.Avalonia.Views
 
         private async void MenuToolsBuildMix_Click(object? sender, RoutedEventArgs e)
             => await BuildMixtureFromDwsimAsync();
+
+        private async void MenuToolsWorkDir_Click(object? sender, RoutedEventArgs e)
+        {
+            var currentDir = DisperSim3D.Core.AppSettings.Instance.WorkingDirectory;
+            long currentSize = DisperSim3D.Core.TempManager.GetWorkDirSize();
+
+            var dlg = new Window
+            {
+                Title = "Working Directory",
+                Width = 560, Height = 220,
+                CanResize = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                SystemDecorations = SystemDecorations.BorderOnly,
+                Background = new SolidColorBrush(Color.FromRgb(250, 250, 250))
+            };
+
+            var txtPath = new TextBox
+            {
+                Text = currentDir,
+                Watermark = "Path to working directory...",
+                MinHeight = 32
+            };
+            var btnBrowse = new Button
+            {
+                Content = "Browse...", MinWidth = 80, Height = 32,
+                HorizontalContentAlignment = global::Avalonia.Layout.HorizontalAlignment.Center
+            };
+            btnBrowse.Click += async (_, _) =>
+            {
+                var folders = await StorageProvider.OpenFolderPickerAsync(
+                    new global::Avalonia.Platform.Storage.FolderPickerOpenOptions
+                    {
+                        Title = "Choose Working Directory",
+                        AllowMultiple = false
+                    });
+                if (folders.Count > 0)
+                    txtPath.Text = folders[0].Path.LocalPath;
+            };
+
+            bool saved = false;
+            var btnCancel = new Button
+            {
+                Content = "Cancel", MinWidth = 90, Height = 32,
+                HorizontalContentAlignment = global::Avalonia.Layout.HorizontalAlignment.Center
+            };
+            var btnOk = new Button
+            {
+                Content = "OK", MinWidth = 90, Height = 32,
+                Background = new SolidColorBrush(Color.FromRgb(0, 120, 212)),
+                Foreground = Brushes.White, FontWeight = FontWeight.SemiBold,
+                HorizontalContentAlignment = global::Avalonia.Layout.HorizontalAlignment.Center
+            };
+            btnCancel.Click += (_, _) => dlg.Close();
+            btnOk.Click += (_, _) => { saved = true; dlg.Close(); };
+
+            var pathRow = new DockPanel { LastChildFill = true };
+            DockPanel.SetDock(btnBrowse, global::Avalonia.Controls.Dock.Right);
+            pathRow.Children.Add(btnBrowse);
+            pathRow.Children.Add(txtPath);
+
+            dlg.Content = new StackPanel
+            {
+                Margin = new Thickness(20),
+                Spacing = 12,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = $"All simulation working files will be stored here.\nCurrent size: {DisperSim3D.Core.TempManager.FormatBytes(currentSize)}",
+                        FontSize = 13, TextWrapping = TextWrapping.Wrap
+                    },
+                    pathRow,
+                    new StackPanel
+                    {
+                        Orientation = global::Avalonia.Layout.Orientation.Horizontal,
+                        HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Right,
+                        Spacing = 8,
+                        Children = { btnCancel, btnOk }
+                    }
+                }
+            };
+
+            await dlg.ShowDialog(this);
+
+            if (saved && !string.IsNullOrWhiteSpace(txtPath.Text))
+            {
+                var newDir = txtPath.Text.Trim();
+                DisperSim3D.Core.AppSettings.Instance.WorkingDirectory = newDir;
+                DisperSim3D.Core.AppSettings.Instance.Save();
+                try { System.IO.Directory.CreateDirectory(newDir); } catch { }
+                RefreshWorkDirStatus();
+                StatusText.Text = $"Working directory set to: {newDir}";
+            }
+        }
+
+        private async void MenuToolsCleanTemp_Click(object? sender, RoutedEventArgs e)
+        {
+            var (totalBytes, entryCount, byCategory) = DisperSim3D.Core.TempManager.GetSummary();
+
+            if (totalBytes == 0)
+            {
+                var emptyDlg = new Window
+                {
+                    Title = "Clean Temp Files",
+                    Width = 380, Height = 150,
+                    CanResize = false,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    SystemDecorations = SystemDecorations.BorderOnly,
+                    Background = new SolidColorBrush(Color.FromRgb(250, 250, 250))
+                };
+                var btnOkEmpty = new Button
+                {
+                    Content = "OK", MinWidth = 90, Height = 32,
+                    HorizontalContentAlignment = global::Avalonia.Layout.HorizontalAlignment.Center
+                };
+                btnOkEmpty.Click += (_, _) => emptyDlg.Close();
+                emptyDlg.Content = new StackPanel
+                {
+                    Margin = new Thickness(20),
+                    Spacing = 16,
+                    Children =
+                    {
+                        new TextBlock { Text = "No temporary files found.", FontSize = 14 },
+                        new StackPanel
+                        {
+                            Orientation = global::Avalonia.Layout.Orientation.Horizontal,
+                            HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Right,
+                            Children = { btnOkEmpty }
+                        }
+                    }
+                };
+                await emptyDlg.ShowDialog(this);
+                return;
+            }
+
+            var lines = new System.Text.StringBuilder();
+            lines.AppendLine($"DisperSim 3D is using {DisperSim3D.Core.TempManager.FormatBytes(totalBytes)} in {entryCount} temp entries:\n");
+            foreach (var kv in byCategory.OrderByDescending(x => x.Value))
+                lines.AppendLine($"  {kv.Key}: {DisperSim3D.Core.TempManager.FormatBytes(kv.Value)}");
+            lines.AppendLine($"\nDelete all temp files older than 24 hours?");
+
+            var dlg = new Window
+            {
+                Title = "Clean Temp Files",
+                Width = 500, Height = 320,
+                CanResize = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                SystemDecorations = SystemDecorations.BorderOnly,
+                Background = new SolidColorBrush(Color.FromRgb(250, 250, 250))
+            };
+
+            bool confirmed = false;
+            bool deleteAll = false;
+
+            var btnCancel = new Button
+            {
+                Content = "Cancel", MinWidth = 90, Height = 32,
+                HorizontalContentAlignment = global::Avalonia.Layout.HorizontalAlignment.Center
+            };
+            var btnClean = new Button
+            {
+                Content = "Clean (> 24h)", MinWidth = 120, Height = 32,
+                Background = new SolidColorBrush(Color.FromRgb(0, 120, 212)),
+                Foreground = Brushes.White, FontWeight = FontWeight.SemiBold,
+                HorizontalContentAlignment = global::Avalonia.Layout.HorizontalAlignment.Center
+            };
+            var btnAll = new Button
+            {
+                Content = "Delete All", MinWidth = 100, Height = 32,
+                Background = new SolidColorBrush(Color.FromRgb(200, 50, 50)),
+                Foreground = Brushes.White, FontWeight = FontWeight.SemiBold,
+                HorizontalContentAlignment = global::Avalonia.Layout.HorizontalAlignment.Center
+            };
+
+            btnCancel.Click += (_, _) => dlg.Close();
+            btnClean.Click += (_, _) => { confirmed = true; dlg.Close(); };
+            btnAll.Click += (_, _) => { confirmed = true; deleteAll = true; dlg.Close(); };
+
+            dlg.Content = new StackPanel
+            {
+                Margin = new Thickness(20),
+                Spacing = 16,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = lines.ToString(),
+                        FontSize = 13,
+                        TextWrapping = TextWrapping.Wrap
+                    },
+                    new StackPanel
+                    {
+                        Orientation = global::Avalonia.Layout.Orientation.Horizontal,
+                        HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Right,
+                        Spacing = 8,
+                        Children = { btnCancel, btnAll, btnClean }
+                    }
+                }
+            };
+
+            await dlg.ShowDialog(this);
+
+            if (!confirmed) return;
+
+            var (deleted, freed) = deleteAll
+                ? DisperSim3D.Core.TempManager.PurgeAll()
+                : DisperSim3D.Core.TempManager.PurgeOlderThan(TimeSpan.FromHours(24));
+
+            var doneDlg = new Window
+            {
+                Title = "Clean Temp Files",
+                Width = 380, Height = 150,
+                CanResize = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                SystemDecorations = SystemDecorations.BorderOnly,
+                Background = new SolidColorBrush(Color.FromRgb(250, 250, 250))
+            };
+            var btnOk = new Button
+            {
+                Content = "OK", MinWidth = 90, Height = 32,
+                HorizontalContentAlignment = global::Avalonia.Layout.HorizontalAlignment.Center
+            };
+            btnOk.Click += (_, _) => doneDlg.Close();
+            doneDlg.Content = new StackPanel
+            {
+                Margin = new Thickness(20),
+                Spacing = 16,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = $"Deleted {deleted} entries, freed {DisperSim3D.Core.TempManager.FormatBytes(freed)}.",
+                        FontSize = 14
+                    },
+                    new StackPanel
+                    {
+                        Orientation = global::Avalonia.Layout.Orientation.Horizontal,
+                        HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Right,
+                        Children = { btnOk }
+                    }
+                }
+            };
+            await doneDlg.ShowDialog(this);
+        }
 
         // ── Context menu wiring ──────────────────────────────────────────────
         // Shared flyout instance reused across right-clicks. Built once,

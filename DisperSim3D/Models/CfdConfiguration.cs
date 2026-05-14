@@ -109,7 +109,8 @@ namespace DisperSim3D.Models
             WslDistroName = "Ubuntu";
             DockerImageName = "openfoam/openfoam2312-default";
             WorkingDirectory = System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(), "DisperSim_OpenFOAM");
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
+                "DisperSim3D", "Work", "DisperSim_OpenFOAM");
             DiffusivityM2PerS = 1e-5;
             NumberOfProcessors = System.Math.Max(1, System.Environment.ProcessorCount / 2);
             WriteIntervalS = -1;

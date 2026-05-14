@@ -28,14 +28,14 @@ namespace DisperSim3D.Core
 
         private static readonly (string Prefix, string Category)[] KnownPrefixes =
         {
-            ("DisperSim_OpenFOAM",          "OpenFOAM Cases"),
-            ("DisperSim3D_fx3d_sim_",       "FluidX3D Dispersion"),
+            ("DisperSim_OpenFOAM",           "OpenFOAM Cases"),
+            ("DisperSim3D_fx3d_sim_",        "FluidX3D Dispersion"),
             ("DisperSim3D_fx3dsteady_sim_",  "FluidX3D Steady"),
-            ("DisperSim3D_fx3dfire_sim_",    "FluidX3D Fire"),
-            ("DisperSim3D_fx3d_",           "FluidX3D Wind Field"),
-            ("DisperSim_GP_",               "Gaussian Puff/Plume"),
-            ("DisperSim_OF_test_",          "OpenFOAM Validation"),
-            ("DisperSim3D",                 "Project Sessions"),
+            ("DisperSim3D_fx3dfire_sim_",     "FluidX3D Fire"),
+            ("DisperSim3D_fx3d_",            "FluidX3D Wind Field"),
+            ("DisperSim_GP_",                "Gaussian Puff/Plume"),
+            ("DisperSim_OF_test_",           "OpenFOAM Validation"),
+            ("DisperSim3D",                  "Project Sessions"),
         };
 
         private static readonly string[] KnownLogFiles =
@@ -44,39 +44,67 @@ namespace DisperSim3D.Core
             "dispersim3d_view.log",
         };
 
+        public static string GetWorkDir()
+        {
+            var dir = AppSettings.Instance.WorkingDirectory;
+            if (string.IsNullOrWhiteSpace(dir))
+                dir = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "DisperSim3D", "Work");
+            if (!Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+            return dir;
+        }
+
         public static void RegisterActive(string path)
         {
             if (!string.IsNullOrEmpty(path))
-                lock (ActivePaths) ActivePaths.Add(Path.GetFullPath(path));
+                lock (ActivePaths) ActivePaths.Add(System.IO.Path.GetFullPath(path));
         }
 
         public static void UnregisterActive(string path)
         {
             if (!string.IsNullOrEmpty(path))
-                lock (ActivePaths) ActivePaths.Remove(Path.GetFullPath(path));
+                lock (ActivePaths) ActivePaths.Remove(System.IO.Path.GetFullPath(path));
         }
 
         private static bool IsActive(string path)
         {
             lock (ActivePaths)
             {
-                var full = Path.GetFullPath(path);
+                var full = System.IO.Path.GetFullPath(path);
                 return ActivePaths.Any(a =>
                     full.Equals(a, StringComparison.OrdinalIgnoreCase) ||
-                    full.StartsWith(a + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
+                    full.StartsWith(a + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase));
             }
         }
 
         public static List<TempEntry> Scan()
         {
             var entries = new List<TempEntry>();
-            var tempDir = Path.GetTempPath();
+            var dirsToScan = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+            dirsToScan.Add(System.IO.Path.GetTempPath());
+
+            try { dirsToScan.Add(GetWorkDir()); }
+            catch { }
+
+            foreach (var scanDir in dirsToScan)
+            {
+                if (!Directory.Exists(scanDir)) continue;
+                ScanDirectory(scanDir, entries);
+            }
+
+            return entries;
+        }
+
+        private static void ScanDirectory(string scanDir, List<TempEntry> entries)
+        {
             foreach (var (prefix, category) in KnownPrefixes)
             {
                 try
                 {
-                    foreach (var dir in Directory.EnumerateDirectories(tempDir, prefix + "*"))
+                    foreach (var dir in Directory.EnumerateDirectories(scanDir, prefix + "*"))
                     {
                         try
                         {
@@ -89,7 +117,7 @@ namespace DisperSim3D.Core
 
                     if (prefix == "DisperSim_OpenFOAM")
                     {
-                        var ofDir = Path.Combine(tempDir, "DisperSim_OpenFOAM");
+                        var ofDir = System.IO.Path.Combine(scanDir, "DisperSim_OpenFOAM");
                         if (Directory.Exists(ofDir))
                         {
                             foreach (var sub in Directory.EnumerateDirectories(ofDir))
@@ -112,7 +140,7 @@ namespace DisperSim3D.Core
             {
                 try
                 {
-                    var logPath = Path.Combine(tempDir, logName);
+                    var logPath = System.IO.Path.Combine(scanDir, logName);
                     if (File.Exists(logPath))
                     {
                         var fi = new FileInfo(logPath);
@@ -121,8 +149,17 @@ namespace DisperSim3D.Core
                 }
                 catch { }
             }
+        }
 
-            return entries;
+        public static long GetWorkDirSize()
+        {
+            try
+            {
+                var dir = GetWorkDir();
+                if (!Directory.Exists(dir)) return 0;
+                return GetDirectorySize(new DirectoryInfo(dir));
+            }
+            catch { return 0; }
         }
 
         public static (int deleted, long freedBytes) PurgeOlderThan(TimeSpan maxAge)
@@ -157,6 +194,34 @@ namespace DisperSim3D.Core
         public static void StartupPurge(int maxAgeDays = 7)
         {
             try { PurgeOlderThan(TimeSpan.FromDays(maxAgeDays)); }
+            catch { }
+        }
+
+        public static void MigrateLegacyTempFiles()
+        {
+            try
+            {
+                var workDir = GetWorkDir();
+                var tempDir = System.IO.Path.GetTempPath();
+                if (workDir.TrimEnd('\\', '/').Equals(
+                    tempDir.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                foreach (var (prefix, _) in KnownPrefixes)
+                {
+                    foreach (var dir in Directory.EnumerateDirectories(tempDir, prefix + "*"))
+                    {
+                        try
+                        {
+                            var name = System.IO.Path.GetFileName(dir);
+                            var dest = System.IO.Path.Combine(workDir, name);
+                            if (!Directory.Exists(dest))
+                                Directory.Move(dir, dest);
+                        }
+                        catch { }
+                    }
+                }
+            }
             catch { }
         }
 

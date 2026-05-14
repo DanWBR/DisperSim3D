@@ -421,9 +421,10 @@ namespace DisperSim3D.Core
                     }
                 }
 
-                string tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                string tempDir = System.IO.Path.Combine(DisperSim3D.Core.TempManager.GetWorkDir(),
                     "DisperSim_GP_" + Guid.NewGuid().ToString("N").Substring(0, 8));
                 System.IO.Directory.CreateDirectory(tempDir);
+                DisperSim3D.Core.TempManager.RegisterActive(tempDir);
 
                 var result = new OpenFoamResult
                 {

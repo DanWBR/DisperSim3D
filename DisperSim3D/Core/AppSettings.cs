@@ -46,6 +46,14 @@ namespace DisperSim3D.Core
         /// IDs match <see cref="FluidX3DBridge.ListDevicesJson"/>.</summary>
         public int PreferredComputeDeviceId { get; set; } = -1;
 
+        /// <summary>Root directory for all DisperSim 3D working files (simulation
+        /// cases, temp snapshots, project sessions). Defaults to
+        /// <c>%LOCALAPPDATA%\DisperSim3D\Work</c>. The user can change this via
+        /// the settings dialog.</summary>
+        public string WorkingDirectory { get; set; } = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "DisperSim3D", "Work");
+
         private readonly List<string> _recentFiles = new List<string>();
 
         /// <summary>Read-only view of the most-recently-used project paths
@@ -162,6 +170,9 @@ namespace DisperSim3D.Core
                         System.Globalization.NumberStyles.Integer, Inv, out id))
                         PreferredComputeDeviceId = id;
                 }
+                var workDir = (string)root.Element("WorkingDirectory");
+                if (!string.IsNullOrEmpty(workDir))
+                    WorkingDirectory = workDir;
                 var recent = root.Element("RecentFiles");
                 if (recent != null)
                 {
@@ -222,6 +233,7 @@ namespace DisperSim3D.Core
                         new XElement("Gpu",
                             new XAttribute("PreferredComputeDeviceId",
                                 PreferredComputeDeviceId.ToString(Inv))),
+                        new XElement("WorkingDirectory", WorkingDirectory ?? ""),
                         new XElement("RecentFiles",
                             _recentFiles.Select(p => new XElement("File",
                                 new XAttribute("Path", p ?? string.Empty))))

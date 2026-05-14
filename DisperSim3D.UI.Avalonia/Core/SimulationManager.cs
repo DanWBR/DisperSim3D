@@ -310,9 +310,10 @@ namespace DisperSim3D.UI.Avalonia.Core
                 ReportProgress(job, 0.7, "Storing result...");
                 job.PauseHandle.Wait(job.Cts.Token);
 
-                string tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                string tempDir = System.IO.Path.Combine(TempManager.GetWorkDir(),
                     "DisperSim_GP_" + Guid.NewGuid().ToString("N")[..8]);
                 System.IO.Directory.CreateDirectory(tempDir);
+                TempManager.RegisterActive(tempDir);
 
                 string binPath = System.IO.Path.Combine(tempDir, "0.0000.bin");
                 OpenFoamResult.SaveBinaryField(binPath, field);
@@ -400,9 +401,10 @@ namespace DisperSim3D.UI.Avalonia.Core
                     }
                 }
 
-                string tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                string tempDir = System.IO.Path.Combine(TempManager.GetWorkDir(),
                     "DisperSim_GP_" + Guid.NewGuid().ToString("N")[..8]);
                 System.IO.Directory.CreateDirectory(tempDir);
+                TempManager.RegisterActive(tempDir);
 
                 var result = new OpenFoamResult
                 {
