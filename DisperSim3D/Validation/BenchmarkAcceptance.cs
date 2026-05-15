@@ -13,6 +13,13 @@ namespace DisperSim3D.Validation
         public MetricRange FAC2 { get; set; } = new MetricRange { Min = 0.5, Max = 2.0 };
         public MetricRange MG { get; set; } = new MetricRange { Min = 0.67, Max = 1.5 };
         public MetricRange VG { get; set; } = new MetricRange { Max = 3.3 };
+
+        /// <summary>
+        /// Acceptance range for the ratio PredictedCloudVolume / ExpectedCloudVolume.
+        /// Only evaluated when <see cref="BenchmarkSpec.ExpectedCloudVolumeM3"/> is set.
+        /// Typical range: [0.5, 2.0] (FAC2-equivalent) or tighter [0.8, 1.2] for CFD comparison.
+        /// </summary>
+        public MetricRange CloudVolumeRatio { get; set; }
     }
 
     public class MetricRange

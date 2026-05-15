@@ -1,0 +1,66 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "GantIvings2005",
+  "citation": "Gant & Ivings 2005 — methane sonic jet from 10.5 mm orifice at 5.0 bar abs / 250 K. Observed values here are CALIBRATED REGRESSION BASELINES captured from FluidX3DDispersion (buoyant tracer, 3x grid 180x180x90, BFECC), NOT published CFD results. The FluidX3D tracer injects mass into a cell-scale blob (no jet resolution) so the near-field structure is approximate; the far-field cloud volume (1.169 m³) is the primary validation target.",
+  "description": "Gant & Ivings 2005: high-pressure CH4 jet. Choked flow through 10.5 mm orifice at 5.0 bar abs, 250 K vessel temperature. Mass flow ~0.054 kg/s (Cd=0.65). Birch expanded source: ~32 mm diameter at 100 m/s, ambient T. Validation metric: flammable cloud volume (LFL-UFL envelope). Wind 2 m/s, neutral stability.",
+
+  "source": {
+    "name": "CH4 jet 10.5mm @ 5bar",
+    "gas": {
+      "name": "Methane (CH4)",
+      "molarMass": 0.01604,
+      "lfl": 0.028,
+      "ufl": 0.089,
+      "isCryogenic": false
+    },
+    "position": [0, 0, 1],
+    "releaseRateKgPerS": 0.054,
+    "releaseDurationS": 60,
+    "stackDiameterM": 0.0105,
+    "exitTemperatureK": 250,
+    "exitVelocityMPerS": 100
+  },
+
+  "meteo": {
+    "windSpeed": 2.0,
+    "windDirectionDeg": 270,
+    "stability": "D",
+    "ambientTemperature": 293.15,
+    "ambientPressure": 101325,
+    "windMeasurementHeightM": 10,
+    "roughnessLengthM": 0.03
+  },
+
+  "domain": {
+    "sizeM": 10,
+    "gridResolution": 60,
+    "durationS": 60,
+    "timeStepS": 0.5
+  },
+
+  "solver": "FluidX3DDispersion",
+  "concentrationKind": "PeakOverTime",
+  "concentrationField": "CH4",
+  "unit": "MassFraction",
+
+  // LFL/UFL in mass-fraction units for FlammableCloudCalculator:
+  //   Y_LFL = 0.05 * 16.04 / (0.05*16.04 + 0.95*28.97) = 0.028
+  //   Y_UFL = 0.15 * 16.04 / (0.15*16.04 + 0.85*28.97) = 0.089
+  "expectedCloudVolumeM3": 1.169,
+
+  "sensors": [
+    { "name": "jet_1m", "position": [1, 0, 1.0], "measuredKgM3": 0.08081 },
+    { "name": "jet_2m", "position": [2, 0, 1.0], "measuredKgM3": 0.04181 },
+    { "name": "jet_3m", "position": [3, 0, 1.0], "measuredKgM3": 0.03098 },
+    { "name": "jet_5m", "position": [5, 0, 1.0], "measuredKgM3": 0.01949 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.10, "max": 0.10 },
+    "RMSE": { "max": 0.40 },
+    "FAC2": { "min": 0.95,  "max": 2.0 },
+    "MG":   { "min": 0.90, "max": 1.10 },
+    "VG":   { "max": 1.10 },
+    "CloudVolumeRatio": { "min": 0.80, "max": 1.20 }
+  }
+}

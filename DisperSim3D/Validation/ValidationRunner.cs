@@ -29,6 +29,7 @@ namespace DisperSim3D.Validation
                             " sensors=" + spec.Sensors.Count);
 
                 List<SensorPair> pairs;
+                HeadlessResult cfdResult = null;
                 if (solverType == CfdSolverType.GaussianPlume)
                 {
                     pairs = SampleGaussianPlume(spec, scene);
@@ -75,7 +76,7 @@ namespace DisperSim3D.Validation
                         }
                     }
 
-                    var cfdResult = HeadlessRunner.RunSimulation(scene, sim, log);
+                    cfdResult = HeadlessRunner.RunSimulation(scene, sim, log);
                     // If the runner failed because its hard-coded species name (e.g. "CH4")
                     // was missing in the case (e.g. SF6 bench injected only SF6), but the
                     // case actually ran to completion, we can still sample the bench's
@@ -99,6 +100,50 @@ namespace DisperSim3D.Validation
                 }
 
                 report.Spm = SpmCalculator.Compute(pairs);
+
+                // Cloud volume validation (optional — only when the bench declares an expected volume).
+                if (spec.ExpectedCloudVolumeM3.HasValue && spec.ExpectedCloudVolumeM3.Value > 0
+                    && spec.Source?.Gas != null && spec.Source.Gas.Lfl > 0 && spec.Source.Gas.Ufl > spec.Source.Gas.Lfl)
+                {
+                    double[,,] field = null;
+                    double cellX = 0, cellY = 0, cellZ = 0;
+
+                    if (solverType == CfdSolverType.GaussianPlume || solverType == CfdSolverType.GaussianPuff)
+                    {
+                        field = RasteriseGaussian(spec, scene, solverType);
+                        double half = spec.Domain.SizeM;
+                        int gNx = field.GetLength(0);
+                        cellX = cellY = 2.0 * half / gNx;
+                        cellZ = half / field.GetLength(2);
+                    }
+                    else
+                    {
+                        field = ExtractConcentrationField(spec, cfdResult);
+                        if (field != null)
+                        {
+                            double half = spec.Domain.SizeM;
+                            int fNx = field.GetLength(0);
+                            int fNz = field.GetLength(2);
+                            cellX = cellY = 2.0 * half / fNx;
+                            double height = half;
+                            cellZ = height / fNz;
+                        }
+                    }
+
+                    if (field != null)
+                    {
+                        var cloud = FlammableCloudCalculator.Compute(field, cellX, cellY, cellZ,
+                            spec.Source.Gas.Lfl, spec.Source.Gas.Ufl);
+                        report.Spm.PredictedCloudVolumeM3 = cloud.VolumeM3;
+                        report.Spm.ExpectedCloudVolumeM3 = spec.ExpectedCloudVolumeM3.Value;
+                        report.Spm.CloudVolumeRatio = spec.ExpectedCloudVolumeM3.Value > 0
+                            ? cloud.VolumeM3 / spec.ExpectedCloudVolumeM3.Value
+                            : double.NaN;
+                        log?.Invoke(string.Format("  Cloud volume: predicted={0:G4} m³  expected={1:G4} m³  ratio={2:G3}",
+                            cloud.VolumeM3, spec.ExpectedCloudVolumeM3.Value, report.Spm.CloudVolumeRatio));
+                    }
+                }
+
                 if (log != null)
                     foreach (var p in pairs)
                         log("  " + p.Name + ": pred=" + p.Predicted.ToString("G4")
@@ -380,6 +425,69 @@ namespace DisperSim3D.Validation
                 });
             }
             return pairs;
+        }
+
+        // ── cloud volume helpers ──
+
+        private static double[,,] ExtractConcentrationField(BenchmarkSpec spec, HeadlessResult cfdResult)
+        {
+            if (cfdResult == null) return null;
+            if (cfdResult.ConcentrationField != null) return cfdResult.ConcentrationField;
+
+            if (string.IsNullOrEmpty(cfdResult.CasePath) || !System.IO.Directory.Exists(cfdResult.CasePath))
+                return null;
+
+            int nx = spec.Domain.GridResolution;
+            int ny = nx;
+            int nz = Math.Max(1, nx / 2);
+            double half = spec.Domain.SizeM;
+            var fullResult = OpenFoamResultReader.ReadResults(
+                cfdResult.CasePath, nx, ny, nz, half,
+                scalarFieldName: spec.ResolveConcentrationField());
+            if (fullResult == null || !fullResult.IsLoaded || fullResult.TimeSteps.Count == 0)
+                return null;
+            return fullResult.GetField(fullResult.TimeSteps[fullResult.TimeSteps.Count - 1]);
+        }
+
+        private static double[,,] RasteriseGaussian(BenchmarkSpec spec, Scene3D scene, CfdSolverType solver)
+        {
+            var transient = ToScenario(spec, scene);
+            Func<double, double, double, double> eval;
+
+            if (solver == CfdSolverType.GaussianPuff)
+            {
+                var engine = new GaussianPuffEngine();
+                engine.Initialize(transient);
+                engine.StepTo(spec.Domain.DurationS);
+                eval = (x, y, z) => engine.EvaluateConcentration(x, y, z);
+            }
+            else
+            {
+                var engine = new GaussianPlumeEngine();
+                engine.Initialize(transient);
+                eval = (x, y, z) => engine.EvaluateConcentration(x, y, z);
+            }
+
+            int nx = spec.Domain.GridResolution;
+            int ny = nx;
+            int nz = Math.Max(1, nx / 2);
+            double half = spec.Domain.SizeM;
+            double height = half;
+            double dx = 2.0 * half / nx;
+            double dy = 2.0 * half / ny;
+            double dz = height / nz;
+            var field = new double[nx, ny, nz];
+
+            for (int i = 0; i < nx; i++)
+                for (int j = 0; j < ny; j++)
+                    for (int k = 0; k < nz; k++)
+                    {
+                        double x = -half + (i + 0.5) * dx;
+                        double y = -half + (j + 0.5) * dy;
+                        double z = (k + 0.5) * dz;
+                        field[i, j, k] = eval(x, y, z);
+                    }
+            return field;
         }
 
         // ── helpers ──

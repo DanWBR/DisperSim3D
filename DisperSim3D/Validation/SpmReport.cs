@@ -16,15 +16,26 @@ namespace DisperSim3D.Validation
 
         public List<SensorPair> Pairs { get; set; } = new List<SensorPair>();
 
+        /// <summary>Predicted flammable cloud volume (m³), set when the benchmark specifies ExpectedCloudVolumeM3.</summary>
+        public double PredictedCloudVolumeM3 { get; set; }
+        /// <summary>Expected flammable cloud volume from the benchmark (m³).</summary>
+        public double ExpectedCloudVolumeM3 { get; set; }
+        /// <summary>Ratio Predicted / Expected. NaN when expected is zero or not specified.</summary>
+        public double CloudVolumeRatio { get; set; } = double.NaN;
+
         /// <summary>True when EVERY metric falls inside its acceptance range.</summary>
         public bool AllPass(BenchmarkAcceptance acc)
         {
             if (acc == null) return true;
-            return acc.MRB.Accepts(MRB)
+            bool spmOk = acc.MRB.Accepts(MRB)
                 && acc.RMSE.Accepts(RMSE)
                 && acc.FAC2.Accepts(FAC2)
                 && acc.MG.Accepts(MG)
                 && acc.VG.Accepts(VG);
+            if (!spmOk) return false;
+            if (acc.CloudVolumeRatio != null && !double.IsNaN(CloudVolumeRatio))
+                return acc.CloudVolumeRatio.Accepts(CloudVolumeRatio);
+            return true;
         }
     }
 

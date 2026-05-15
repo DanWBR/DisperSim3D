@@ -60,6 +60,18 @@ namespace DisperSim3D.Validation
                 AppendRow(sb, "MG", Spm.MG, Benchmark?.Acceptance?.MG);
                 AppendRow(sb, "VG", Spm.VG, Benchmark?.Acceptance?.VG);
 
+                if (!double.IsNaN(Spm.CloudVolumeRatio))
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("## Cloud Volume");
+                    sb.AppendLine();
+                    sb.AppendFormat(inv, "| Metric | Value | Range | Pass |\n");
+                    sb.AppendLine("|---|---:|---|:-:|");
+                    sb.AppendFormat(inv, "| Predicted | {0:G6} m³ | — | — |\n", Spm.PredictedCloudVolumeM3);
+                    sb.AppendFormat(inv, "| Expected | {0:G6} m³ | — | — |\n", Spm.ExpectedCloudVolumeM3);
+                    AppendRow(sb, "Ratio (P/E)", Spm.CloudVolumeRatio, Benchmark?.Acceptance?.CloudVolumeRatio);
+                }
+
                 sb.AppendLine();
                 sb.AppendLine("## Per-sensor pairs");
                 sb.AppendLine();

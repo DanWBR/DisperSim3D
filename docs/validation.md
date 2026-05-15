@@ -58,6 +58,16 @@ For GPU LBM dispersion (`FluidX3DDispersion`):
   the scenario grid resolution (300³ on a 100-base grid, 6.7 m cells) to
   resolve the near-field pool evaporation source (32 m diameter LNG pool,
   Q = 109.5 kg/s, T_exit = 111 K).
+- **Gant &amp; Ivings 2005 (CH₄ sonic jet)** — `FluidX3DDispersion` with the
+  buoyant tracer engine (3× grid, 180×180×90 on a 60-base grid, 0.11 m
+  cells) reproduces a methane jet from a 10.5 mm orifice at 5.0 bar / 250 K
+  (choked flow Q = 0.054 kg/s, Cd = 0.65). Against initial Birch 1/x
+  centreline-decay estimates the tracer achieves FAC2 = 1.0, MG = 1.10,
+  MRB = 0.096 — all four sensors within 20 % of the analytical jet model.
+  Flammable cloud volume (LFL–UFL envelope in mass-fraction units) =
+  1.17 m³. First benchmark to validate cloud volume via
+  `expectedCloudVolumeM3`; the `.dsbench` now carries calibrated regression
+  baselines from the FluidX3D prediction itself.
 
 ## Validation harness
 
@@ -92,6 +102,17 @@ Chang &amp; Hanna 2004):
 
 Geometric (log-based) metrics floor zero values at $10^{-12}$ to avoid $-\infty$.
 
+## Cloud volume validation
+
+When a `.dsbench` file declares `expectedCloudVolumeM3`, the runner
+computes the flammable cloud volume (cells where LFL ≤ c ≤ UFL) via
+`FlammableCloudCalculator` and reports the ratio predicted/expected.
+The `acceptance.CloudVolumeRatio` field accepts/rejects the ratio.
+This is the standard metric for jet/plume consequence assessment per
+Gant &amp; Ivings (2005) and Fiates &amp; Vianna (2016). LFL/UFL in the
+`.dsbench` must be in the same unit as the engine's concentration
+field (e.g. mass-fraction LFL = 0.028 for 5 % v/v CH₄).
+
 ## `.dsbench` file format
 
 JSON document defining a complete recipe + the observed values from the
@@ -107,14 +128,16 @@ citation. Schema version `dsbench/v1`. Top-level fields:
 | `concentrationKind` | `PeakOverTime` or `FinalSnapshot` |
 | `unit` | `KgPerM3`, `MoleFraction`, `MassFraction` — must match the engine output |
 | `sensors[]` | name, position `[x,y,z]`, `measuredKgM3` |
+| `expectedCloudVolumeM3` | *(optional)* expected flammable cloud volume (m³); triggers volume validation |
 | `acceptance` | per-metric `{ "min": …, "max": … }`, either bound optional |
+| `acceptance.CloudVolumeRatio` | *(optional)* range for predicted/expected cloud volume ratio |
 
 JavaScript-style `// comments` are accepted.
 
 ## Bundled benchmarks
 
 Located under [`benchmarks/`](https://github.com/DanWBR/DisperSim3D/tree/main/benchmarks)
-at the repo root. All 5 currently **PASS** as regression baselines:
+at the repo root. All 6 currently **PASS** as regression baselines:
 
 | File | Solver | Role |
 |---|---|---|
@@ -123,6 +146,7 @@ at the repo root. All 5 currently **PASS** as regression baselines:
 | `burro9.dsbench` | RhoReactingBuoyantFoam | LNG cryogenic, neutral ABL, 3 arcs (Koopman 1982 / Vu 2019 §5.4). Also validated with `FluidX3DDispersion` (buoyant tracer, gravity-current spreading, BFECC, 3× grid) — all Hanna SPMs pass |
 | `burro8.dsbench` | RhoReactingBuoyantFoam | Same setup under stable ABL (Pasquill F, U = 1.8 m/s) |
 | `dat632.dsbench` | RhoReactingBuoyantFoam | SF₆ over slope, Hamburg WT (Mack &amp; Spruijt 2013). Also validated with `FluidX3DDispersion` (mass-injection source, Smagorinsky D) — all SPMs pass |
+| `gant-ivings-2005.dsbench` | FluidX3DDispersion | CH₄ sonic jet, 10.5 mm @ 5 bar / 250 K (Gant &amp; Ivings 2005). Buoyant tracer 3× grid (180³), BFECC, cloud volume = 1.17 m³. First benchmark to use `expectedCloudVolumeM3` + `CloudVolumeRatio` acceptance |
 
 ### What these benchmarks lock in
 
@@ -145,6 +169,12 @@ So the CFD benches **catch any change in the case-writer or solver pipeline**
 that would alter the predicted concentrations — they're a regression net,
 not a quantitative match against the original experiments.
 
+The Gant &amp; Ivings 2005 bench additionally locks the **flammable cloud
+volume** (1.169 m³) computed by `FlammableCloudCalculator` over the
+LFL–UFL mass-fraction range. Any change to the source injection, tracer
+advection, diffusivity, or BFECC limiter that shifts the cloud volume
+by more than ±20 % will break the `CloudVolumeRatio` acceptance.
+
 ## Adding a new benchmark
 
 1. Copy the closest existing `.dsbench` as a template.
@@ -154,7 +184,11 @@ not a quantitative match against the original experiments.
    `unit` matches your chosen solver's output (`MoleFraction` for
    species-transport solvers, `KgPerM3` for Gaussian).
 4. Set `acceptance` ranges. Default Hanna ranges are usually fine.
-5. `DisperSim3D.CLI --validate path/to/your.dsbench` to exercise it.
+5. *(Optional)* For cloud-volume benchmarks: set `expectedCloudVolumeM3`
+   and add `acceptance.CloudVolumeRatio` (e.g. `{ "min": 0.8, "max": 1.2 }`).
+   Ensure `source.gas.lfl` / `ufl` are in the same unit as the engine's
+   concentration field (`MassFraction` for species-transport solvers).
+6. `DisperSim3D.CLI --validate path/to/your.dsbench` to exercise it.
 
 ## Detector optimisation validation
 

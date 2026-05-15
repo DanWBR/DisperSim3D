@@ -54,6 +54,13 @@ namespace DisperSim3D.Validation
         /// </summary>
         public string ConcentrationField { get; set; }
 
+        /// <summary>
+        /// Expected flammable cloud volume (m³) from the cited paper or regression baseline.
+        /// When set, the runner computes flammable volume (LFL ≤ c ≤ UFL) and checks it
+        /// against <see cref="BenchmarkAcceptance.CloudVolumeRatio"/>.
+        /// </summary>
+        public double? ExpectedCloudVolumeM3 { get; set; }
+
         public BenchmarkAcceptance Acceptance { get; set; }
 
         /// <summary>Default field name for the chosen solver when <see cref="ConcentrationField"/> is null.</summary>
