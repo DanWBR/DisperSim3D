@@ -26,6 +26,7 @@ namespace DisperSim3D.UI.Avalonia.Core
     {
         public string Id { get; } = Guid.NewGuid().ToString("N")[..8];
         public string Name { get; set; } = "";
+        public string? SimulationId { get; set; }
         public DispersionScenario Scenario { get; set; } = null!;
         public CfdSolverType SolverType { get; set; }
         public CfdConfiguration CfdConfig { get; set; } = null!;
@@ -77,7 +78,8 @@ namespace DisperSim3D.UI.Avalonia.Core
 
         public SimulationJob Enqueue(DispersionScenario scenario, CfdSolverType solverType,
             CfdConfiguration config, Scene3D scene, OpenFoamEnvironment? env,
-            List<BoundingBox>? obstacles = null, Dictionary<string, double[]>? hpLeakProfiles = null)
+            List<BoundingBox>? obstacles = null, Dictionary<string, double[]>? hpLeakProfiles = null,
+            string? simulationId = null)
         {
             string solverTag = DisperSim3D.Core.SolverCode.Of(solverType);
             string solverLabel = DisperSim3D.Core.SolverCode.DisplayName(solverType);
@@ -85,6 +87,7 @@ namespace DisperSim3D.UI.Avalonia.Core
             var job = new SimulationJob
             {
                 Name = $"[{solverTag}] {solverLabel} — {scenario.Name ?? "Scenario"}",
+                SimulationId = simulationId,
                 Scenario = scenario,
                 SolverType = solverType,
                 CfdConfig = config,

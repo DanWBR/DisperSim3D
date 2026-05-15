@@ -58,6 +58,8 @@ namespace DisperSim3D.Core
             DeserializeGasDetectors(root, inv, scene);
             DeserializeDecorations(root, inv, scene);
             DeserializeEnvironment(root, inv, scene);
+            DeserializeDispersionStudies(root, inv, scene);
+            DeserializeDetectorAllocations(root, inv, scene);
 
             return scene;
         }
@@ -675,6 +677,137 @@ namespace DisperSim3D.Core
             if (gridHalf != null) env.GridHalfSize = double.Parse(gridHalf, inv);
 
             scene.Environment = env;
+        }
+
+        private static void DeserializeDispersionStudies(XElement root, CultureInfo inv, Scene3D scene)
+        {
+            var el = root.Element("DispersionStudies");
+            if (el == null) return;
+            scene.DispersionStudies.Clear();
+            foreach (var se in el.Elements("Study"))
+            {
+                var st = new DispersionStudy
+                {
+                    Id = (string)se.Attribute("Id") ?? Guid.NewGuid().ToString(),
+                    Name = (string)se.Attribute("Name") ?? "Dispersion Study",
+                    Description = (string)se.Attribute("Description") ?? "",
+                    DetectionThreshold = double.Parse((string)se.Attribute("DetectionThreshold") ?? "50", inv),
+                    IsVisible = bool.Parse((string)se.Attribute("IsVisible") ?? "True")
+                };
+                if (Enum.TryParse((string)se.Attribute("DetectionQuantity") ?? "PercentLFL", out ViewFieldProperty dq))
+                    st.DetectionQuantity = dq;
+                var created = (string)se.Attribute("CreatedAt");
+                if (created != null && DateTime.TryParse(created, inv, System.Globalization.DateTimeStyles.RoundtripKind, out var dt))
+                    st.CreatedAt = dt;
+
+                var simsEl = se.Element("Simulations");
+                if (simsEl != null)
+                    foreach (var simRef in simsEl.Elements("Simulation"))
+                    {
+                        var sid = (string)simRef.Attribute("Id");
+                        if (!string.IsNullOrEmpty(sid)) st.SimulationIds.Add(sid);
+                    }
+
+                var rwEl = se.Element("RiskWeights");
+                if (rwEl != null)
+                    foreach (var r in rwEl.Elements("R"))
+                    {
+                        var simId = (string)r.Attribute("SimId") ?? "";
+                        if (string.IsNullOrEmpty(simId)) continue;
+                        var risk = new ScenarioRisk
+                        {
+                            FreqPerYear = double.Parse((string)r.Attribute("FreqValue") ?? "1", inv),
+                            Consequence = double.Parse((string)r.Attribute("ConsValue") ?? "1", inv)
+                        };
+                        if (Enum.TryParse((string)r.Attribute("FreqMode") ?? "Auto", out RiskValueMode fm))
+                            risk.FreqMode = fm;
+                        if (Enum.TryParse((string)r.Attribute("ConsMode") ?? "Auto", out RiskValueMode cm))
+                            risk.ConsMode = cm;
+                        st.RiskWeights[simId] = risk;
+                    }
+
+                scene.DispersionStudies.Add(st);
+            }
+        }
+
+        private static void DeserializeDetectorAllocations(XElement root, CultureInfo inv, Scene3D scene)
+        {
+            var el = root.Element("DetectorAllocations");
+            if (el == null) return;
+            scene.DetectorAllocations.Clear();
+            foreach (var ae in el.Elements("Allocation"))
+            {
+                var a = new DetectorAllocation
+                {
+                    Id = (string)ae.Attribute("Id") ?? Guid.NewGuid().ToString(),
+                    Name = (string)ae.Attribute("Name") ?? "Detector Allocation",
+                    DispersionStudyId = (string)ae.Attribute("DispersionStudyId") ?? "",
+                    TargetCoveragePercent = double.Parse((string)ae.Attribute("TargetCoveragePercent") ?? "100", inv),
+                    MaxDetectors = int.Parse((string)ae.Attribute("MaxDetectors") ?? "0", inv),
+                    DetectionRadiusM = double.Parse((string)ae.Attribute("DetectionRadiusM") ?? "5", inv),
+                    MinZ = double.Parse((string)ae.Attribute("MinZ") ?? "1.5", inv),
+                    MaxZ = double.Parse((string)ae.Attribute("MaxZ") ?? "3", inv),
+                    CandidateNx = int.Parse((string)ae.Attribute("CandidateNx") ?? "60", inv),
+                    CandidateNy = int.Parse((string)ae.Attribute("CandidateNy") ?? "60", inv),
+                    CandidateNz = int.Parse((string)ae.Attribute("CandidateNz") ?? "3", inv),
+                    UseExistingDetectors = bool.Parse((string)ae.Attribute("UseExistingDetectors") ?? "False"),
+                    DetectionProbability = double.Parse((string)ae.Attribute("DetectionProbability") ?? "1", inv),
+                    UseDistanceWeighting = bool.Parse((string)ae.Attribute("UseDistanceWeighting") ?? "False"),
+                    DistanceWeightMin = double.Parse((string)ae.Attribute("DistanceWeightMin") ?? "0.5", inv),
+                    DistanceWeightMax = double.Parse((string)ae.Attribute("DistanceWeightMax") ?? "1", inv),
+                    AchievedCoveragePercent = double.Parse((string)ae.Attribute("AchievedCoveragePercent") ?? "0", inv),
+                    TotalRisk = double.Parse((string)ae.Attribute("TotalRisk") ?? "0", inv),
+                    ResidualRisk = double.Parse((string)ae.Attribute("ResidualRisk") ?? "0", inv),
+                    RiskReductionFraction = double.Parse((string)ae.Attribute("RiskReductionFraction") ?? "0", inv),
+                    StatusMessage = (string)ae.Attribute("StatusMessage") ?? "",
+                    IsVisible = bool.Parse((string)ae.Attribute("IsVisible") ?? "True")
+                };
+                if (Enum.TryParse((string)ae.Attribute("Objective") ?? "CoverAll", out AllocationObjective obj))
+                    a.Objective = obj;
+                if (Enum.TryParse((string)ae.Attribute("Strategy") ?? "GreedyMaxCoverage", out AllocationStrategy strat))
+                    a.Strategy = strat;
+                if (Enum.TryParse((string)ae.Attribute("Status") ?? "Configured", out AllocationStatus status))
+                    a.Status = status;
+                var runAt = (string)ae.Attribute("RunAt");
+                if (runAt != null && DateTime.TryParse(runAt, inv, System.Globalization.DateTimeStyles.RoundtripKind, out var ra))
+                    a.RunAt = ra;
+
+                var posEl = ae.Element("Positions");
+                if (posEl != null)
+                    foreach (var p in posEl.Elements("P"))
+                        a.AllocatedPositions.Add(new Geometry.Point3D(
+                            double.Parse((string)p.Attribute("X") ?? "0", inv),
+                            double.Parse((string)p.Attribute("Y") ?? "0", inv),
+                            double.Parse((string)p.Attribute("Z") ?? "0", inv)));
+
+                var covEl = ae.Element("Coverage");
+                if (covEl != null)
+                    foreach (var c in covEl.Elements("C"))
+                    {
+                        var simId = (string)c.Attribute("SimId") ?? "";
+                        if (!string.IsNullOrEmpty(simId))
+                            a.PerCloudCovered[simId] = bool.Parse((string)c.Attribute("Covered") ?? "False");
+                    }
+
+                var rrEl = ae.Element("ResidualRisks");
+                if (rrEl != null)
+                    foreach (var r in rrEl.Elements("R"))
+                    {
+                        var simId = (string)r.Attribute("SimId") ?? "";
+                        if (!string.IsNullOrEmpty(simId))
+                            a.PerCloudResidualRisk[simId] = double.Parse((string)r.Attribute("R") ?? "0", inv);
+                    }
+
+                var rcEl = ae.Element("RiskCurve");
+                if (rcEl != null)
+                    foreach (var p in rcEl.Elements("P"))
+                    {
+                        a.RiskCurveK.Add(int.Parse((string)p.Attribute("K") ?? "0", inv));
+                        a.RiskCurveRRF.Add(double.Parse((string)p.Attribute("RRF") ?? "0", inv));
+                    }
+
+                scene.DetectorAllocations.Add(a);
+            }
         }
     }
 }

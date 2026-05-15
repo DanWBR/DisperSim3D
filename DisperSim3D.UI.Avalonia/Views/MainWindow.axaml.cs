@@ -1231,12 +1231,16 @@ namespace DisperSim3D.UI.Avalonia.Views
                 case "study":
                     AddItem("Edit Study…", "mdi-pencil-outline",
                         (_, _) => _ = EditDispersionStudyAsync(node));
+                    AddItem("Duplicate", "mdi-content-copy",
+                        (_, _) => DuplicateDispersionStudy(node));
                     AddItem("Delete", "mdi-trash-can-outline",
                         (_, _) => DeleteFromList(_scene!.DispersionStudies, node));
                     return;
                 case "alloc":
                     AddItem("Edit…", "mdi-pencil-outline",
                         (_, _) => _ = EditDetectorAllocationAsync(node));
+                    AddItem("Apply (create detectors)", "mdi-map-marker-plus-outline",
+                        (_, _) => ApplyDetectorAllocation(node));
                     AddItem("Delete", "mdi-trash-can-outline",
                         (_, _) => DeleteFromList(_scene!.DetectorAllocations, node));
                     return;
@@ -1587,9 +1591,17 @@ namespace DisperSim3D.UI.Avalonia.Views
                 }
             }
 
+            OpenFoamEnvironment? env = null;
+            if (config.DetectedEnvironment != OpenFoamEnvironmentType.None)
+            {
+                env = new OpenFoamEnvironment();
+                env.Configure(config.OpenFoamPath, config.DetectedEnvironment, config.WslDistroName);
+            }
+
+            sim.Status = SimulationStatus.Queued;
             SimulationManager.Enqueue(
-                scenario, sim.SolverType, config, _scene, null,
-                obstacles, hpProfiles);
+                scenario, sim.SolverType, config, _scene, env,
+                obstacles, hpProfiles, sim.Id);
 
             ShowSimulationManager();
             StatusText.Text = $"Simulation enqueued: {sim.Name}";
@@ -1633,14 +1645,31 @@ namespace DisperSim3D.UI.Avalonia.Views
 
                     if (job.ResultEntry != null && _scene != null)
                     {
-                        var sim = _scene.Simulations.FirstOrDefault(s =>
-                            s.SolverType == job.SolverType && s.Name == job.Scenario?.Name);
+                        var sim = job.SimulationId != null
+                            ? _scene.Simulations.FirstOrDefault(s => s.Id == job.SimulationId)
+                            : _scene.Simulations.FirstOrDefault(s =>
+                                s.SolverType == job.SolverType && s.Status == SimulationStatus.Running);
                         if (sim != null)
                         {
                             sim.Status = SimulationStatus.Completed;
+                            sim.CompletedAt = job.CompletedAt ?? DateTime.Now;
                             sim.ResultTag = job.ResultEntry.Tag;
                             sim.CasePath = job.ResultEntry.CasePath ?? "";
+                            sim.TimeStepCount = job.ResultEntry.TimeStepCount;
+                            if (job.ResultEntry.Tag is OpenFoamResult ofr && ofr.TimeSteps.Count > 0)
+                            {
+                                var lastField = ofr.GetField(ofr.TimeSteps[ofr.TimeSteps.Count - 1]);
+                                if (lastField != null)
+                                {
+                                    double maxC = 0;
+                                    foreach (double v in lastField)
+                                        if (v > maxC) maxC = v;
+                                    sim.MaxConcentration = maxC;
+                                }
+                            }
+                            if (!_isDirty) { _isDirty = true; UpdateTitle(); }
                             RebuildTree();
+                            Viewport3D.PopulateScene(_scene);
                         }
                     }
                 }
@@ -1684,6 +1713,22 @@ namespace DisperSim3D.UI.Avalonia.Views
             var dlg = new DispersionStudyDialog(_scene, study);
             if (!await dlg.ShowDialog<bool>(this)) return;
             MarkDirtyAndRefresh("Updated study: " + study.Name);
+        }
+
+        private void DuplicateDispersionStudy(ProjectTreeNode node)
+        {
+            if (_scene is null || node.Tag is not DispersionStudy st) return;
+            var copy = new DispersionStudy
+            {
+                Name = st.Name + " (copy)",
+                Description = st.Description,
+                DetectionQuantity = st.DetectionQuantity,
+                DetectionThreshold = st.DetectionThreshold,
+                SimulationIds = new System.Collections.Generic.List<string>(st.SimulationIds),
+                IsVisible = st.IsVisible
+            };
+            _scene.DispersionStudies.Add(copy);
+            MarkDirtyAndRefresh("Duplicated study: " + copy.Name);
         }
 
         // ── Transient wind / ESD ─────────────────────────────────────────────
@@ -1918,6 +1963,27 @@ namespace DisperSim3D.UI.Avalonia.Views
             // instance, so no swap is needed — just refresh the tree to pick
             // up the updated name / coverage.
             MarkDirtyAndRefresh("Updated detector allocation: " + dlg.Result.Name);
+        }
+
+        private void ApplyDetectorAllocation(ProjectTreeNode node)
+        {
+            if (_scene is null || node.Tag is not DetectorAllocation a) return;
+            if (a.AllocatedPositions == null || a.AllocatedPositions.Count == 0)
+            {
+                StatusText.Text = "This allocation has no positions yet — run it first.";
+                return;
+            }
+            int baseCount = _scene.GasDetectors.Count;
+            for (int i = 0; i < a.AllocatedPositions.Count; i++)
+            {
+                _scene.GasDetectors.Add(new GasDetector3D
+                {
+                    Name = a.Name + " #" + (i + 1),
+                    Position = a.AllocatedPositions[i]
+                });
+            }
+            int added = _scene.GasDetectors.Count - baseCount;
+            MarkDirtyAndRefresh("Applied: created " + added + " gas detectors from '" + a.Name + "'.");
         }
 
         // ── DWSIM mixture builder (adds to the gas library) ──────────────────

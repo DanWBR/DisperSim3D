@@ -629,24 +629,24 @@ namespace DisperSim3D.UI.Avalonia.Views
         /// </summary>
         public static (SolidVertex[] verts, uint[] indices) GenerateHemisphere(
             float radius, Vector4 zenithColor, Vector4 horizonColor,
-            int stacks = 24, int slices = 32)
+            int stacks = 24, int slices = 32, bool fullSphere = false)
         {
             int vertCount = (stacks + 1) * (slices + 1);
             int idxCount  = stacks * slices * 6;
             var verts   = new SolidVertex[vertCount];
             var indices = new uint[idxCount];
 
+            float maxPhi = fullSphere ? MathF.PI : MathF.PI * 0.5f;
+
             int vi = 0;
             for (int st = 0; st <= stacks; st++)
             {
-                // phi goes from 0 (zenith, top) to π/2 (horizon)
-                float phi = MathF.PI * 0.5f * st / stacks;
+                float phi = maxPhi * st / stacks;
                 float sp  = MathF.Sin(phi);
                 float cp  = MathF.Cos(phi);
 
-                // Blend factor: 0 at zenith → 1 at horizon
                 float t = (float)st / stacks;
-                var color = Vector4.Lerp(zenithColor, horizonColor, t);
+                var color = Vector4.Lerp(zenithColor, horizonColor, MathF.Min(t * (fullSphere ? 2f : 1f), 1f));
 
                 for (int sl = 0; sl <= slices; sl++)
                 {

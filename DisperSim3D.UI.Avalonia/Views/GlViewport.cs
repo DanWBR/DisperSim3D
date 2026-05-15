@@ -2076,6 +2076,14 @@ void main() { }
             var env = _loadedScene?.Environment ?? _loadedEnv ?? new EnvironmentSettings();
             _loadedEnv = env;
 
+            DeleteGlTexture(_skyTextureId);
+            _skyTextureId = 0;
+            {
+                var skyPath = BuiltinAssetResolver.Resolve(env.SkyTexturePath);
+                if (!string.IsNullOrEmpty(skyPath) && System.IO.File.Exists(skyPath))
+                    _skyTextureId = GlTextureLoader.LoadFromFile(gl, skyPath);
+            }
+
             _skyDomeMesh?.Cleanup(gl);
             _skyDomeMesh = null;
             if (env.SkydomeEnabled)
@@ -2086,18 +2094,14 @@ void main() { }
                 var horizon = new Vector4(
                     env.SkyHorizonColor.ScR, env.SkyHorizonColor.ScG,
                     env.SkyHorizonColor.ScB, 1f);
+                bool hasSkyTex = _skyTextureId != 0;
                 var (skyV, skyI) = GlMeshBuffer.GenerateHemisphere(
-                    500f, zenith, horizon);
+                    500f, zenith, horizon,
+                    stacks: hasSkyTex ? 48 : 24,
+                    slices: hasSkyTex ? 64 : 32,
+                    fullSphere: hasSkyTex);
                 _skyDomeMesh = new GlMeshBuffer();
                 _skyDomeMesh.Upload(gl, skyV, skyI);
-            }
-
-            DeleteGlTexture(_skyTextureId);
-            _skyTextureId = 0;
-            {
-                var skyPath = BuiltinAssetResolver.Resolve(env.SkyTexturePath);
-                if (!string.IsNullOrEmpty(skyPath) && System.IO.File.Exists(skyPath))
-                    _skyTextureId = GlTextureLoader.LoadFromFile(gl, skyPath);
             }
 
             DeleteGlTexture(_groundTextureId);
@@ -2179,7 +2183,16 @@ void main() { }
             var env = scene?.Environment ?? new EnvironmentSettings();
             _loadedEnv = env;
 
-            // Sky dome — rebuild each time (zenith/horizon colours may change)
+            // Sky panorama texture (load before dome so we know if full sphere is needed)
+            DeleteGlTexture(_skyTextureId);
+            _skyTextureId = 0;
+            {
+                var skyPath = BuiltinAssetResolver.Resolve(env.SkyTexturePath);
+                if (!string.IsNullOrEmpty(skyPath) && System.IO.File.Exists(skyPath))
+                    _skyTextureId = GlTextureLoader.LoadFromFile(gl, skyPath);
+            }
+
+            // Sky dome — full sphere when textured (matches WPF panorama wrapping)
             _skyDomeMesh?.Cleanup(gl);
             _skyDomeMesh = null;
             if (env.SkydomeEnabled)
@@ -2190,19 +2203,14 @@ void main() { }
                 var horizon = new Vector4(
                     env.SkyHorizonColor.ScR, env.SkyHorizonColor.ScG,
                     env.SkyHorizonColor.ScB, 1f);
+                bool hasSkyTex = _skyTextureId != 0;
                 var (skyV, skyI) = GlMeshBuffer.GenerateHemisphere(
-                    500f, zenith, horizon);
+                    500f, zenith, horizon,
+                    stacks: hasSkyTex ? 48 : 24,
+                    slices: hasSkyTex ? 64 : 32,
+                    fullSphere: hasSkyTex);
                 _skyDomeMesh = new GlMeshBuffer();
                 _skyDomeMesh.Upload(gl, skyV, skyI);
-            }
-
-            // Sky panorama texture
-            DeleteGlTexture(_skyTextureId);
-            _skyTextureId = 0;
-            {
-                var skyPath = BuiltinAssetResolver.Resolve(env.SkyTexturePath);
-                if (!string.IsNullOrEmpty(skyPath) && System.IO.File.Exists(skyPath))
-                    _skyTextureId = GlTextureLoader.LoadFromFile(gl, skyPath);
             }
 
             // Ground texture
