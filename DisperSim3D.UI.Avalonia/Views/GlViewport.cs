@@ -204,6 +204,22 @@ namespace DisperSim3D.UI.Avalonia.Views
         private int _groundShadowMapUniform, _groundLightSpaceUniform, _groundShadowEnabledUniform;
         private int _texShadowMapUniform, _texLightSpaceUniform, _texShadowEnabledUniform;
 
+        // Fog uniforms (per-program)
+        private int _groundFogColorUniform, _groundFogDensityUniform, _groundCameraPosUniform;
+        private int _solidFogColorUniform, _solidFogDensityUniform, _solidCameraPosUniform;
+        private int _texFogColorUniform, _texFogDensityUniform, _texCameraPosUniform;
+        private int _lineFogColorUniform, _lineFogDensityUniform, _lineCameraPosUniform;
+        private int _grassFogColorUniform, _grassFogDensityUniform, _grassCameraPosUniform;
+        private int _scCameraPosUniform, _scFogDensityUniform;
+        private int _skyFogColorUniform, _skyFogDensityUniform;
+
+        // Cloud (gas leak) shader
+        private int _cloudProgram;
+        private int _cloudMvpUniform, _cloudModelUniform, _cloudNormalMatUniform;
+        private int _cloudSunDirUniform, _cloudSunColorUniform, _cloudAmbientUniform;
+        private int _cloudAlphaUniform, _cloudTimeUniform;
+        private int _cloudFogColorUniform, _cloudFogDensityUniform, _cloudCameraPosUniform;
+
         // Texture cache (path → GL texture ID) + white 1×1 fallback
         private readonly Dictionary<string, int> _textureCache = new();
         private int _whiteTexture;
@@ -215,6 +231,7 @@ namespace DisperSim3D.UI.Avalonia.Views
         private Scene3D? _pendingScene;
         private Scene3D? _loadedScene;
         private bool _sceneNeedsRebuild;
+        private bool _envNeedsRebuild;
 
         // Cached environment settings from the last loaded scene
         private EnvironmentSettings? _loadedEnv;
@@ -263,11 +280,13 @@ uniform float uAnimScale;
 
 out vec4 vCol;
 out float vArcPhase;
+out vec3 vWorldPos;
 
 void main()
 {
     vCol = aCol;
     vArcPhase = fract(aArcT * uAnimScale - uTime);
+    vWorldPos = aPos;
     gl_Position = uMVP * vec4(aPos, 1.0);
 }
 ";
@@ -275,6 +294,11 @@ void main()
         private const string LineFragBody = @"
 in vec4 vCol;
 in float vArcPhase;
+in vec3 vWorldPos;
+
+uniform vec3  uFogColor;
+uniform float uFogDensity;
+uniform vec3  uCameraPos;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -297,6 +321,11 @@ void main()
 {
     vec3 rainbow = hsv2rgb(vArcPhase, 1.0, 1.0);
     fragColor = vec4(rainbow, vCol.a);
+
+    // Atmospheric fog (exponential squared)
+    float fogDist = length(vWorldPos - uCameraPos);
+    float fd = uFogDensity * fogDist;
+    fragColor.rgb = mix(uFogColor, fragColor.rgb, clamp(exp(-fd * fd), 0.0, 1.0));
 }
 ";
 
@@ -332,6 +361,8 @@ uniform float uUseSkyTexture;
 uniform sampler2D uSkyTexture;
 uniform float uSkyBrightness;
 uniform float uSkyVOffset;
+uniform vec3  uFogColor;
+uniform float uFogDensity;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -375,7 +406,12 @@ void main()
         v = clamp(v + uSkyVOffset, 0.0, 1.0);
         vec4 texCol = texture(uSkyTexture, vec2(u, v));
         float gamma = 1.0 / max(0.01, uSkyBrightness);
-        fragColor = vec4(pow(texCol.rgb, vec3(gamma)), texCol.a);
+        vec3 texRgb = pow(texCol.rgb, vec3(gamma));
+        // Horizon fog band — fade texture into fog near the horizon
+        float texEl = max(dir.z, 0.0);
+        float texFogBand = 1.0 - smoothstep(0.0, 0.05 + uFogDensity * 50.0, texEl);
+        texRgb = mix(texRgb, uFogColor, texFogBand * clamp(uFogDensity * 250.0, 0.0, 0.85));
+        fragColor = vec4(texRgb, texCol.a);
         return;
     }
 
@@ -421,6 +457,10 @@ void main()
     vec3 cloudCol = vec3(cLit, cLit, cLit * 0.98);
     sky = mix(sky, cloudCol, cloud * 0.75 * uShowClouds);
 
+    // Horizon fog band — matches the scene's distance-based fog
+    float fogBand = 1.0 - smoothstep(0.0, 0.05 + uFogDensity * 50.0, el);
+    sky = mix(sky, uFogColor, fogBand * clamp(uFogDensity * 250.0, 0.0, 0.85));
+
     fragColor = vec4(sky, 1.0);
 }
 ";
@@ -437,6 +477,7 @@ uniform float uTime;
 uniform vec3  uWindDir;
 
 out vec4 vCol;
+out vec3 vWorldPos;
 
 void main()
 {
@@ -453,14 +494,30 @@ void main()
     pos.z += cos(p1) * h * 0.04;
 
     vCol = aCol;
+    vWorldPos = pos;
     gl_Position = uMVP * vec4(pos, 1.0);
 }
 ";
 
         private const string GrassFragBody = @"
 in vec4 vCol;
+in vec3 vWorldPos;
+
+uniform vec3  uFogColor;
+uniform float uFogDensity;
+uniform vec3  uCameraPos;
+
 layout(location = 0) out vec4 fragColor;
-void main() { fragColor = vCol; }
+
+void main()
+{
+    fragColor = vCol;
+
+    // Atmospheric fog (exponential squared)
+    float fogDist = length(vWorldPos - uCameraPos);
+    float fd = uFogDensity * fogDist;
+    fragColor.rgb = mix(uFogColor, fragColor.rgb, clamp(exp(-fd * fd), 0.0, 1.0));
+}
 ";
 
         // ── Ground plane shader (procedural textures) ──────────────────
@@ -504,6 +561,9 @@ uniform float uGridHalf;
 uniform sampler2D uShadowMap;
 uniform mat4 uLightSpaceMat;
 uniform float uShadowEnabled;
+uniform vec3  uFogColor;
+uniform float uFogDensity;
+uniform vec3  uCameraPos;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -620,6 +680,11 @@ void main()
     vec3 light = uAmbient + uSunColor * diff * (1.0 - shadow * 0.7);
 
     fragColor = vec4(col * light, 1.0);
+
+    // Atmospheric fog (exponential squared)
+    float fogDist = length(vWorldPos - uCameraPos);
+    float fd = uFogDensity * fogDist;
+    fragColor.rgb = mix(uFogColor, fragColor.rgb, clamp(exp(-fd * fd), 0.0, 1.0));
 }
 ";
 
@@ -645,6 +710,8 @@ in vec3 vWorldPos;
 uniform sampler2D uShadowMap;
 uniform mat4  uLightSpaceMat;
 uniform float uShadowStrength;
+uniform vec3  uCameraPos;
+uniform float uFogDensity;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -669,7 +736,12 @@ void main()
 
     if (shadow < 0.01) discard;
 
-    fragColor = vec4(0.0, 0.0, 0.0, shadow * uShadowStrength);
+    // Fade shadows with atmospheric fog
+    float fogDist = length(vWorldPos - uCameraPos);
+    float fd = uFogDensity * fogDist;
+    float fogFactor = clamp(exp(-fd * fd), 0.0, 1.0);
+
+    fragColor = vec4(0.0, 0.0, 0.0, shadow * uShadowStrength * fogFactor);
 }
 ";
 
@@ -711,6 +783,9 @@ uniform float uAlpha;
 uniform sampler2D uShadowMap;
 uniform mat4 uLightSpaceMat;
 uniform float uShadowEnabled;
+uniform vec3  uFogColor;
+uniform float uFogDensity;
+uniform vec3  uCameraPos;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -742,6 +817,107 @@ void main()
     float shadow = calcShadow();
     vec3 light = uAmbient + (uSunColor * diff + uRimColor * rim) * (1.0 - shadow * 0.7);
     fragColor  = vec4(vCol.rgb * light, vCol.a * uAlpha);
+
+    // Atmospheric fog (exponential squared)
+    float fogDist = length(vWorldPos - uCameraPos);
+    float fd = uFogDensity * fogDist;
+    fragColor.rgb = mix(uFogColor, fragColor.rgb, clamp(exp(-fd * fd), 0.0, 1.0));
+}
+";
+
+        // ── Cloud (gas leak) shader ────────────────────────────────────
+        // Same vertex layout as the solid shader; the fragment shader uses
+        // 3D noise, Fresnel edge softening and subsurface-scatter
+        // approximation to make the isosurface look like a real gas cloud.
+
+        private const string CloudFragBody = @"
+in vec3 vNorm;
+in vec4 vCol;
+in vec3 vWorldPos;
+
+uniform vec3  uSunDir;
+uniform vec3  uSunColor;
+uniform vec3  uAmbient;
+uniform float uAlpha;
+uniform float uTime;
+uniform vec3  uCameraPos;
+uniform vec3  uFogColor;
+uniform float uFogDensity;
+
+layout(location = 0) out vec4 fragColor;
+
+// ── 3D value noise (Inigo Quilez) ──────────────────────────────
+float hash(vec3 p)
+{
+    p = fract(p * 0.3183099 + 0.1);
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+
+float noise3(vec3 x)
+{
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(hash(i),               hash(i+vec3(1,0,0)), f.x),
+                   mix(hash(i+vec3(0,1,0)),   hash(i+vec3(1,1,0)), f.x), f.y),
+               mix(mix(hash(i+vec3(0,0,1)),   hash(i+vec3(1,0,1)), f.x),
+                   mix(hash(i+vec3(0,1,1)),   hash(i+vec3(1,1,1)), f.x), f.y), f.z);
+}
+
+float fbm(vec3 p)
+{
+    float f  = 0.5000 * noise3(p); p *= 2.01;
+          f += 0.2500 * noise3(p); p *= 2.02;
+          f += 0.1250 * noise3(p); p *= 2.03;
+          f += 0.0625 * noise3(p);
+    return f / 0.9375;
+}
+
+void main()
+{
+    vec3 N = normalize(vNorm);
+    vec3 V = normalize(uCameraPos - vWorldPos);
+
+    // ── Fresnel edge softening — edges fade to transparent ─────
+    float NdotV = abs(dot(N, V));
+    float fresnel = 1.0 - NdotV;
+    float edgeFade = smoothstep(0.0, 0.45, NdotV);
+
+    // ── 3D turbulent noise — slow drift with time ─────────────
+    vec3 np = vWorldPos * 0.35 + vec3(uTime * 0.12, uTime * 0.05, uTime * 0.08);
+    float n = fbm(np);
+
+    // Higher-frequency detail layer
+    float detail = noise3(vWorldPos * 1.2 + vec3(uTime * 0.2, 0.0, uTime * 0.15));
+
+    // Edge-aware noise: noise cuts harder near silhouette edges
+    float edgeNoise = mix(n * 0.6, n, edgeFade);
+
+    // ── Cloud alpha: dense center, wispy dissolving edges ─────
+    float baseAlpha = vCol.a * uAlpha;
+    float cloudAlpha = baseAlpha
+        * edgeFade                    // smooth silhouette fade
+        * (0.3 + edgeNoise * 0.7)    // turbulence (stronger at edges)
+        * (0.7 + detail * 0.3);      // fine detail
+    cloudAlpha = clamp(cloudAlpha, 0.0, 1.0);
+
+    // ── Soft lighting with subsurface scatter approximation ───
+    float diff = max(dot(N, normalize(uSunDir)), 0.0) * 0.35;
+    // Forward scatter: light passing through the cloud
+    float scatter = pow(max(dot(-V, normalize(uSunDir)), 0.0), 3.0) * 0.25;
+    // Wrap lighting for softer shadows
+    float wrap = (dot(N, normalize(uSunDir)) + 1.0) * 0.25;
+
+    vec3 light = uAmbient * 1.3 + uSunColor * (diff + scatter + wrap);
+    vec3 col = vCol.rgb * light;
+
+    fragColor = vec4(col, cloudAlpha);
+
+    // Atmospheric fog
+    float fogDist = length(vWorldPos - uCameraPos);
+    float fd = uFogDensity * fogDist;
+    fragColor.rgb = mix(uFogColor, fragColor.rgb, clamp(exp(-fd * fd), 0.0, 1.0));
 }
 ";
 
@@ -783,6 +959,9 @@ uniform float uAlpha;
 uniform sampler2D uShadowMap;
 uniform mat4 uLightSpaceMat;
 uniform float uShadowEnabled;
+uniform vec3  uFogColor;
+uniform float uFogDensity;
+uniform vec3  uCameraPos;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -818,6 +997,11 @@ void main()
 
     vec3 col = texel.rgb * uTint.rgb * light;
     fragColor = vec4(col, texel.a * uTint.a * uAlpha);
+
+    // Atmospheric fog (exponential squared)
+    float fogDist = length(vWorldPos - uCameraPos);
+    float fd = uFogDensity * fogDist;
+    fragColor.rgb = mix(uFogColor, fragColor.rgb, clamp(exp(-fd * fd), 0.0, 1.0));
 }
 ";
 
@@ -898,6 +1082,17 @@ void main() { }
             RequestNextFrameRendering();
         }
 
+        /// <summary>
+        /// Rebuild only environment geometry (sky dome, ground, grass) without
+        /// touching scene objects. Use when EnvironmentSettings change — avoids
+        /// destroying views/simulations/dispersion playback.
+        /// </summary>
+        public void RefreshEnvironment()
+        {
+            _envNeedsRebuild = true;
+            RequestNextFrameRendering();
+        }
+
         // ── OpenGL lifecycle ────────────────────────────────────────────
 
         protected override void OnOpenGlInit(GlInterface gl)
@@ -970,6 +1165,20 @@ void main() { }
                 _solidRimColorUniform = GetUniformLoc(gl, _solidProgram, "uRimColor");
                 _solidAlphaUniform   = GetUniformLoc(gl, _solidProgram, "uAlpha");
 
+                // ── Compile cloud (gas leak) shader ─────────────────────
+                _cloudProgram          = CompileProgram(gl, SolidVertBody, CloudFragBody);
+                _cloudMvpUniform       = GetUniformLoc(gl, _cloudProgram, "uMVP");
+                _cloudModelUniform     = GetUniformLoc(gl, _cloudProgram, "uModel");
+                _cloudNormalMatUniform = GetUniformLoc(gl, _cloudProgram, "uNormalMat");
+                _cloudSunDirUniform    = GetUniformLoc(gl, _cloudProgram, "uSunDir");
+                _cloudSunColorUniform  = GetUniformLoc(gl, _cloudProgram, "uSunColor");
+                _cloudAmbientUniform   = GetUniformLoc(gl, _cloudProgram, "uAmbient");
+                _cloudAlphaUniform     = GetUniformLoc(gl, _cloudProgram, "uAlpha");
+                _cloudTimeUniform      = GetUniformLoc(gl, _cloudProgram, "uTime");
+                _cloudFogColorUniform  = GetUniformLoc(gl, _cloudProgram, "uFogColor");
+                _cloudFogDensityUniform = GetUniformLoc(gl, _cloudProgram, "uFogDensity");
+                _cloudCameraPosUniform = GetUniformLoc(gl, _cloudProgram, "uCameraPos");
+
                 // ── Compile sky shader ──────────────────────────────────
                 _skyProgram          = CompileProgram(gl, SkyVertBody, SkyFragBody);
                 _skyMvpUniform       = GetUniformLoc(gl, _skyProgram, "uMVP");
@@ -1028,6 +1237,30 @@ void main() { }
                 _texLightSpaceUniform    = GetUniformLoc(gl, _texProgram, "uLightSpaceMat");
                 _texShadowEnabledUniform = GetUniformLoc(gl, _texProgram, "uShadowEnabled");
 
+                // ── Fog uniforms ───────────────────────────────────────
+                _groundFogColorUniform   = GetUniformLoc(gl, _groundProgram, "uFogColor");
+                _groundFogDensityUniform = GetUniformLoc(gl, _groundProgram, "uFogDensity");
+                _groundCameraPosUniform  = GetUniformLoc(gl, _groundProgram, "uCameraPos");
+
+                _solidFogColorUniform   = GetUniformLoc(gl, _solidProgram, "uFogColor");
+                _solidFogDensityUniform = GetUniformLoc(gl, _solidProgram, "uFogDensity");
+                _solidCameraPosUniform  = GetUniformLoc(gl, _solidProgram, "uCameraPos");
+
+                _texFogColorUniform   = GetUniformLoc(gl, _texProgram, "uFogColor");
+                _texFogDensityUniform = GetUniformLoc(gl, _texProgram, "uFogDensity");
+                _texCameraPosUniform  = GetUniformLoc(gl, _texProgram, "uCameraPos");
+
+                _lineFogColorUniform   = GetUniformLoc(gl, _lineProgram, "uFogColor");
+                _lineFogDensityUniform = GetUniformLoc(gl, _lineProgram, "uFogDensity");
+                _lineCameraPosUniform  = GetUniformLoc(gl, _lineProgram, "uCameraPos");
+
+                _grassFogColorUniform   = GetUniformLoc(gl, _grassProgram, "uFogColor");
+                _grassFogDensityUniform = GetUniformLoc(gl, _grassProgram, "uFogDensity");
+                _grassCameraPosUniform  = GetUniformLoc(gl, _grassProgram, "uCameraPos");
+
+                _skyFogColorUniform   = GetUniformLoc(gl, _skyProgram, "uFogColor");
+                _skyFogDensityUniform = GetUniformLoc(gl, _skyProgram, "uFogDensity");
+
                 // ── Compile shadow depth shader + create FBO ────────────
                 _shadowProgram = CompileProgram(gl, ShadowVertBody, ShadowFragBody);
                 _shadowLightVPUniform = GetUniformLoc(gl, _shadowProgram, "uLightVP");
@@ -1040,6 +1273,8 @@ void main() { }
                 _scShadowMapUniform   = GetUniformLoc(gl, _shadowCatcherProgram, "uShadowMap");
                 _scLightSpaceUniform  = GetUniformLoc(gl, _shadowCatcherProgram, "uLightSpaceMat");
                 _scStrengthUniform    = GetUniformLoc(gl, _shadowCatcherProgram, "uShadowStrength");
+                _scCameraPosUniform   = GetUniformLoc(gl, _shadowCatcherProgram, "uCameraPos");
+                _scFogDensityUniform  = GetUniformLoc(gl, _shadowCatcherProgram, "uFogDensity");
 
                 // ── Create white 1×1 fallback texture ───────────────────
                 _whiteTexture = GlTextureLoader.CreateWhite1x1(gl);
@@ -1075,8 +1310,14 @@ void main() { }
             if (_sceneNeedsRebuild)
             {
                 _sceneNeedsRebuild = false;
+                _envNeedsRebuild = false;
                 RebuildSceneObjects(gl, _pendingScene);
                 _pendingScene = null;
+            }
+            else if (_envNeedsRebuild)
+            {
+                _envNeedsRebuild = false;
+                RebuildEnvironmentGeometry(gl);
             }
 
             // ── Deferred dispersion frame update (playback) ────────────
@@ -1135,6 +1376,14 @@ void main() { }
             float warmR = 1.0f;
             float warmG = 0.85f + 0.15f * MathF.Min(1f, elRad / 1.0f);
             float warmB = 0.70f + 0.30f * MathF.Min(1f, elRad / 1.0f);
+
+            // Fog parameters — derive colour from sky horizon for seamless blend
+            float fogDensity = env.FogEnabled ? (float)env.FogDensity : 0f;
+            var hc = env.SkyHorizonColor;
+            float fogR = hc.R / 255f;
+            float fogG = hc.G / 255f;
+            float fogB = hc.B / 255f;
+            var camPos = _camera.Eye;
 
             // ── 0. Shadow depth pass ────────────────────────────────────
             bool doShadows = env.ShadowsEnabled && env.UseSunLighting &&
@@ -1308,6 +1557,8 @@ void main() { }
                 _glUniform1f?.Invoke(_skyTimeUniform, timeSky);
                 _glUniform1f?.Invoke(_skyShowCloudsUniform, env.ShowClouds ? 1f : 0f);
                 _glUniform1f?.Invoke(_skyCloudSpeedUniform, (float)env.CloudSpeed);
+                _glUniform3f?.Invoke(_skyFogColorUniform, fogR, fogG, fogB);
+                _glUniform1f?.Invoke(_skyFogDensityUniform, fogDensity);
 
                 bool useSkyTex = _skyTextureId != 0;
                 _glUniform1f?.Invoke(_skyUseSkyTextureUniform, useSkyTex ? 1f : 0f);
@@ -1320,7 +1571,6 @@ void main() { }
                     _glUniform1i?.Invoke(_skySkyTextureUniform, 0);
                 }
 
-                var camPos = _camera.Eye;
                 var skyModel = Matrix4x4.CreateTranslation(camPos.X, camPos.Y, 0f);
                 var skyMvp = skyModel * view * proj;
                 SetMatrixUniform(gl, _skyMvpUniform, skyMvp);
@@ -1356,6 +1606,11 @@ void main() { }
                     warmR * sunI, warmG * sunI, warmB * sunI);
                 _glUniform3f?.Invoke(_groundAmbientUniform,
                     0.431f * ambI, 0.490f * ambI, 0.588f * ambI);
+
+                // Fog
+                _glUniform3f?.Invoke(_groundFogColorUniform, fogR, fogG, fogB);
+                _glUniform1f?.Invoke(_groundFogDensityUniform, fogDensity);
+                _glUniform3f?.Invoke(_groundCameraPosUniform, camPos.X, camPos.Y, camPos.Z);
 
                 // Shadow map
                 _glUniform1f?.Invoke(_groundShadowEnabledUniform, doShadows ? 1f : 0f);
@@ -1411,6 +1666,8 @@ void main() { }
                 SetMatrixUniform(gl, _scMvpUniform, mvp);
                 SetMatrixUniform(gl, _scLightSpaceUniform, lightSpaceMat);
                 _glUniform1f?.Invoke(_scStrengthUniform, 0.55f);
+                _glUniform3f?.Invoke(_scCameraPosUniform, camPos.X, camPos.Y, camPos.Z);
+                _glUniform1f?.Invoke(_scFogDensityUniform, fogDensity);
 
                 _glActiveTexture?.Invoke(GL_TEXTURE0);
                 _glBindTexture?.Invoke(GL_TEXTURE_2D_VAL, _shadowDepthTex);
@@ -1431,11 +1688,17 @@ void main() { }
             }
 
             // ── 3. Grid overlay ─────────────────────────────────────────
-            gl.UseProgram(_lineProgram);
-            _glUniform1f?.Invoke(_lineTimeUniform, 0f);
-            _glUniform1f?.Invoke(_lineAnimScaleUniform, 0f);
-            SetMatrixUniform(gl, _mvpUniform, mvp);
-            _grid.Render(gl);
+            if (_groundShowGridOverlay)
+            {
+                gl.UseProgram(_lineProgram);
+                _glUniform1f?.Invoke(_lineTimeUniform, 0f);
+                _glUniform1f?.Invoke(_lineAnimScaleUniform, 0f);
+                _glUniform3f?.Invoke(_lineFogColorUniform, fogR, fogG, fogB);
+                _glUniform1f?.Invoke(_lineFogDensityUniform, fogDensity);
+                _glUniform3f?.Invoke(_lineCameraPosUniform, camPos.X, camPos.Y, camPos.Z);
+                SetMatrixUniform(gl, _mvpUniform, mvp);
+                _grid.Render(gl);
+            }
 
             // ── 3b. Animated grass blades ───────────────────────────────
             if (_grassMesh != null && _grassProgram != 0)
@@ -1445,6 +1708,9 @@ void main() { }
                 float grassTime = (float)_animClock.Elapsed.TotalSeconds;
                 _glUniform1f?.Invoke(_grassTimeUniform, grassTime);
                 _glUniform3f?.Invoke(_grassWindDirUniform, 0.7f, 0.7f, 0f);
+                _glUniform3f?.Invoke(_grassFogColorUniform, fogR, fogG, fogB);
+                _glUniform1f?.Invoke(_grassFogDensityUniform, fogDensity);
+                _glUniform3f?.Invoke(_grassCameraPosUniform, camPos.X, camPos.Y, camPos.Z);
                 SetMatrixUniform(gl, _grassMvpUniform, mvp);
 
                 gl.Disable(GL_CULL_FACE);
@@ -1471,6 +1737,11 @@ void main() { }
                 _glUniform3f?.Invoke(_solidRimColorUniform,
                     0.549f * 0.25f, 0.627f * 0.25f, 0.784f * 0.25f);
 
+                // Fog
+                _glUniform3f?.Invoke(_solidFogColorUniform, fogR, fogG, fogB);
+                _glUniform1f?.Invoke(_solidFogDensityUniform, fogDensity);
+                _glUniform3f?.Invoke(_solidCameraPosUniform, camPos.X, camPos.Y, camPos.Z);
+
                 // Shadow map
                 _glUniform1f?.Invoke(_solidShadowEnabledUniform, doShadows ? 1f : 0f);
                 if (doShadows)
@@ -1491,6 +1762,7 @@ void main() { }
                 foreach (var obj in _sceneObjects)
                 {
                     if (!obj.Visible || obj.Mesh.IsLineGeometry || obj.Mesh.IsTextured) continue;
+                    if (obj.UseCloudShader) continue; // rendered in the cloud pass below
 
                     var model = obj.ModelMatrix;
 
@@ -1503,6 +1775,10 @@ void main() { }
                         gl.Enable(GL_CULL_FACE);
                         _glCullFace?.Invoke(GL_BACK);
                     }
+
+                    // Disable fog for scientific visualizations (isosurfaces, contour planes)
+                    _glUniform1f?.Invoke(_solidFogDensityUniform,
+                        isViewObj ? 0f : fogDensity);
 
                     _glUniform1f?.Invoke(_solidAlphaUniform, 1.0f);
 
@@ -1530,6 +1806,57 @@ void main() { }
                 gl.Disable(GL_BLEND);
             }
 
+            // ── 4a. Cloud (gas leak) objects ─────────────────────────────
+            bool hasCloudObjects = false;
+            foreach (var obj in _sceneObjects)
+            {
+                if (obj.Visible && obj.UseCloudShader && !obj.Mesh.IsLineGeometry && !obj.Mesh.IsTextured)
+                { hasCloudObjects = true; break; }
+            }
+            if (hasCloudObjects && _cloudProgram != 0)
+            {
+                gl.UseProgram(_cloudProgram);
+
+                float cloudTime = (float)_animClock.Elapsed.TotalSeconds;
+                _glUniform3f?.Invoke(_cloudSunDirUniform, sunX, sunY, sunZ);
+                _glUniform3f?.Invoke(_cloudSunColorUniform,
+                    warmR * sunI, warmG * sunI, warmB * sunI);
+                _glUniform3f?.Invoke(_cloudAmbientUniform,
+                    0.431f * ambI, 0.490f * ambI, 0.588f * ambI);
+                _glUniform1f?.Invoke(_cloudTimeUniform, cloudTime);
+                _glUniform3f?.Invoke(_cloudCameraPosUniform, camPos.X, camPos.Y, camPos.Z);
+                _glUniform3f?.Invoke(_cloudFogColorUniform, fogR, fogG, fogB);
+                _glUniform1f?.Invoke(_cloudFogDensityUniform, 0f);
+
+                gl.Disable(GL_CULL_FACE);
+                gl.Enable(GL_BLEND);
+                _glBlendFunc?.Invoke(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+                foreach (var obj in _sceneObjects)
+                {
+                    if (!obj.Visible || !obj.UseCloudShader || obj.Mesh.IsLineGeometry || obj.Mesh.IsTextured)
+                        continue;
+
+                    var model = obj.ModelMatrix;
+                    _glUniform1f?.Invoke(_cloudAlphaUniform, 1.0f);
+
+                    var objMvp = model * view * proj;
+                    SetMatrixUniform(gl, _cloudMvpUniform, objMvp);
+                    SetMatrixUniform(gl, _cloudModelUniform, model);
+
+                    if (Matrix4x4.Invert(model, out var inv))
+                    {
+                        var normalMat = Matrix4x4.Transpose(inv);
+                        SetMatrix3Uniform(gl, _cloudNormalMatUniform, normalMat);
+                    }
+
+                    obj.Mesh.Draw(gl);
+                }
+
+                gl.Disable(GL_BLEND);
+                gl.UseProgram(0);
+            }
+
             // ── 4b. Textured scene objects (OBJ+MTL decorations) ────────
             if (_texProgram != 0)
             {
@@ -1550,6 +1877,11 @@ void main() { }
                     _glUniform3f?.Invoke(_texAmbientUniform,
                         0.431f * ambI, 0.490f * ambI, 0.588f * ambI);
                     _glUniform1i?.Invoke(_texTextureUniform, 0);
+
+                    // Fog
+                    _glUniform3f?.Invoke(_texFogColorUniform, fogR, fogG, fogB);
+                    _glUniform1f?.Invoke(_texFogDensityUniform, fogDensity);
+                    _glUniform3f?.Invoke(_texCameraPosUniform, camPos.X, camPos.Y, camPos.Z);
 
                     // Shadow map
                     _glUniform1f?.Invoke(_texShadowEnabledUniform, doShadows ? 1f : 0f);
@@ -1622,6 +1954,9 @@ void main() { }
                 float timeSec = (float)_animClock.Elapsed.TotalSeconds;
                 _glUniform1f?.Invoke(_lineTimeUniform, timeSec * 0.4f);
                 _glUniform1f?.Invoke(_lineAnimScaleUniform, 0.04f);
+                _glUniform3f?.Invoke(_lineFogColorUniform, fogR, fogG, fogB);
+                _glUniform1f?.Invoke(_lineFogDensityUniform, fogDensity);
+                _glUniform3f?.Invoke(_lineCameraPosUniform, camPos.X, camPos.Y, camPos.Z);
 
                 foreach (var obj in _sceneObjects)
                 {
@@ -1647,7 +1982,7 @@ void main() { }
             }
             _lastFrameTime = _animClock.Elapsed.TotalSeconds;
 
-            if (_hasWindLines || _grassMesh != null || _skyDomeMesh != null)
+            if (_hasWindLines || _grassMesh != null || _skyDomeMesh != null || hasCloudObjects)
                 RequestNextFrameRendering();
         }
 
@@ -1670,6 +2005,11 @@ void main() { }
             {
                 gl.DeleteProgram(_solidProgram);
                 _solidProgram = 0;
+            }
+            if (_cloudProgram != 0)
+            {
+                gl.DeleteProgram(_cloudProgram);
+                _cloudProgram = 0;
             }
             if (_skyProgram != 0)
             {
@@ -1725,6 +2065,97 @@ void main() { }
         private static readonly Vector4 FireColor     = new(0.95f, 0.30f, 0.15f, 0.9f); // red-orange
         private static readonly Vector4 MonitorColor  = new(0.25f, 0.55f, 0.95f, 0.9f); // blue
         private static readonly Vector4 DetectorColor = new(0.20f, 0.80f, 0.35f, 0.9f); // green
+
+        /// <summary>
+        /// Rebuild only environment geometry (sky dome, textures, ground, grass)
+        /// without touching <see cref="_sceneObjects"/>. Called when
+        /// EnvironmentSettings change so views/simulations stay intact.
+        /// </summary>
+        private void RebuildEnvironmentGeometry(GlInterface gl)
+        {
+            var env = _loadedScene?.Environment ?? _loadedEnv ?? new EnvironmentSettings();
+            _loadedEnv = env;
+
+            _skyDomeMesh?.Cleanup(gl);
+            _skyDomeMesh = null;
+            if (env.SkydomeEnabled)
+            {
+                var zenith = new Vector4(
+                    env.SkyZenithColor.ScR, env.SkyZenithColor.ScG,
+                    env.SkyZenithColor.ScB, 1f);
+                var horizon = new Vector4(
+                    env.SkyHorizonColor.ScR, env.SkyHorizonColor.ScG,
+                    env.SkyHorizonColor.ScB, 1f);
+                var (skyV, skyI) = GlMeshBuffer.GenerateHemisphere(
+                    500f, zenith, horizon);
+                _skyDomeMesh = new GlMeshBuffer();
+                _skyDomeMesh.Upload(gl, skyV, skyI);
+            }
+
+            DeleteGlTexture(_skyTextureId);
+            _skyTextureId = 0;
+            {
+                var skyPath = BuiltinAssetResolver.Resolve(env.SkyTexturePath);
+                if (!string.IsNullOrEmpty(skyPath) && System.IO.File.Exists(skyPath))
+                    _skyTextureId = GlTextureLoader.LoadFromFile(gl, skyPath);
+            }
+
+            DeleteGlTexture(_groundTextureId);
+            _groundTextureId = 0;
+            _groundTexWidth = 0; _groundTexHeight = 0;
+            {
+                var gndPath = BuiltinAssetResolver.Resolve(env.GroundTexturePath);
+                if (!string.IsNullOrEmpty(gndPath) && System.IO.File.Exists(gndPath))
+                    _groundTextureId = GlTextureLoader.LoadFromFile(gl, gndPath,
+                        out _groundTexWidth, out _groundTexHeight);
+            }
+
+            _groundPlaneMesh?.Cleanup(gl);
+            _groundPlaneMesh = null;
+            _groundMaterialIndex = (int)env.Ground;
+            _groundShowGridOverlay = env.ShowGridOverlay;
+            {
+                var fallback = new Vector4(0.48f, 0.58f, 0.35f, 1f);
+                var (gndV, gndI) = GlMeshBuffer.GenerateGroundDisc(
+                    500f, fallback);
+                _groundPlaneMesh = new GlMeshBuffer();
+                _groundPlaneMesh.Upload(gl, gndV, gndI, keepCpuCopy: true);
+            }
+
+            _shadowCatcherMesh?.Cleanup(gl);
+            _shadowCatcherMesh = null;
+            {
+                float sc = 500f;
+                float z  = 0.01f;
+                var scV = new SolidVertex[]
+                {
+                    new(new Vector3(-sc, -sc, z), Vector3.UnitZ, Vector4.Zero),
+                    new(new Vector3( sc, -sc, z), Vector3.UnitZ, Vector4.Zero),
+                    new(new Vector3( sc,  sc, z), Vector3.UnitZ, Vector4.Zero),
+                    new(new Vector3(-sc,  sc, z), Vector3.UnitZ, Vector4.Zero),
+                };
+                var scI = new uint[] { 0, 1, 2, 0, 2, 3 };
+                _shadowCatcherMesh = new GlMeshBuffer();
+                _shadowCatcherMesh.Upload(gl, scV, scI);
+            }
+
+            _grassMesh?.Cleanup(gl);
+            _grassMesh = null;
+            if (env.ShowGrassBlades && _loadedScene != null)
+            {
+                var exclusions = BuildDecorationFootprints(_loadedScene);
+                int bladeCount = Math.Clamp(env.GrassBladeCount, 500, 100000);
+                var (gV, gI) = GlMeshBuffer.GenerateGrassBlades(80f, bladeCount,
+                    exclusionZones: exclusions);
+                _grassMesh = new GlMeshBuffer();
+                _grassMesh.Upload(gl, gV, gI);
+            }
+
+            _grid.HalfSize = (float)env.GridHalfSize;
+            _grid.MinorStep = (float)env.GridMinorSpacing;
+            _grid.MajorStep = (float)env.GridMajorSpacing;
+            _grid.Init(gl);
+        }
 
         /// <summary>
         /// Rebuild all scene objects from the given <see cref="Scene3D"/>.
@@ -2202,17 +2633,21 @@ void main() { }
             if (isoResult == null) return;
 
             float alpha = (float)Math.Max(0, Math.Min(1, view.Opacity));
-            var isoColor = new Vector4(
-                view.IsoColor.ScR, view.IsoColor.ScG, view.IsoColor.ScB, alpha);
+            var c = view.UseCloudAppearance ? view.CloudColor : view.IsoColor;
+            var isoColor = new Vector4(c.ScR, c.ScG, c.ScB, alpha);
 
             var (verts, idx) = GlMeshBuffer.FromIsosurfaceResult(isoResult.Value, isoColor);
             var mesh = new GlMeshBuffer();
             mesh.Upload(gl, verts, idx);
             _sceneObjects.Add(new SceneObject(
-                mesh, Matrix4x4.Identity, $"view:iso:{view.Id}"));
+                mesh, Matrix4x4.Identity, $"view:iso:{view.Id}")
+            {
+                UseCloudShader = view.UseCloudAppearance
+            });
 
             System.Diagnostics.Debug.WriteLine(
-                $"[GlViewport] Isosurface '{view.Name}': {isoResult.Value.TriangleCount} tris");
+                $"[GlViewport] Isosurface '{view.Name}': {isoResult.Value.TriangleCount} tris" +
+                (view.UseCloudAppearance ? " [cloud]" : ""));
         }
 
         /// <summary>Build a contour-plane mesh for the given View and upload it.</summary>
@@ -2450,13 +2885,17 @@ void main() { }
                 if (isoResult == null) continue;
 
                 float alpha = (float)Math.Max(0.1, Math.Min(1, th.Opacity));
-                var color = new Vector4(th.Color.ScR, th.Color.ScG, th.Color.ScB, alpha);
+                var c = th.UseCloudAppearance ? th.CloudColor : th.Color;
+                var color = new Vector4(c.ScR, c.ScG, c.ScB, alpha);
 
                 var (verts, idx) = GlMeshBuffer.FromIsosurfaceResult(isoResult.Value, color);
                 var mesh = new GlMeshBuffer();
                 mesh.Upload(gl, verts, idx);
                 _sceneObjects.Add(new SceneObject(
-                    mesh, Matrix4x4.Identity, $"dispersion:{th.Name}"));
+                    mesh, Matrix4x4.Identity, $"dispersion:{th.Name}")
+                {
+                    UseCloudShader = th.UseCloudAppearance
+                });
             }
         }
 
@@ -2974,6 +3413,9 @@ void main() { }
 
         /// <summary>Material tint multiplied with texture colour.</summary>
         public Vector4 Tint { get; set; } = Vector4.One;
+
+        /// <summary>Render with the cloud (gas leak) shader instead of the solid shader.</summary>
+        public bool UseCloudShader { get; set; }
 
     }
 }

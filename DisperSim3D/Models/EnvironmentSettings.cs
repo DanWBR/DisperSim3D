@@ -110,6 +110,14 @@ namespace DisperSim3D.Models
         [Description("Cast shadows from the sun onto the ground and objects. Requires UseSunLighting.")]
         public bool ShadowsEnabled { get; set; } = true;
 
+        [Category("Atmosphere")]
+        [Description("Enable distance-based atmospheric fog that blends distant objects into the sky horizon color.")]
+        public bool FogEnabled { get; set; } = true;
+
+        [Category("Atmosphere")]
+        [Description("Fog density (0.001 = very subtle, 0.003 = light haze, 0.008 = medium, 0.02 = heavy). Controls how quickly objects fade with distance.")]
+        public double FogDensity { get; set; } = 0.003;
+
         [Category("Ground")]
         [Description("Procedural ground material drawn on the editor's ground plane.")]
         public GroundMaterial Ground { get; set; } = GroundMaterial.Grass;

@@ -85,8 +85,19 @@ namespace DisperSim3D.UI.Avalonia.Views
             {
                 if (_scene == null) return;
                 if (!_isDirty) { _isDirty = true; UpdateTitle(); }
-                RebuildTree();
-                Viewport3D.PopulateScene(_scene);
+                if (Inspector.Target is DisperSim3D.Models.EnvironmentSettings)
+                {
+                    Viewport3D.RefreshEnvironment();
+                }
+                else if (Inspector.Target is DisperSim3D.Models.ProjectSettings)
+                {
+                    // No viewport update needed
+                }
+                else
+                {
+                    RebuildTree();
+                    Viewport3D.PopulateScene(_scene);
+                }
             };
             RebuildTree();
 

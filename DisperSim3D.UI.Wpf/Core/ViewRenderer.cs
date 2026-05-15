@@ -261,17 +261,47 @@ namespace DisperSim3D.Core
             if (mesh == null || mesh.Positions.Count == 0) return null;
 
             byte alpha = (byte)Math.Max(0, Math.Min(255, view.Opacity * 255));
-            var col = Color.FromArgb(alpha, view.IsoColor.R, view.IsoColor.G, view.IsoColor.B);
-            var brush = new SolidColorBrush(col);
-            brush.Freeze();
-            var mat = new DiffuseMaterial(brush);
+            GeometryModel3D model;
 
-            var model = new GeometryModel3D
+            if (view.UseCloudAppearance)
             {
-                Geometry = mesh,
-                Material = mat,
-                BackMaterial = mat
-            };
+                var cc = view.CloudColor;
+                var wpfColor = Color.FromRgb(cc.R, cc.G, cc.B);
+                var alphaColor = Color.FromArgb(alpha, wpfColor.R, wpfColor.G, wpfColor.B);
+                var brush = new SolidColorBrush(alphaColor);
+                brush.Freeze();
+
+                var emissiveColor = Color.FromArgb(
+                    (byte)(view.Opacity * 80),
+                    (byte)(wpfColor.R * 0.5), (byte)(wpfColor.G * 0.5), (byte)(wpfColor.B * 0.5));
+                var emissiveBrush = new SolidColorBrush(emissiveColor);
+                emissiveBrush.Freeze();
+
+                var matGroup = new MaterialGroup();
+                matGroup.Children.Add(new DiffuseMaterial(brush));
+                matGroup.Children.Add(new EmissiveMaterial(emissiveBrush));
+
+                model = new GeometryModel3D
+                {
+                    Geometry = mesh,
+                    Material = matGroup,
+                    BackMaterial = matGroup
+                };
+            }
+            else
+            {
+                var col = Color.FromArgb(alpha, view.IsoColor.R, view.IsoColor.G, view.IsoColor.B);
+                var brush = new SolidColorBrush(col);
+                brush.Freeze();
+                var mat = new DiffuseMaterial(brush);
+
+                model = new GeometryModel3D
+                {
+                    Geometry = mesh,
+                    Material = mat,
+                    BackMaterial = mat
+                };
+            }
             model.Freeze();
             var group = new Model3DGroup();
             group.Children.Add(model);

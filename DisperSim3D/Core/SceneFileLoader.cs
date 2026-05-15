@@ -301,6 +301,9 @@ namespace DisperSim3D.Core
                 v.MinValue = double.Parse((string)ve.Attribute("MinValue") ?? "0", inv);
                 v.MaxValue = double.Parse((string)ve.Attribute("MaxValue") ?? "0", inv);
                 v.SampleResolution = int.Parse((string)ve.Attribute("SampleResolution") ?? "80", inv);
+                v.UseCloudAppearance = bool.Parse((string)ve.Attribute("CloudAppearance") ?? "False");
+                try { v.CloudColor = DisperSim3D.Geometry.Color.Parse((string)ve.Attribute("CloudColor") ?? "#FFC8C8D2"); }
+                catch { v.CloudColor = DisperSim3D.Geometry.Color.FromRgb(200, 200, 210); }
                 scene.Views.Add(v);
             }
         }
@@ -426,7 +429,13 @@ namespace DisperSim3D.Core
                     threshold.Type = (DispersionThresholdType)Enum.Parse(typeof(DispersionThresholdType),
                         (string)te.Attribute("Type") ?? "Custom");
                     threshold.ConcentrationValue = double.Parse((string)te.Attribute("Value") ?? "0.01", inv);
+                    try { threshold.Color = DisperSim3D.Geometry.Color.Parse((string)te.Attribute("Color") ?? "#FFFF0000"); }
+                    catch { threshold.Color = DisperSim3D.Geometry.Colors.Red; }
+                    threshold.Opacity = double.Parse((string)te.Attribute("Opacity") ?? "0.3", inv);
                     threshold.Visible = bool.Parse((string)te.Attribute("Visible") ?? "True");
+                    threshold.UseCloudAppearance = bool.Parse((string)te.Attribute("CloudAppearance") ?? "False");
+                    try { threshold.CloudColor = DisperSim3D.Geometry.Color.Parse((string)te.Attribute("CloudColor") ?? "#FFC8C8D2"); }
+                    catch { threshold.CloudColor = DisperSim3D.Geometry.Color.FromRgb(200, 200, 210); }
                     sc.Thresholds.Add(threshold);
                 }
             }

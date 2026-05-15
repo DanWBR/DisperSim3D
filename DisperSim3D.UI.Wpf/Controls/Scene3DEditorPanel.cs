@@ -1188,6 +1188,9 @@ namespace DisperSim3D.Controls
                 case ProjectTreeAction.EditGeneralSettings:
                     DoEditGeneralSettings();
                     break;
+                case ProjectTreeAction.EditEnvironment:
+                    DoShowEnvironmentSettings();
+                    break;
                 case ProjectTreeAction.AddPureGas:
                     DoAddGas(false);
                     break;

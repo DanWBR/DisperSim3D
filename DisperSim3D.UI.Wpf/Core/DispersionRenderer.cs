@@ -67,17 +67,26 @@ namespace DisperSim3D.Core
 
                 if (mesh.Positions.Count == 0) continue;
 
-                var brush = new SolidColorBrush(threshold.Color);
-                brush.Opacity = threshold.Opacity;
-                brush.Freeze();
-
-                var material = new DiffuseMaterial(brush);
-                var model = new GeometryModel3D
+                GeometryModel3D model;
+                if (threshold.UseCloudAppearance)
                 {
-                    Geometry = mesh,
-                    Material = material,
-                    BackMaterial = material
-                };
+                    var cc = threshold.CloudColor;
+                    var wpfColor = Color.FromRgb(cc.R, cc.G, cc.B);
+                    model = MakeCloudGeometry(mesh, wpfColor, threshold.Opacity);
+                }
+                else
+                {
+                    var brush = new SolidColorBrush(threshold.Color);
+                    brush.Opacity = threshold.Opacity;
+                    brush.Freeze();
+                    var material = new DiffuseMaterial(brush);
+                    model = new GeometryModel3D
+                    {
+                        Geometry = mesh,
+                        Material = material,
+                        BackMaterial = material
+                    };
+                }
                 group.Children.Add(model);
             }
 
@@ -375,7 +384,12 @@ namespace DisperSim3D.Core
                         _scalarField, th.ConcentrationValue, _gridOrigin,
                         _cellSizeX, _cellSizeY, _cellSizeZ);
                     if (mesh.Positions.Count == 0) continue;
-                    group.Children.Add(MakeCloudGeometry(mesh, th.Color, th.Opacity));
+                    Color cc;
+                    if (th.UseCloudAppearance)
+                        cc = Color.FromRgb(th.CloudColor.R, th.CloudColor.G, th.CloudColor.B);
+                    else
+                        cc = th.Color;
+                    group.Children.Add(MakeCloudGeometry(mesh, cc, th.Opacity));
                 }
             }
 
@@ -457,7 +471,11 @@ namespace DisperSim3D.Core
                     _cellSizeX, _cellSizeY, _cellSizeZ);
                 if (mesh.Positions.Count == 0) continue;
 
-                var color = threshold.Color;
+                Color color;
+                if (threshold.UseCloudAppearance)
+                    color = Color.FromRgb(threshold.CloudColor.R, threshold.CloudColor.G, threshold.CloudColor.B);
+                else
+                    color = threshold.Color;
                 var alphaColor = Color.FromArgb(
                     (byte)(threshold.Opacity * 255), color.R, color.G, color.B);
                 var brush = new SolidColorBrush(alphaColor);

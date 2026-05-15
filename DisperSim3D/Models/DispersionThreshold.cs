@@ -39,6 +39,16 @@ namespace DisperSim3D.Models
         public bool Visible { get; set; }
 
         /// <summary>
+        /// When true, renders as a realistic turbulent gas cloud instead of a solid isosurface.
+        /// </summary>
+        public bool UseCloudAppearance { get; set; }
+
+        /// <summary>
+        /// Tint colour for cloud-style rendering. Ignored when <see cref="UseCloudAppearance"/> is false.
+        /// </summary>
+        public Color CloudColor { get; set; }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="DispersionThreshold"/> class with default values.
         /// </summary>
         public DispersionThreshold()
@@ -49,6 +59,8 @@ namespace DisperSim3D.Models
             Color = Colors.Red;
             Opacity = 0.3;
             Visible = true;
+            UseCloudAppearance = false;
+            CloudColor = Color.FromRgb(200, 200, 210);
         }
     }
 }

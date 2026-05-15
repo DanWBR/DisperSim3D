@@ -332,6 +332,8 @@ namespace DisperSim3D.Core
                     new XAttribute("Opacity", v.Opacity.ToString(inv)),
                     new XAttribute("IsoValue", v.IsoValue.ToString(inv)),
                     new XAttribute("IsoColor", v.IsoColor.ToString()),
+                    new XAttribute("CloudAppearance", v.UseCloudAppearance),
+                    new XAttribute("CloudColor", v.CloudColor.ToString()),
                     new XAttribute("PlanePosition", v.PlanePosition.ToString(inv)),
                     new XAttribute("ColorMap", v.ColorMap.ToString()),
                     new XAttribute("MinValue", v.MinValue.ToString(inv)),
@@ -534,7 +536,9 @@ namespace DisperSim3D.Core
                             new XAttribute("Value", t.ConcentrationValue.ToString(inv)),
                             new XAttribute("Color", t.Color.ToString()),
                             new XAttribute("Opacity", t.Opacity.ToString(inv)),
-                            new XAttribute("Visible", t.Visible)))),
+                            new XAttribute("Visible", t.Visible),
+                            new XAttribute("CloudAppearance", t.UseCloudAppearance),
+                            new XAttribute("CloudColor", t.CloudColor.ToString())))),
 
                 new XElement("ContourPlanes",
                     sc.ContourPlanes.Select(cp =>

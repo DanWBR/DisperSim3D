@@ -122,6 +122,15 @@ namespace DisperSim3D.Models
         [Editor("DisperSim3D.Controls.ColorPickerPropertyEditor, DisperSim3D.UI.Wpf", "HandyControl.Controls.PropertyEditorBase, HandyControl")]
         public Color IsoColor { get; set; }
 
+        [Category("Isosurface")]
+        [Description("Render as a realistic turbulent gas cloud instead of a solid isosurface.")]
+        public bool UseCloudAppearance { get; set; }
+
+        [Category("Isosurface")]
+        [Description("Tint colour for cloud-style rendering. Ignored when UseCloudAppearance is off.")]
+        [Editor("DisperSim3D.Controls.ColorPickerPropertyEditor, DisperSim3D.UI.Wpf", "HandyControl.Controls.PropertyEditorBase, HandyControl")]
+        public Color CloudColor { get; set; }
+
         // ── Contour-plane-specific ──
         [Category("Contour")]
         [Description("Position of the slicing plane along its normal axis (z for XY, y for XZ, x for YZ).")]
@@ -155,6 +164,8 @@ namespace DisperSim3D.Models
             Opacity = 0.5;
             IsoValue = 0.05;
             IsoColor = Colors.Cyan;
+            UseCloudAppearance = false;
+            CloudColor = Color.FromRgb(200, 200, 210);
             PlanePosition = 1.0;
             ColorMap = ColorMapName.Jet;
             MinValue = 0;

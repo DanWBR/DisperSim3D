@@ -67,6 +67,9 @@ namespace DisperSim3D.Controls
             root.Items.Add(MakeNode("General Settings", NodeKind.GeneralRoot, null,
                 italic: true, glyph: "⚙"));
 
+            root.Items.Add(MakeNode("Environment", NodeKind.EnvironmentRoot, null,
+                italic: true, glyph: "☁"));
+
             var gases = MakeNode("Gases", NodeKind.GasesRoot, null,
                 bold: true, glyph: "⚛", count: _scene.GasLibrary.Count, isContainer: true);
             foreach (var g in _scene.GasLibrary)
@@ -312,6 +315,7 @@ namespace DisperSim3D.Controls
             switch (kind)
             {
                 case NodeKind.GeneralRoot: return ProjectTreeAction.EditGeneralSettings;
+                case NodeKind.EnvironmentRoot: return ProjectTreeAction.EditEnvironment;
                 case NodeKind.GasItem: return ProjectTreeAction.EditGas;
                 case NodeKind.GeometryItem: return ProjectTreeAction.EditGeometry;
                 case NodeKind.SourceItem: return ProjectTreeAction.EditSource;
@@ -414,6 +418,8 @@ namespace DisperSim3D.Controls
             {
                 case NodeKind.GeneralRoot:
                     AddItem("Edit...", ProjectTreeAction.EditGeneralSettings); break;
+                case NodeKind.EnvironmentRoot:
+                    AddItem("Edit...", ProjectTreeAction.EditEnvironment); break;
                 case NodeKind.GasesRoot:
                     AddItem("Add Pure Gas...", ProjectTreeAction.AddPureGas);
                     AddItem("Add Mixture...", ProjectTreeAction.AddMixture);
@@ -519,6 +525,7 @@ namespace DisperSim3D.Controls
             switch (tref.Kind)
             {
                 case NodeKind.GeneralRoot: return _scene.GeneralSettings;
+                case NodeKind.EnvironmentRoot: return _scene.Environment;
                 case NodeKind.GasItem: return _scene.GasLibrary.FirstOrDefault(g => g.Id == tref.ItemId);
                 case NodeKind.GeometryItem: return _scene.Decorations.FirstOrDefault(d => d.Id == tref.ItemId);
                 case NodeKind.SourceItem: return _scene.TopLevelSources.FirstOrDefault(s => s.Id == tref.ItemId);
@@ -541,6 +548,7 @@ namespace DisperSim3D.Controls
             switch (tref.Kind)
             {
                 case NodeKind.GeneralRoot: return "General Settings";
+                case NodeKind.EnvironmentRoot: return "Environment";
                 case NodeKind.GasItem: return ((GasLibraryItem)selected).Name;
                 case NodeKind.GeometryItem: return ((Decoration3D)selected).Name;
                 case NodeKind.SourceItem: return ((ReleaseSource3D)selected).Name;
@@ -586,6 +594,7 @@ namespace DisperSim3D.Controls
         {
             ProjectRoot,
             GeneralRoot,
+            EnvironmentRoot,
             GasesRoot, GasItem,
             GeometryRoot, GeometryItem,
             SourcesRoot, SourceItem,
@@ -614,6 +623,7 @@ namespace DisperSim3D.Controls
     public enum ProjectTreeAction
     {
         EditGeneralSettings,
+        EditEnvironment,
         AddPureGas, AddMixture, AddMixtureFromDwsim, EditGas, DuplicateGas, DeleteGas,
         ImportGeometry, EditGeometry, DeleteGeometry,
         AddSource, EditSource, EditSourceInventory, DuplicateSource, DeleteSource, NewSimulationFromSource,

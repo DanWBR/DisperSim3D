@@ -44,6 +44,8 @@ namespace DisperSim3D.UI.Avalonia.Views
 
         private object? _target;
 
+        public object? Target => _target;
+
         public PropertyEditor()
         {
             InitializeComponent();
