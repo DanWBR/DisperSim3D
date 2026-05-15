@@ -30,6 +30,18 @@ namespace DisperSim3D.Models
         Ultra = 3
     }
 
+    /// <summary>Ground boundary condition for the FluidX3D LBM wind-field solver.</summary>
+    public enum FluidX3DGroundBC
+    {
+        /// <summary>No-slip wall (TYPE_S). Physical for wind over solid terrain — develops
+        /// a viscous boundary layer near z=0. Default.</summary>
+        NoSlip = 0,
+        /// <summary>Free-slip / equilibrium (TYPE_E). Preserves free-stream velocity at z=0 —
+        /// appropriate for open-field atmospheric dispersion where the ABL profile is
+        /// already embedded in the inlet condition or unnecessary.</summary>
+        FreeSlip = 1
+    }
+
     /// <summary>How the wind field is rendered in the 3D viewport.</summary>
     public enum WindFieldDisplayMode
     {
@@ -84,6 +96,10 @@ namespace DisperSim3D.Models
         [Category("Solver")]
         [Description("FluidX3D precision preset. Fast (~128³, sub-minute) → Ultra (~384³, many minutes, needs ≥8 GB VRAM). Higher = finer grid + more iterations.")]
         public FluidX3DQuality FluidX3DQuality { get; set; } = FluidX3DQuality.Fast;
+
+        [Category("Solver")]
+        [Description("FluidX3D ground boundary condition. NoSlip = solid wall with viscous boundary layer; FreeSlip = equilibrium BC that preserves free-stream velocity at z=0.")]
+        public FluidX3DGroundBC FluidX3DGroundBC { get; set; } = FluidX3DGroundBC.FreeSlip;
 
         [Category("Result")]
         [Description("OpenFOAM case directory on disk (set after a successful run).")]

@@ -146,6 +146,12 @@ namespace DisperSim3D.Core
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern void fx3d_set_z_boundaries(ulong h);
 
+        /// <summary>Extended z-boundary setup. groundType: 0=no-slip (TYPE_S, velocity ignored),
+        /// 1=free-slip (TYPE_E with given velocity on z=0 cells).</summary>
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void fx3d_set_z_boundaries_ex(ulong h, int groundType,
+            float ux, float uy, float uz);
+
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern void fx3d_set_source_sphere(ulong h,
             uint cx, uint cy, uint cz, uint radius, float temperature);

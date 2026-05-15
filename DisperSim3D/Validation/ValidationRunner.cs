@@ -51,6 +51,30 @@ namespace DisperSim3D.Validation
                         if (envConfig.NumberOfProcessors > 0)
                             sim.SnapshotCfdConfig.NumberOfProcessors = envConfig.NumberOfProcessors;
                     }
+
+                    // FluidX3D dispersion needs a pre-computed wind field on the scene.
+                    if (solverType == CfdSolverType.FluidX3DDispersion
+                        || solverType == CfdSolverType.FluidX3DDispersionSteady)
+                    {
+                        var wf = scene.WindFieldScenarios.Count > 0 ? scene.WindFieldScenarios[0] : null;
+                        if (wf != null && wf.WindField == null)
+                        {
+                            log?.Invoke("Pre-running FluidX3D wind field (GPU LBM)...");
+                            wf.UseFluidX3D = true;
+                            var windRunner = new FluidX3DWindFieldRunner();
+                            bool windOk = windRunner.Run(wf, new System.Collections.Generic.List<BoundingBox>(),
+                                (frac, msg) => log?.Invoke("  [wind] " + msg));
+                            if (!windOk)
+                            {
+                                report.Success = false;
+                                report.ErrorMessage = "Wind field failed: " + wf.StatusMessage;
+                                report.RunDuration = sw.Elapsed;
+                                return report;
+                            }
+                            log?.Invoke("Wind field ready: " + wf.StatusMessage);
+                        }
+                    }
+
                     var cfdResult = HeadlessRunner.RunSimulation(scene, sim, log);
                     // If the runner failed because its hard-coded species name (e.g. "CH4")
                     // was missing in the case (e.g. SF6 bench injected only SF6), but the
@@ -92,6 +116,8 @@ namespace DisperSim3D.Validation
             }
             return report;
         }
+
+        public static Scene3D BuildScenePublic(BenchmarkSpec spec) => BuildScene(spec);
 
         // ── Scene construction ──
 
@@ -163,6 +189,7 @@ namespace DisperSim3D.Validation
                 Name = "bench-wind",
                 Meteo = meteo,
                 DomainSizeM = spec.Domain.SizeM,
+                DomainHeightM = spec.Domain.SizeM,
                 GridResolution = spec.Domain.GridResolution
             };
             CfdConfigurationPresets.ApplyForSolver(wf.CfdConfig, CfdSolverType.ScalarSimpleFoam, gasItem, meteo);
@@ -264,8 +291,6 @@ namespace DisperSim3D.Validation
         private static List<SensorPair> SampleCfd(BenchmarkSpec spec, Scene3D scene,
             HeadlessResult cfdResult)
         {
-            // Re-read the case using the bench-declared field name (HeadlessRunner reads
-            // a hard-coded field per solver, which won't match SF6 / non-CH4 benches).
             int nx = spec.Domain.GridResolution;
             int ny = nx;
             int nz = Math.Max(1, nx / 2);
@@ -273,6 +298,15 @@ namespace DisperSim3D.Validation
 
             bool peakKind = string.Equals(spec.ConcentrationKind, "PeakOverTime",
                 StringComparison.OrdinalIgnoreCase);
+
+            // FluidX3D runners populate ConcentrationField in-memory (no OpenFOAM
+            // case directory). Use it directly when available.
+            if (cfdResult.ConcentrationField != null)
+            {
+                var fld = new OpenFoamConcentrationField(cfdResult.ConcentrationField, half,
+                    cfdResult.ConcentrationField.GetLength(0));
+                return SamplePoints(spec, (x, y, z) => fld.EvaluateConcentration(x, y, z));
+            }
 
             if (!string.IsNullOrEmpty(cfdResult.CasePath)
                 && System.IO.Directory.Exists(cfdResult.CasePath))

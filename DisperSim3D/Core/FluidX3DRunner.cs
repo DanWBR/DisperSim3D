@@ -83,6 +83,15 @@ namespace DisperSim3D.Core
                     Report(0.05, "FluidX3D dispersion: initialising tracer engine...");
 
                     double diff = config?.DiffusivityM2PerS > 0 ? config.DiffusivityM2PerS : 1e-5;
+                    if (scenario.Meteo != null)
+                    {
+                        double ws = Math.Max(scenario.Meteo.WindSpeed, 0.5);
+                        double cellM = scenario.DomainSizeM * 2.0 / nx;
+                        // Subgrid turbulent diffusivity: Dt = (Cs²/Sct) · Δ · U
+                        // Cs=0.092 (standard Smagorinsky for shear flows), Sct=0.7
+                        double Dt = 0.0084 * cellM * ws / 0.7;
+                        diff = Math.Max(diff, Dt);
+                    }
                     var src = scenario.Sources != null && scenario.Sources.Count > 0
                         ? scenario.Sources[0] : null;
                     double decay = src?.Gas != null && src.Gas.HalfLifeS > 0
@@ -93,18 +102,31 @@ namespace DisperSim3D.Core
 
                     if (src != null)
                     {
-                        // Continuous release: clamp source cells to a normalised concentration of
-                        // 1.0 (post-processing rescales by mass flow rate if needed).
-                        // Radius scaled to at least ~5 cells so the marching-cubes renderer has
-                        // enough volume to extract an isosurface (1-2 cell-wide sources got
-                        // smoothed away by interpolation, making the source look invisible).
-                        double cellM = scenario.DomainSizeM * 2.0 / nx;
-                        double radiusM = Math.Max(5.0 * cellM, 8.0);
-                        engine.SetSphericalSource(src.Position.X, src.Position.Y, src.Position.Z,
-                            radiusM: radiusM, concentration: 1.0);
-                        Report(0.06, string.Format(
-                            "FluidX3D source: pos=({0:F1},{1:F1},{2:F1}) m, r={3:F1} m, cell={4:F2} m, domainHalf={5:F0} m",
-                            src.Position.X, src.Position.Y, src.Position.Z, radiusM, cellM, scenario.DomainSizeM));
+                        double cellM2 = scenario.DomainSizeM * 2.0 / nx;
+                        double physR = src.StackDiameterM > 0 ? src.StackDiameterM * 2.0 : cellM2 * 3.0;
+                        double radiusM = src.ReleaseRateKgPerS > 0
+                            ? Math.Max(2.0 * cellM2, physR)
+                            : Math.Max(5.0 * cellM2, physR);
+
+                        // Use mass-injection source when we have a physical release rate.
+                        if (src.ReleaseRateKgPerS > 0)
+                        {
+                            double airDensity = 101325.0 * 0.029 / (8.314 *
+                                (scenario.Meteo?.AmbientTemperature > 0 ? scenario.Meteo.AmbientTemperature : 293.15));
+                            engine.SetMassSource(src.Position.X, src.Position.Y, src.Position.Z,
+                                radiusM, src.ReleaseRateKgPerS, airDensity);
+                            Report(0.06, string.Format(
+                                "FluidX3D mass source: pos=({0:F1},{1:F1},{2:F1}) m, r={3:F3} m, Q={4:E3} kg/s, D={5:E3} m²/s, cell={6:F3} m",
+                                src.Position.X, src.Position.Y, src.Position.Z, radiusM, src.ReleaseRateKgPerS, diff, cellM2));
+                        }
+                        else
+                        {
+                            engine.SetSphericalSource(src.Position.X, src.Position.Y, src.Position.Z,
+                                radiusM: radiusM, concentration: 1.0);
+                            Report(0.06, string.Format(
+                                "FluidX3D source: pos=({0:F1},{1:F1},{2:F1}) m, r={3:F1} m, cell={4:F2} m, domainHalf={5:F0} m",
+                                src.Position.X, src.Position.Y, src.Position.Z, radiusM, cellM2, scenario.DomainSizeM));
+                        }
                     }
 
                     // Marching timesteps. Use a CFL-respecting dt: dt <= cellSize / max|U|.

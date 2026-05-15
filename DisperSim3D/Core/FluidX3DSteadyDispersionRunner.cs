@@ -94,6 +94,13 @@ namespace DisperSim3D.Core
                     Report(0.05, "FluidX3D dispersion (steady): initialising tracer...");
 
                     double diff = config?.DiffusivityM2PerS > 0 ? config.DiffusivityM2PerS : 1e-5;
+                    if (scenario.Meteo != null)
+                    {
+                        double ws = Math.Max(scenario.Meteo.WindSpeed, 0.5);
+                        double cellM = scenario.DomainSizeM * 2.0 / nx;
+                        double Dt = 0.0084 * cellM * ws / 0.7;
+                        diff = Math.Max(diff, Dt);
+                    }
                     var src = scenario.Sources != null && scenario.Sources.Count > 0
                         ? scenario.Sources[0] : null;
                     double decay = src?.Gas != null && src.Gas.HalfLifeS > 0
@@ -104,10 +111,23 @@ namespace DisperSim3D.Core
 
                     if (src != null)
                     {
-                        double cellM = scenario.DomainSizeM * 2.0 / nx;
-                        double radiusM = Math.Max(5.0 * cellM, 8.0);
-                        engine.SetSphericalSource(src.Position.X, src.Position.Y, src.Position.Z,
-                            radiusM: radiusM, concentration: 1.0);
+                        double cellM2 = scenario.DomainSizeM * 2.0 / nx;
+                        double physR = src.StackDiameterM > 0 ? src.StackDiameterM * 2.0 : cellM2 * 3.0;
+                        double radiusM = src.ReleaseRateKgPerS > 0
+                            ? Math.Max(2.0 * cellM2, physR)
+                            : Math.Max(5.0 * cellM2, physR);
+                        if (src.ReleaseRateKgPerS > 0)
+                        {
+                            double airDensity = 101325.0 * 0.029 / (8.314 *
+                                (scenario.Meteo?.AmbientTemperature > 0 ? scenario.Meteo.AmbientTemperature : 293.15));
+                            engine.SetMassSource(src.Position.X, src.Position.Y, src.Position.Z,
+                                radiusM, src.ReleaseRateKgPerS, airDensity);
+                        }
+                        else
+                        {
+                            engine.SetSphericalSource(src.Position.X, src.Position.Y, src.Position.Z,
+                                radiusM: radiusM, concentration: 1.0);
+                        }
                     }
 
                     // CFL-respecting dt.

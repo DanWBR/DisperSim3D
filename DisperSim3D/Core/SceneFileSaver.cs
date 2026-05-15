@@ -438,6 +438,7 @@ namespace DisperSim3D.Core
                         new XAttribute("EmbedMode", wf.EmbedMode.ToString()),
                         new XAttribute("UseFluidX3D", wf.UseFluidX3D.ToString()),
                         new XAttribute("FluidX3DQuality", wf.FluidX3DQuality.ToString()),
+                        new XAttribute("FluidX3DGroundBC", wf.FluidX3DGroundBC.ToString()),
                         new XAttribute("IsVisible", wf.IsVisible.ToString()),
                         new XElement("Meteo",
                             new XAttribute("WindSpeed", wf.Meteo.WindSpeed.ToString(inv)),

@@ -67,6 +67,10 @@ namespace DisperSim3D.CLI
             int memNxArg = 0;
             int gpuDeviceId = int.MinValue;     // sentinel: unspecified
             string allocationSelector = null;
+            string fieldComparePath = null;
+            string windCompareBench = null;
+            string windCaseA = null;
+            string windCaseB = null;
 
             for (int i = 0; i < args.Length; i++)
             {
@@ -137,6 +141,18 @@ namespace DisperSim3D.CLI
                     case "--allocation":
                         if (i + 1 < args.Length) allocationSelector = args[++i];
                         break;
+                    case "--field-compare":
+                        if (i + 1 < args.Length) fieldComparePath = args[++i];
+                        break;
+                    case "--wind-compare":
+                        if (i + 1 < args.Length) windCompareBench = args[++i];
+                        break;
+                    case "--case-a":
+                        if (i + 1 < args.Length) windCaseA = args[++i];
+                        break;
+                    case "--case-b":
+                        if (i + 1 < args.Length) windCaseB = args[++i];
+                        break;
                 }
             }
 
@@ -156,7 +172,22 @@ namespace DisperSim3D.CLI
             // --validate is a stand-alone mode (doesn't need a project file).
             if (!string.IsNullOrEmpty(validatePath))
             {
-                return RunValidate(validatePath, BuildEnvConfig(envType, openFoamPath, wslDistro, nProcs));
+                var envCfg = BuildEnvConfig(envType, openFoamPath, wslDistro, nProcs);
+                return RunValidate(validatePath, envCfg, solver);
+            }
+
+            // --field-compare: run the same benchmark with both OpenFOAM and FluidX3D,
+            // then compare the resulting concentration fields cell-by-cell.
+            if (!string.IsNullOrEmpty(fieldComparePath))
+            {
+                var envCfg = BuildEnvConfig(envType, openFoamPath, wslDistro, nProcs);
+                return RunFieldCompare(fieldComparePath, envCfg);
+            }
+
+            if (!string.IsNullOrEmpty(windCompareBench))
+            {
+                var envCfg = BuildEnvConfig(envType, openFoamPath, wslDistro, nProcs);
+                return RunWindCompare(windCompareBench, envCfg, windCaseA, windCaseB);
             }
 
             if (filePath == null)
@@ -309,6 +340,17 @@ namespace DisperSim3D.CLI
         }
 
         // ─── Helpers ────────────────────────────────────────────────────────
+
+        static double MaxVal(double[,,] f)
+        {
+            double m = 0;
+            int nx = f.GetLength(0), ny = f.GetLength(1), nz = f.GetLength(2);
+            for (int k = 0; k < nz; k++)
+                for (int j = 0; j < ny; j++)
+                    for (int i = 0; i < nx; i++)
+                        if (f[i, j, k] > m) m = f[i, j, k];
+            return m;
+        }
 
         static CfdConfiguration BuildEnvConfig(string envType, string openFoamPath, string wslDistro, int nProcs)
         {
@@ -575,7 +617,7 @@ namespace DisperSim3D.CLI
         /// --validate mode. Accepts a single .dsbench file or a directory containing many.
         /// Returns 0 when EVERY benchmark passes, 2 otherwise.
         /// </summary>
-        static int RunValidate(string path, CfdConfiguration envConfig)
+        static int RunValidate(string path, CfdConfiguration envConfig, string solverOverride = null)
         {
             var files = new System.Collections.Generic.List<string>();
             if (Directory.Exists(path))
@@ -603,6 +645,11 @@ namespace DisperSim3D.CLI
                 try
                 {
                     var spec = BenchmarkLoader.Load(f);
+                    if (!string.IsNullOrEmpty(solverOverride))
+                    {
+                        Console.WriteLine("  Solver override: " + solverOverride);
+                        spec.Solver = solverOverride;
+                    }
                     report = ValidationRunner.Run(spec, envConfig, msg => Console.WriteLine("  " + msg));
                 }
                 catch (Exception ex)
@@ -823,6 +870,443 @@ namespace DisperSim3D.CLI
             {
                 Console.Error.WriteLine("Error listing project: " + ex.Message);
                 return 1;
+            }
+        }
+
+        static int RunFieldCompare(string benchPath, CfdConfiguration envConfig)
+        {
+            BenchmarkSpec spec;
+            try { spec = BenchmarkLoader.Load(benchPath); }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Failed to load benchmark: " + ex.Message);
+                return 1;
+            }
+
+            Console.WriteLine("Field comparison: " + spec.Name);
+            Console.WriteLine("  Declared solver (A): " + spec.Solver);
+            Console.WriteLine("  FluidX3D solver (B): FluidX3DDispersion");
+            Console.WriteLine();
+
+            var solverA = spec.ResolveSolverType();
+            var solverB = CfdSolverType.FluidX3DDispersion;
+            int nx = spec.Domain.GridResolution;
+            int ny = nx;
+            int nz = Math.Max(1, nx / 2);
+            double half = spec.Domain.SizeM;
+            string fieldName = spec.ResolveConcentrationField();
+
+            Console.WriteLine("--- Running solver A: " + solverA + " ---");
+            Scene3D sceneA;
+            var resultA = RunSolverForBench(spec, solverA, envConfig, out sceneA);
+            if (resultA == null)
+            {
+                Console.Error.WriteLine("Solver A failed — cannot compare.");
+                return 2;
+            }
+            Console.WriteLine("  Solver A: " + resultA.TimeSteps.Count + " timesteps loaded.");
+
+            Console.WriteLine();
+            Console.WriteLine("--- Running solver B: " + solverB + " ---");
+            Scene3D sceneB;
+            var resultB = RunSolverForBench(spec, solverB, null, out sceneB);
+            if (resultB == null)
+            {
+                Console.Error.WriteLine("Solver B failed — cannot compare.");
+                return 2;
+            }
+            Console.WriteLine("  Solver B: " + resultB.TimeSteps.Count + " timesteps loaded.");
+
+            Console.WriteLine();
+            Console.WriteLine("--- Comparing concentration fields (normalized to [0,1]) ---");
+            var report = FieldComparer.Compare(resultA, resultB, normalize: true);
+            Console.WriteLine(report.ToMarkdown());
+
+            string csvPath = Path.ChangeExtension(benchPath, ".field-compare.csv");
+            try
+            {
+                File.WriteAllText(csvPath, report.ToCsv());
+                Console.WriteLine("CSV saved: " + csvPath);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Could not write CSV: " + ex.Message);
+            }
+
+            // --- Wind field comparison ---
+            Console.WriteLine();
+            Console.WriteLine("--- Comparing wind fields ---");
+            WindField3D windA = null, windB = null;
+            try
+            {
+                var wfA = sceneA?.WindFieldScenarios?.Count > 0 ? sceneA.WindFieldScenarios[0] : null;
+                var wfB = sceneB?.WindFieldScenarios?.Count > 0 ? sceneB.WindFieldScenarios[0] : null;
+
+                windA = wfA?.WindField;
+                if (windA == null && wfA != null)
+                    windA = WindFieldRunner.LoadFromCase(wfA);
+                if (windA == null && wfA != null)
+                    windA = FluidX3DWindFieldRunner.LoadFromCase(wfA);
+
+                windB = wfB?.WindField;
+                if (windB == null && wfB != null)
+                    windB = FluidX3DWindFieldRunner.LoadFromCase(wfB);
+                if (windB == null && wfB != null)
+                    windB = WindFieldRunner.LoadFromCase(wfB);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("  Wind field load error: " + ex.Message);
+            }
+
+            if (windA != null && windB != null)
+            {
+                var src = spec.Source;
+                double srcX = src?.Position != null && src.Position.Length > 0 ? src.Position[0] : 0;
+                double srcY = src?.Position != null && src.Position.Length > 1 ? src.Position[1] : 0;
+                double srcZ = src?.Position != null && src.Position.Length > 2 ? src.Position[2] : 0;
+
+                var windReport = WindFieldComparer.Compare(windA, windB,
+                    spec.Domain.SizeM, spec.Domain.SizeM,
+                    srcX, srcY, srcZ);
+                Console.WriteLine(windReport.ToMarkdown());
+
+                string windCsvPath = Path.ChangeExtension(benchPath, ".wind-compare.csv");
+                try
+                {
+                    File.WriteAllText(windCsvPath, windReport.ProfileToCsv());
+                    Console.WriteLine("Wind CSV saved: " + windCsvPath);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine("Could not write wind CSV: " + ex.Message);
+                }
+            }
+            else
+            {
+                Console.Error.WriteLine("  Could not load both wind fields for comparison.");
+                if (windA == null) Console.Error.WriteLine("    Wind A (solver A): not available");
+                if (windB == null) Console.Error.WriteLine("    Wind B (solver B): not available");
+            }
+
+            return 0;
+        }
+
+        static int RunWindCompare(string benchPath, CfdConfiguration envConfig,
+            string casePathA, string casePathB)
+        {
+            BenchmarkSpec spec;
+            try { spec = BenchmarkLoader.Load(benchPath); }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Failed to load benchmark: " + ex.Message);
+                return 1;
+            }
+
+            int nx = spec.Domain.GridResolution;
+            int ny = nx;
+            int nz = Math.Max(1, nx / 2);
+            double half = spec.Domain.SizeM;
+            double height = spec.Domain.SizeM;
+
+            Console.WriteLine("Wind field comparison: " + spec.Name);
+            Console.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                "  Grid: {0}×{1}×{2}, domain: ±{3}m, height: {4}m", nx, ny, nz, half, height));
+            Console.WriteLine();
+
+            WindField3D windA = null, windB = null;
+
+            // --- Load wind A (OpenFOAM) ---
+            if (!string.IsNullOrEmpty(casePathA) && Directory.Exists(casePathA))
+            {
+                Console.WriteLine("  Loading wind A from existing case: " + casePathA);
+                windA = OpenFoamResultReader.ReadWindField(casePathA, nx, ny, nz,
+                    -half, half, -half, half, height);
+                if (windA != null)
+                    Console.WriteLine("    Loaded ({0}×{1}×{2})", windA.Nx, windA.Ny, windA.Nz);
+                else
+                    Console.Error.WriteLine("    Failed to read U from case.");
+            }
+            else
+            {
+                Console.WriteLine("  No --case-a provided; running OpenFOAM wind field...");
+                var scene = ValidationRunner.BuildScenePublic(spec);
+                var wf = scene.WindFieldScenarios[0];
+                if (envConfig != null)
+                {
+                    wf.CfdConfig.OpenFoamPath = envConfig.OpenFoamPath;
+                    wf.CfdConfig.WslDistroName = envConfig.WslDistroName;
+                    wf.CfdConfig.DetectedEnvironment = envConfig.DetectedEnvironment;
+                    if (envConfig.NumberOfProcessors > 0)
+                        wf.CfdConfig.NumberOfProcessors = envConfig.NumberOfProcessors;
+                }
+                var env = new OpenFoamEnvironment();
+                env.Configure(wf.CfdConfig.OpenFoamPath, wf.CfdConfig.DetectedEnvironment,
+                    wf.CfdConfig.WslDistroName);
+                var runner = new WindFieldRunner(env);
+                bool ok = runner.Run(wf, new List<BoundingBox>(),
+                    (frac, msg) => Console.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                        "    [{0:P0}] {1}", frac, msg)));
+                if (ok) windA = wf.WindField;
+                if (windA != null && !string.IsNullOrEmpty(wf.CasePath))
+                    Console.WriteLine("    OF wind case: " + wf.CasePath + "  (reuse with --case-a)");
+                if (windA == null)
+                    Console.Error.WriteLine("    OpenFOAM wind field failed.");
+            }
+
+            // --- Load wind B (FluidX3D) ---
+            if (!string.IsNullOrEmpty(casePathB) && Directory.Exists(casePathB))
+            {
+                Console.WriteLine("  Loading wind B from existing case: " + casePathB);
+                var wfProxy = new WindFieldScenario
+                {
+                    CasePath = casePathB,
+                    DomainSizeM = half,
+                    DomainHeightM = height,
+                    GridResolution = nx
+                };
+                windB = FluidX3DWindFieldRunner.LoadFromCase(wfProxy);
+                if (windB != null)
+                    Console.WriteLine("    Loaded ({0}×{1}×{2})", windB.Nx, windB.Ny, windB.Nz);
+                else
+                    Console.Error.WriteLine("    Failed to read windfield.bin from case.");
+            }
+            else
+            {
+                Console.WriteLine("  No --case-b provided; running FluidX3D wind field...");
+                var scene = ValidationRunner.BuildScenePublic(spec);
+                var wf = scene.WindFieldScenarios[0];
+                wf.UseFluidX3D = true;
+                var runner = new FluidX3DWindFieldRunner();
+                bool ok = runner.Run(wf, new List<BoundingBox>(),
+                    (frac, msg) => Console.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                        "    [{0:P0}] {1}", frac, msg)));
+                if (ok) windB = wf.WindField;
+                if (windB == null)
+                    Console.Error.WriteLine("    FluidX3D wind field failed.");
+            }
+
+            if (windA == null || windB == null)
+            {
+                Console.Error.WriteLine("Cannot compare — missing wind field(s).");
+                return 2;
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("--- Comparing wind fields ---");
+            var src = spec.Source;
+            double srcX = src?.Position != null && src.Position.Length > 0 ? src.Position[0] : 0;
+            double srcY = src?.Position != null && src.Position.Length > 1 ? src.Position[1] : 0;
+            double srcZ = src?.Position != null && src.Position.Length > 2 ? src.Position[2] : 0;
+
+            var report = WindFieldComparer.Compare(windA, windB, half, height,
+                srcX, srcY, srcZ);
+            Console.WriteLine(report.ToMarkdown());
+
+            string csvPath = Path.ChangeExtension(benchPath, ".wind-compare.csv");
+            try
+            {
+                File.WriteAllText(csvPath, report.ProfileToCsv());
+                Console.WriteLine("Wind CSV saved: " + csvPath);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Could not write CSV: " + ex.Message);
+            }
+
+            // --- Hybrid test: run FluidX3D dispersion with OpenFOAM wind ---
+            Console.WriteLine();
+            Console.WriteLine("--- Hybrid test: OpenFOAM wind + FluidX3D dispersion ---");
+            var hybridScene = ValidationRunner.BuildScenePublic(spec);
+            var hybridWf = hybridScene.WindFieldScenarios[0];
+            hybridWf.WindField = windA;
+            hybridWf.Status = WindFieldStatus.Ready;
+            hybridWf.UseFluidX3D = true;
+
+            Scene3D hybridSceneOut;
+            var hybridResult = RunSolverForBench(spec, CfdSolverType.FluidX3DDispersion,
+                null, out hybridSceneOut, windOverride: windA);
+
+            if (hybridResult != null && hybridResult.TimeSteps.Count > 0)
+            {
+                Console.WriteLine("  Hybrid: " + hybridResult.TimeSteps.Count + " timesteps loaded.");
+                Console.WriteLine("  Max concentration: " +
+                    hybridResult.TimeSteps.Max(t => { var f = hybridResult.GetField(t); return f == null ? 0 : MaxVal(f); }).ToString("G4"));
+
+                bool peakKind = string.Equals(spec.ConcentrationKind, "PeakOverTime",
+                    StringComparison.OrdinalIgnoreCase);
+                var hybridPairs = new List<SensorPair>();
+
+                if (peakKind)
+                {
+                    var maxByIdx = new double[spec.Sensors.Count];
+                    foreach (var t in hybridResult.TimeSteps)
+                    {
+                        var f = hybridResult.GetField(t);
+                        if (f == null) continue;
+                        var fld = new OpenFoamConcentrationField(f, half, nx);
+                        for (int si = 0; si < spec.Sensors.Count; si++)
+                        {
+                            var p = spec.Sensors[si].Position;
+                            double c = fld.EvaluateConcentration(p[0], p[1], p[2]);
+                            if (c > maxByIdx[si]) maxByIdx[si] = c;
+                        }
+                    }
+                    for (int si = 0; si < spec.Sensors.Count; si++)
+                        hybridPairs.Add(new SensorPair
+                        {
+                            Name = spec.Sensors[si].Name,
+                            Predicted = maxByIdx[si],
+                            Observed = spec.Sensors[si].MeasuredKgM3
+                        });
+                }
+                else
+                {
+                    var lastT = hybridResult.TimeSteps[hybridResult.TimeSteps.Count - 1];
+                    var f = hybridResult.GetField(lastT);
+                    if (f != null)
+                    {
+                        var fld = new OpenFoamConcentrationField(f, half, nx);
+                        foreach (var s in spec.Sensors)
+                        {
+                            double c = fld.EvaluateConcentration(s.Position[0], s.Position[1], s.Position[2]);
+                            hybridPairs.Add(new SensorPair
+                            {
+                                Name = s.Name,
+                                Predicted = c,
+                                Observed = s.MeasuredKgM3
+                            });
+                        }
+                    }
+                }
+
+                if (hybridPairs.Count > 0)
+                {
+                    var hybridSpm = SpmCalculator.Compute(hybridPairs);
+                    Console.WriteLine();
+                    Console.WriteLine("--- Hybrid (OF wind + FX3D dispersion) vs measurements ---");
+                    Console.WriteLine("  Sensors: " + hybridPairs.Count);
+                    foreach (var p in hybridPairs)
+                        Console.WriteLine("    {0}: pred={1:G4} obs={2:G4} ratio={3}",
+                            p.Name, p.Predicted, p.Observed,
+                            p.Observed != 0 ? (p.Predicted / p.Observed).ToString("G3") : "n/a");
+                    Console.WriteLine("  SPM: N={0} MRB={1:F4} RMSE={2:G4} NMSE={3:G4} FAC2={4:F4} MG={5:F4} VG={6:F4}",
+                        hybridSpm.N, hybridSpm.MRB, hybridSpm.RMSE,
+                        hybridSpm.NMSE, hybridSpm.FAC2, hybridSpm.MG, hybridSpm.VG);
+                }
+            }
+            else
+            {
+                Console.Error.WriteLine("  Hybrid dispersion failed.");
+            }
+
+            return 0;
+        }
+
+        static OpenFoamResult RunSolverForBench(BenchmarkSpec spec, CfdSolverType solver,
+            CfdConfiguration envConfig, out Scene3D outScene, WindField3D windOverride = null)
+        {
+            var scene = ValidationRunner.BuildScenePublic(spec);
+            outScene = scene;
+            var sim = scene.Simulations[0];
+            sim.SolverType = solver;
+
+            if (envConfig != null && sim.SnapshotCfdConfig != null)
+            {
+                sim.SnapshotCfdConfig.OpenFoamPath = envConfig.OpenFoamPath;
+                sim.SnapshotCfdConfig.WslDistroName = envConfig.WslDistroName;
+                sim.SnapshotCfdConfig.DetectedEnvironment = envConfig.DetectedEnvironment;
+                if (envConfig.NumberOfProcessors > 0)
+                    sim.SnapshotCfdConfig.NumberOfProcessors = envConfig.NumberOfProcessors;
+            }
+
+            CfdConfigurationPresets.ApplyForSolver(
+                sim.SnapshotCfdConfig, solver,
+                sim.SnapshotGas,
+                sim.SnapshotMeteo ?? scene.WindFieldScenarios[0].Meteo);
+
+            // FluidX3D dispersion needs a pre-computed wind field. Run it automatically.
+            if (solver == CfdSolverType.FluidX3DDispersion ||
+                solver == CfdSolverType.FluidX3DDispersionSteady)
+            {
+                var wf = scene.WindFieldScenarios.Count > 0 ? scene.WindFieldScenarios[0] : null;
+                if (wf != null && windOverride != null)
+                {
+                    wf.WindField = windOverride;
+                    wf.Status = WindFieldStatus.Ready;
+                    Console.WriteLine("  Using wind field override ({0}×{1}×{2})",
+                        windOverride.Nx, windOverride.Ny, windOverride.Nz);
+                }
+                else if (wf != null && wf.WindField == null)
+                {
+                    Console.WriteLine("  Pre-computing FluidX3D wind field...");
+                    wf.UseFluidX3D = true;
+                    var windRunner = new FluidX3DWindFieldRunner();
+                    bool windOk = windRunner.Run(wf, new List<BoundingBox>(),
+                        (frac, msg) => Console.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                            "    [{0:P0}] {1}", frac, msg)));
+                    if (!windOk)
+                    {
+                        Console.Error.WriteLine("  Wind field failed: " + wf.StatusMessage);
+                        return null;
+                    }
+                    Console.WriteLine("  Wind field ready.");
+                }
+            }
+
+            try
+            {
+                var hr = HeadlessRunner.RunSimulation(scene, sim, msg => Console.WriteLine("  " + msg));
+                if (!hr.Success)
+                {
+                    Console.Error.WriteLine("  Solver error: " + hr.Error);
+                }
+
+                string casePath = hr.CasePath;
+                if (string.IsNullOrEmpty(casePath) || !Directory.Exists(casePath))
+                    return null;
+
+                int nx = spec.Domain.GridResolution;
+                int ny = nx;
+                int nz = Math.Max(1, nx / 2);
+                double half = spec.Domain.SizeM;
+
+                // FluidX3D writes <time>.bin flat in the case dir; OpenFOAM writes
+                // <time>/<fieldName> in subdirectories. Try the OpenFOAM reader first,
+                // fall back to scanning .bin files.
+                string fieldName = spec.ResolveConcentrationField();
+                var result = OpenFoamResultReader.ReadResults(casePath, nx, ny, nz, half,
+                    scalarFieldName: fieldName);
+                if (result != null && result.IsLoaded && result.TimeSteps.Count > 0)
+                    return result;
+
+                // Fallback: scan for .bin files (FluidX3D format)
+                result = new OpenFoamResult
+                {
+                    GridNx = nx, GridNy = ny, GridNz = nz,
+                    DomainSizeM = half,
+                    DomainXMin = -half, DomainXMax = half,
+                    DomainYMin = -half, DomainYMax = half,
+                    DomainZMax = half,
+                    CaseDir = casePath
+                };
+                foreach (var binFile in Directory.EnumerateFiles(casePath, "*.bin"))
+                {
+                    string name = Path.GetFileNameWithoutExtension(binFile);
+                    if (double.TryParse(name, NumberStyles.Float, CultureInfo.InvariantCulture, out double t))
+                    {
+                        result.TimeSteps.Add(t);
+                        result.TimeStepPaths[t] = binFile;
+                    }
+                }
+                result.TimeSteps.Sort();
+                result.IsLoaded = result.TimeSteps.Count > 0;
+                return result.IsLoaded ? result : null;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("  Exception: " + ex.Message);
+                return null;
             }
         }
 

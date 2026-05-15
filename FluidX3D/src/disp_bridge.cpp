@@ -317,16 +317,34 @@ FX3D_API void fx3d_set_lateral_free_stream(uint64_t h, float ux, float uy, float
 }
 
 FX3D_API void fx3d_set_z_boundaries(uint64_t h) {
-    log_line("fx3d_set_z_boundaries h=" + std::to_string(h));
+    fx3d_set_z_boundaries_ex(h, 0, 0.0f, 0.0f, 0.0f); // 0 = no-slip (TYPE_S)
+}
+
+FX3D_API void fx3d_set_z_boundaries_ex(uint64_t h, int ground_type,
+                                       float ux, float uy, float uz) {
+    {
+        char buf[192];
+        std::snprintf(buf, sizeof(buf),
+            "fx3d_set_z_boundaries_ex h=%llu ground_type=%d u=(%.6g,%.6g,%.6g)",
+            (unsigned long long)h, ground_type, ux, uy, uz);
+        log_line(buf);
+    }
     LBM* lbm = resolve(h); if (!lbm) return;
     const uint32_t Nx = lbm->get_Nx(), Ny = lbm->get_Ny(), Nz = lbm->get_Nz();
-    // Ground: TYPE_S (no-slip wall)
+    // Ground: ground_type=0 → TYPE_S (no-slip, u=0), ground_type=1 → TYPE_E with given velocity
+    const uchar gflag = (ground_type == 1) ? TYPE_E : TYPE_S;
     for (uint32_t y = 0u; y < Ny; y++)
-        for (uint32_t x = 0u; x < Nx; x++)
-            lbm->flags[lbm->index(x, y, 0u)] = TYPE_S;
-    // Top: TYPE_E with whatever velocity is already on the cell — caller should set
-    // the lateral free-stream velocity AFTER calling this, which will overwrite the
-    // ring at z=Nz-1 with the correct values. We just clear flags + density here.
+        for (uint32_t x = 0u; x < Nx; x++) {
+            const ulong n = lbm->index(x, y, 0u);
+            lbm->flags[n] = gflag;
+            if (gflag == TYPE_E) {
+                lbm->rho[n] = 1.0f;
+                lbm->u.x[n] = ux;
+                lbm->u.y[n] = uy;
+                lbm->u.z[n] = uz;
+            }
+        }
+    // Top: TYPE_E (open)
     for (uint32_t y = 0u; y < Ny; y++) {
         for (uint32_t x = 0u; x < Nx; x++) {
             const ulong n = lbm->index(x, y, Nz - 1u);

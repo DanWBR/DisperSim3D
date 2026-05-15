@@ -121,11 +121,12 @@ namespace DisperSim3D.Core
                     float uzLat = units.ULattice(wind.Z);
 
                     // Boundary setup — order matters: lateral free-stream first (sets all
-                    // outer cells to TYPE_E with free-stream U), then z-boundaries to overwrite
-                    // the bottom row with TYPE_S (no-slip ground). The free-stream cap on the
-                    // top face is included in the lateral call.
+                    // outer cells to TYPE_E with free-stream U), then z-boundaries to set
+                    // the bottom row. The free-stream cap on the top face is included in
+                    // the lateral call.
                     FluidX3DBridge.fx3d_set_lateral_free_stream(handle, uxLat, uyLat, uzLat);
-                    FluidX3DBridge.fx3d_set_z_boundaries(handle);
+                    int groundType = windScenario.FluidX3DGroundBC == FluidX3DGroundBC.FreeSlip ? 1 : 0;
+                    FluidX3DBridge.fx3d_set_z_boundaries_ex(handle, groundType, uxLat, uyLat, uzLat);
 
                     // Obstacles — prefer GPU-side triangle voxelization (FluidX3D
                     // raycasts every cell against the mesh, accurate for curved

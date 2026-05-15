@@ -104,9 +104,48 @@ namespace DisperSim3D.Core
             _sourceX = xSi; _sourceY = ySi; _sourceZ = zSi;
             _sourceR = radiusM; _sourceC = concentration;
             _hasSource = true;
+            _massInjection = false;
             CarveSourceHoleInMask();
-            // Initial seed at t=0.
             ApplySource();
+        }
+
+        /// <summary>Sets a mass-injection source: each source cell receives
+        /// Q·dt/(ρ·V_source) per timestep instead of being clamped. The resulting
+        /// concentration field has physical units (kg/m³ or mass fraction) directly,
+        /// so no post-hoc scaling is needed.</summary>
+        public void SetMassSource(double xSi, double ySi, double zSi,
+            double radiusM, double releaseRateKgPerS, double airDensityKgPerM3)
+        {
+            _sourceX = xSi; _sourceY = ySi; _sourceZ = zSi;
+            _sourceR = radiusM; _sourceC = 0;
+            _hasSource = true;
+            _massInjection = true;
+            CarveSourceHoleInMask();
+
+            _sourceCellCount = 0;
+            double r2 = radiusM * radiusM;
+            for (int k = 0; k < Nz; k++)
+            {
+                double z = (k + 0.5) * DzM;
+                double dz = z - _sourceZ;
+                if (dz * dz > r2) continue;
+                for (int j = 0; j < Ny; j++)
+                {
+                    double y = -DomainHalfM + (j + 0.5) * DyM;
+                    double dy = y - _sourceY;
+                    if (dy * dy + dz * dz > r2) continue;
+                    for (int i = 0; i < Nx; i++)
+                    {
+                        double x = -DomainHalfM + (i + 0.5) * DxM;
+                        double dx = x - _sourceX;
+                        if (dx * dx + dy * dy + dz * dz <= r2)
+                            _sourceCellCount++;
+                    }
+                }
+            }
+            if (_sourceCellCount < 1) _sourceCellCount = 1;
+            double cellVol = DxM * DyM * DzM;
+            _injectionRatePerCellPerS = releaseRateKgPerS / (airDensityKgPerM3 * cellVol * _sourceCellCount);
         }
 
         /// <summary>Clears _blocked[i,j,k] for every cell within the source sphere — so
@@ -139,11 +178,17 @@ namespace DisperSim3D.Core
 
         private double _sourceX, _sourceY, _sourceZ, _sourceR, _sourceC;
         private bool _hasSource;
+        private bool _massInjection;
+        private double _injectionRatePerCellPerS;
+        private int _sourceCellCount;
+
+        private double _lastDt;
 
         private void ApplySource()
         {
             if (!_hasSource) return;
             double r2 = _sourceR * _sourceR;
+            double dC = _massInjection ? _injectionRatePerCellPerS * _lastDt : 0;
             for (int k = 0; k < Nz; k++)
             {
                 double z = (k + 0.5) * DzM;
@@ -158,13 +203,13 @@ namespace DisperSim3D.Core
                     {
                         double x = -DomainHalfM + (i + 0.5) * DxM;
                         double dx = x - _sourceX;
-                        // Source always injects, even into cells the obstacle mask would
-                        // block. A leak position frequently coincides with the equipment
-                        // bbox (it IS the equipment that's leaking) — masking it out
-                        // produced zero plume. The post-step mask still prevents the
-                        // tracer from accumulating elsewhere inside obstacles.
                         if (dx * dx + dy * dy + dz * dz <= r2)
-                            _c[i, j, k] = _sourceC;
+                        {
+                            if (_massInjection)
+                                _c[i, j, k] += dC;
+                            else
+                                _c[i, j, k] = _sourceC;
+                        }
                     }
                 }
             }
@@ -176,6 +221,7 @@ namespace DisperSim3D.Core
         /// <summary>Advances the tracer by dt seconds. Returns the current concentration field.</summary>
         public double[,,] Step(double dtS)
         {
+            _lastDt = dtS;
             // Semi-Lagrangian advection: for each cell, trace back along velocity to find
             // where the tracer "came from", then trilinearly interpolate.
             Parallel.For(0, Nz, k =>

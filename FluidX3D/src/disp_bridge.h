@@ -95,6 +95,13 @@ FX3D_API void fx3d_initial_temperature(uint64_t h, float t);
 // Mark ground (z=0) cells as TYPE_S and top (z=Nz-1) as TYPE_E (open top).
 FX3D_API void fx3d_set_z_boundaries(uint64_t h);
 
+// Extended version: ground_type=0 → TYPE_S (no-slip wall, ux/uy/uz ignored),
+//                   ground_type=1 → TYPE_E (equilibrium BC with given velocity).
+// Top is always TYPE_E. When ground_type=1, pass the free-stream velocity
+// so the z=0 cells act as a velocity inlet rather than a stagnation plane.
+FX3D_API void fx3d_set_z_boundaries_ex(uint64_t h, int ground_type,
+                                       float ux, float uy, float uz);
+
 // Set a sphere of cells around (cx,cy,cz) with radius (cells) as TYPE_T fixed
 // temperature — used as a release-source tracer when TEMPERATURE is enabled.
 FX3D_API void fx3d_set_source_sphere(uint64_t h,

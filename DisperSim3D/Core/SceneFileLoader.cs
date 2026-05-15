@@ -263,6 +263,9 @@ namespace DisperSim3D.Core
                 FluidX3DQuality fxQual;
                 if (Enum.TryParse((string)wfEl.Attribute("FluidX3DQuality") ?? "Fast", out fxQual))
                     wf.FluidX3DQuality = fxQual;
+                FluidX3DGroundBC fxGround;
+                if (Enum.TryParse((string)wfEl.Attribute("FluidX3DGroundBC") ?? "FreeSlip", out fxGround))
+                    wf.FluidX3DGroundBC = fxGround;
                 var mEl = wfEl.Element("Meteo");
                 if (mEl != null) wf.Meteo = ParseMeteo(mEl, inv);
                 wf.CfdConfig = ParseAtmosphericCfd(wfEl, inv);
