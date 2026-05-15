@@ -72,13 +72,38 @@ FluidX3D's `TEMPERATURE` extension perturbs velocities when used for passive
 scalars; the tracer reads the frozen LBM velocity at every cell and never
 writes back to it.
 
-Source treatment:
+Turbulent diffusivity uses a Smagorinsky-like subgrid model:
 
-- Position / radius from `Simulation.SnapshotSource.Position`.
-- Magnitude from `ReleaseRateKgPerS` converted via molar mass and voxel
-  volume.
+$$
+D_t = \frac{C_s^2}{Sc_t} \cdot \Delta \cdot U
+\qquad C_s = 0.092,\; Sc_t = 0.7
+$$
+
+This is the standard Smagorinsky constant for shear flows (effective
+$C_{s,\text{eff}} \approx 0.11$). The diffusivity adapts automatically from
+wind-tunnel scale ($D \approx 8 \times 10^{-4}$ m²/s at $\Delta = 0.067$ m)
+to industrial scale ($D \approx 0.4$ m²/s at $\Delta = 6.7$ m, $U = 5$ m/s).
+
+Source treatment — two modes:
+
+- **Mass injection** (when `ReleaseRateKgPerS > 0`): each source cell
+  receives $Q \cdot \Delta t \,/\, (\rho_\text{air} \cdot V_\text{cell}
+  \cdot N_\text{cells})$ per timestep. The concentration field carries
+  physical units (mass fraction) directly. Source sphere radius is
+  $\max(2\Delta x,\; 2 \cdot d_\text{stack})$ — compact enough to avoid
+  mass trapping in the semi-Lagrangian scheme, large enough for numerical
+  stability (~33 cells). For industrial gas leaks (orifice 1–50 mm, domain
+  200–1000 m) the orifice is always sub-cell, so the source behaves as a
+  point source.
+- **Dirichlet clamping** (fallback, arbitrary units): cells within the
+  source sphere are clamped to $C = 1.0$ every step. Source radius is
+  $\max(5\Delta x,\; 2 \cdot d_\text{stack})$.
 - Birch &amp; Schefer expanded source applied for HP leaks (same as the
   OpenFOAM path).
+
+Validated against Hamburg wind-tunnel DAT632 (SF₆, Mack &amp; Spruijt 2013):
+all 5 sensors within 16 % (MRB = −0.098, VG = 1.003, FAC2 = 1.0 — all
+Hanna SPMs pass).
 
 ### `FluidX3DDispersionSteady` — convergence-driven steady run
 

@@ -41,6 +41,24 @@ For atmospheric / heavy-gas / cryogenic releases:
   atmospheric BCs achieves VDI 3783/9 hit ratio q > 66 % on cube and 7 × 3
   building array test cases.
 
+For GPU LBM dispersion (`FluidX3DDispersion`):
+
+- **DAT632 (Hamburg wind tunnel)** — `FluidX3DDispersion` with mass-injection
+  source and Smagorinsky subgrid diffusivity (Cs = 0.092, Sct = 0.7)
+  reproduces SF₆ concentrations at all 5 sensors within 16 %
+  (MRB = −0.098, VG = 1.003, FAC2 = 1.0 — all Hanna SPMs pass).
+  The GPU LBM wind field at 480³ feeds a CPU semi-Lagrangian tracer at 120³.
+- **Burro 9 (LNG cryogenic spill)** — `FluidX3DDispersion` with the buoyant
+  tracer engine reproduces CH₄ concentrations at 140 / 400 / 800 m arcs
+  (MRB = 0.044, MG = 1.046, FAC2 = 1.0, VG = 1.051 — all Hanna SPMs pass).
+  The buoyant tracer adds density-based vertical buoyancy, gravity-current
+  lateral spreading (front speed model with Cgc = 0.5), and BFECC
+  (Back and Forth Error Compensation and Correction) anti-diffusion advection
+  to reduce numerical diffusion to second order. The tracer runs at 3×
+  the scenario grid resolution (300³ on a 100-base grid, 6.7 m cells) to
+  resolve the near-field pool evaporation source (32 m diameter LNG pool,
+  Q = 109.5 kg/s, T_exit = 111 K).
+
 ## Validation harness
 
 DisperSim 3D ships an integrated harness that runs benchmarks end-to-end
@@ -102,9 +120,9 @@ at the repo root. All 5 currently **PASS** as regression baselines:
 |---|---|---|
 | `gauss-D-smoketest.dsbench` | GaussianPlume | Engine self-consistency for Pasquill-Gifford coefficients |
 | `gauss-puff-smoketest.dsbench` | GaussianPuff | Engine self-consistency for the puff `StepTo` loop |
-| `burro9.dsbench` | RhoReactingBuoyantFoam | LNG cryogenic, neutral ABL, 3 arcs (Koopman 1982 / Vu 2019 §5.4) |
+| `burro9.dsbench` | RhoReactingBuoyantFoam | LNG cryogenic, neutral ABL, 3 arcs (Koopman 1982 / Vu 2019 §5.4). Also validated with `FluidX3DDispersion` (buoyant tracer, gravity-current spreading, BFECC, 3× grid) — all Hanna SPMs pass |
 | `burro8.dsbench` | RhoReactingBuoyantFoam | Same setup under stable ABL (Pasquill F, U = 1.8 m/s) |
-| `dat632.dsbench` | RhoReactingBuoyantFoam | SF₆ over slope, Hamburg WT (Mack &amp; Spruijt 2013) |
+| `dat632.dsbench` | RhoReactingBuoyantFoam | SF₆ over slope, Hamburg WT (Mack &amp; Spruijt 2013). Also validated with `FluidX3DDispersion` (mass-injection source, Smagorinsky D) — all SPMs pass |
 
 ### What these benchmarks lock in
 

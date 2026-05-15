@@ -318,11 +318,21 @@ c_new(x) = c_old(x − u(x)·Δt)                                    semi-Lagran
         − Δt · decay · c                                          first-order decay (gas half-life)
 ```
 
-Source treatment:
+Turbulent diffusivity uses a Smagorinsky-like subgrid model that scales with cell size and wind speed:
 
-- Position / radius from `Simulation.SnapshotSource.Position`.
-- Magnitude from `ReleaseRateKgPerS` converted via molar mass and voxel volume.
+```
+D_t = Cs² · Δ · U / Sc_t          Cs = 0.092, Sc_t = 0.7
+```
+
+This gives the standard Smagorinsky constant for shear flows (effective Cs_eff ≈ 0.11). The diffusivity adapts automatically from wind-tunnel scale (D ≈ 8×10⁻⁴ m²/s at Δ = 0.067 m) to industrial scale (D ≈ 0.4 m²/s at Δ = 6.7 m).
+
+Source treatment — two modes:
+
+- **Mass injection** (when `ReleaseRateKgPerS > 0`): each source cell receives `Q·Δt / (ρ_air · V_cell · N_cells)` per timestep. The concentration field has physical units (mass fraction) directly. Source radius is `max(2·Δx, 2·stackDiam)` — compact enough to avoid mass trapping in the semi-Lagrangian scheme, large enough for numerical stability (~33 cells).
+- **Dirichlet clamping** (fallback, arbitrary units): cells within the source sphere are clamped to `C = 1.0` at every step. Source radius is `max(5·Δx, 2·stackDiam)`.
 - HP-leak Birch & Schefer expanded source applied identically to the OpenFOAM path.
+
+Validated against Hamburg wind-tunnel DAT632 (SF₆, Mack & Spruijt 2013): all 5 sensors within 16% (MRB = −0.098, VG = 1.003, FAC2 = 1.0, all Hanna SPMs pass).
 
 #### 3.7.3 `FluidX3DDispersionSteady` — convergence-driven steady run
 

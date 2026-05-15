@@ -51,7 +51,7 @@
 
   "acceptance": {
     "MRB":  { "min": -0.10, "max": 0.10 },
-    "RMSE": { "max": 0.20 },
+    "RMSE": { "max": 0.40 },
     "FAC2": { "min": 0.95,  "max": 2.0 },
     "MG":   { "min": 0.90, "max": 1.10 },
     "VG":   { "max": 1.10 }

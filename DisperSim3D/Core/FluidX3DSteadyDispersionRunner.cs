@@ -94,11 +94,11 @@ namespace DisperSim3D.Core
                     Report(0.05, "FluidX3D dispersion (steady): initialising tracer...");
 
                     double diff = config?.DiffusivityM2PerS > 0 ? config.DiffusivityM2PerS : 1e-5;
+                    double cellMGlobal = scenario.DomainSizeM * 2.0 / nx;
                     if (scenario.Meteo != null)
                     {
                         double ws = Math.Max(scenario.Meteo.WindSpeed, 0.5);
-                        double cellM = scenario.DomainSizeM * 2.0 / nx;
-                        double Dt = 0.0084 * cellM * ws / 0.7;
+                        double Dt = 0.0084 * cellMGlobal * ws / 0.7;
                         diff = Math.Max(diff, Dt);
                     }
                     var src = scenario.Sources != null && scenario.Sources.Count > 0
@@ -106,34 +106,79 @@ namespace DisperSim3D.Core
                     double decay = src?.Gas != null && src.Gas.HalfLifeS > 0
                         ? Math.Log(2.0) / src.Gas.HalfLifeS : 0.0;
 
-                    var engine = new DispersionTracerEngine(wind, domain, height, nx, ny, nz,
-                        diff, decay, _obstacles);
+                    double ambientT = scenario.Meteo?.AmbientTemperature > 0
+                        ? scenario.Meteo.AmbientTemperature : 293.15;
+                    double ambientP = scenario.Meteo?.AmbientPressure > 0
+                        ? scenario.Meteo.AmbientPressure : 101325.0;
+                    double gasMW = src?.Gas != null && src.Gas.MolarMass > 0
+                        ? src.Gas.MolarMass : 0.029;
+                    double exitT = src != null && src.ExitTemperatureK > 0
+                        ? src.ExitTemperatureK : ambientT;
+
+                    bool useBuoyant = Math.Abs(exitT - ambientT) > 20.0;
+
+                    int tnx = useBuoyant ? nx * 3 : nx;
+                    int tny = useBuoyant ? ny * 3 : ny;
+                    int tnz = useBuoyant ? nz * 3 : nz;
+                    double tracerCellM = domain * 2.0 / tnx;
+                    if (useBuoyant && scenario.Meteo != null)
+                    {
+                        double ws2 = Math.Max(scenario.Meteo.WindSpeed, 0.5);
+                        diff = Math.Max(config?.DiffusivityM2PerS > 0 ? config.DiffusivityM2PerS : 1e-5,
+                            0.0084 * tracerCellM * ws2 / 0.7);
+                    }
+
+                    DispersionTracerEngine passiveEngine = null;
+                    BuoyantTracerEngine buoyantEngine = null;
+
+                    if (useBuoyant)
+                    {
+                        buoyantEngine = new BuoyantTracerEngine(wind, domain, height, tnx, tny, tnz,
+                            diff, gasMW, ambientT, ambientP, 2.2e-5, decay, _obstacles);
+                    }
+                    else
+                    {
+                        passiveEngine = new DispersionTracerEngine(wind, domain, height, nx, ny, nz,
+                            diff, decay, _obstacles);
+                    }
 
                     if (src != null)
                     {
-                        double cellM2 = scenario.DomainSizeM * 2.0 / nx;
-                        double physR = src.StackDiameterM > 0 ? src.StackDiameterM * 2.0 : cellM2 * 3.0;
+                        double srcCellM = useBuoyant ? tracerCellM : cellMGlobal;
+                        double physR = src.StackDiameterM > 0 ? src.StackDiameterM * 2.0 : srcCellM * 3.0;
                         double radiusM = src.ReleaseRateKgPerS > 0
-                            ? Math.Max(2.0 * cellM2, physR)
-                            : Math.Max(5.0 * cellM2, physR);
+                            ? Math.Max(2.0 * srcCellM, physR)
+                            : Math.Max(5.0 * srcCellM, physR);
                         if (src.ReleaseRateKgPerS > 0)
                         {
-                            double airDensity = 101325.0 * 0.029 / (8.314 *
-                                (scenario.Meteo?.AmbientTemperature > 0 ? scenario.Meteo.AmbientTemperature : 293.15));
-                            engine.SetMassSource(src.Position.X, src.Position.Y, src.Position.Z,
-                                radiusM, src.ReleaseRateKgPerS, airDensity);
+                            double airDensity = ambientP * 0.029 / (8.314 * ambientT);
+                            if (useBuoyant)
+                                buoyantEngine.SetMassSource(src.Position.X, src.Position.Y, src.Position.Z,
+                                    radiusM, src.ReleaseRateKgPerS, airDensity, exitT);
+                            else
+                                passiveEngine.SetMassSource(src.Position.X, src.Position.Y, src.Position.Z,
+                                    radiusM, src.ReleaseRateKgPerS, airDensity);
                         }
                         else
                         {
-                            engine.SetSphericalSource(src.Position.X, src.Position.Y, src.Position.Z,
-                                radiusM: radiusM, concentration: 1.0);
+                            if (useBuoyant)
+                                buoyantEngine.SetSphericalSource(src.Position.X, src.Position.Y, src.Position.Z,
+                                    radiusM, 1.0, exitT);
+                            else
+                                passiveEngine.SetSphericalSource(src.Position.X, src.Position.Y, src.Position.Z,
+                                    radiusM: radiusM, concentration: 1.0);
                         }
                     }
 
-                    // CFL-respecting dt.
+                    double engineDx = useBuoyant ? buoyantEngine.DxM : passiveEngine.DxM;
+                    double engineDy = useBuoyant ? buoyantEngine.DyM : passiveEngine.DyM;
+                    double engineDz = useBuoyant ? buoyantEngine.DzM : passiveEngine.DzM;
+
                     double maxU = MaxWindSpeed(wind);
+                    if (useBuoyant)
+                        maxU = Math.Max(maxU, buoyantEngine.EstimateBuoyantVelocity());
                     if (maxU < 0.1) maxU = 0.1;
-                    double cellSize = Math.Min(engine.DxM, Math.Min(engine.DyM, engine.DzM));
+                    double cellSize = Math.Min(engineDx, Math.Min(engineDy, engineDz));
                     double dtMax = 0.5 * cellSize / maxU;
                     // Chunk = sim seconds between convergence checks.
                     int checks = Math.Max(10, ConvergenceChecks);
@@ -146,9 +191,12 @@ namespace DisperSim3D.Core
                     try { System.IO.Directory.CreateDirectory(_casePath); TempManager.RegisterActive(_casePath); }
                     catch { _casePath = null; }
 
+                    int outNx = useBuoyant ? tnx : nx;
+                    int outNy = useBuoyant ? tny : ny;
+                    int outNz = useBuoyant ? tnz : nz;
                     var result = new OpenFoamResult
                     {
-                        GridNx = nx, GridNy = ny, GridNz = nz,
+                        GridNx = outNx, GridNy = outNy, GridNz = outNz,
                         DomainSizeM = domain,
                         DomainXMin = -domain, DomainXMax = domain,
                         DomainYMin = -domain, DomainYMax = domain,
@@ -172,11 +220,16 @@ namespace DisperSim3D.Core
                         for (int sub = 0; sub < stepsPerChunk; sub++)
                         {
                             if (_cancelled) break;
-                            engine.Step(dt);
+                            if (useBuoyant)
+                                buoyantEngine.Step(dt);
+                            else
+                                passiveEngine.Step(dt);
                             simT += dt;
                         }
 
-                        var current = engine.Snapshot();
+                        var current = useBuoyant
+                            ? buoyantEngine.SnapshotConcentration()
+                            : passiveEngine.Snapshot();
 
                         // Convergence delta vs the previous check.
                         if (previous != null)
@@ -189,7 +242,7 @@ namespace DisperSim3D.Core
                         }
 
                         // Clone for next comparison + write to disk so progress is visible.
-                        var snapField = new double[nx, ny, nz];
+                        var snapField = new double[outNx, outNy, outNz];
                         Array.Copy(current, snapField, current.Length);
                         previous = snapField;
 

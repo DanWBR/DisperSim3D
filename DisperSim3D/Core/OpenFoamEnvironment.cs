@@ -387,7 +387,10 @@ namespace DisperSim3D.Core
         private Process StartWSL2Command(string casePath, string command)
         {
             string linuxPath = WindowsToWslPath(casePath);
-            string bashCmd = "source /opt/openfoam*/etc/bashrc 2>/dev/null; cd '" + linuxPath + "' && " + command;
+            string bashCmd = "for f in /opt/openfoam*/etc/bashrc /usr/share/openfoam/etc/bashrc; do [ -f \"$f\" ] && . \"$f\" 2>/dev/null && break; done; " +
+                "export FOAM_ETC=${FOAM_ETC:-/usr/share/openfoam/etc}; " +
+                "export WM_PROJECT_DIR=${WM_PROJECT_DIR:-/usr/share/openfoam}; " +
+                "cd '" + linuxPath + "' && " + command;
             var psi = new ProcessStartInfo
             {
                 FileName = "wsl",

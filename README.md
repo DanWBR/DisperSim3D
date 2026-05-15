@@ -65,7 +65,7 @@ Automatic mesh generation with snappyHexMesh, building/obstacle refinement zones
 Embedded sibling C++ project (`FluidX3D.dll`) compiled from [Moritz Lehmann's FluidX3D](https://github.com/ProjectPhysX/FluidX3D) and invoked via P/Invoke. Runs on any OpenCL 1.2+ device. Four runners exposed as `CfdSolverType` values:
 
 - **FluidX3DWind** (`FX3DWN`) — steady wind field via Smagorinsky-Lilly LES (typically 5–30 s for 64³–96³ on a mid-range GPU)
-- **FluidX3DDispersion** (`FX3DDP`) — transient dispersion: GPU LBM wind field + CPU semi-Lagrangian tracer (`DispersionTracerEngine`)
+- **FluidX3DDispersion** (`FX3DDP`) — transient dispersion: GPU LBM wind field + CPU semi-Lagrangian tracer (`DispersionTracerEngine`) with mass-injection source model and Smagorinsky subgrid diffusivity (Cs = 0.092, Sct = 0.7). Validated against DAT632 (SF₆ wind tunnel, Mack & Spruijt 2013) — all Hanna SPMs pass
 - **FluidX3DDispersionSteady** (`FX3DDS`) — same tracer driven until cell-by-cell L2 delta drops below tolerance; result is a single converged frame, playback bar hidden
 - **FluidX3DFire** (`FX3DFR`) — buoyant fire plume via dual-tracer `FireTracerEngine` (smoke + temperature) with Boussinesq buoyancy `β·g·(T-T_amb)`
 
