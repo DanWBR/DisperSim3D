@@ -63,7 +63,16 @@ namespace DisperSim3D.Validation
                             log?.Invoke("Pre-running FluidX3D wind field (GPU LBM)...");
                             wf.UseFluidX3D = true;
                             var windRunner = new FluidX3DWindFieldRunner();
-                            bool windOk = windRunner.Run(wf, new System.Collections.Generic.List<BoundingBox>(),
+                            // Collect obstacles from the scene's Decorations so the wind LBM
+                            // and the tracer engine see the same array (essential for built-
+                            // environment benches like MUST where the geometry is the test).
+                            var windObstacles = new System.Collections.Generic.List<BoundingBox>();
+                            foreach (var d in scene.Decorations)
+                            {
+                                if (d != null && d.BoundingBox != null)
+                                    windObstacles.Add(d.BoundingBox);
+                            }
+                            bool windOk = windRunner.Run(wf, windObstacles,
                                 (frac, msg) => log?.Invoke("  [wind] " + msg));
                             if (!windOk)
                             {
@@ -315,6 +324,26 @@ namespace DisperSim3D.Validation
                     Name = s.Name,
                     Position = new Point3D(s.Position[0], s.Position[1], s.Position[2])
                 });
+            }
+
+            // Obstacle array: when the bench declares one, generate the boxes and
+            // add them as scene decorations. HeadlessRunner.RunCfd picks up every
+            // decoration's BoundingBox automatically and passes the list to both
+            // the wind-field LBM (FluidX3DWindFieldRunner) and the tracer engine
+            // (BuoyantTracerEngine), so the obstacles affect both the velocity
+            // field and the scalar transport without any extra wiring.
+            if (spec.ObstacleArray != null
+                && !string.IsNullOrEmpty(spec.ObstacleArray.Type)
+                && string.Equals(spec.ObstacleArray.Type, "must",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                var oa = spec.ObstacleArray;
+                var decos = MustGeometryBuilder.BuildContainerDecorations(
+                    oa.Rows, oa.Columns,
+                    oa.SpacingAlongWindM, oa.SpacingCrosswindM,
+                    oa.ContainerLengthM, oa.ContainerWidthM, oa.ContainerHeightM,
+                    oa.CenterX, oa.CenterY, oa.GroundZ);
+                foreach (var d in decos) scene.Decorations.Add(d);
             }
             return scene;
         }

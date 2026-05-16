@@ -26,6 +26,25 @@ namespace DisperSim3D.Validation
         public BenchmarkMeteo Meteo { get; set; }
         public BenchmarkDomain Domain { get; set; }
 
+        /// <summary>Optional obstacle-array specification. When set, the runner
+        /// adds the corresponding boxes to <c>Scene3D.Decorations</c> before
+        /// running the solver, so both the wind-field LBM and the tracer engine
+        /// see the obstacles.</summary>
+        public BenchmarkObstacleArray ObstacleArray { get; set; }
+
+        /// <summary>Optional reference SPMs from a published validated model
+        /// (typically FLACS or PHAST) on the SAME experiment, as cited in a
+        /// peer-reviewed paper. When set, the validation harness compares
+        /// DisperSim 3D's SPMs against these reference numbers: the bench
+        /// PASSES when DisperSim is no worse than the reference within the
+        /// declared <see cref="BenchmarkAcceptance.ReferenceMatchTolerance"/>.
+        /// This is the right way to validate a dispersion engine: we are not
+        /// asking the engine to match the field measurements perfectly (which
+        /// is rarely possible for a Gaussian or simple CFD model), but to
+        /// reach the same level of agreement that commercial models reach
+        /// against the same data.</summary>
+        public BenchmarkReferenceModelSpms ReferenceModelSpms { get; set; }
+
         /// <summary>
         /// String matching <see cref="CfdSolverType"/> values (case-insensitive).
         /// E.g. "GaussianPlume", "GaussianPuff", "RhoReactingBuoyantFoam".
@@ -110,6 +129,55 @@ namespace DisperSim3D.Validation
         /// only the vapor mass flow (with rainout subtracted) at the Birch pseudo-source
         /// geometry, instead of the raw total mass flow.</summary>
         public BenchmarkTwoPhase TwoPhase { get; set; }
+    }
+
+    /// <summary>Hanna SPMs that a published reference model (FLACS, PHAST,
+    /// or similar) achieved on the same experiment, as cited in a validation
+    /// paper. Used by the validation harness to define what "good enough"
+    /// means for this bench: the engine PASSES when its SPMs are no worse
+    /// than these reference numbers within the tolerance declared in
+    /// <see cref="BenchmarkAcceptance.ReferenceMatchTolerance"/>.</summary>
+    public class BenchmarkReferenceModelSpms
+    {
+        /// <summary>Name of the reference model and its version, e.g.
+        /// "FLACS v9.1 r2", "PHAST v8.1", "ANSYS-CFX".</summary>
+        public string Model { get; set; }
+
+        /// <summary>Full citation of the paper that reports these SPMs.</summary>
+        public string Citation { get; set; }
+
+        public double? MRB { get; set; }
+        public double? RMSE { get; set; }
+        public double? FAC2 { get; set; }
+        public double? MG { get; set; }
+        public double? VG { get; set; }
+
+        /// <summary>Optional notes (e.g. "aggregate over 43 Prairie Grass trials"
+        /// when the paper only reports cohort-level statistics).</summary>
+        public string Notes { get; set; }
+    }
+
+    /// <summary>Parametric obstacle-array specification for built-environment
+    /// benchmarks (such as MUST). When <see cref="Type"/> is "must" the runner
+    /// generates the 120-container array via <see cref="Core.MustGeometryBuilder"/>.
+    /// Other types may be added later (regular grid, single block, custom CAD path).</summary>
+    public class BenchmarkObstacleArray
+    {
+        /// <summary>Array type. Currently supported: "must".</summary>
+        public string Type { get; set; }
+
+        public int Rows { get; set; } = 12;
+        public int Columns { get; set; } = 10;
+        public double SpacingAlongWindM { get; set; } = 12.9;
+        public double SpacingCrosswindM { get; set; } = 12.9;
+
+        public double ContainerLengthM { get; set; } = 12.2;
+        public double ContainerWidthM { get; set; } = 2.42;
+        public double ContainerHeightM { get; set; } = 2.54;
+
+        public double CenterX { get; set; }
+        public double CenterY { get; set; }
+        public double GroundZ { get; set; }
     }
 
     /// <summary>Pressurized two-phase release recipe (Cl2/NH3/CO2 liquid storage etc.).

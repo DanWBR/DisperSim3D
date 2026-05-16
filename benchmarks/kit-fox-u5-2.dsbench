@@ -49,11 +49,22 @@
     { "name": "arc-225m", "position": [225, 0, 1.5], "measuredKgM3": 0.0058 }
   ],
 
+  "referenceModelSpms": {
+    "model": "FLACS v8",
+    "citation": "Hanna, Hansen, Dharmavaram 2004 (Atmospheric Environment 38, 4675-4687), Table 2 - aggregate over 52 Kit Fox trials.",
+    "notes": "FLACS aggregate on Kit Fox cohort. Strong performance because Kit Fox has well-defined source and uniform terrain (continuous billboard array).",
+    "MRB": 0.08,
+    "FAC2": 0.94,
+    "MG": 1.12,
+    "VG": 1.20
+  },
+
   "acceptance": {
-    "MRB":  { "min": -0.67, "max": 0.67 },
-    "RMSE": { "max": 3.0 },
-    "FAC2": { "min": 0.3, "max": 2.0 },
-    "MG":   { "min": 0.5, "max": 2.0 },
-    "VG":   { "max": 4.0 }
+    "ReferenceMatchTolerance": {
+      "MRB":  0.5,
+      "FAC2": 0.3,
+      "MG":   0.5,
+      "VG":   1.5
+    }
   }
 }

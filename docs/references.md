@@ -33,7 +33,7 @@ nav_order: 12
 
 5. **Schalau, S., Habib, A. &amp; Michel, S.** (2021). *Atmospheric Wind
    Field Modelling with OpenFOAM for Near-Ground Gas Dispersion*.
-   Atmosphere, 12 (8), 933 — **open access**.
+   Atmosphere, 12 (8), 933  -  **open access**.
    [doi:10.3390/atmos12080933](https://doi.org/10.3390/atmos12080933)
    · [MDPI HTML](https://www.mdpi.com/2073-4433/12/8/933)
    · [MDPI PDF](https://www.mdpi.com/2073-4433/12/8/933/pdf)
@@ -80,12 +80,12 @@ nav_order: 12
    Xu, Y.** (2018). *Verification and validation of Phast consequence
    models for accidental releases of toxic or flammable chemicals to the
    atmosphere*. J. Loss Prev. Process Ind., 55, 457–470. **Multi-chemical
-   (LNG, propane, NH3, CO2, H2, Cl2, HF) — Phast 8.1.**
+   (LNG, propane, NH3, CO2, H2, Cl2, HF)  -  Phast 8.1.**
    [doi:10.1016/j.jlp.2018.07.014](https://doi.org/10.1016/j.jlp.2018.07.014)
 
 8. **Witlox, H.W.M., Oke, A.** (2008). *Verification and validation of
    consequence models for accidental releases*. IChemE Symp. Series 154.
-   Multi-chemical — Phast 6.3.
+   Multi-chemical  -  Phast 6.3.
 
 9. **Witlox, H.W.M., Harper, M., Oke, A., Stene, J.** (2014). *Phast
    validation of discharge and atmospheric dispersion for pressurised CO2
@@ -109,7 +109,7 @@ nav_order: 12
     [PHMSA PDF](https://primis.phmsa.dot.gov/rd/FileGet/11365/15704-TS-000-012_(Final_Report)_170629.pdf)
 
 13. **Bergen Open Research Archive** (2014). *Comparison of FLACS (CFD)
-    vs Phast (integral) for flammable gas dispersion — effect of geometry;
+    vs Phast (integral) for flammable gas dispersion  -  effect of geometry;
     Phast does not reproduce dense gas behaviour correctly*. MSc thesis,
     University of Bergen.
     [BORA UiB](https://bora.uib.no/bora-xmlui/handle/1956/8039)
@@ -135,7 +135,7 @@ nav_order: 12
     for evaluating vapor dispersion models for safety analysis of LNG
     facilities*. HSL / FPRF. **The MEP experimental database itself.**
 
-18. **Gavelli, F.** (2011). *PHMSA Model Evaluation Report — FLACS Version
+18. **Gavelli, F.** (2011). *PHMSA Model Evaluation Report  -  FLACS Version
     9.1 Release 2*.
     [PHMSA Docket](https://downloads.regulations.gov/PHMSA-2011-0101-0005/attachment_1.pdf)
 
@@ -156,7 +156,7 @@ nav_order: 12
     (Burro + Coyote)*. ASME J. Heat Transfer, 109 (4), 952–960.
 
 22. **Eberwein, R., Rogge, A., Behrendt, F., Knaust, C.** (2020).
-    *Dispersion modeling of LNG-vapor on land — A CFD-model evaluation
+    *Dispersion modeling of LNG-vapor on land  -  A CFD-model evaluation
     study (12 CFD variants vs LNG Phase II data)*. J. Loss Prev. Process
     Ind., 64, 104062.
     [doi:10.1016/j.jlp.2020.104062](https://doi.org/10.1016/j.jlp.2020.104062)
@@ -180,36 +180,36 @@ nav_order: 12
     [doi:10.1016/j.jhazmat.2012.02.013](https://doi.org/10.1016/j.jhazmat.2012.02.013)
 
 26. **Brighton, P.W.M., Prince, A.J., Webber, D.M.** (1985). *Thorney
-    Island heavy gas dispersion trials — analysis of data*. J. Hazardous
+    Island heavy gas dispersion trials  -  analysis of data*. J. Hazardous
     Materials, 11, 381–397.
     [doi:10.1016/0304-3894(85)85049-7](https://doi.org/10.1016/0304-3894(85)85049-7)
 
 ## 7. Regulatory approvals
 
-- **FLACS v9.1 r2** — PHMSA approved 7 October 2011 under 49 CFR 193.2059.
+- **FLACS v9.1 r2**  -  PHMSA approved 7 October 2011 under 49 CFR 193.2059.
   [Docket](https://downloads.regulations.gov/PHMSA-2011-0101-0005/attachment_1.pdf)
-- **Phast v6.6 / v6.7** — PHMSA approved October 2011 (UDM dispersion).
-- **Phast v8.4** — PHMSA approved 13 April 2023 under 49 CFR § 193.2059(a).
+- **Phast v6.6 / v6.7**  -  PHMSA approved October 2011 (UDM dispersion).
+- **Phast v8.4**  -  PHMSA approved 13 April 2023 under 49 CFR § 193.2059(a).
   [PHMSA LNG page](https://www.phmsa.dot.gov/pipeline/liquified-natural-gas/lng-exclusion-zones)
-- **49 CFR 193.2059** — federal regulation (DEGADIS 2.1 and FEM3A as baseline).
-- **NFPA 59A** — incorporates the MEP since the 2009 edition.
+- **49 CFR 193.2059**  -  federal regulation (DEGADIS 2.1 and FEM3A as baseline).
+- **NFPA 59A**  -  incorporates the MEP since the 2009 edition.
 
 ## Priority for DisperSim 3D validation
 
 The four most directly actionable references for further DisperSim 3D
 validation work:
 
-- **[#2 Hansen 2010](https://doi.org/10.1016/j.jlp.2010.08.005)** — FLACS
+- **[#2 Hansen 2010](https://doi.org/10.1016/j.jlp.2010.08.005)**  -  FLACS
   against 33 MEP experiments. Same protocol DisperSim 3D would follow.
-- **[#23 Mazzola 2021](https://doi.org/10.1016/j.atmosenv.2020.117887)** —
+- **[#23 Mazzola 2021](https://doi.org/10.1016/j.atmosenv.2020.117887)**  - 
   17 models compared against Jack Rabbit II. Excellent benchmark cohort
   for the chlorine release case already wired into `.dsbench`.
-- **[#17 Coldrick 2009](https://doi.org/10.1016/j.jlp.2012.10.005)** —
+- **[#17 Coldrick 2009](https://doi.org/10.1016/j.jlp.2012.10.005)**  - 
   the MEP database itself. Contains condensed experimental data for Burro,
   Coyote, Falcon, Maplin Sands, Thorney Island with automated Hanna SPM
   computation. DisperSim 3D can be exercised against the same scenarios
   for direct head-to-head comparison.
-- **[#12 CH-IV 2017](https://primis.phmsa.dot.gov/rd/FileGet/11365/15704-TS-000-012_(Final_Report)_170629.pdf)** —
+- **[#12 CH-IV 2017](https://primis.phmsa.dot.gov/rd/FileGet/11365/15704-TS-000-012_(Final_Report)_170629.pdf)**  - 
   DEGADIS/Phast/FLACS exclusion zones comparison under PHMSA.
 
 ## Gaussian plume and atmospheric dispersion (supporting)
@@ -237,7 +237,7 @@ validation work:
 - **Birch, A. D., Hughes, D. J., Swaffield, F.** (1987). *Velocity decay
   of high pressure jets*. Combustion Science and Technology, 52, 161–171.
 - **Birch, A. D., Schefer, R. W.** (1984). Pseudo-source equivalent-diameter
-  approach for sonic underexpanded jets — see Benintendi 2010 for the
+  approach for sonic underexpanded jets  -  see Benintendi 2010 for the
   engineering form used here.
 - **Chuech, S. G., Lai, M. C., Faeth, G. M.** (1989). *Structure of
   turbulent sonic underexpanded free jets*. AIAA Journal, 27 (5), 549–559.
@@ -254,30 +254,30 @@ validation work:
 - **Turner, D. B.** (1970). *Workbook of Atmospheric Dispersion Estimates*.
   EPA AP-26, US Environmental Protection Agency.
 - **Slade, D. H.** (1968). *Meteorology and Atomic Energy*. USAEC TID-24190.
-- **TNO Yellow Book** — *Methods for the Calculation of Physical Effects.*
-- **VDI 3783/9** (2017). *Environmental Meteorology — Prognostic
-  Microscale Wind Field Models — Evaluation for Flow around Buildings and
+- **TNO Yellow Book**  -  *Methods for the Calculation of Physical Effects.*
+- **VDI 3783/9** (2017). *Environmental Meteorology  -  Prognostic
+  Microscale Wind Field Models  -  Evaluation for Flow around Buildings and
   Obstacles*. Beuth Verlag, Berlin.
 - **British Petroleum** (n.d.). *Fire and Gas Detection Engineering
   Technical Practice*. GP 30-85.
 
 ## OpenFOAM
 
-- **OpenFOAM Foundation / ESI** — OpenFOAM v2306+ / v2512 user guide.
+- **OpenFOAM Foundation / ESI**  -  OpenFOAM v2306+ / v2512 user guide.
   [openfoam.com/documentation](https://www.openfoam.com/documentation)
 
 ## Software dependencies
 
-- **FluidX3D** — Moritz Lehmann's GPU LBM solver.
+- **FluidX3D**  -  Moritz Lehmann's GPU LBM solver.
   [github.com/ProjectPhysX/FluidX3D](https://github.com/ProjectPhysX/FluidX3D)
-- **HelixToolkit.Wpf** —
+- **HelixToolkit.Wpf**  - 
   [github.com/helix-toolkit/helix-toolkit](https://github.com/helix-toolkit/helix-toolkit)
   (MIT)
-- **DockPanelSuite** —
+- **DockPanelSuite**  - 
   [github.com/dockpanelsuite/dockpanelsuite](https://github.com/dockpanelsuite/dockpanelsuite)
   (MIT)
-- **HandyControl** —
+- **HandyControl**  - 
   [github.com/HandyOrg/HandyControl](https://github.com/HandyOrg/HandyControl)
   (MIT)
-- **DWSIM** — used via Fluent API for thermodynamics &amp; compound
+- **DWSIM**  -  used via Fluent API for thermodynamics &amp; compound
   databases. [github.com/DanWBR/dwsim](https://github.com/DanWBR/dwsim)

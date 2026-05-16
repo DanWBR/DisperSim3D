@@ -18,8 +18,8 @@ release physics it can handle.
 
 | Need | Best fit |
 |---|---|
-| Screening / preliminary sizing | **GaussianPuff** or **GaussianPlume** — seconds, no GPU/CFD |
-| Fast iteration on a steady design | **FluidX3DWind + FluidX3DDispersionSteady** — converges in tens of seconds on GPU |
+| Screening / preliminary sizing | **GaussianPuff** or **GaussianPlume**  -  seconds, no GPU/CFD |
+| Fast iteration on a steady design | **FluidX3DWind + FluidX3DDispersionSteady**  -  converges in tens of seconds on GPU |
 | Transient release with simple geometry | **FluidX3DDispersion** (LES on GPU) |
 | Fire plume / buoyant hot release | **FluidX3DFire** (Boussinesq tracer) or **rhoReactingBuoyantFoam** |
 | Heavy / cryogenic gas (SF₆, LNG) | **rhoReactingBuoyantFoam** with the cryogenic preset |
@@ -39,7 +39,7 @@ The full `CfdSolverType` enum:
 | `PimpleFoam` | OpenFOAM transient incompressible | same |
 | `BuoyantPimpleFoam` | OpenFOAM transient buoyant | same |
 | `ReactingFoam` | OpenFOAM multi-species, combustion off | same |
-| **`RhoReactingBuoyantFoam`** | **Recommended CFD** — compressible + buoyant + multi-species | same |
+| **`RhoReactingBuoyantFoam`** | **Recommended CFD**  -  compressible + buoyant + multi-species | same |
 | `FluidX3DWind` | GPU LBM wind field | [`FluidX3DWindFieldRunner.cs`](https://github.com/DanWBR/DisperSim3D/blob/main/DisperSim3D/Core/FluidX3DWindFieldRunner.cs) |
 | `FluidX3DDispersion` | GPU LBM wind + CPU tracer | [`FluidX3DRunner.cs`](https://github.com/DanWBR/DisperSim3D/blob/main/DisperSim3D/Core/FluidX3DRunner.cs) |
 | `FluidX3DDispersionSteady` | GPU LBM + CPU tracer to convergence | [`FluidX3DSteadyDispersionRunner.cs`](https://github.com/DanWBR/DisperSim3D/blob/main/DisperSim3D/Core/FluidX3DSteadyDispersionRunner.cs) |
@@ -78,7 +78,7 @@ wind direction over a momentum-based bend length
 wind direction and speed at the source position are interpolated from the
 field instead of the uniform meteo.
 
-### High-pressure leak — Birch &amp; Schefer expanded source
+### High-pressure leak  -  Birch &amp; Schefer expanded source
 
 For an underexpanded sonic jet, modelling the real orifice in CFD requires
 sub-millimetre cells and sub-microsecond timesteps. Birch &amp; Schefer (1984)
@@ -106,7 +106,7 @@ with $V_{\mathrm{target}} \approx 100\ \mathrm{m/s}$.
 
 `HighPressureLeakModel.ComputeExpandedSource(p, 100, 293.15)` returns
 `(d_pseudo, V_target, T_amb)`. `ReleaseSource3D.ExpandedDiameterForCfdM` and
-`ExpandedVelocityForCfdMS` are the CFD-facing accessors — they return the
+`ExpandedVelocityForCfdMS` are the CFD-facing accessors  -  they return the
 physical orifice values for non-choked flow and fall back to Birch only when
 the leak is sonic.
 
@@ -115,7 +115,7 @@ the leak is sonic.
 See the [OpenFOAM section](#openfoam-pipeline) below for case generation,
 boundary conditions and the Atmospheric Boundary Layer treatment.
 
-The recommended universal CFD solver is **`rhoReactingBuoyantFoam`** — it
+The recommended universal CFD solver is **`rhoReactingBuoyantFoam`**  -  it
 covers compressible flow, buoyancy, multi-species transport, sonic and
 subsonic releases, with combustion switched off. Recipe follows Fiates &amp;
 Vianna 2016.
@@ -126,12 +126,12 @@ When `CfdConfiguration.UseAtmosphericBL = true` (default for every CFD
 solver), the case writer emits a validated atmospheric configuration based
 on three published references:
 
-- **Mack &amp; Spruijt 2013** — heavy gas, recommends `C_ε3 = -0.33` constant
+- **Mack &amp; Spruijt 2013**  -  heavy gas, recommends `C_ε3 = -0.33` constant
   in the ε-equation buoyancy term and `Sc_t = 0.7`.
-- **Tran Le Vu 2019** — LNG vapor, validates HHTSL k-ε constants with
+- **Tran Le Vu 2019**  -  LNG vapor, validates HHTSL k-ε constants with
   `σ_ε = 1.167`, `Sc_t = 0.3` for dense gas, `Sc_t = 0.15` for cryogenic,
   fixed-temperature ground BC for cryogenic releases.
-- **Schalau et al. 2021** — wind around obstacles, stock OpenFOAM
+- **Schalau et al. 2021**  -  wind around obstacles, stock OpenFOAM
   `atmBoundaryLayerInlet*` BCs, ground roughness via
   `nutkAtmRoughWallFunction(z₀)`.
 
@@ -164,10 +164,10 @@ Cases are written to
 `%TEMP%/DisperSim_OpenFOAM/<solver>_case_<scenarioId>` (configurable via
 `CfdConfiguration.WorkingDirectory`). The runner pipeline for transient runs:
 
-1. `blockMesh` — generate the base hex grid
+1. `blockMesh`  -  generate the base hex grid
 2. Optional `topoSet` + `refineMesh` for source/obstacle refinement
-3. `topoSet` — create source/obstacle cellSets
-4. `setFields` — initialise U, species, T
+3. `topoSet`  -  create source/obstacle cellSets
+4. `setFields`  -  initialise U, species, T
 5. `decomposePar` (when parallel)
 6. `mpiexec -np N <solver> -parallel` (or single-process)
 7. `reconstructPar`

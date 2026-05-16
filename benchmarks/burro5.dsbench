@@ -1,11 +1,11 @@
 {
   "$schema": "dsbench/v1",
-  "name": "Burro7",
-  "citation": "Koopman, R.P. et al. (1982). LLNL/NWC 1980 LNG spill tests. LLNL UCID-19075. Burro Trial 7. Parameters from PHMSA MVD Rev B 2024 Table 2-8. Sensor values approximated from Hansen et al. 2010 J. Loss Prev. Process Ind. 23 figures.",
-  "description": "Burro Trial 7 - LNG spill on water from 0.61 m pipe. 39.4 m^3 LNG over ~174 s (~123 kg/s effective). Frenchman Flat 1980. High wind (8.4 m/s) with neutral C stability - the high-wind case in the Burro series. Sensors on arcs at 57, 140, 400 m, ~1 m height. NOTE: high wind reduces near-field concentrations vs Burro 8/9. Sensor values approximate from Hansen 2010 figures (confidence medium-low).",
+  "name": "Burro5",
+  "citation": "Koopman, R.P. et al. (1982). LLNL/NWC 1980 LNG spill tests. LLNL UCID-19075. Burro Trial 5. Parameters from PHMSA MVD Rev B 2024 Table 2-8. Sensor values approximated from Hansen et al. 2010 J. Loss Prev. Process Ind. 23 figures.",
+  "description": "Burro Trial 5 - LNG spill on water from 0.61 m pipe. 35.3 m^3 LNG over ~190 s (~84 kg/s effective). Frenchman Flat 1980. Stability D with high wind 7.4 m/s. Sensors on arcs at 57, 140, 400 m, ~1 m height.",
 
   "source": {
-    "name": "Burro7 LNG pool",
+    "name": "Burro5 LNG pool",
     "gas": {
       "name": "CH4",
       "molarMass": 0.01604,
@@ -14,18 +14,18 @@
       "isCryogenic": true
     },
     "position": [0, 0, 0.5],
-    "releaseRateKgPerS": 123.4,
-    "releaseDurationS": 174,
-    "stackDiameterM": 20.0,
+    "releaseRateKgPerS": 84.1,
+    "releaseDurationS": 190,
+    "stackDiameterM": 19.0,
     "exitTemperatureK": 111,
     "exitVelocityMPerS": 0.05
   },
 
   "meteo": {
-    "windSpeed": 8.4,
+    "windSpeed": 7.4,
     "windDirectionDeg": 270,
-    "stability": "C",
-    "ambientTemperature": 307,
+    "stability": "D",
+    "ambientTemperature": 308,
     "ambientPressure": 93000,
     "windMeasurementHeightM": 2,
     "roughnessLengthM": 0.0002
@@ -43,9 +43,9 @@
   "unit": "MassFraction",
 
   "sensors": [
-    { "name": "arc-57m_centerline",  "position": [57,  0, 1.0], "measuredKgM3": 0.035 },
-    { "name": "arc-140m_centerline", "position": [140, 0, 1.0], "measuredKgM3": 0.014 },
-    { "name": "arc-400m_centerline", "position": [400, 0, 1.0], "measuredKgM3": 0.004 }
+    { "name": "arc-57m_centerline",  "position": [57,  0, 1.0], "measuredKgM3": 0.028 },
+    { "name": "arc-140m_centerline", "position": [140, 0, 1.0], "measuredKgM3": 0.013 },
+    { "name": "arc-400m_centerline", "position": [400, 0, 1.0], "measuredKgM3": 0.0045 }
   ],
 
   "referenceModelSpms": {

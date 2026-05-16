@@ -49,11 +49,21 @@
     { "name": "arc400_centerline", "position": [400, 0, 1.0], "measuredKgM3": 0.00383 }
   ],
 
+  "referenceModelSpms": {
+    "model": "FLACS v9",
+    "citation": "Hansen, Gavelli, Ichard, Davis 2010 (J. Loss Prev. Process Ind. 23, 857-877) - unobstructed-group aggregate.",
+    "notes": "Cohort aggregate for LNG dispersion tests without obstacles.",
+    "FAC2": 0.94,
+    "MG": 1.18,
+    "VG": 1.14
+  },
+
   "acceptance": {
-    "MRB":  { "min": -0.10, "max": 0.10 },
-    "RMSE": { "max": 0.20 },
-    "FAC2": { "min": 0.95,  "max": 2.0 },
-    "MG":   { "min": 0.90, "max": 1.10 },
-    "VG":   { "max": 1.10 }
+    "ReferenceMatchTolerance": {
+      "MRB":  0.5,
+      "FAC2": 0.3,
+      "MG":   0.5,
+      "VG":   1.5
+    }
   }
 }

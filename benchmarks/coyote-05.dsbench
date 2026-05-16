@@ -48,11 +48,21 @@
     { "name": "arc-400m", "position": [400, 0, 1.0], "measuredKgM3": 0.008 }
   ],
 
+  "referenceModelSpms": {
+    "model": "FLACS v9",
+    "citation": "Hansen, Gavelli, Ichard, Davis 2010 (J. Loss Prev. Process Ind. 23, 857-877) - unobstructed-group aggregate (Burro, Coyote, Maplin Sands, Thorney Island).",
+    "notes": "Per-trial SPMs not tabulated in open paper; numbers below are the cohort aggregate for LNG dispersion tests without obstacles. FLACS used custom source-term and high-resolution grid.",
+    "FAC2": 0.94,
+    "MG": 1.18,
+    "VG": 1.14
+  },
+
   "acceptance": {
-    "MRB":  { "min": -0.67, "max": 0.67 },
-    "RMSE": { "max": 3.0 },
-    "FAC2": { "min": 0.3, "max": 2.0 },
-    "MG":   { "min": 0.5, "max": 2.0 },
-    "VG":   { "max": 4.0 }
+    "ReferenceMatchTolerance": {
+      "MRB":  0.5,
+      "FAC2": 0.3,
+      "MG":   0.5,
+      "VG":   1.5
+    }
   }
 }

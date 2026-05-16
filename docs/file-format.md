@@ -24,7 +24,7 @@ The CLI accepts either form.
 Root element is `<Project Version="2">`. Legacy `<Scene3D Version="1">`
 files are auto-migrated on load: inline gases are hoisted into
 `GasLibrary`, sources promoted to top-level, and old scenarios converted
-into `Simulation` snapshots (idempotent — safe to load and re-save).
+into `Simulation` snapshots (idempotent  -  safe to load and re-save).
 
 ### Top-level structure (Version 2)
 
@@ -103,7 +103,7 @@ separator).
   source's `GasRefId` is set.
 - Each existing `CfdSimulationEntry` becomes a stub `Simulation` with
   `Status = Completed` (or `Failed`).
-- Migration is idempotent — safe to run on every load.
+- Migration is idempotent  -  safe to run on every load.
 
 ## `.dsproj` bundle
 
@@ -135,7 +135,7 @@ through the headless / CLI layer:
 | Code | `CfdSolverType` |
 |---|---|
 | `GAUSSP` | `GaussianPuff` |
-| `GAUSSPL` (note 7 chars — historical) | `GaussianPlume` |
+| `GAUSSPL` (note 7 chars  -  historical) | `GaussianPlume` |
 | `SCTRFM` | `ScalarTransportFoam` |
 | `SCTRFS` | `ScalarTransportFoamSteady` |
 | `SCSMFM` | `ScalarSimpleFoam` |

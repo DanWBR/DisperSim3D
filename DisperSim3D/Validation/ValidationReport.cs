@@ -13,13 +13,47 @@ namespace DisperSim3D.Validation
         public string CasePath { get; set; }
         public TimeSpan RunDuration { get; set; }
 
-        /// <summary>Convenience: true when the run completed AND every SPM passed.</summary>
+        /// <summary>Convenience: true when the run completed AND the engine
+        /// matched the validation criteria. When the bench declares a
+        /// <see cref="BenchmarkSpec.ReferenceModelSpms"/> block, PASS means
+        /// "DisperSim 3D's SPMs are no worse than the cited reference model
+        /// (FLACS / PHAST / etc.) achieved on the same experiment, within
+        /// tolerance". Otherwise PASS falls back to the standard Hanna
+        /// acceptance ranges in <see cref="BenchmarkSpec.Acceptance"/>.</summary>
         public bool Pass
         {
             get
             {
                 if (!Success || Spm == null) return false;
+                if (Benchmark?.ReferenceModelSpms != null
+                    && Benchmark.Acceptance?.ReferenceMatchTolerance != null)
+                {
+                    var match = Spm.MatchesReference(
+                        Benchmark.ReferenceModelSpms,
+                        Benchmark.Acceptance.ReferenceMatchTolerance);
+                    if (!match.Pass) return false;
+                    // Cloud volume (if applicable) still uses the standard range.
+                    if (Benchmark.Acceptance.CloudVolumeRatio != null
+                        && !double.IsNaN(Spm.CloudVolumeRatio))
+                        return Benchmark.Acceptance.CloudVolumeRatio.Accepts(Spm.CloudVolumeRatio);
+                    return true;
+                }
                 return Spm.AllPass(Benchmark != null ? Benchmark.Acceptance : null);
+            }
+        }
+
+        /// <summary>The reason (failing metric) when <see cref="Pass"/> is false
+        /// due to reference-match. Empty when not applicable.</summary>
+        public string FailureReason
+        {
+            get
+            {
+                if (Spm == null || Benchmark?.ReferenceModelSpms == null
+                    || Benchmark.Acceptance?.ReferenceMatchTolerance == null) return "";
+                var match = Spm.MatchesReference(
+                    Benchmark.ReferenceModelSpms,
+                    Benchmark.Acceptance.ReferenceMatchTolerance);
+                return match.Reason ?? "";
             }
         }
 

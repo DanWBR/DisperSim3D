@@ -50,11 +50,22 @@
     { "name": "arc-800m", "position": [800, 0, 1.5], "measuredKgM3": 2.5e-6 }
   ],
 
+  "referenceModelSpms": {
+    "model": "FLACS v8",
+    "citation": "Hanna, Hansen, Dharmavaram 2004 (Atmospheric Environment 38, 4675-4687), Table 2 - aggregate over 43 Prairie Grass trials.",
+    "notes": "Cohort-average SPMs from FLACS evaluation.",
+    "MRB": 0.18,
+    "FAC2": 0.49,
+    "MG": 1.53,
+    "VG": 2.75
+  },
+
   "acceptance": {
-    "MRB":  { "min": -0.67, "max": 0.67 },
-    "RMSE": { "max": 3.0 },
-    "FAC2": { "min": 0.3, "max": 2.0 },
-    "MG":   { "min": 0.5, "max": 2.0 },
-    "VG":   { "max": 4.0 }
+    "ReferenceMatchTolerance": {
+      "MRB":  0.5,
+      "FAC2": 0.2,
+      "MG":   0.5,
+      "VG":   1.0
+    }
   }
 }

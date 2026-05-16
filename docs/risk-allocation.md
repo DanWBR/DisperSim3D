@@ -24,7 +24,7 @@ Covering Problem, see [Dispersion Studies &amp; Detector Allocation](studies-det
 |---|---|
 | **Set Covering** (Vianna 2019) | One simulation, want the minimum detector count |
 | **Greedy Max Coverage** | Many simulations, every cloud has equal importance |
-| **Greedy Min Residual Risk** (this page) | Many simulations, scenarios differ in frequency and consequence — typical for QRA detector siting |
+| **Greedy Min Residual Risk** (this page) | Many simulations, scenarios differ in frequency and consequence  -  typical for QRA detector siting |
 
 ## Mathematical formulation
 
@@ -44,7 +44,7 @@ c^{\star} \;=\; \arg\max_{c}
   R_s \cdot w(c, s)
 $$
 
-With distance weighting **off**, $w(c, s) \equiv 1$ — every cloud within
+With distance weighting **off**, $w(c, s) \equiv 1$  -  every cloud within
 the detection radius is "fully covered".
 
 With distance weighting **on** (Rad &amp; Rashtchian 2016):
@@ -54,8 +54,8 @@ w(c, s) \;=\; w_{\min} + (w_{\max} - w_{\min}) \cdot
               \left(1 - \frac{d(c, s)}{R_{\mathrm{det}}}\right)
 $$
 
-where $d(c, s)$ is the candidate-to-cloud-bbox closest-point distance — a
-cheap proxy that preserves the monotonic "closer is better" property — and
+where $d(c, s)$ is the candidate-to-cloud-bbox closest-point distance  -  a
+cheap proxy that preserves the monotonic "closer is better" property  -  and
 $R_{\mathrm{det}}$ is the configured `DetectionRadius`. With defaults
 $w_{\min} = 0.5$ and $w_{\max} = 1.0$, a detector right on the edge of the
 radius contributes half of a detector at the cloud centre.
@@ -66,7 +66,7 @@ Approximation guarantee versus the exact MILP solution:
 $1 - 1/e \approx 0.63$ worst case (Nemhauser et al. 1978), typically less
 than $5\%$ gap on industrial cases per Rad 2017.
 
-A **risk-reduction curve** $(k, \mathrm{RRF})$ is captured after every pick — the
+A **risk-reduction curve** $(k, \mathrm{RRF})$ is captured after every pick  -  the
 "marginal utility" plot from Rad 2017 Fig. 7. The knee of that curve tells
 you when adding more detectors stops paying off in risk terms.
 
@@ -74,19 +74,19 @@ you when adding more detectors stops paying off in risk terms.
 
 Per scenario $s$:
 
-- $f_s$ — frequency in events / year. Comes from **auto** (IOGP × wind
+- $f_s$  -  frequency in events / year. Comes from **auto** (IOGP × wind
   rose, default) or **manual** override in the dialog grid.
-- $c_s$ — consequence weight (positive scalar, relative severity).
+- $c_s$  -  consequence weight (positive scalar, relative severity).
   Auto-derived from cloud volume × hazard, or manual.
-- $P_d$ — global detection probability (single dialog field, default $1.0$).
+- $P_d$  -  global detection probability (single dialog field, default $1.0$).
 
 Per candidate detector:
 
 - Position $(x, y, z)$ in the $[\mathrm{MinZ},\ \mathrm{MaxZ}]$ breathing zone.
-- $R_{\mathrm{det}}$ — sphere radius within which a cloud is considered
+- $R_{\mathrm{det}}$  -  sphere radius within which a cloud is considered
   covered (`DetectionRadiusM`).
 
-## Auto frequency — IOGP × wind rose
+## Auto frequency  -  IOGP × wind rose
 
 The default $f_s$ for a simulation is:
 
@@ -102,7 +102,7 @@ field, in degrees.
 ### IOGP 434-01 leak-frequency database
 
 `source.EffectiveLeakFrequencyPerYear` is computed from the source's
-**equipment inventory** — a list of equipment items contributing to the
+**equipment inventory**  -  a list of equipment items contributing to the
 release scenario. Each item carries (type, nominal diameter, count). For
 pipe types the "count" is total length in metres; for everything else it's
 the number of items.
@@ -205,11 +205,11 @@ From coarse to fine, the user can take control:
 
 1. **Manual `ScenarioRisk.Freq`** (per-simulation, in the allocation dialog grid).
 2. **Manual `ReleaseSource3D.LeakFrequencyPerYear`** (per-source, uncheck `AutoComputeLeakFrequency`).
-3. **IOGP inventory** (default) — `AutoComputeLeakFrequency = true`.
+3. **IOGP inventory** (default)  -  `AutoComputeLeakFrequency = true`.
 
 Levels 1 and 2 take precedence when set.
 
-## Auto consequence — cloud volume × hazard
+## Auto consequence  -  cloud volume × hazard
 
 For each cloud snapshot the allocator computes the cell volume from the
 domain dimensions and the cloud volume from the flagged-cell count:
@@ -249,7 +249,7 @@ Manual override via `ScenarioRisk.ConsMode = Manual`.
 
 ## UI walkthrough
 
-### Step 1 — equipment inventory per source
+### Step 1  -  equipment inventory per source
 
 Right-click a release source in the project tree → **"Equipment Inventory
 (IOGP)..."**.
@@ -260,9 +260,9 @@ In the dialog:
   release scenario (Medium = 10–50 mm is the default).
 - **Add item** to insert inventory rows. Each row has:
   - **Type** combo of the 24 IOGP categories.
-  - **Diameter (mm)** — 50, 150, 300, 450, 600, 900 (anchors) or any value
+  - **Diameter (mm)**  -  50, 150, 300, 450, 600, 900 (anchors) or any value
     in between.
-  - **Count / Length (m)** — metres for pipe types, count for everything
+  - **Count / Length (m)**  -  metres for pipe types, count for everything
     else.
   - Free-text **Note**.
 - The bottom **Effective** label shows the computed leak frequency live
@@ -271,13 +271,13 @@ In the dialog:
 
 OK commits the inventory to the source; Cancel reverts.
 
-### Step 2 — dispersion study
+### Step 2  -  dispersion study
 
 Right-click **Dispersion Studies → Add Study...** and pick the simulations
 plus the detection criterion (e.g. PercentLFL ≥ 50). The clouds used by the
 allocator are the final-snapshot iso-volumes at this threshold.
 
-### Step 3 — risk allocation
+### Step 3  -  risk allocation
 
 Right-click **Detector Allocations → Add Allocation...** Pick the study,
 then in the new **Strategy** radio group at the top of settings:
@@ -289,15 +289,15 @@ then in the new **Strategy** radio group at the top of settings:
   - `Simulation` (read-only)
   - `Freq Auto` checkbox + `Freq/yr` cell (read-only when Auto)
   - `Cons Auto` checkbox + `Consequence` cell (read-only when Auto)
-  - `Risk R_s` (read-only — the computed `freq × cons × P_d`)
+  - `Risk R_s` (read-only  -  the computed `freq × cons × P_d`)
 - Knob row: `Detector POD`, `Distance weight` checkbox + `Wmin/Wmax`.
 
 Click **Run allocation**. The results panel surfaces:
 
 - **Total risk** $\sum_s R_s$ across all scenarios.
 - **Residual** risk after the chosen positions.
-- **RRF** as a percentage — the headline number for stakeholders.
-- A small `(K, RRF)` ListView — the marginal-utility curve. Look for the
+- **RRF** as a percentage  -  the headline number for stakeholders.
+- A small `(K, RRF)` ListView  -  the marginal-utility curve. Look for the
   knee.
 
 The per-cloud ListView gains a `Residual R_s` column showing which
@@ -322,7 +322,7 @@ All numeric serialisation goes through `CultureInfo.InvariantCulture`.
 
 | Limitation | Workaround / future work |
 |---|---|
-| Greedy worst-case approximation 63% | Add an LP solver (e.g. Google.OrTools) for exact MILP — out of scope for v1 |
+| Greedy worst-case approximation 63% | Add an LP solver (e.g. Google.OrTools) for exact MILP  -  out of scope for v1 |
 | Single global `DetectionProbability` scalar | No per-detector POD curves yet |
 | Consequence is volume × hazard heuristic | Probit-fatality / TNT overpressure left for future |
 | Only IOGP 2006–2015 dataset embedded | 1992–2015 historical dataset not bundled |
@@ -341,15 +341,15 @@ mean hole sizes. All 27 assertions must pass.
 
 - **Rad, A., Rashtchian, D. &amp; Badri, N.** (2017). *A risk-based methodology
   for optimum placement of flammable gas detectors.* Process Safety and
-  Environmental Protection, 105, 175–183. — the MRR greedy implemented by
+  Environmental Protection, 105, 175–183.  -  the MRR greedy implemented by
   `RunRiskReductionGreedy`.
 - **Rad, A. &amp; Rashtchian, D.** (2016). *A new approach for optimal placement
-  of gas detectors.* Chemical Engineering Transactions, 53, 145–150. — the
+  of gas detectors.* Chemical Engineering Transactions, 53, 145–150.  -  the
   distance-weighted refinement.
 - **IOGP Report 434-01** (2019, rev 1.1 May 2021). *Risk Assessment Data
-  Directory — Process Release Frequencies.* International Association of
+  Directory  -  Process Release Frequencies.* International Association of
   Oil &amp; Gas Producers.
   [iogp.org](https://www.iogp.org/bookstore/product/risk-assessment-data-directory-process-release-frequencies/).
 - **Nemhauser, G., Wolsey, L. &amp; Fisher, M.** (1978). *An analysis of
   approximations for maximizing submodular set functions.* Mathematical
-  Programming, 14 (1), 265–294. — origin of the `(1 − 1/e)` greedy bound.
+  Programming, 14 (1), 265–294.  -  origin of the `(1 − 1/e)` greedy bound.

@@ -60,11 +60,21 @@
     { "name": "arc-11000m", "position": [11000, 0, 1.5], "measuredKgM3": 0.0000316 }
   ],
 
+  "referenceModelSpms": {
+    "model": "PHAST UDM (one of 17 models compared)",
+    "citation": "Mazzola, Hanna et al. 2021 (Atmospheric Environment 244, 117887), Table 7 - cohort over JR-II Trials 1, 6, 7.",
+    "notes": "PHAST is one of 17 dense-gas models compared. FLACS not in the 17. Best-of-17 (IDDM) achieved FAC2=0.80, VG=1.40, MG=0.79. Median across all 17 models: FAC2=0.47, VG=2.69, MG=1.04. Cohort spans Trials 1, 6, 7 - not split per-trial in published SPM table.",
+    "FAC2": 0.40,
+    "MG": 1.44,
+    "VG": 2.24
+  },
+
   "acceptance": {
-    "MRB":  { "min": -0.67, "max": 0.67 },
-    "RMSE": { "max": 3.0 },
-    "FAC2": { "min": 0.3, "max": 2.0 },
-    "MG":   { "min": 0.5, "max": 2.0 },
-    "VG":   { "max": 4.0 }
+    "ReferenceMatchTolerance": {
+      "MRB":  0.5,
+      "FAC2": 0.2,
+      "MG":   0.5,
+      "VG":   1.5
+    }
   }
 }

@@ -1,0 +1,85 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "MUST-Trial11",
+  "citation": "Biltoft, C.A. (2001). Customer report for Mock Urban Setting Test. DPG WDTC-FR-01-121. Yee, E. & Biltoft, C.A. (2004). Concentration fluctuation measurements in a plume dispersing through a regular array of obstacles. Boundary-Layer Meteorology 111, 363-415. Trial 11 parameters from Hanna, Hansen & Dharmavaram (2004) Atmospheric Environment 38, 4675-4687.",
+  "description": "Mock Urban Setting Test (MUST), Trial 11. Continuous propylene tracer released near the upwind edge of a regular array of 120 ISO shipping containers at Dugway Proving Ground. The array has 12 rows along the wind direction by 10 columns crosswind, each container 12.2 m long (crosswind) x 2.42 m wide (along wind) x 2.54 m tall, with centre-to-centre spacing of 12.9 m in both directions. Wind around 7 m/s at 4 m height, near-neutral stability. The container array is generated programmatically by MustGeometryBuilder; no external CAD file is needed. ROLE: regression baseline for the obstacle pipeline. Sensor reference values were captured from a known-good run of the FluidX3D buoyant tracer (480 cubed wind LBM with 120 voxelised containers, 240 cubed tracer engine). The bench therefore catches any future drift in the obstacle voxelisation, the wind LBM through obstacles, or the tracer advection. It does NOT validate against the experimental ground truth in Biltoft 2001 (WDTC-FR-01-121, restricted), and the 25 m sensor sits in a narrow gap between containers where the voxel resolution drives a depleted prediction (kept in the bench to detect voxel-artifact regressions).",
+
+  "source": {
+    "name": "MUST T11 propylene tracer",
+    "gas": {
+      "name": "Propylene",
+      "molarMass": 0.04208,
+      "lfl": 0,
+      "ufl": 0,
+      "isCryogenic": false
+    },
+    "position": [-50, 0, 1.8],
+    "releaseRateKgPerS": 0.200,
+    "releaseDurationS": 200,
+    "stackDiameterM": 0.05,
+    "exitTemperatureK": 295,
+    "exitVelocityMPerS": 5
+  },
+
+  "meteo": {
+    "windSpeed": 7.0,
+    "windDirectionDeg": 270,
+    "stability": "D",
+    "ambientTemperature": 295,
+    "ambientPressure": 87000,
+    "windMeasurementHeightM": 4,
+    "roughnessLengthM": 0.05
+  },
+
+  "domain": {
+    "sizeM": 200,
+    "gridResolution": 120,
+    "durationS": 120,
+    "timeStepS": 0.5
+  },
+
+  "solver": "FluidX3DDispersion",
+  "concentrationKind": "PeakOverTime",
+  "concentrationField": "C3H6",
+  "unit": "MassFraction",
+
+  "obstacleArray": {
+    "type": "must",
+    "rows": 12,
+    "columns": 10,
+    "spacingAlongWindM": 12.9,
+    "spacingCrosswindM": 12.9,
+    "containerLengthM": 12.2,
+    "containerWidthM": 2.42,
+    "containerHeightM": 2.54,
+    "centerX": 0,
+    "centerY": 0,
+    "groundZ": 0
+  },
+
+  "sensors": [
+    { "name": "downwind-25m",  "position": [25,  0, 1.6], "measuredKgM3": 1.96e-6 },
+    { "name": "downwind-50m",  "position": [50,  0, 1.6], "measuredKgM3": 4.07e-5 },
+    { "name": "downwind-100m", "position": [100, 0, 1.6], "measuredKgM3": 4.55e-5 },
+    { "name": "downwind-150m", "position": [150, 0, 1.6], "measuredKgM3": 3.47e-5 }
+  ],
+
+  "referenceModelSpms": {
+    "model": "FLACS v8",
+    "citation": "Hanna, Hansen, Dharmavaram 2004 (Atmospheric Environment 38, 4675-4687), Table 2 - aggregate over 37 MUST trials.",
+    "notes": "FLACS aggregate on MUST cohort. Per-trial concentration tables for trial 11 are in Biltoft 2001 DPG WDTC-FR-01-121 (restricted). Sensor values here are regression baselines captured from a known-good FluidX3D buoyant tracer run; the comparison against FLACS uses the SPMs DisperSim achieves against those baselines.",
+    "MRB": 0.53,
+    "FAC2": 0.64,
+    "MG": 1.57,
+    "VG": 1.69
+  },
+
+  "acceptance": {
+    "ReferenceMatchTolerance": {
+      "MRB":  0.5,
+      "FAC2": 0.2,
+      "MG":   0.5,
+      "VG":   1.0
+    }
+  }
+}

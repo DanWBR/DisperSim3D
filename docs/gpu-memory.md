@@ -12,9 +12,9 @@ nav_order: 9
 
 Open via **Settings → GPU &amp; Memory...**. Two tabs:
 
-- **Compute GPU** — lists the OpenCL devices DisperSim 3D can see and lets
+- **Compute GPU**  -  lists the OpenCL devices DisperSim 3D can see and lets
   you pin the FluidX3D solvers to a specific GPU.
-- **Memory Estimator** — sizes RAM, VRAM and disk for a given solver +
+- **Memory Estimator**  -  sizes RAM, VRAM and disk for a given solver +
   grid combination before you commit to a run.
 
 ## Compute GPU tab
@@ -34,12 +34,12 @@ FluidX3D's own `get_devices()` and returns JSON like:
 ```
 
 If the dialog shows "No OpenCL devices reported", check
-`FluidX3DBridge.LastListDevicesError` (logged to the dialog status line) —
+`FluidX3DBridge.LastListDevicesError` (logged to the dialog status line)  - 
 it usually means one of:
 
 - `FluidX3D.dll` is not next to the executable (post-build copy didn't run).
 - The OpenCL ICD loader is not installed or the driver is out of date.
-- The DLL is loaded by a previous process and was rebuilt in place — close
+- The DLL is loaded by a previous process and was rebuilt in place  -  close
   and restart the app.
 
 ### Pinning a device
@@ -51,7 +51,7 @@ All four FluidX3D runners read that setting on `Start` and call
 sessions via the standard `AppSettings` save path.
 
 You can also override on a per-run basis from the simulation editor when
-needed — but for most workflows pinning the higher-VRAM card once is the
+needed  -  but for most workflows pinning the higher-VRAM card once is the
 right answer.
 
 ## Memory Estimator tab
@@ -71,12 +71,12 @@ The numbers below are conservative compile-time constants in
 | FluidX3D D3Q19 FP32 baseline | 93 B (VRAM) |
 | `+ TEMPERATURE` extension | +32 B (VRAM, unused but allocated) |
 | `+ SUBGRID` LES | +24 B (VRAM) |
-| CPU `DispersionTracerEngine` | 41 B (RAM) — concentration + obstacles + scratch |
-| CPU `FireTracerEngine` | 57 B (RAM) — smoke + T + obstacles + scratch |
+| CPU `DispersionTracerEngine` | 41 B (RAM)  -  concentration + obstacles + scratch |
+| CPU `FireTracerEngine` | 57 B (RAM)  -  tracer + T + obstacles + scratch |
 | OpenFOAM steady (`simpleFoam`) | ~150 B per cell on disk |
 | OpenFOAM transient reactive | ~450 B per cell per write |
 
-These are upper-ish bounds — actual usage is a few % below.
+These are upper-ish bounds  -  actual usage is a few % below.
 
 ### Public API
 
@@ -123,7 +123,7 @@ three numbers scale roughly linearly.
 ### When to consult the estimator
 
 - Before running anything beyond 96³ on a 4 GB GPU.
-- Before creating a `DispersionStudy` with many simulations — the disk
+- Before creating a `DispersionStudy` with many simulations  -  the disk
   footprint times the number of runs adds up fast.
-- Before choosing FluidX3DFire vs FluidX3DDispersion — the fire path
+- Before choosing FluidX3DFire vs FluidX3DDispersion  -  the fire path
   carries the temperature field, so its RAM and disk are higher.

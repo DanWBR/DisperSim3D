@@ -25,8 +25,8 @@ reproduce it from a clean clone.
 |---|---|:-:|:-:|:-:|
 | `DisperSim3D` (engine) | `net10.0` + `net10.0-windows` (multi-target) | ✅ | ✅ | ✅ |
 | `DisperSim3D.CLI` (headless) | `net10.0` | ✅ | ✅ | ✅ |
-| `DisperSim3D.UI.Avalonia` (cross-plat smoke) | `net10.0` + Avalonia 11 | ✅ | ✅ (WSLg) | ✅ |
-| `DisperSim3D.UI.Wpf` + `DisperSim3D.App` (WinForms shell) | `net10.0-windows` | ✅ | — | — |
+| `DisperSim3D.UI.Avalonia` (cross-platform verification) | `net10.0` + Avalonia 11 | ✅ | ✅ (WSLg) | ✅ |
+| `DisperSim3D.UI.Wpf` + `DisperSim3D.App` (WinForms shell) | `net10.0-windows` | ✅ |  -  |  -  |
 | `FluidX3D` native library | C++ / OpenCL | `FluidX3D.dll` (MSVC) | `libFluidX3D.so` (g++) | `libFluidX3D.dylib` (g++) |
 
 The Windows-only column is intentional: it's the production-quality desktop
@@ -47,8 +47,8 @@ DisperSim3D.UI.Wpf/                (Windows-only UI library)
 └── net10.0-windows. Holds every type that touches WPF / HelixToolkit /
     HandyControl / DockPanelSuite. References DisperSim3D.
 
-DisperSim3D.UI.Avalonia/           (cross-platform smoke window)
-└── net10.0. Pure Avalonia 11 — a 4-panel proof that the engine works
+DisperSim3D.UI.Avalonia/           (Cross-platform verification window)
+└── net10.0. Pure Avalonia 11  -  a 4-panel proof that the engine works
     behind a non-WPF UI on the same source. References DisperSim3D.
 
 DisperSim3D.CLI/                   (headless runner)
@@ -87,23 +87,23 @@ cd FluidX3D
 ./make-disp-bridge.sh --copy        # → bin/libFluidX3D.so, auto-copied into each .NET output dir
 cd ..
 
-# 3) Headless smoke tests (must all exit 0)
+# 3) headless verification tests (must all exit 0)
 dotnet DisperSim3D.CLI/bin/Release/net10.0/DisperSim3D.CLI.dll --geometry-selftest   # 19/19 PASS
 dotnet DisperSim3D.CLI/bin/Release/net10.0/DisperSim3D.CLI.dll --iogp-selftest       # 27/27 PASS
 dotnet DisperSim3D.CLI/bin/Release/net10.0/DisperSim3D.CLI.dll --list-gpus           # JSON device list
 
-# 4) Avalonia smoke window — opens via WSLg on the Windows desktop
+# 4) Avalonia verification window  -  opens via WSLg on the Windows desktop
 dotnet build DisperSim3D.UI.Avalonia/DisperSim3D.UI.Avalonia.csproj -c Release
 dotnet DisperSim3D.UI.Avalonia/bin/Release/net10.0/DisperSim3D.UI.Avalonia.dll
 ```
 
 For production-speed FluidX3D runs, swap PoCL for the GPU vendor's ICD
-(NVIDIA driver / `intel-opencl-icd` / `amdgpu-install --usecase=opencl`) —
+(NVIDIA driver / `intel-opencl-icd` / `amdgpu-install --usecase=opencl`)  - 
 see [FluidX3D solvers]({{ site.baseurl }}/solvers-fluidx3d#building-fluidx3d-on-linux--macos).
 
 ## Validation outputs
 
-### Step 1 — Geometry self-test (`--geometry-selftest`)
+### Step 1  -  Geometry self-test (`--geometry-selftest`)
 
 19 portable `Point3D` / `Vector3D` operators tested against expected values.
 Every line green, exit code 0:
@@ -111,13 +111,13 @@ Every line green, exit code 0:
 ![Geometry self-test passing on WSL2]({{ site.baseurl }}/assets/cross-platform/01-geometry-selftest-wsl2.png)
 
 This proves the engine's portable `DisperSim3D.Geometry.Point3D` and
-`Vector3D` types — which replace `System.Windows.Media.Media3D.*` in the
-engine assembly — produce bit-equivalent results to the WPF originals.
+`Vector3D` types  -  which replace `System.Windows.Media.Media3D.*` in the
+engine assembly  -  produce bit-equivalent results to the WPF originals.
 Constructors, operators, `Length`, `LengthSquared`, `Normalize`, `Negate`,
 `CrossProduct`, `DotProduct`, `AngleBetween`, and the explicit
 `Point3D → Vector3D` cast all match the WPF semantics one-for-one.
 
-### Step 2 — IOGP 434-01 self-test (`--iogp-selftest`)
+### Step 2  -  IOGP 434-01 self-test (`--iogp-selftest`)
 
 27 published values from the IOGP 434-01 (2006–2015) leak-frequency dataset
 round-tripped through the embedded database. All PASS:
@@ -130,7 +130,7 @@ to the 3rd significant digit. The risk-reduction detector allocator
 multiplies these frequencies by consequence severity per cloud, so any
 cross-platform drift here would silently corrupt detector placement.
 
-### Step 3 — FluidX3D OpenCL device probe (`--list-gpus`)
+### Step 3  -  FluidX3D OpenCL device probe (`--list-gpus`)
 
 The native `libFluidX3D.so` (894 KB) builds with g++ from the same source
 that produces `FluidX3D.dll`, with `disp_bridge.cpp` as the C-ABI entry
@@ -159,13 +159,13 @@ This is the full chain: `dotnet` → managed engine → `[DllImport]` →
 `libFluidX3D.so` → FluidX3D `LBM::get_devices()` → OpenCL ICD loader →
 PoCL CPU runtime → results back up the stack as JSON.
 
-### Step 4 — Avalonia smoke window (4 panels, all green)
+### Step 4  -  Avalonia verification window (4 panels, all green)
 
 The proof-of-concept Avalonia UI. Native window on the Windows desktop via
 WSLg, identical layout the user would get on a bare-metal Linux desktop or
 macOS:
 
-![DisperSim 3D Avalonia smoke — 4 panels all green on WSL2]({{ site.baseurl }}/assets/cross-platform/04-avalonia-all-green-wsl2.png)
+![DisperSim 3D Avalonia verification  -  4 panels all green on WSL2]({{ site.baseurl }}/assets/cross-platform/04-avalonia-all-green-wsl2.png)
 
 Header: `.NET 10.0.7  •  OS Linux/Unix (Ubuntu 24.04 LTS)  •  Avalonia 11.2.3.0  •  cores 32`
 
@@ -173,15 +173,15 @@ Header: `.NET 10.0.7  •  OS Linux/Unix (Ubuntu 24.04 LTS)  •  Avalonia 11.2.
 |---|---|---|
 | Portable geometry self-test | `DisperSim3D.Geometry.*` operators | 19/19 PASS |
 | IOGP 434-01 risk frequency | `IogpFrequencyTable` lookup + checks | 27/27 PASS |
-| FluidX3D — list OpenCL devices | `[DllImport("FluidX3D")]` → C-ABI → OpenCL | JSON device list |
+| FluidX3D  -  list OpenCL devices | `[DllImport("FluidX3D")]` → C-ABI → OpenCL | JSON device list |
 | Engine end-to-end (Gaussian plume) | Gas → Source → Meteo → `GaussianPlumeEngine` → 32³ sweep | `MaxC = 0.000852243 kg/m³` @ `(62.5, 37.5, 0.0) m` |
 
 The plume result is particularly important: it's **32 768 calls** to
-`GaussianPlumeEngine.EvaluateConcentration(x, y, z)` — every one of which
+`GaussianPlumeEngine.EvaluateConcentration(x, y, z)`  -  every one of which
 walks through portable `Point3D`/`Vector3D` arithmetic, Pasquill class D
 stability functions, wind direction rotation, and ground reflection. The
 exact same `MaxC` to all significant digits appears on Windows when the
-same code path is invoked from `DisperSim3D.App` — that's the
+same code path is invoked from `DisperSim3D.App`  -  that's the
 cross-platform-arithmetic guarantee in action.
 
 ## How the port works under the hood
@@ -206,21 +206,21 @@ possible:
    `typeof(...)`. So when the engine declares
    `[Editor("DisperSim3D.Controls.Point3DPropertyEditor, DisperSim3D.UI.Wpf", ...)]`,
    nothing in the engine assembly actually compile-links to the UI editor
-   — the property grid resolves the type by name at runtime.
+    -  the property grid resolves the type by name at runtime.
 4. **`Decoration3D.Model3D` is typed `object`**, not `Model3DGroup`.
    The runtime visual is a WPF object, but the engine never inspects it;
    the UI layer casts on read (`deco.Model3D as Model3DGroup`).
    Serialization is unaffected because the visual is loaded from the
-   `.obj`/`.stl`/`.glb` file path at runtime — it never serializes.
+   `.obj`/`.stl`/`.glb` file path at runtime  -  it never serializes.
 5. **WPF-specific methods on engine types live as extension methods** in
    `DisperSim3D.UI.Wpf.Models`. Call-site syntax is unchanged
    (`deco.ApplyClip()`, `deco.GetWorldTransform()`,
    `boundingBox.Transform(transform3D)`), but the engine assembly has no
    reference to `MeshClipper` or `Transform3D`.
-6. **FluidX3D `[DllImport("FluidX3D")]`** — no extension. .NET adds the
+6. **FluidX3D `[DllImport("FluidX3D")]`**  -  no extension. .NET adds the
    platform-correct suffix and prefix automatically: `FluidX3D.dll` on
    Windows, `libFluidX3D.so` on Linux, `libFluidX3D.dylib` on macOS. The
-   common pitfall is writing `"FluidX3D.dll"` literally — .NET on Linux
+   common pitfall is writing `"FluidX3D.dll"` literally  -  .NET on Linux
    then *never* strips the `.dll` and only tries
    `FluidX3D.dll{,.so}` / `libFluidX3D.dll{,.so}`, none of which match
    the file you built.
@@ -242,9 +242,9 @@ WSL2 introduces a thin layer of overhead vs. bare-metal Linux:
   future Avalonia 3D viewport (OpenTK / Silk.NET), expect some marshalling
   cost.
 
-For development the WSL2 round-trip is excellent — you can edit on
+For development the WSL2 round-trip is excellent  -  you can edit on
 Windows, build on Linux, and the resulting binary lands on the same NTFS
-share both OSs see. For release validation, smoke on a bare-metal Linux
+share both OSs see. For release validation, verification on a bare-metal Linux
 container too.
 
 ## What's next
@@ -254,22 +254,22 @@ prove the engine, the C++ bridge, and a non-WPF UI all hold up together
 on Linux. The remaining work to ship a full Linux/macOS desktop app
 against this foundation is:
 
-1. **3D viewport on Avalonia** — substitute `HelixToolkit.Wpf` with
+1. **3D viewport on Avalonia**  -  substitute `HelixToolkit.Wpf` with
    OpenTK or Silk.NET on top of Avalonia's `OpenGlControlBase`.
-2. **Avalonia dialogs** — port the WPF dialogs in `DisperSim3D.UI.Wpf` to
+2. **Avalonia dialogs**  -  port the WPF dialogs in `DisperSim3D.UI.Wpf` to
    Avalonia 11 XAML. The code-behind logic is mostly pure C# already, so
    this is largely XAML conversion.
-3. **OpenFOAM path detection on Linux** — the runner currently looks for
+3. **OpenFOAM path detection on Linux**  -  the runner currently looks for
    `%APPDATA%\ESI-OpenCFD`; on Linux it should also probe
    `~/OpenFOAM/`, `/opt/openfoam*/`, `/usr/lib/openfoam/`.
-4. **DWSIM thermo on Linux** — `DwsimThermo.cs` is reflection-loaded
+4. **DWSIM thermo on Linux**  -  `DwsimThermo.cs` is reflection-loaded
    (zero compile-time dependency on DWSIM), so it should work
    out-of-the-box once `AppSettings.DwsimInstallPath` points at the
    DWSIM Linux install. Subject to a real test.
-5. **CI on `ubuntu-latest`** — a GitHub Actions workflow that runs
+5. **CI on `ubuntu-latest`**  -  a GitHub Actions workflow that runs
    `--validate benchmarks/` + `--geometry-selftest` + `--iogp-selftest`
    on every PR. Small, deterministic, prevents cross-platform regressions.
 
-None of these are blockers for the existing WinForms experience — they're
+None of these are blockers for the existing WinForms experience  -  they're
 additive. The current state is "engine and CLI fully cross-platform,
 WinForms UI fully functional on Windows" and that holds indefinitely.

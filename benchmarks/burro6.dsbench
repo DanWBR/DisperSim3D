@@ -1,0 +1,58 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "Burro6",
+  "citation": "Koopman, R.P. et al. (1982). LLNL/NWC 1980 LNG spill tests. LLNL UCID-19075. Burro Trial 6. Parameters from PHMSA MVD Rev B 2024 Table 2-8. Sensor values approximated from Hansen et al. 2010 J. Loss Prev. Process Ind. 23 figures.",
+  "description": "Burro Trial 6 - LNG spill on water from 0.61 m pipe. 27.5 m^3 LNG over ~148 s (~80 kg/s effective). Frenchman Flat 1980. Highest wind of the Burro series (9.0 m/s, stability C). Sensors on arcs at 57, 140, 400 m, ~1 m height.",
+
+  "source": {
+    "name": "Burro6 LNG pool",
+    "gas": {
+      "name": "CH4",
+      "molarMass": 0.01604,
+      "lfl": 0,
+      "ufl": 0,
+      "isCryogenic": true
+    },
+    "position": [0, 0, 0.5],
+    "releaseRateKgPerS": 80.0,
+    "releaseDurationS": 148,
+    "stackDiameterM": 17.0,
+    "exitTemperatureK": 111,
+    "exitVelocityMPerS": 0.05
+  },
+
+  "meteo": {
+    "windSpeed": 9.0,
+    "windDirectionDeg": 270,
+    "stability": "C",
+    "ambientTemperature": 309,
+    "ambientPressure": 93000,
+    "windMeasurementHeightM": 2,
+    "roughnessLengthM": 0.0002
+  },
+
+  "domain": {
+    "sizeM": 1000,
+    "gridResolution": 100,
+    "durationS": 250,
+    "timeStepS": 1.0
+  },
+
+  "solver": "RhoReactingBuoyantFoam",
+  "concentrationKind": "PeakOverTime",
+  "unit": "MassFraction",
+
+  "sensors": [
+    { "name": "arc-57m_centerline",  "position": [57,  0, 1.0], "measuredKgM3": 0.025 },
+    { "name": "arc-140m_centerline", "position": [140, 0, 1.0], "measuredKgM3": 0.011 },
+    { "name": "arc-400m_centerline", "position": [400, 0, 1.0], "measuredKgM3": 0.003 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.67, "max": 0.67 },
+    "RMSE": { "max": 3.0 },
+    "FAC2": { "min": 0.3, "max": 2.0 },
+    "MG":   { "min": 0.5, "max": 2.0 },
+    "VG":   { "max": 4.0 }
+  }
+}

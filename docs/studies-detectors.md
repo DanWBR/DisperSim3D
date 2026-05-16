@@ -12,11 +12,11 @@ nav_order: 7
 
 DisperSim 3D supports two related-but-distinct detector-placement workflows:
 
-- **Set Covering Problem (SCP) optimisation** (Vianna 2019) — exact /
+- **Set Covering Problem (SCP) optimisation** (Vianna 2019)  -  exact /
   greedy minimum-cardinality cover over the flammable cloud volume of one
   or more simulations. Long-standing feature, accessed via
   **Dispersion → Optimize Detector Placement...**.
-- **Dispersion Study + Detector Allocation** (newer) — a project-level
+- **Dispersion Study + Detector Allocation** (newer)  -  a project-level
   collection of related simulations bundled into a single **Study**, and a
   greedy **maximum-coverage** allocator that places `K` detectors to cover
   as many clouds as possible. Designed for design-review use cases where
@@ -36,7 +36,7 @@ into a binary "this cell is detectable" mask:
 |---|---|
 | `Name` | display name shown in the tree |
 | `SimulationIds[]` | references to existing `Simulation` entries |
-| `DetectionQuantity` | `ViewFieldProperty` enum — `PercentLfl`, `Ppm`, `MoleFraction`, `MassFraction`, `Temperature`, `ThermalRadiation` |
+| `DetectionQuantity` | `ViewFieldProperty` enum  -  `PercentLfl`, `Ppm`, `MoleFraction`, `MassFraction`, `Temperature`, `ThermalRadiation` |
 | `DetectionThreshold` | the threshold value in the units defined by `DetectionQuantity` |
 
 Example: `DetectionQuantity = PercentLfl`, `DetectionThreshold = 25`
@@ -50,7 +50,7 @@ inside the project XML / `.dsproj` bundle.
 
 For each simulation in the study, `DispersionStudyEngine.LoadClouds` reads
 the **last** concentration timestep (or the steady-state frame, for
-`FluidX3DDispersionSteady`) and builds a **`CloudSnapshot`** — a list of
+`FluidX3DDispersionSteady`) and builds a **`CloudSnapshot`**  -  a list of
 flagged cells together with an axis-aligned bounding box used to short-cut
 the radius test in the allocator (`CellWithinRadius` skips clouds whose
 bbox does not intersect the detector radius sphere).
@@ -91,7 +91,7 @@ the greedy max-coverage allocator.
    accounted for in step 4 before the greedy loop runs.
 
 The allocator is deliberately **greedy max-coverage**, not exact set-cover
-— it scales to thousands of candidates × dozens of clouds without the
+ -  it scales to thousands of candidates × dozens of clouds without the
 combinatorial blow-up of Balas branch-and-bound. For exact minimum-set-cover
 runs use the classic SCP dialog instead.
 
@@ -99,21 +99,21 @@ runs use the classic SCP dialog instead.
 
 After running, the allocation populates:
 
-- `AllocatedPositions[]` — chosen 3-D positions (excluding any pinned
+- `AllocatedPositions[]`  -  chosen 3-D positions (excluding any pinned
   existing detectors).
-- `AchievedCoveragePercent` — fraction of study clouds covered by the final
+- `AchievedCoveragePercent`  -  fraction of study clouds covered by the final
   placement.
-- `PerCloudCovered[]` — boolean per simulation, useful for spotting which
+- `PerCloudCovered[]`  -  boolean per simulation, useful for spotting which
   cloud(s) the greedy didn't reach.
 
 ## Visualisation
 
 `StudyAllocationRenderer`:
 
-- **Per-cloud isosurfaces** — marching-cubes mesh for every simulation in
+- **Per-cloud isosurfaces**  -  marching-cubes mesh for every simulation in
   the study, colour-cycled from a palette so each cloud is distinguishable.
-- **Allocated detectors** — orange spheres at the chosen positions.
-- **Detection radius** — translucent spheres of radius `DetectionRadiusM`
+- **Allocated detectors**  -  orange spheres at the chosen positions.
+- **Detection radius**  -  translucent spheres of radius `DetectionRadiusM`
   drawn around each detector to make coverage gaps visible at a glance.
 
 Toggle the study or the allocation visibility in the tree to drill in.

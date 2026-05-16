@@ -26,7 +26,7 @@ WinForms shell via `ElementHost`. Default controls:
 | Exit current edit mode | `Esc` key |
 
 **Object repositioning by drag is disabled by design.** Geometry positions
-are tied to the snapshots cached for each completed simulation — moving an
+are tied to the snapshots cached for each completed simulation  -  moving an
 object would silently invalidate those results. Use the properties panel on
 the right to edit positions instead.
 
@@ -34,7 +34,7 @@ the right to edit positions instead.
 
 The **View → Camera** menu has named presets (Isometric, Top, Front, Side,
 Free) that snap the camera to canonical orientations. Batch image export
-captures every preset at once and writes PNGs alongside the project file —
+captures every preset at once and writes PNGs alongside the project file  - 
 useful for QA reports.
 
 ## Per-item visibility
@@ -67,10 +67,10 @@ Performance: a 64³ grid renders in ~50 ms; 128³ in ~400 ms on a modern CPU.
 
 Slice planes in XY, XZ or YZ orientation, with one of:
 
-- **Jet** — classic blue-green-yellow-red
-- **Viridis** — perceptually uniform
-- **Inferno** — perceptually uniform, dark background
-- **Coolwarm** — diverging
+- **Jet**  -  classic blue-green-yellow-red
+- **Viridis**  -  perceptually uniform
+- **Inferno**  -  perceptually uniform, dark background
+- **Coolwarm**  -  diverging
 
 The plane is dragged along its normal axis via a property slider or the
 plane handle gizmo (when shown). Texture sampling uses the LRU-cached
@@ -84,13 +84,13 @@ When a wind field scenario is checked in the tree:
 - **Animated arrows** are drawn on a configurable density / colour / opacity
   /length / thickness grid. Animation pulses scale and opacity in sync with
   the playback time.
-- **Streamlines** — particle paths seeded on a regular grid and integrated
+- **Streamlines**  -  particle paths seeded on a regular grid and integrated
   through the velocity field, optionally coloured by concentration when a
   dispersion result is also loaded.
-- **Wind rose** — a polar histogram of wind speed × direction in the bottom
+- **Wind rose**  -  a polar histogram of wind speed × direction in the bottom
   dock, refreshed when the meteo is edited.
 
-All wind-field rendering is read-only — the velocity field comes from the
+All wind-field rendering is read-only  -  the velocity field comes from the
 `WindField3D` that the runner populated, never modified live.
 
 ## Dispersion playback
@@ -103,7 +103,7 @@ Below the viewport, the **playback bar** synchronises:
 - **Frame counter** displays the rendered timestep.
 
 When multiple simulations are checked, all of them advance to the same
-wall-clock time — useful for side-by-side comparison of solvers on the same
+wall-clock time  -  useful for side-by-side comparison of solvers on the same
 source.
 
 **Steady-state runs hide the playback bar entirely.** A `FluidX3DDispersionSteady`
@@ -115,7 +115,7 @@ The view jumps straight to that frame.
 The `GaussianPuffEngine` emits discrete puffs at `PuffIntervalS`. Each puff
 is rendered as a translucent sphere that grows over time (sigma growth).
 The result is a stylised but physically meaningful animation of a transient
-release — handy for non-technical stakeholders.
+release  -  handy for non-technical stakeholders.
 
 ## Thermal radiation
 

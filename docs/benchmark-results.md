@@ -32,8 +32,8 @@ Exit code 0 = every metric inside its acceptance range.
 
 | # | Benchmark | Solver | Gas | Status | Notes |
 |---|---|---|---|---|---|
-| 1 | Gauss-D-smoketest | GaussianPlume | tracer | **PASS** | Self-consistency |
-| 2 | Gauss-Puff-smoketest | GaussianPuff | tracer | **PASS** | Self-consistency |
+| 1 | Gauss-D-selftest | GaussianPlume | tracer | **PASS** | Self-consistency |
+| 2 | Gauss-Puff-selftest | GaussianPuff | tracer | **PASS** | Self-consistency |
 | 3 | Prairie Grass Run 7 (B) | GaussianPlume | SO2 | FAIL | B-class σ_z long-range overshoot |
 | 4 | Prairie Grass Run 11 (C) | GaussianPlume | SO2 | FAIL | PGT underprediction |
 | 5 | Prairie Grass Run 22 (D) | GaussianPlume | SO2 | FAIL | Marginal (MG=2.025) |
@@ -75,7 +75,7 @@ The heavy-gas / pressurized failures (DT4, JR I/II, Thorney Island,
 Kit Fox, CO2PipeHaz) are out-of-scope for the current Gaussian and
 FluidX3D-single-phase engines. The `TwoPhaseSourceCalculator`
 infrastructure has been built but, used alone, removes rainout mass
-without pool re-evaporation and makes predictions worse — see the
+without pool re-evaporation and makes predictions worse  -  see the
 [two-phase discussion](validation.md#two-phase-pressurized-source-opt-in)
 in the validation guide.
 
@@ -84,9 +84,9 @@ DAT632 and Burro 9 experimental data (see [GPU LBM cross-validation](#gpu-lbm-cr
 
 ---
 
-## 1. Gaussian Plume smoketest
+## 1. Gaussian Plume self-consistency test
 
-Self-consistency regression test for `GaussianPlumeEngine` with
+Self-consistency test for `GaussianPlumeEngine` with
 Pasquill-Gifford-Turner sigma coefficients.
 
 ### Configuration
@@ -124,9 +124,9 @@ at measurement height (10 m).
 
 ---
 
-## 2. Gaussian Puff smoketest
+## 2. Gaussian Puff self-consistency test
 
-Self-consistency regression test for `GaussianPuffEngine` with Slade (1968)
+Self-consistency test for `GaussianPuffEngine` with Slade (1968)
 puff coefficients and the `StepTo` transient loop.
 
 ### Configuration
@@ -171,10 +171,10 @@ Dispersion coefficients: Briggs (1973) open-country power-law fits
 (sigma_y = ay * x^by, sigma_z = az * x^bz). Wind evaluated at
 `max(H, WindMeasurementHeightM)` per PGT calibration convention.
 
-Acceptance criteria: Chang & Hanna (2004) for external validation —
+Acceptance criteria: Chang & Hanna (2004) for external validation  - 
 MRB within +/-0.67, MG within [0.5, 2.0], VG < 4.0, FAC2 >= 0.3.
 
-### 3. Run 7 — Stability B (unstable)
+### 3. Run 7  -  Stability B (unstable)
 
 | Parameter | Value |
 |---|---|
@@ -202,7 +202,7 @@ MRB within +/-0.67, MG within [0.5, 2.0], VG < 4.0, FAC2 >= 0.3.
 causing systematic overprediction at long range (800 m: 5.4x). This is a
 known limitation of the Briggs B-class parameterisation.
 
-### 4. Run 11 — Stability C (slightly unstable)
+### 4. Run 11  -  Stability C (slightly unstable)
 
 | Parameter | Value |
 |---|---|
@@ -230,7 +230,7 @@ known limitation of the Briggs B-class parameterisation.
 power-law sigmas spread too rapidly for this specific wind speed / stability
 combination, diluting the plume more than observed.
 
-### 5. Run 22 — Stability D (neutral)
+### 5. Run 22  -  Stability D (neutral)
 
 | Parameter | Value |
 |---|---|
@@ -257,7 +257,7 @@ combination, diluting the plume more than observed.
 **Result: FAIL** (marginal). MG = 2.025 barely exceeds the 2.0 limit.
 Same pattern as C-class: systematic underprediction increasing with distance.
 
-### 6. Run 29 — Stability E (slightly stable)
+### 6. Run 29  -  Stability E (slightly stable)
 
 | Parameter | Value |
 |---|---|
@@ -284,7 +284,7 @@ Same pattern as C-class: systematic underprediction increasing with distance.
 **Result: PASS.** All 5 sensors within FAC2. Slight overprediction
 (1.4x-1.9x) typical of Gaussian models in stable conditions.
 
-### 7. Run 35 — Stability E (stable, low wind)
+### 7. Run 35  -  Stability E (stable, low wind)
 
 | Parameter | Value |
 |---|---|
@@ -309,7 +309,7 @@ Same pattern as C-class: systematic underprediction increasing with distance.
 | VG | 1.265 | < 4.0 | Y |
 
 **Result: PASS.** Low-wind stable case. Near-field overprediction (50 m:
-1.4x) transitions to underprediction at 200-400 m — typical for Gaussian
+1.4x) transitions to underprediction at 200-400 m  -  typical for Gaussian
 models where plume meander is not captured.
 
 ### Prairie Grass discussion
@@ -368,7 +368,7 @@ ATDL Contribution File No. 79, NOAA.
 
 ---
 
-## 8. Burro 9 — OpenFOAM
+## 8. Burro 9  -  OpenFOAM
 
 LNG cryogenic spill on water, neutrally stratified ABL. Koopman et al. 1982;
 Vu 2019 section 5.4. Regression baselines from `rhoReactingBuoyantFoam`
@@ -417,7 +417,7 @@ Koopman experiments.
 
 ---
 
-## 9. Burro 8 — OpenFOAM
+## 9. Burro 8  -  OpenFOAM
 
 Most stable ABL of the Burro series (Pasquill F, U = 1.8 m/s). Confirms
 `buoyantKEpsilon` survives stable stratification + low wind. Same Sct = 1.0
@@ -456,7 +456,7 @@ limitation as Burro 9.
 
 ---
 
-## 10. DAT632 — Hamburg wind tunnel (OpenFOAM)
+## 10. DAT632  -  Hamburg wind tunnel (OpenFOAM)
 
 SF6 release on 8.6-degree slope. Mack & Spruijt 2013. Quasi-laminar
 (Re_l ~ 15 000). Exercises the C_eps3 = -0.33 buoyancy treatment and the
@@ -497,7 +497,7 @@ SF6 species path.
 
 ---
 
-## 11. Gant & Ivings 2005 — FluidX3D
+## 11. Gant & Ivings 2005  -  FluidX3D
 
 High-pressure CH4 sonic jet from 10.5 mm orifice at 5.0 bar / 250 K.
 Buoyant tracer engine with 3x grid resolution (180x180x90), BFECC
@@ -617,16 +617,16 @@ The eleven `.dsbench` files bundled with DisperSim 3D serve three distinct roles
    SPMs are perfect (MRB = 0, FAC2 = 1). Catches any change in the engine's
    numerical code.
 
-2. **Experimental validation — Gaussian plume** (benchmarks 3-7): the
+2. **Experimental validation  -  Gaussian plume** (benchmarks 3-7): the
    GaussianPlumeEngine is compared against Project Prairie Grass field data
    (Barad 1958). Acceptance per Chang & Hanna (2004). E-stability runs pass;
    B/C/D runs fail within documented Gaussian model limitations.
 
-3. **Regression baselines — CFD** (benchmarks 8-11): observed values from
+3. **Regression baselines  -  CFD** (benchmarks 8-11): observed values from
    the current OpenFOAM / FluidX3D pipeline. Any change in the case writer,
    mesh, or solver that alters predictions will break these tests.
 
-4. **Experimental cross-validation — GPU LBM** (below): FluidX3D is compared
+4. **Experimental cross-validation  -  GPU LBM** (below): FluidX3D is compared
    against original cited measurements. These SPM values are non-trivial and
    demonstrate the engine's physical accuracy.
 

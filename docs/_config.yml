@@ -1,6 +1,6 @@
 # Jekyll configuration for the DisperSim 3D GitHub Pages site.
 #
-# Theme: Just the Docs (remote theme — no local build required, GitHub Pages
+# Theme: Just the Docs (remote theme  -  no local build required, GitHub Pages
 #        compiles server-side).
 # Source: /docs (configure under Settings → Pages → "Deploy from a branch" →
 #         Branch: main, Folder: /docs).

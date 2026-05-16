@@ -1832,6 +1832,17 @@ namespace DisperSim3D.Core
             string modelName = useBuoyantModel ? "buoyantKEpsilon" : "kEpsilon";
             sb.AppendFormat(Inv, "    RASModel        {0};\n    turbulence      on;\n    printCoeffs     on;\n", modelName);
 
+            // Sct/Prt go INSIDE the model-coeffs block. OpenFOAM v2206+ reads the
+            // turbulent Schmidt number from there for species transport and the
+            // turbulent Prandtl number for energy. Without these entries the
+            // solvers fall back to defaults that hard-code Sct = Prt = 1, which
+            // for LNG/dense-gas dispersion under-predicts experiments by ~3x
+            // (Vu 2019 reached experimental FAC2 = 1.0 with Sct = 0.15).
+            double sct = cfd != null && cfd.TurbulentSchmidtNumber > 0
+                ? cfd.TurbulentSchmidtNumber : 0.7;
+            double prt = cfd != null && cfd.TurbulentPrandtlNumber > 0
+                ? cfd.TurbulentPrandtlNumber : 0.85;
+
             if (cfd != null && cfd.UseAtmosphericBL)
             {
                 double sigmaEps = cfd.KEpsilonSigmaEpsilon > 0 ? cfd.KEpsilonSigmaEpsilon : 1.3;
@@ -1842,6 +1853,8 @@ namespace DisperSim3D.Core
                     sb.Append("        sigmak          1.0;\n");
                     sb.AppendFormat(Inv, "        sigmaEps        {0};\n", sigmaEps);
                     sb.AppendFormat(Inv, "        Ceps3           {0};\n", cfd.BuoyancyEpsCoefficient.Value);
+                    sb.AppendFormat(Inv, "        Prt             {0};\n", prt);
+                    sb.AppendFormat(Inv, "        Sct             {0};\n", sct);
                     sb.Append("    }\n");
                 }
                 else
@@ -1850,8 +1863,19 @@ namespace DisperSim3D.Core
                     sb.Append("        Cmu             0.09;\n        C1              1.44;\n        C2              1.92;\n");
                     sb.Append("        sigmak          1.0;\n");
                     sb.AppendFormat(Inv, "        sigmaEps        {0};\n", sigmaEps);
+                    sb.AppendFormat(Inv, "        Prt             {0};\n", prt);
+                    sb.AppendFormat(Inv, "        Sct             {0};\n", sct);
                     sb.Append("    }\n");
                 }
+            }
+            else if (cfd != null)
+            {
+                // No atmospheric-BL extras requested, but the user did set Sct/Prt:
+                // still write the coeffs block so they take effect.
+                sb.AppendFormat(Inv, "    {0}\n    {{\n", useBuoyantModel ? "buoyantKEpsilonCoeffs" : "kEpsilonCoeffs");
+                sb.AppendFormat(Inv, "        Prt             {0};\n", prt);
+                sb.AppendFormat(Inv, "        Sct             {0};\n", sct);
+                sb.Append("    }\n");
             }
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "constant", "turbulenceProperties"), sb.ToString());

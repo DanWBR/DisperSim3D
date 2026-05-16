@@ -2,7 +2,7 @@
 layout: default
 title: Home
 nav_order: 1
-description: "DisperSim 3D — interactive 3D gas dispersion analysis for process safety."
+description: "DisperSim 3D  -  interactive 3D gas dispersion analysis for process safety."
 permalink: /
 ---
 
@@ -24,23 +24,23 @@ placement.
 
 DisperSim 3D is a .NET 10 desktop application for simulating accidental gas
 releases and their atmospheric dispersion in industrial environments. The
-**WinForms + WPF desktop UI is Windows-only**, but everything else —
+**WinForms + WPF desktop UI is Windows-only**, but everything else  - 
 **the calculation engine, the FluidX3D GPU bridge, the headless CLI, and an
-Avalonia cross-platform UI smoke** — runs on Windows, Linux and macOS from
+Avalonia cross-platform UI verification**  -  runs on Windows, Linux and macOS from
 the same source. The engine multi-targets `net10.0;net10.0-windows`, the
-CLI and Avalonia smoke are plain `net10.0`, and FluidX3D builds as
+CLI and Avalonia verification are plain `net10.0`, and FluidX3D builds as
 `libFluidX3D.so` / `.dylib` from the same C++ sources that produce the
-Windows `FluidX3D.dll`. Validated end-to-end on Ubuntu 24.04 / WSL2 — see
+Windows `FluidX3D.dll`. Validated end-to-end on Ubuntu 24.04 / WSL2  -  see
 [Getting started](getting-started) for the cross-platform recipe.
 
 It combines three solver families inside a single project-centric workflow:
 
-- **Analytical** — Gaussian puff, Gaussian plume, Briggs plume rise, TNO
+- **Analytical**  -  Gaussian puff, Gaussian plume, Briggs plume rise, TNO
   Yellow Book jets, Birch &amp; Schefer expanded source for sonic releases.
-- **CFD with OpenFOAM v2512+** — `simpleFoam`, `pimpleFoam`,
+- **CFD with OpenFOAM v2512+**  -  `simpleFoam`, `pimpleFoam`,
   `buoyantPimpleFoam`, `rhoReactingBuoyantFoam` and friends, with Fiates &amp;
   Vianna 2016 / Vu 2019 / Mack &amp; Spruijt 2013 atmospheric BCs baked in.
-- **GPU LBM with FluidX3D** — wind field, dispersion, steady-state dispersion
+- **GPU LBM with FluidX3D**  -  wind field, dispersion, steady-state dispersion
   and fire-plume runners that finish in seconds on a consumer GPU. Multi-GPU
   selection via the **Compute GPU** dialog.
 
