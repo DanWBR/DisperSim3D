@@ -102,6 +102,36 @@ namespace DisperSim3D.Validation
         public double StackDiameterM { get; set; }
         public double ExitTemperatureK { get; set; }
         public double ExitVelocityMPerS { get; set; }
+
+        /// <summary>Optional two-phase pressurized-release specification. When present,
+        /// <see cref="TwoPhase"/>.<see cref="BenchmarkTwoPhase.Enabled"/> may be true to
+        /// have <see cref="ValidationRunner"/> pre-process the source via
+        /// <see cref="Core.TwoPhaseSourceCalculator"/>: the dispersion engine then sees
+        /// only the vapor mass flow (with rainout subtracted) at the Birch pseudo-source
+        /// geometry, instead of the raw total mass flow.</summary>
+        public BenchmarkTwoPhase TwoPhase { get; set; }
+    }
+
+    /// <summary>Pressurized two-phase release recipe (Cl2/NH3/CO2 liquid storage etc.).
+    /// Vessel state + orifice → mass flow + vapor fraction (Clapeyron) → vapor source.</summary>
+    public class BenchmarkTwoPhase
+    {
+        /// <summary>When true the runner replaces <see cref="BenchmarkSource.ReleaseRateKgPerS"/>
+        /// and friends with the flash-corrected vapor source before invoking the engine.</summary>
+        public bool Enabled { get; set; }
+
+        /// <summary>Compound name as recognised by the built-in flash table
+        /// (e.g. "Carbon dioxide", "Ammonia", "Chlorine", "Methane", "Propane").
+        /// Defaults to <see cref="BenchmarkGas.Name"/> when null.</summary>
+        public string CompoundName { get; set; }
+
+        public double VesselPressurePa { get; set; } = 1e6;
+        public double VesselTemperatureK { get; set; } = 293.15;
+        public double OrificeDiameterM { get; set; } = 0.025;
+        public double DischargeCoefficient { get; set; } = 0.65;
+
+        /// <summary>Birch &amp; Schefer pseudo-source target velocity (default 100 m/s).</summary>
+        public double TargetExpandedVelocityMS { get; set; } = 100.0;
     }
 
     public class BenchmarkGas

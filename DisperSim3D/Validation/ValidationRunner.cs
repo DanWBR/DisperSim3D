@@ -195,6 +195,52 @@ namespace DisperSim3D.Validation
             double releaseAz = (spec.Meteo.WindDirectionDeg - 180.0) % 360.0;
             if (releaseAz < 0) releaseAz += 360.0;
 
+            // Two-phase pre-processing: when the bench declares a TwoPhase block with
+            // Enabled=true, run the Clapeyron flash to split the orifice mass flow into
+            // vapor (goes to the dispersion engine) and rainout (drops to pool, ignored
+            // for first-iteration source modelling). The Birch & Schefer pseudo-source
+            // geometry replaces the user-supplied stack diameter / exit velocity.
+            double effRate = spec.Source.ReleaseRateKgPerS;
+            double effDiam = spec.Source.StackDiameterM;
+            double effExitT = spec.Source.ExitTemperatureK > 0
+                ? spec.Source.ExitTemperatureK : 293.15;
+            double effExitV = spec.Source.ExitVelocityMPerS;
+            if (spec.Source.TwoPhase != null && spec.Source.TwoPhase.Enabled)
+            {
+                var tp = spec.Source.TwoPhase;
+                string compoundName = !string.IsNullOrEmpty(tp.CompoundName)
+                    ? tp.CompoundName : spec.Source.Gas?.Name;
+                var leak = new HighPressureLeakParams
+                {
+                    VesselPressurePa = tp.VesselPressurePa,
+                    VesselTemperatureK = tp.VesselTemperatureK,
+                    OrificeDiameterM = tp.OrificeDiameterM,
+                    GasGamma = 1.30,
+                    GasMolarMassKgMol = spec.Source.Gas?.MolarMass > 0
+                        ? spec.Source.Gas.MolarMass : 0.044,
+                    AmbientPressurePa = spec.Meteo.AmbientPressure > 0
+                        ? spec.Meteo.AmbientPressure : 101325.0,
+                    DischargeCoefficient = tp.DischargeCoefficient,
+                    // Pass the bench's measured/observed total mass flow through to the
+                    // calculator. For liquid-storage benches the gas-orifice formula is
+                    // off by a large factor; using the published rate is much more accurate.
+                    SpecifyMassFlow = spec.Source.ReleaseRateKgPerS > 0,
+                    SpecifiedMassFlowKgPerS = spec.Source.ReleaseRateKgPerS,
+                };
+                var flash = TwoPhaseSourceCalculator.Compute(
+                    leak, compoundName,
+                    leak.AmbientPressurePa,
+                    spec.Meteo.AmbientTemperature > 0 ? spec.Meteo.AmbientTemperature : 293.15,
+                    tp.TargetExpandedVelocityMS);
+                if (string.IsNullOrEmpty(flash.Error) && flash.VaporMassFlowKgPerS > 0)
+                {
+                    effRate = flash.VaporMassFlowKgPerS;
+                    effDiam = flash.DiameterPseudoM;
+                    effExitT = flash.TempExitK;
+                    effExitV = flash.VelocityExitMS;
+                }
+            }
+
             // Source
             var src = new ReleaseSource3D
             {
@@ -202,12 +248,11 @@ namespace DisperSim3D.Validation
                 GasRefId = gasItem.Id,
                 Position = new Point3D(
                     spec.Source.Position[0], spec.Source.Position[1], spec.Source.Position[2]),
-                ReleaseRateKgPerS = spec.Source.ReleaseRateKgPerS,
+                ReleaseRateKgPerS = effRate,
                 ReleaseDurationS = spec.Source.ReleaseDurationS,
-                StackDiameterM = spec.Source.StackDiameterM,
-                ExitTemperatureK = spec.Source.ExitTemperatureK > 0
-                    ? spec.Source.ExitTemperatureK : 293.15,
-                ExitVelocityMPerS = spec.Source.ExitVelocityMPerS,
+                StackDiameterM = effDiam,
+                ExitTemperatureK = effExitT,
+                ExitVelocityMPerS = effExitV,
                 ReleaseAzimuthDeg = releaseAz,
                 ReleaseElevationDeg = 0,
                 ReleaseHeightOffset = 0

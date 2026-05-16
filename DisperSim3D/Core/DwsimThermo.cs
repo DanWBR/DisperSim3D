@@ -1,306 +1,113 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Reflection;
+using DWSIMCore.Foundation.CalculatorInterface;
+using DWSIMCore.Foundation.BaseClasses;
 
 namespace DisperSim3D.Core
 {
     /// <summary>
-    /// Reflection-based thin wrapper around <c>DWSIM.Automation.FluentAPI</c>.
+    /// Thin wrapper around DWSIMCore.Foundation.CalculatorInterface.Calculator —
+    /// the .NET 10 native rewrite of DWSIM's thermodynamic core.
     ///
-    /// We don't take a compile-time reference on DWSIM because the installer ships
-    /// 200+ DLLs (CoolProp, GTK#, SkiaSharp, MathNet, …) that would bloat the
-    /// DisperSim3D output. Instead, the user points <see cref="AppSettings.DwsimInstallPath"/>
-    /// at their DWSIM install dir; we install an <c>AssemblyResolve</c> handler that
-    /// probes that directory and invoke FluentAPI types via reflection.
+    /// Replaces the old reflection-based wrapper around DWSIM.Automation.FluentAPI
+    /// which had a hard dependency on BinaryFormatter (removed in .NET 10) and
+    /// pulled the full 200+-DLL DWSIM install via runtime probing. DWSIMCore is
+    /// a single project reference, builds cleanly on net10.0, and exposes the
+    /// PT/PH/PS flash routines we need directly.
     ///
-    /// All public methods return primitive types (double / string / List&lt;…&gt;) so
-    /// callers don't need DWSIM types either.
+    /// Public surface is kept compatible with the old wrapper so callers
+    /// (TwoPhaseSourceCalculator, DwsimMixtureBuilderDialog, etc.) need no
+    /// changes beyond a rebuild.
     /// </summary>
     public static class DwsimThermo
     {
-        private static bool _resolverInstalled;
-        private static bool _initialised;
-        private static Assembly _fluentApi;
-        private static Type _flowsheetType;
-        private static Type _propertyPackagesType;
-        private static string _installPath = "";
+        private static Calculator _calc;
         private static List<string> _availableCompounds;
+        private static string _propPackName = "Peng-Robinson 1978 (PR78)";
+        private static readonly Dictionary<string, CompoundInfo> _compoundCache =
+            new Dictionary<string, CompoundInfo>(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>True when the DWSIM install dir is configured and FluentAPI loaded.</summary>
-        public static bool IsAvailable => _initialised && _fluentApi != null;
+        /// <summary>True once <see cref="Initialize"/> has loaded the DWSIMCore
+        /// compound databases (chemsep, dwsim, biodiesel, electrolyte, chedl).</summary>
+        public static bool IsAvailable => _calc != null;
 
-        /// <summary>Last error message from a failed Initialize/load attempt.</summary>
+        /// <summary>Last error message from a failed Initialize/Compute call.</summary>
         public static string LastError { get; private set; } = "";
 
-        /// <summary>Initialises the resolver and loads <c>DWSIM.Automation.FluentAPI.dll</c>.
-        /// Returns true on success; sets <see cref="LastError"/> on failure.</summary>
-        public static bool Initialize(string dwsimInstallPath)
+        /// <summary>Loads the DWSIMCore Calculator and primes the compound catalog.
+        /// The <paramref name="dwsimInstallPath"/> parameter is accepted for backward
+        /// compatibility with the old reflection wrapper but is ignored — DWSIMCore
+        /// is a direct project reference, so no install path is needed.</summary>
+        public static bool Initialize(string dwsimInstallPath = null)
         {
-            if (_initialised && _installPath == dwsimInstallPath && _fluentApi != null) return true;
+            if (_calc != null) return true;
             LastError = "";
             try
             {
-                if (string.IsNullOrEmpty(dwsimInstallPath))
-                { LastError = "DWSIM install path is not set."; return false; }
-                if (!Directory.Exists(dwsimInstallPath))
-                { LastError = "DWSIM install path does not exist: " + dwsimInstallPath; return false; }
-
-                string fluentDll = Path.Combine(dwsimInstallPath, "DWSIM.Automation.FluentAPI.dll");
-                if (!File.Exists(fluentDll))
-                { LastError = "DWSIM.Automation.FluentAPI.dll not found at " + dwsimInstallPath; return false; }
-
-                // Path changed — any prior cached Flowsheet was built against the
-                // OLD assemblies and is stale; drop it.
-                if (_installPath != dwsimInstallPath) ResetFlowsheetCache();
-                _installPath = dwsimInstallPath;
-                InstallResolver(dwsimInstallPath);
-
-                // DWSIM's database loaders and some property packages probe the process
-                // CWD for configuration / data files. Point it at the install dir so
-                // ChemSep, CoolProp, ChEDL etc. all find their resources. Most embedded
-                // databases don't need this, but compiled extensions and addon DBs do.
-                try { Environment.CurrentDirectory = dwsimInstallPath; } catch { }
-
-                _fluentApi = Assembly.LoadFrom(fluentDll);
-
-                // Pre-load the critical thermodynamics DLLs eagerly. Lazy loading via the
-                // AssemblyResolve handler works for most cases, but the Automation3
-                // constructor reflects over property packages and database providers in
-                // tight loops — pre-binding avoids dozens of resolver dispatches and
-                // surfaces FileNotFoundException for any missing dependency right here.
-                string[] eagerDlls =
-                {
-                    "DWSIM.Interfaces.dll",
-                    "DWSIM.GlobalSettings.dll",
-                    "DWSIM.SharedClasses.dll",
-                    "DWSIM.MathOps.dll",
-                    "DWSIM.FlowsheetBase.dll",
-                    "DWSIM.FlowsheetSolver.dll",
-                    "DWSIM.Thermodynamics.dll",
-                    "DWSIM.UnitOperations.dll",
-                    "DWSIM.Automation.dll"
-                };
-                foreach (var dll in eagerDlls)
-                {
-                    string p = Path.Combine(dwsimInstallPath, dll);
-                    if (File.Exists(p))
-                    {
-                        try { Assembly.LoadFrom(p); } catch { /* let resolver retry lazily */ }
-                    }
-                }
-
-                _flowsheetType = _fluentApi.GetType("DWSIM.Automation.FluentAPI.Flowsheet", throwOnError: false);
-                _propertyPackagesType = _fluentApi.GetType("DWSIM.Automation.FluentAPI.PropertyPackages", throwOnError: false);
-                if (_flowsheetType == null)
-                { LastError = "Couldn't resolve Flowsheet type from FluentAPI."; return false; }
-                _initialised = true;
+                _calc = new Calculator();
+                _calc.Initialize();
+                _availableCompounds = null; // force re-enumeration
                 return true;
             }
             catch (Exception ex)
             {
-                LastError = ex.Message;
-                _initialised = false;
+                var root = ex;
+                while (root.InnerException != null) root = root.InnerException;
+                LastError = "DWSIMCore.Calculator.Initialize: " + root.GetType().Name + " — " + root.Message;
+                _calc = null;
                 return false;
             }
         }
 
-        private static void InstallResolver(string baseDir)
-        {
-            if (_resolverInstalled) return;
-            AppDomain.CurrentDomain.AssemblyResolve += (s, e) =>
-            {
-                try
-                {
-                    string name = new AssemblyName(e.Name).Name + ".dll";
-                    string[] candidateDirs =
-                    {
-                        baseDir,
-                        Path.Combine(baseDir, "extenders"),
-                        Path.Combine(baseDir, "extenders2"),
-                        Path.Combine(baseDir, "unitops"),
-                        Path.Combine(baseDir, "unitops2"),
-                        Path.Combine(baseDir, "ppacks"),
-                        Path.Combine(baseDir, "ppacks2")
-                    };
-                    foreach (var dir in candidateDirs)
-                    {
-                        if (!Directory.Exists(dir)) continue;
-                        string p = Path.Combine(dir, name);
-                        if (File.Exists(p)) return Assembly.LoadFrom(p);
-                    }
-                }
-                catch { }
-                return null;
-            };
-            _resolverInstalled = true;
-        }
-
-        /// <summary>Returns the canonical names of every DWSIM property package
-        /// exposed by the FluentAPI <c>PropertyPackages</c> constants class.
-        /// Reflection-pulled so we stay version-tolerant (new packages added by
-        /// later DWSIM releases surface automatically). Empty when DWSIM isn't
-        /// initialised.</summary>
-        public static IReadOnlyList<string> AvailablePropertyPackages()
-        {
-            if (!IsAvailable || _propertyPackagesType == null) return Array.Empty<string>();
-            try
-            {
-                var consts = _propertyPackagesType.GetFields(
-                    BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)
-                    .Where(f => f.IsLiteral && !f.IsInitOnly && f.FieldType == typeof(string));
-                var list = consts.Select(f => f.GetRawConstantValue() as string)
-                    .Where(s => !string.IsNullOrEmpty(s))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-                return list;
-            }
-            catch (Exception ex)
-            {
-                LastError = "AvailablePropertyPackages: " + ex.Message;
-                return Array.Empty<string>();
-            }
-        }
-
-        /// <summary>Returns every compound name in DWSIM's process-wide catalog. The first
-        /// call triggers a one-time database load (~1–2 s); subsequent calls are cached.
-        /// When the catalog ends up empty, sets <see cref="LastError"/> with the deepest
-        /// inner exception so the user can see WHY the database failed to load.</summary>
+        /// <summary>Returns the list of all compounds loaded by DWSIMCore
+        /// (typically ~700-1000 from ChemSep + DWSIM + biodiesel + electrolyte
+        /// + ChEDL databases).</summary>
         public static IReadOnlyList<string> AvailableCompounds()
         {
-            if (!IsAvailable) return Array.Empty<string>();
-            if (_availableCompounds != null && _availableCompounds.Count > 0) return _availableCompounds;
+            if (!IsAvailable) return new List<string>();
+            if (_availableCompounds != null) return _availableCompounds;
             try
             {
-                // Try the Bootstrap.Automation path first.
-                System.Collections.IDictionary catalog = TryReadBootstrapCatalog();
-
-                // Fallback: bypass Automation3 entirely and load the compound databases
-                // directly. Automation3's LoadItems() runs every property-package
-                // constructor in parallel tasks; if a single PP fails (CAPE-OPEN without
-                // registry, missing Plus addon, …), Task.WaitAll throws and aborts
-                // BEFORE the compound-loading section runs — leaving the catalog empty.
-                if (catalog == null || catalog.Count == 0)
-                    catalog = LoadCompoundsDirectly();
-
-                var list = new List<string>();
-                if (catalog != null)
-                    foreach (var k in catalog.Keys) list.Add(k.ToString());
-                list.Sort(StringComparer.OrdinalIgnoreCase);
-                _availableCompounds = list;
-                if (list.Count == 0)
-                {
-                    LastError = "DWSIM compound database is empty. Direct ChemSep load also " +
-                                "returned 0 — DWSIM.Thermodynamics.dll likely failed to bind " +
-                                "or its embedded chemsep1.xml / chemsep2.xml resources are missing.";
-                }
-                return list;
+                _availableCompounds = _calc.AvailableCompounds.Keys
+                    .Select(k => k.ToString())
+                    .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                return _availableCompounds;
             }
             catch (Exception ex)
             {
-                var root = ex;
-                while (root.InnerException != null) root = root.InnerException;
-                LastError = "AvailableCompounds: " + root.GetType().Name + " — " + root.Message;
-                return Array.Empty<string>();
+                LastError = "AvailableCompounds: " + ex.Message;
+                return new List<string>();
             }
         }
 
-        /// <summary>Best-effort read of <c>Bootstrap.Automation.AvailableCompounds</c>.
-        /// Returns null on any exception (caller falls back to the direct DB load).</summary>
-        private static System.Collections.IDictionary TryReadBootstrapCatalog()
+        /// <summary>Drops the cached compound list and property cache. Call when
+        /// the underlying Calculator state needs to be rebuilt.</summary>
+        public static void ResetFlowsheetCache()
         {
-            try
-            {
-                var create = _flowsheetType.GetMethod("Create", BindingFlags.Public | BindingFlags.Static);
-                object fs;
-                try { fs = create.Invoke(null, new object[] { (string)"probe" }); }
-                catch (TargetInvocationException tie) { throw tie.InnerException ?? tie; }
-
-                var bootstrapType = _fluentApi.GetType("DWSIM.Automation.FluentAPI.Bootstrap", false);
-                var autoProp = bootstrapType?.GetProperty("Automation",
-                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
-                var auto = autoProp?.GetValue(null);
-                var catalog = auto?.GetType().GetProperty("AvailableCompounds")?.GetValue(auto)
-                              as System.Collections.IDictionary;
-                if (catalog != null && catalog.Count > 0) return catalog;
-
-                var innerProp = _flowsheetType.GetProperty("Inner",
-                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                var inner = innerProp?.GetValue(fs);
-                return inner?.GetType().GetProperty("AvailableCompounds")?.GetValue(inner)
-                       as System.Collections.IDictionary;
-            }
-            catch (Exception ex)
-            {
-                var root = ex;
-                while (root.InnerException != null) root = root.InnerException;
-                LastError = "Bootstrap.Automation: " + root.GetType().Name + " — " + root.Message;
-                return null;
-            }
+            _availableCompounds = null;
+            _compoundCache.Clear();
         }
 
-        /// <summary>Directly instantiate the DWSIM.Thermodynamics ChemSep database
-        /// provider, call <c>Load()</c> + <c>Transfer()</c>, and aggregate the returned
-        /// compounds into a fresh dictionary keyed by Name. We only use ChemSep — its
-        /// XML database is embedded in DWSIM.Thermodynamics.dll (no external files),
-        /// it ships ~470 industrial-relevant compounds, and skipping CoolProp/Biodiesel/
-        /// ChEDL avoids cascading failures from those providers' external dependencies.
-        /// Bypasses Automation3 entirely, so a property-package layer crash doesn't
-        /// block compound availability.</summary>
-        private static System.Collections.IDictionary LoadCompoundsDirectly()
+        /// <summary>Sets the property package used for subsequent flash calls.
+        /// Common values: "Peng-Robinson 1978 (PR78)", "Peng-Robinson (PR)",
+        /// "Soave-Redlich-Kwong (SRK)", "Raoult's Law". Use <see cref="GetPropertyPackageList"/>
+        /// to enumerate the installed packages.</summary>
+        public static void SetPropertyPackage(string name)
         {
-            try
-            {
-                // Locate DWSIM.Thermodynamics.dll. It was eagerly pre-loaded in Initialize;
-                // pick it up from AppDomain.CurrentDomain rather than path-probing.
-                var thermo = AppDomain.CurrentDomain.GetAssemblies()
-                    .FirstOrDefault(a => string.Equals(a.GetName().Name, "DWSIM.Thermodynamics",
-                        StringComparison.OrdinalIgnoreCase));
-                if (thermo == null) return null;
+            if (!string.IsNullOrWhiteSpace(name)) _propPackName = name;
+        }
 
-                var dict = new System.Collections.Generic.Dictionary<string, object>(
-                    StringComparer.OrdinalIgnoreCase);
-                var t = thermo.GetType("DWSIM.Thermodynamics.Databases.ChemSep", throwOnError: false);
-                if (t == null)
-                {
-                    LastError = "DWSIM.Thermodynamics.Databases.ChemSep type not found.";
-                    return null;
-                }
-                object inst = Activator.CreateInstance(t);
-                t.GetMethod("Load", Type.EmptyTypes)?.Invoke(inst, null);
-                // VB.NET signature: Transfer(Optional ByVal CompName As String = "").
-                // From C# reflection that's a 1-arg method, NOT a no-arg one — so
-                // GetMethod with Type.EmptyTypes returns null. Look it up by name and
-                // pass the default value explicitly.
-                var transferMi = t.GetMethods()
-                    .FirstOrDefault(m => m.Name == "Transfer" && m.GetParameters().Length == 1);
-                object[] args = transferMi != null ? new object[] { "" } : null;
-                var arr = transferMi?.Invoke(inst, args) as System.Collections.IEnumerable;
-                if (arr != null)
-                {
-                    foreach (var cp in arr)
-                    {
-                        if (cp == null) continue;
-                        var n = cp.GetType().GetProperty("Name")?.GetValue(cp) as string;
-                        if (string.IsNullOrEmpty(n)) continue;
-                        if (!dict.ContainsKey(n)) dict[n] = cp;
-                    }
-                }
-                if (dict.Count > 0)
-                {
-                    _directDbCatalog = (System.Collections.IDictionary)dict;
-                    return _directDbCatalog;
-                }
-                return null;
-            }
+        /// <summary>Returns the list of available property package names from DWSIMCore.</summary>
+        public static IReadOnlyList<string> GetPropertyPackageList()
+        {
+            if (!IsAvailable) return new List<string>();
+            try { return _calc.GetPropPackList(); }
             catch (Exception ex)
             {
-                var root = ex;
-                while (root.InnerException != null) root = root.InnerException;
-                LastError = "LoadCompoundsDirectly (ChemSep): " + root.GetType().Name + " — " + root.Message;
-                return null;
+                LastError = "GetPropPackList: " + ex.Message;
+                return new List<string>();
             }
         }
 
@@ -317,49 +124,26 @@ namespace DisperSim3D.Core
             public double CriticalVolumeM3Mol;
         }
 
-        private static readonly Dictionary<string, CompoundInfo> _compoundCache =
-            new Dictionary<string, CompoundInfo>(StringComparer.OrdinalIgnoreCase);
-
-        // Direct-DB catalog (compound-name → ICompoundConstantProperties instance),
-        // populated by LoadCompoundsDirectly when Bootstrap.Automation fails to load.
-        // Used by GetCompoundInfo as a fallback so per-compound constants survive
-        // even when the Automation3 path is broken.
-        private static System.Collections.IDictionary _directDbCatalog;
-
-        /// <summary>Looks up the constant properties of a single compound in DWSIM's
-        /// catalog and returns them in SI. Result is cached. Returns null when the
-        /// compound is unknown or DWSIM isn't initialised.</summary>
+        /// <summary>Looks up constant properties of a single compound. Cached.
+        /// Returns null when the compound is unknown.</summary>
         public static CompoundInfo GetCompoundInfo(string compoundName)
         {
             if (string.IsNullOrEmpty(compoundName) || !IsAvailable) return null;
             if (_compoundCache.TryGetValue(compoundName, out var cached)) return cached;
             try
             {
-                // Ensure the catalog is loaded; AvailableCompounds primes Bootstrap.Automation.
-                if (_availableCompounds == null) AvailableCompounds();
-                // Try Bootstrap.Automation first.
-                System.Collections.IDictionary catalog = null;
-                var bootstrapType = _fluentApi.GetType("DWSIM.Automation.FluentAPI.Bootstrap", false);
-                var autoProp = bootstrapType?.GetProperty("Automation",
-                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
-                var auto = autoProp?.GetValue(null);
-                var availableProp = auto?.GetType().GetProperty("AvailableCompounds");
-                catalog = availableProp?.GetValue(auto) as System.Collections.IDictionary;
-                // Fallback to the direct-DB catalog populated by LoadCompoundsDirectly.
-                if (catalog == null || catalog.Count == 0) catalog = _directDbCatalog;
-                if (catalog == null || !catalog.Contains(compoundName)) return null;
-                object cp = catalog[compoundName];
-                var ct = cp.GetType();
+                if (!_calc.AvailableCompounds.TryGetValue(compoundName, out var cp)) return null;
                 var info = new CompoundInfo
                 {
                     Name = compoundName,
                     // DWSIM stores Molar_Weight in g/mol; convert to kg/mol.
-                    MolarMassKgMol      = GetDouble(ct, cp, "Molar_Weight") / 1000.0,
-                    CriticalTemperatureK = GetDouble(ct, cp, "Critical_Temperature"),
-                    CriticalPressurePa   = GetDouble(ct, cp, "Critical_Pressure"),
-                    AcentricFactor       = GetDouble(ct, cp, "Acentric_Factor"),
-                    NormalBoilingPointK  = GetDouble(ct, cp, "Normal_Boiling_Point"),
-                    CriticalVolumeM3Mol  = GetDouble(ct, cp, "Critical_Volume") / 1000.0 // L/mol → m³/mol (DWSIM stores L/mol)
+                    MolarMassKgMol      = cp.Molar_Weight / 1000.0,
+                    CriticalTemperatureK = cp.Critical_Temperature,
+                    CriticalPressurePa   = cp.Critical_Pressure,
+                    AcentricFactor       = cp.Acentric_Factor,
+                    NormalBoilingPointK  = cp.Normal_Boiling_Point,
+                    // DWSIM stores Critical_Volume in L/mol; convert to m³/mol.
+                    CriticalVolumeM3Mol  = cp.Critical_Volume / 1000.0,
                 };
                 _compoundCache[compoundName] = info;
                 return info;
@@ -371,20 +155,6 @@ namespace DisperSim3D.Core
             }
         }
 
-        private static double GetDouble(Type t, object obj, string propName)
-        {
-            try
-            {
-                var p = t.GetProperty(propName);
-                if (p == null) return 0;
-                var v = p.GetValue(obj);
-                if (v == null) return 0;
-                if (v is double d) return d;
-                return Convert.ToDouble(v);
-            }
-            catch { return 0; }
-        }
-
         /// <summary>Container returned by <see cref="ComputeMixtureProperties"/>.</summary>
         public sealed class MixtureProperties
         {
@@ -392,174 +162,127 @@ namespace DisperSim3D.Core
             public double DensityKgM3;        // mass density at T, P
             public double ViscosityPaS;       // dynamic viscosity
             public double CpJPerKgK;          // specific heat capacity
-            public double VaporFraction;      // single-phase = 1 (gas)
+            public double VaporFraction;      // 0 = all liquid, 1 = all vapor
             public double GammaCpCv;          // ratio Cp/Cv
             public string Error;
         }
 
-        // Cached flowsheet — keyed by the sorted compound-set signature so the same
-        // mixture (independent of mole-fraction values) reuses the same DWSIM
-        // Flowsheet, MaterialStream, and Peng-Robinson 1978 property package across
-        // every flash. Recreating these is the slow part: a fresh flowsheet runs
-        // Bootstrap, instantiates the PP, registers compounds, builds the stream
-        // (~150–400 ms cold) — versus ~5–30 ms for a re-solve of the cached one.
-        private static string _cachedKey;
-        private static object _cachedFlowsheet;
-        private static object _cachedStreamObj;
-        private static Type _cachedStreamObjType;
-        private static List<string> _cachedSelectedOrder;
-
-        private static string BuildKey(IEnumerable<string> compoundNames)
-        {
-            var sorted = compoundNames
-                .Where(s => !string.IsNullOrEmpty(s))
-                .Select(s => s.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(s => s, StringComparer.OrdinalIgnoreCase);
-            return string.Join("|", sorted);
-        }
-
-        /// <summary>Drops the cached flowsheet so the next call rebuilds it. Call
-        /// this if the user changed the DWSIM install path or the FluentAPI is
-        /// in a known-bad state.</summary>
-        public static void ResetFlowsheetCache()
-        {
-            _cachedKey = null;
-            _cachedFlowsheet = null;
-            _cachedStreamObj = null;
-            _cachedStreamObjType = null;
-            _cachedSelectedOrder = null;
-            _availableCompounds = null;
-            _directDbCatalog = null;
-            _compoundCache.Clear();
-        }
-
-        /// <summary>Runs a Peng-Robinson 1978 flash on the supplied mole-fraction mixture
-        /// and returns aggregate mixture properties (M, ρ, μ, Cp, γ). Composition is
-        /// normalised before sending to DWSIM. The Flowsheet and its MaterialStream
-        /// are cached by compound-set: subsequent calls with the same compounds reuse
-        /// them (~10× faster — see <see cref="ResetFlowsheetCache"/>).</summary>
-        public static MixtureProperties ComputeMixtureProperties(IDictionary<string, double> moleFractions,
-            double temperatureK, double pressurePa)
+        /// <summary>Runs a PT flash on the supplied mole-fraction mixture and
+        /// returns aggregate mixture properties (M, ρ, μ, Cp, γ, vapor fraction).
+        /// Composition is normalised before sending to DWSIMCore.</summary>
+        public static MixtureProperties ComputeMixtureProperties(
+            IDictionary<string, double> moleFractions,
+            double temperatureK,
+            double pressurePa)
         {
             var result = new MixtureProperties();
-            if (!IsAvailable) { result.Error = "DWSIM not initialised."; return result; }
+            if (!IsAvailable) { result.Error = "DWSIMCore not initialised."; return result; }
             if (moleFractions == null || moleFractions.Count == 0)
             { result.Error = "Empty mixture composition."; return result; }
             try
             {
-                // Normalise composition.
-                double sum = 0; foreach (var v in moleFractions.Values) sum += v;
+                double sum = 0;
+                foreach (var v in moleFractions.Values) sum += v;
                 if (sum <= 0) { result.Error = "All mole fractions are zero."; return result; }
 
-                string key = BuildKey(moleFractions.Keys);
-                object fs;
-                object streamObj;
-                Type streamObjType;
-                List<string> order;
+                var compounds = moleFractions.Keys.ToArray();
+                var fracs = compounds.Select(k => moleFractions[k] / sum).ToArray();
 
-                if (key != _cachedKey || _cachedFlowsheet == null || _cachedStreamObj == null)
+                // PT flash returns Object(,) matrix:
+                //   row 0: phase labels (string)
+                //   row 1: phase fractions (mole)
+                //   rows 2..N+1: compound mole fractions per phase
+                var flashMatrix = _calc.PTFlash(_propPackName, 2, pressurePa, temperatureK,
+                    compounds, fracs);
+
+                // Sum vapor phase fraction (DWSIM may report it under "Vapor" label).
+                double xv = 0;
+                int nPhases = flashMatrix.GetLength(1);
+                for (int p = 0; p < nPhases; p++)
                 {
-                    // 1. Create a fresh headless flowsheet.
-                    var create = _flowsheetType.GetMethod("Create", BindingFlags.Public | BindingFlags.Static);
-                    fs = create.Invoke(null, new object[] { (string)"DispersionThermo" });
-
-                    // 2. Add compounds (chained WithCompound calls).
-                    var withCompound = _flowsheetType.GetMethod("WithCompound", new[] { typeof(string) });
-                    foreach (var c in moleFractions.Keys)
-                        withCompound.Invoke(fs, new object[] { c });
-
-                    // 3. Pick property package — user-configurable via AppSettings.
-                    //    Defaults to Peng-Robinson 1978 when empty / unset.
-                    string ppName = AppSettings.Instance.DwsimPropertyPackage;
-                    if (string.IsNullOrWhiteSpace(ppName))
-                        ppName = _propertyPackagesType?.GetField("PengRobinson1978",
-                            BindingFlags.Public | BindingFlags.Static)?.GetRawConstantValue() as string
-                            ?? "Peng-Robinson 1978 (PR78)";
-                    var withPp = _flowsheetType.GetMethod("WithPropertyPackage", new[] { typeof(string) });
-                    withPp.Invoke(fs, new object[] { ppName });
-
-                    // 4. Add the material stream once.
-                    var addStream = _flowsheetType.GetMethod("AddMaterialStream", new[] { typeof(string) });
-                    var streamBuilder = addStream.Invoke(fs, new object[] { "S1" });
-                    var streamBuilderType = streamBuilder.GetType();
-                    var streamProp = streamBuilderType.GetProperty("Object");
-                    streamObj = streamProp.GetValue(streamBuilder);
-                    streamObjType = streamObj.GetType();
-                    streamObjType.GetMethod("SetMassFlow", new[] { typeof(double) })
-                        .Invoke(streamObj, new object[] { 1.0 }); // 1 kg/s basis (constant)
-
-                    // Selected-compound order is fixed once the PP is attached.
-                    var innerProp = _flowsheetType.GetProperty("Inner",
-                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                    var inner = innerProp.GetValue(fs);
-                    var selectedProp = inner.GetType().GetProperty("SelectedCompounds");
-                    var selected = selectedProp.GetValue(inner) as System.Collections.IDictionary;
-                    order = new List<string>();
-                    foreach (var k in selected.Keys) order.Add(k.ToString());
-
-                    _cachedKey = key;
-                    _cachedFlowsheet = fs;
-                    _cachedStreamObj = streamObj;
-                    _cachedStreamObjType = streamObjType;
-                    _cachedSelectedOrder = order;
+                    var phaseLbl = flashMatrix[0, p] as string ?? "";
+                    if (phaseLbl.Equals("Vapor", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (flashMatrix[1, p] is double f) xv += f;
+                        else if (flashMatrix[1, p] != null) xv += Convert.ToDouble(flashMatrix[1, p]);
+                    }
                 }
-                else
+                result.VaporFraction = xv;
+
+                // Ask DWSIMCore for properties of the dominant phase (the one with
+                // the larger fraction). For single-phase mixtures CalcProp under the
+                // "Overall" label doesn't work — DWSIM requires the actual present
+                // phase label ("Vapor" or "Liquid"). Mass-basis where applicable.
+                string label = xv >= 0.5 ? "Vapor" : "Liquid";
+
+                // Molar mass is composition-only, doesn't depend on phase.
+                result.MolarMassKgMol = SumMolarMass(compounds, fracs);
+
+                result.DensityKgM3 = CalcProp("density", label, "Mass",
+                    compounds, fracs, temperatureK, pressurePa);
+                if (double.IsNaN(result.DensityKgM3) || result.DensityKgM3 <= 0)
                 {
-                    // Reuse the cached flowsheet/stream verbatim — only T, P, and
-                    // composition change between flashes.
-                    fs = _cachedFlowsheet;
-                    streamObj = _cachedStreamObj;
-                    streamObjType = _cachedStreamObjType;
-                    order = _cachedSelectedOrder;
+                    // Fall back to ideal-gas density for vapor / Rackett-ish estimate for liquid.
+                    if (xv >= 0.5)
+                        result.DensityKgM3 = pressurePa * result.MolarMassKgMol / (8.314 * Math.Max(temperatureK, 100.0));
+                    else
+                        result.DensityKgM3 = 1000.0; // crude liquid default
                 }
+                result.ViscosityPaS = CalcProp("viscosity", label, "Mass",
+                    compounds, fracs, temperatureK, pressurePa);
+                if (double.IsNaN(result.ViscosityPaS)) result.ViscosityPaS = 1e-5;
 
-                // Update T, P, composition for THIS flash.
-                streamObjType.GetMethod("SetTemperature", new[] { typeof(double) })
-                    .Invoke(streamObj, new object[] { temperatureK });
-                streamObjType.GetMethod("SetPressure", new[] { typeof(double) })
-                    .Invoke(streamObj, new object[] { pressurePa });
+                result.CpJPerKgK = CalcProp("heatCapacityCp", label, "Mass",
+                    compounds, fracs, temperatureK, pressurePa) * 1000.0;
+                if (double.IsNaN(result.CpJPerKgK) || result.CpJPerKgK <= 0) result.CpJPerKgK = 1000.0;
 
-                var fracArray = new double[order.Count];
-                for (int i = 0; i < order.Count; i++)
-                {
-                    moleFractions.TryGetValue(order[i], out double f);
-                    fracArray[i] = f / sum;
-                }
-                streamObjType.GetMethod("SetOverallComposition", new[] { typeof(double[]) })
-                    .Invoke(streamObj, new object[] { fracArray });
+                double cv = CalcProp("heatCapacityCv", label, "Mass",
+                    compounds, fracs, temperatureK, pressurePa) * 1000.0;
+                result.GammaCpCv = (cv > 0 && !double.IsNaN(cv)) ? result.CpJPerKgK / cv : 1.3;
 
-                // 5. Solve.
-                _flowsheetType.GetMethod("Solve", new Type[0]).Invoke(fs, null);
-
-                // 6. Read aggregate properties off the overall phase (phase index 0).
-                // GetProp(propname, phase) returns object[] of doubles. The names DWSIM uses
-                // are stable across versions: "molecularWeight", "density", "viscosity",
-                // "heatCapacity", "fraction".
-                var phasesProp = streamObjType.GetProperty("Phases");
-                var phases = phasesProp.GetValue(streamObj) as System.Collections.IDictionary;
-                // Phase 0 = overall mixture (covers single-phase gas).
-                object overallPhase = phases[0];
-                var phaseProps = overallPhase.GetType().GetProperty("Properties").GetValue(overallPhase);
-                var phasePropsType = phaseProps.GetType();
-                result.MolarMassKgMol = GetD(phasePropsType, phaseProps, "molecularWeight") / 1000.0; // g/mol → kg/mol
-                result.DensityKgM3 = GetD(phasePropsType, phaseProps, "density");
-                result.ViscosityPaS = GetD(phasePropsType, phaseProps, "viscosity");
-                result.CpJPerKgK = GetD(phasePropsType, phaseProps, "heatCapacityCp") * 1000.0; // kJ/kg/K → J/kg/K
-                double cv = GetD(phasePropsType, phaseProps, "heatCapacityCv") * 1000.0;
-                result.GammaCpCv = cv > 0 ? result.CpJPerKgK / cv : 1.3;
-
-                // Vapor fraction sometimes hides on a separate phase index — defer.
-                result.VaporFraction = 1.0;
                 return result;
             }
             catch (Exception ex)
             {
-                result.Error = ex.Message;
+                var root = ex;
+                while (root.InnerException != null) root = root.InnerException;
+                result.Error = root.GetType().Name + ": " + root.Message;
                 return result;
             }
         }
 
-        private static double GetD(Type t, object obj, string propName) => GetDouble(t, obj, propName);
+        /// <summary>Returns the composition-weighted molar mass in kg/mol.</summary>
+        private static double SumMolarMass(string[] compounds, double[] moleFractions)
+        {
+            double sumMW = 0;
+            for (int i = 0; i < compounds.Length; i++)
+            {
+                var info = GetCompoundInfo(compounds[i]);
+                if (info != null) sumMW += moleFractions[i] * info.MolarMassKgMol;
+            }
+            return sumMW > 0 ? sumMW : 0.029; // default to air MW
+        }
+
+        /// <summary>Computes any single-phase property at a given (T, P, composition).
+        /// Returns NaN on failure. Property names: "density", "enthalpy", "entropy",
+        /// "viscosity", "heatCapacityCp", "heatCapacityCv", "molecularweight", etc.</summary>
+        public static double CalcProp(string prop, string phaseLabel, string basis,
+            string[] compounds, double[] moleFractions,
+            double temperatureK, double pressurePa)
+        {
+            if (!IsAvailable) return double.NaN;
+            try
+            {
+                var arr = _calc.CalcProp(_propPackName, prop, basis, phaseLabel,
+                    compounds, temperatureK, pressurePa, moleFractions);
+                if (arr == null || arr.Length == 0) return double.NaN;
+                if (arr[0] is double d) return d;
+                return Convert.ToDouble(arr[0]);
+            }
+            catch
+            {
+                return double.NaN;
+            }
+        }
     }
 }

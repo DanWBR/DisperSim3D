@@ -1,0 +1,60 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "Prairie-Grass-Run07-B",
+  "citation": "Barad, M.L. (1958). Project Prairie Grass, A Field Program in Diffusion. AFCRL-TR-58-235. Run 7: stability B, arc-maximum SO2 concentrations at 50-800 m.",
+  "description": "Prairie Grass Run 7. Unstable (B) conditions: Q=89.9 g/s SO2 at 0.46 m height, U(2m)=4.44 m/s, dT=+2.83 C. Flat short-grass prairie, z0=0.006 m. 10-min averaged arc-max concentrations at 1.5 m height.",
+
+  "source": {
+    "name": "PG Run 7 ground source",
+    "gas": {
+      "name": "SO2",
+      "molarMass": 0.064066,
+      "lfl": 0,
+      "ufl": 0,
+      "isCryogenic": false
+    },
+    "position": [0, 0, 0.46],
+    "releaseRateKgPerS": 0.0899,
+    "releaseDurationS": 600,
+    "stackDiameterM": 0,
+    "exitTemperatureK": 303,
+    "exitVelocityMPerS": 0
+  },
+
+  "meteo": {
+    "windSpeed": 4.44,
+    "windDirectionDeg": 270,
+    "stability": "B",
+    "ambientTemperature": 303,
+    "ambientPressure": 101325,
+    "windMeasurementHeightM": 2,
+    "roughnessLengthM": 0.006
+  },
+
+  "domain": {
+    "sizeM": 1000,
+    "gridResolution": 80,
+    "durationS": 600,
+    "timeStepS": 1.0
+  },
+
+  "solver": "GaussianPlume",
+  "concentrationKind": "FinalSnapshot",
+  "unit": "KgPerM3",
+
+  "sensors": [
+    { "name": "arc-50m",  "position": [50,  0, 1.5], "measuredKgM3": 9.78e-5 },
+    { "name": "arc-100m", "position": [100, 0, 1.5], "measuredKgM3": 2.33e-5 },
+    { "name": "arc-200m", "position": [200, 0, 1.5], "measuredKgM3": 5.1e-6 },
+    { "name": "arc-400m", "position": [400, 0, 1.5], "measuredKgM3": 8.0e-7 },
+    { "name": "arc-800m", "position": [800, 0, 1.5], "measuredKgM3": 1.0e-7 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.67, "max": 0.67 },
+    "RMSE": { "max": 3.0 },
+    "FAC2": { "min": 0.3, "max": 2.0 },
+    "MG":   { "min": 0.5, "max": 2.0 },
+    "VG":   { "max": 4.0 }
+  }
+}

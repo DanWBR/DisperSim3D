@@ -1,0 +1,67 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "Desert-Tortoise-Trial04",
+  "citation": "Goldwire, H.C. et al. (1985). Desert Tortoise series data report - 1983 pressurized ammonia spills. LLNL UCID-20562. Trial 4. Sensor values from EPA (1999) Technical Background Document for Anhydrous Ammonia, Table 2-1 (primary tabulation of Goldwire 1985 data).",
+  "description": "Desert Tortoise Trial 4 - pressurized liquefied ammonia release, Frenchman Flat 1983. Total mass released ~40,820 kg over ~360 s (≈ 113 kg/s avg). Sensors on arcs at 100, 800, 2800 m centerline; 1400 m and 5500 m sensors were NOT deployed for DT4 (omitted here). NOTE: stability class E (not D); pressurized two-phase source requires aerosol/rainout modelling for accuracy. Sensor values primary (EPA 1999 Table 2-1 from Goldwire 1985 UCID-20562).",
+
+  "source": {
+    "name": "Desert Tortoise NH3 jet",
+    "gas": {
+      "name": "NH3",
+      "molarMass": 0.01703,
+      "lfl": 0,
+      "ufl": 0,
+      "isCryogenic": false
+    },
+    "position": [0, 0, 0.79],
+    "releaseRateKgPerS": 113.4,
+    "releaseDurationS": 360,
+    "stackDiameterM": 0.0945,
+    "exitTemperatureK": 240,
+    "exitVelocityMPerS": 168,
+    "twoPhase": {
+      "enabled": false,
+      "compoundName": "Ammonia",
+      "vesselPressurePa": 900000,
+      "vesselTemperatureK": 290.0,
+      "orificeDiameterM": 0.0945,
+      "dischargeCoefficient": 0.65,
+      "targetExpandedVelocityMS": 100.0
+    }
+  },
+
+  "meteo": {
+    "windSpeed": 4.51,
+    "windDirectionDeg": 270,
+    "stability": "E",
+    "ambientTemperature": 305,
+    "ambientPressure": 91500,
+    "windMeasurementHeightM": 2,
+    "roughnessLengthM": 0.003
+  },
+
+  "domain": {
+    "sizeM": 4000,
+    "gridResolution": 100,
+    "durationS": 800,
+    "timeStepS": 1.0
+  },
+
+  "solver": "GaussianPlume",
+  "concentrationKind": "FinalSnapshot",
+  "unit": "KgPerM3",
+
+  "sensors": [
+    { "name": "arc-100m",  "position": [100,  0, 1.0], "measuredKgM3": 0.0494 },
+    { "name": "arc-800m",  "position": [800,  0, 1.0], "measuredKgM3": 0.0133 },
+    { "name": "arc-2800m", "position": [2800, 0, 1.0], "measuredKgM3": 0.0038 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.67, "max": 0.67 },
+    "RMSE": { "max": 3.0 },
+    "FAC2": { "min": 0.3, "max": 2.0 },
+    "MG":   { "min": 0.5, "max": 2.0 },
+    "VG":   { "max": 4.0 }
+  }
+}

@@ -184,6 +184,7 @@
           </Border>
           <TreeView x:Name="ProjectTree" BorderThickness="0"
                     Background="Transparent"
+                    ScrollViewer.HorizontalScrollBarVisibility="Auto"
                     SelectionChanged="ProjectTree_SelectionChanged"
                     ContextRequested="ProjectTree_ContextRequested"
                     DoubleTapped="ProjectTree_DoubleTapped">
@@ -199,12 +200,20 @@
                   <!-- Material Design Icon resolved via Projektanker.Icons.Avalonia.
                        The TreeNode.Icon property carries the "mdi-..." string. -->
                   <i:Icon Value="{Binding Icon}" FontSize="14"
-                          Foreground="#666" VerticalAlignment="Center" />
+                          VerticalAlignment="Center"
+                          Foreground="{Binding IconColor, Converter={x:Static views:HexColorToBrushConverter.Instance}}" />
                   <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
                   <Border Background="#EAEAEA" CornerRadius="6"
                           Padding="6,1" VerticalAlignment="Center"
                           IsVisible="{Binding Badge, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                     <TextBlock Text="{Binding Badge}" FontSize="10" Foreground="#666" />
+                  </Border>
+                  <Border CornerRadius="4" Padding="5,1" Margin="4,0,0,0"
+                          VerticalAlignment="Center"
+                          IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                          Background="{Binding StatusColor, Converter={x:Static views:HexColorToBrushConverter.Instance}, ConverterParameter=0.15}">
+                    <TextBlock Text="{Binding StatusText}" FontSize="10" FontWeight="SemiBold"
+                               Foreground="{Binding StatusColor, Converter={x:Static views:HexColorToBrushConverter.Instance}}" />
                   </Border>
                 </StackPanel>
               </TreeDataTemplate>

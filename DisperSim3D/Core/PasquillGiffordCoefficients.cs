@@ -63,35 +63,39 @@ namespace DisperSim3D.Core
         private static void GetCoefficients(PasquillStabilityClass cls,
             out double ay, out double by, out double az, out double bz)
         {
+            // Power-law fits to Briggs (1973) open-country formulas over the
+            // 50-1000 m range.  σy = ay·x^by  and  σz = az·x^bz  (x in metres).
+            // Reference: Briggs, G.A. (1973). Diffusion Estimation for Small
+            // Emissions. ATDL Contribution File No. 79, NOAA.
             switch (cls)
             {
                 case PasquillStabilityClass.A:
-                    ay = 0.3658; by = 0.9024;
-                    az = 0.192;  bz = 1.2235;
+                    ay = 0.2293; by = 0.9894;
+                    az = 0.2000; bz = 1.0000;
                     break;
                 case PasquillStabilityClass.B:
-                    ay = 0.2751; by = 0.9031;
-                    az = 0.156;  bz = 1.0857;
+                    ay = 0.1667; by = 0.9894;
+                    az = 0.1200; bz = 1.0000;
                     break;
                 case PasquillStabilityClass.C:
-                    ay = 0.2090; by = 0.8987;
-                    az = 0.116;  bz = 0.9865;
+                    ay = 0.1146; by = 0.9894;
+                    az = 0.0872; bz = 0.9790;
                     break;
                 case PasquillStabilityClass.D:
-                    ay = 0.1471; by = 0.9005;
-                    az = 0.079;  bz = 0.8855;
+                    ay = 0.0833; by = 0.9894;
+                    az = 0.1090; bz = 0.8550;
                     break;
                 case PasquillStabilityClass.E:
-                    ay = 0.1046; by = 0.9049;
-                    az = 0.063;  bz = 0.7714;
+                    ay = 0.0625; by = 0.9894;
+                    az = 0.0383; bz = 0.9400;
                     break;
                 case PasquillStabilityClass.F:
-                    ay = 0.0722; by = 0.9049;
-                    az = 0.053;  bz = 0.6794;
+                    ay = 0.0417; by = 0.9894;
+                    az = 0.0202; bz = 0.9430;
                     break;
                 default:
-                    ay = 0.1471; by = 0.9005;
-                    az = 0.079;  bz = 0.8855;
+                    ay = 0.0833; by = 0.9894;
+                    az = 0.1090; bz = 0.8550;
                     break;
             }
         }

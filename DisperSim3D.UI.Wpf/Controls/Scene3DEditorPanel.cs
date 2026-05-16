@@ -233,7 +233,6 @@ namespace DisperSim3D.Controls
                 new ToolStripSeparator(),
                 // Application-level settings group
                 new ToolStripMenuItem("CFD Settings (Application)...", Img("cog.png"), (s, e) => DoCfdSettings()),
-                new ToolStripMenuItem("DWSIM Settings (Application)...", Img("cog.png"), (s, e) => DoDwsimSettings()),
                 new ToolStripMenuItem("GPU & Performance Settings (Application)...", Img("cog.png"), (s, e) => DoGpuPerfSettings())
             });
 
@@ -2537,18 +2536,6 @@ namespace DisperSim3D.Controls
                 {
                     AppSettings.Instance.UpdateFromConfig(dlg.Result);
                     UpdateStatus("Application CFD settings updated (" + dlg.Result.DetectedEnvironment + ")");
-                }
-            }
-        }
-
-        private void DoDwsimSettings()
-        {
-            using (var dlg = new Dialogs.DwsimSettingsDialog())
-            {
-                if (dlg.ShowDialog() == DialogResult.OK)
-                {
-                    UpdateStatus("DWSIM settings updated (" +
-                        AppSettings.Instance.DwsimPropertyPackage + ")");
                 }
             }
         }

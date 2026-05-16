@@ -12,6 +12,33 @@ nav_order: 10
 
 ## Reference experiments
 
+### Gaussian plume (analytical)
+
+The Gaussian plume engine is validated against the **Project Prairie Grass**
+field experiment (Barad 1958) — 68 SO2 tracer releases over flat short-grass
+prairie at O'Neill, Nebraska. Five runs spanning Pasquill classes B through E:
+
+- **Run 7** (B) — Q = 89.9 g/s, U(2 m) = 4.44 m/s, unstable
+- **Run 11** (C) — Q = 95.9 g/s, U(2 m) = 7.61 m/s, slightly unstable
+- **Run 22** (D) — Q = 48.4 g/s, U(2 m) = 7.39 m/s, neutral
+- **Run 29** (E) — Q = 41.5 g/s, U(2 m) = 3.94 m/s, slightly stable
+- **Run 35** (E) — Q = 38.8 g/s, U(2 m) = 1.80 m/s, stable
+
+All runs: source at 0.46 m, z0 = 0.006 m, arc-maximum SO2 concentrations
+at 1.5 m height, arcs at 50, 100, 200, 400, 800 m downwind.
+Acceptance criteria follow Chang & Hanna (2004): MRB within ±0.67,
+MG within [0.5, 2.0], VG < 4.0, FAC2 ≥ 0.3.
+
+Dispersion coefficients are Briggs (1973) open-country power-law fits.
+The engine evaluates wind speed at `max(H, WindMeasurementHeightM)` to
+remain consistent with the PGT calibration convention (sigma curves were
+fit to data using wind at measurement height, not at source height).
+
+See [Benchmark Results](benchmark-results.md#prairie-grass-prairie-grass-runs) for
+per-sensor tables.
+
+### CFD pipeline
+
 The CFD pipeline reproduces the test cases of:
 
 - **Birch et al. (1984, 1987)** — methane sonic jets at 2.0 and 3.5 bar
@@ -91,16 +118,80 @@ Implemented in
 as a pure function over `IList<SensorPair>` (Vu 2019 §1.4.2,
 Chang &amp; Hanna 2004):
 
-| Metric | Formula | Acceptable | Perfect |
-|---|---|---|---|
-| **MRB** Mean Relative Bias | $\,2\cdot\overline{(C_o - C_p)/(C_o + C_p)}\,$ | $[-0.4,\,0.4]$ | $0$ |
-| **RMSE** (normalised) | $\,\sqrt{\overline{(C_o - C_p)^2}}\,/\,\overline{C_o}\,$ | $<2.3$ | $0$ |
-| **NMSE** | $\,\overline{(C_o - C_p)^2}\,/\,(\overline{C_o}\cdot\overline{C_p})\,$ | — | $0$ |
-| **FAC2** | fraction with $\,0.5 \le C_p / C_o \le 2.0\,$ | $[0.5,\,2.0]$ | $1$ |
-| **MG** geometric mean bias | $\,\exp\!\overline{(\ln C_o - \ln C_p)}\,$ | $[0.67,\,1.5]$ | $1$ |
-| **VG** geometric variance | $\,\exp\!\operatorname{var}(\ln C_o - \ln C_p)\,$ | $<3.3$ | $1$ |
+| Metric | Formula | Regression | External | Perfect |
+|---|---|---|---|---|
+| **MRB** Mean Relative Bias | $\,2\cdot\overline{(C_o - C_p)/(C_o + C_p)}\,$ | $[-0.4,\,0.4]$ | $[-0.67,\,0.67]$ | $0$ |
+| **RMSE** (normalised) | $\,\sqrt{\overline{(C_o - C_p)^2}}\,/\,\overline{C_o}\,$ | $<2.3$ | $<3.0$ | $0$ |
+| **NMSE** | $\,\overline{(C_o - C_p)^2}\,/\,(\overline{C_o}\cdot\overline{C_p})\,$ | — | — | $0$ |
+| **FAC2** | fraction with $\,0.5 \le C_p / C_o \le 2.0\,$ | $\ge 0.5$ | $\ge 0.3$ | $1$ |
+| **MG** geometric mean bias | $\,\exp\!\overline{(\ln C_o - \ln C_p)}\,$ | $[0.67,\,1.5]$ | $[0.5,\,2.0]$ | $1$ |
+| **VG** geometric variance | $\,\exp\!\operatorname{var}(\ln C_o - \ln C_p)\,$ | $<3.3$ | $<4.0$ | $1$ |
+
+The "Regression" column is used for self-consistency and CFD baselines
+(tight tolerances catch solver changes). The "External" column is per
+Chang &amp; Hanna (2004) for comparison against field experiments.
 
 Geometric (log-based) metrics floor zero values at $10^{-12}$ to avoid $-\infty$.
+
+## Two-phase pressurized source (opt-in)
+
+Pressurized liquefied gases (Cl₂, NH₃, propane, cold liquid CO₂) and
+supercritical fluids (CO₂ at &gt; P_c) flash partially to vapor when expanded
+to atmospheric pressure. The thermodynamic vapor fraction at the expanded
+state can be estimated analytically via the Clapeyron flash relation:
+
+$$\;x_v \;=\; \frac{C_{p,liq}\,(T_{vessel} - T_{bp})}{\Delta H_{vap}}\;$$
+
+DisperSim 3D ships a `TwoPhaseSourceCalculator` (in `DisperSim3D.Core`) that
+computes this split using a built-in compound table (CO₂, NH₃, Cl₂, CH₄,
+propane, n-butane, H₂S) plus a Watson-correlation fallback for less common
+substances via `DwsimThermo.GetCompoundInfo`. It returns:
+
+- `VaporMassFlowKgPerS` — what would enter an airborne dispersion engine
+- `DropletMassFlowKgPerS` — what would form a re-evaporating pool
+- `TempExitK`, `VelocityExitMS`, `DiameterPseudoM` — Birch &amp; Schefer
+  pseudo-source geometry for the vapor portion
+
+Bench files can opt into this pre-processing via an optional `twoPhase`
+block in the `source`:
+
+```json
+"twoPhase": {
+  "enabled": true,
+  "compoundName": "Carbon dioxide",
+  "vesselPressurePa": 15869325,
+  "vesselTemperatureK": 278.15,
+  "orificeDiameterM": 0.02562,
+  "dischargeCoefficient": 0.65,
+  "targetExpandedVelocityMS": 100.0
+}
+```
+
+When enabled, the `ValidationRunner` replaces the source's
+`releaseRateKgPerS` / `stackDiameterM` / `exitTemperatureK` / `exitVelocityMPerS`
+with the calculator's vapor-only output before the dispersion engine sees
+the source. The bench's user-supplied `releaseRateKgPerS` is honoured as
+the **total** measured/observed mass flow (the gas-orifice formula in
+`HighPressureLeakModel` underpredicts liquid-storage releases by 5-10× and
+is bypassed).
+
+### Important caveat — when NOT to enable
+
+The Clapeyron $x_v$ is the **thermodynamic** vapor fraction at equilibrium
+with ambient pressure. For high-momentum pressurized jets (Jack Rabbit I/II,
+Desert Tortoise) the fine droplets formed by the flash **re-evaporate in
+seconds** in the cold expanding jet — the actual airborne fraction is much
+higher than $x_v$. Applying $x_v$ alone removes the rainout mass without
+modelling the pool re-evaporation that would add it back, and predictions
+get substantially worse.
+
+The bench files for these scenarios keep `twoPhase` defined with
+`enabled: false` as documentation of the recipe, and the dispersion engine
+sees the full mass flow.
+
+Two-phase is currently enabled (true) for **no bundled bench** as of this
+revision. The calculator and infrastructure are in place for future work
+that adds a coupled airborne + pool re-evaporation source.
 
 ## Cloud volume validation
 
@@ -122,6 +213,7 @@ citation. Schema version `dsbench/v1`. Top-level fields:
 |---|---|
 | `name`, `citation`, `description` | provenance |
 | `source` | gas, position, release rate, pool/stack diameter, exit conditions |
+| `source.twoPhase` | *(optional)* Clapeyron flash recipe — see [Two-phase pressurized source](#two-phase-pressurized-source-opt-in) |
 | `meteo` | wind speed/direction, Pasquill class, ambient T/p, `roughnessLengthM` |
 | `domain` | size, grid resolution, simulation duration, timestep |
 | `solver` | string matching `CfdSolverType` (e.g. `RhoReactingBuoyantFoam`) |
@@ -137,12 +229,18 @@ JavaScript-style `// comments` are accepted.
 ## Bundled benchmarks
 
 Located under [`benchmarks/`](https://github.com/DanWBR/DisperSim3D/tree/main/benchmarks)
-at the repo root. All 6 currently **PASS** as regression baselines:
+at the repo root. 11 benchmarks: 2 self-consistency, 5 Prairie Grass
+experimental validation, 4 CFD regression baselines:
 
 | File | Solver | Role |
 |---|---|---|
-| `gauss-D-smoketest.dsbench` | GaussianPlume | Engine self-consistency for Pasquill-Gifford coefficients |
+| `gauss-D-smoketest.dsbench` | GaussianPlume | Engine self-consistency for Briggs (1973) sigma coefficients |
 | `gauss-puff-smoketest.dsbench` | GaussianPuff | Engine self-consistency for the puff `StepTo` loop |
+| `prairie-grass-07-B.dsbench` | GaussianPlume | Prairie Grass Run 7, stability B (Barad 1958) |
+| `prairie-grass-11-C.dsbench` | GaussianPlume | Prairie Grass Run 11, stability C (Barad 1958) |
+| `prairie-grass-22-D.dsbench` | GaussianPlume | Prairie Grass Run 22, stability D (Barad 1958) |
+| `prairie-grass-29-E.dsbench` | GaussianPlume | Prairie Grass Run 29, stability E (Barad 1958) |
+| `prairie-grass-35-E.dsbench` | GaussianPlume | Prairie Grass Run 35, stability E (Barad 1958) |
 | `burro9.dsbench` | RhoReactingBuoyantFoam | LNG cryogenic, neutral ABL, 3 arcs (Koopman 1982 / Vu 2019 §5.4). Also validated with `FluidX3DDispersion` (buoyant tracer, gravity-current spreading, BFECC, 3× grid) — all Hanna SPMs pass |
 | `burro8.dsbench` | RhoReactingBuoyantFoam | Same setup under stable ABL (Pasquill F, U = 1.8 m/s) |
 | `dat632.dsbench` | RhoReactingBuoyantFoam | SF₆ over slope, Hamburg WT (Mack &amp; Spruijt 2013). Also validated with `FluidX3DDispersion` (mass-injection source, Smagorinsky D) — all SPMs pass |
@@ -150,7 +248,13 @@ at the repo root. All 6 currently **PASS** as regression baselines:
 
 ### What these benchmarks lock in
 
-The observed values for the CFD benches (Burro 8/9, DAT632) are
+The **Prairie Grass** benchmarks validate the Gaussian plume engine against
+real field measurements (Barad 1958). Acceptance follows Chang &amp; Hanna
+(2004) published criteria. Runs at E stability pass; B/C/D runs fail within
+documented limitations of the Gaussian plume model (see
+[benchmark results](benchmark-results.md#prairie-grass-discussion)).
+
+The observed values for the **CFD benches** (Burro 8/9, DAT632) are
 **regression baselines captured from the current solver pipeline at the
 current grid resolution**, not the experimental ground truth from the
 cited papers. Two reasons:

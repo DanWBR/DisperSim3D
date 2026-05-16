@@ -43,10 +43,10 @@
   "unit": "KgPerM3",
 
   "sensors": [
-    { "name": "x100",  "position": [100,  0, 0.5], "measuredKgM3": 0.00228717 },
-    { "name": "x500",  "position": [500,  0, 0.5], "measuredKgM3": 0.000129805 },
-    { "name": "x1000", "position": [1000, 0, 0.5], "measuredKgM3": 3.76489e-5 },
-    { "name": "x2000", "position": [2000, 0, 0.5], "measuredKgM3": 1.0918e-5 }
+    { "name": "x100",  "position": [100,  0, 0.5], "measuredKgM3": 1.43e-3 },
+    { "name": "x500",  "position": [500,  0, 0.5], "measuredKgM3": 7.374e-5 },
+    { "name": "x1000", "position": [1000, 0, 0.5], "measuredKgM3": 2.054e-5 },
+    { "name": "x2000", "position": [2000, 0, 0.5], "measuredKgM3": 5.72e-6 }
   ],
 
   "acceptance": {

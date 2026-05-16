@@ -308,19 +308,17 @@ namespace DisperSim3D.Core
                 var thresholds = scenario.Thresholds;
                 if (thresholds.Count == 0)
                 {
-                    renderer.ComputeIsosurfaces(plume, thresholds);
-                    double maxC = renderer.GetMaxConcentration();
-                    if (maxC > 1e-20)
+                    double lfl = ResolveScenarioLfl(scenario, job.Scene);
+                    if (lfl > 0)
                     {
-                        thresholds = new List<DispersionThreshold>
-                        {
-                            new DispersionThreshold { Name = "High", ConcentrationValue = maxC * 0.1,
-                                Color = System.Windows.Media.Colors.Red, Opacity = 0.6, Visible = true },
-                            new DispersionThreshold { Name = "Medium", ConcentrationValue = maxC * 0.01,
-                                Color = System.Windows.Media.Colors.Orange, Opacity = 0.35, Visible = true },
-                            new DispersionThreshold { Name = "Low", ConcentrationValue = maxC * 0.001,
-                                Color = System.Windows.Media.Colors.Yellow, Opacity = 0.12, Visible = true }
-                        };
+                        thresholds = BuildLflThresholds(lfl);
+                    }
+                    else
+                    {
+                        renderer.ComputeIsosurfaces(plume, thresholds);
+                        double maxC = renderer.GetMaxConcentration();
+                        if (maxC > 1e-20)
+                            thresholds = BuildFallbackThresholds(maxC);
                     }
                 }
 
@@ -753,6 +751,49 @@ namespace DisperSim3D.Core
         private void RaiseStatusChanged(SimulationJob job)
         {
             JobStatusChanged?.Invoke(this, job);
+        }
+
+        private static double ResolveScenarioLfl(DispersionScenario scenario, Scene3D scene)
+        {
+            if (scenario?.Sources == null || scenario.Sources.Count == 0) return 0;
+            var src = scenario.Sources[0];
+            if (!string.IsNullOrEmpty(src.GasRefId) && scene?.GasLibrary != null)
+            {
+                var lib = scene.GasLibrary.FirstOrDefault(g => g.Id == src.GasRefId);
+                if (lib != null)
+                {
+                    var props = lib.AsGasProperties();
+                    if (props != null && props.LFL > 0) return props.LFL;
+                }
+            }
+            if (src.Gas != null && src.Gas.LFL > 0) return src.Gas.LFL;
+            return 0;
+        }
+
+        private static List<DispersionThreshold> BuildLflThresholds(double lfl)
+        {
+            return new List<DispersionThreshold>
+            {
+                new DispersionThreshold { Name = "100% LFL", ConcentrationValue = lfl,
+                    Color = System.Windows.Media.Colors.Red, Opacity = 0.7, Visible = true },
+                new DispersionThreshold { Name = "60% LFL", ConcentrationValue = lfl * 0.6,
+                    Color = System.Windows.Media.Colors.DarkOrange, Opacity = 0.5, Visible = true },
+                new DispersionThreshold { Name = "20% LFL", ConcentrationValue = lfl * 0.2,
+                    Color = System.Windows.Media.Colors.Gold, Opacity = 0.3, Visible = true }
+            };
+        }
+
+        private static List<DispersionThreshold> BuildFallbackThresholds(double maxC)
+        {
+            return new List<DispersionThreshold>
+            {
+                new DispersionThreshold { Name = "High", ConcentrationValue = maxC * 0.1,
+                    Color = System.Windows.Media.Colors.Red, Opacity = 0.7, Visible = true },
+                new DispersionThreshold { Name = "Medium", ConcentrationValue = maxC * 0.01,
+                    Color = System.Windows.Media.Colors.DarkOrange, Opacity = 0.5, Visible = true },
+                new DispersionThreshold { Name = "Low", ConcentrationValue = maxC * 0.001,
+                    Color = System.Windows.Media.Colors.Gold, Opacity = 0.3, Visible = true }
+            };
         }
     }
 

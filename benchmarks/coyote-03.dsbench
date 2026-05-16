@@ -1,0 +1,60 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "Coyote-Trial03",
+  "citation": "Goldwire, H.C. et al. (1983). Coyote series data report - LLNL/NWC 1981 LNG spill tests dispersion, vapor burn, and rapid-phase-transition. LLNL UCID-19953. Trial 3 dispersion phase. Parameters from PHMSA MVD Rev B 2024 Table 2-14 (base case). Sensor values approximated from Hansen et al. 2010 validation figures.",
+  "description": "Coyote Trial 3 - LNG spill on water from 0.61 m pipe. 100.7 kg/s for 65 s. Frenchman Flat, same site as Burro. Pre-ignition dispersion phase. Sensors on arcs at 140, 200, 300, 400, 500 m, ~1 m height. NOTE: stability class C (not D as in many secondary sources). Stream composition CH4 79.4% / C2H6 16.4% / C3H8 4.2% - model treats as CH4 surrogate. Sensor values confidence medium-low (Hansen 2010 figures); authoritative tables in Goldwire 1983 UCID-19953 Vol. 2 (OSTI 5289356).",
+
+  "source": {
+    "name": "Coyote T3 LNG pool",
+    "gas": {
+      "name": "CH4",
+      "molarMass": 0.01604,
+      "lfl": 0,
+      "ufl": 0,
+      "isCryogenic": true
+    },
+    "position": [0, 0, 1.5],
+    "releaseRateKgPerS": 100.7,
+    "releaseDurationS": 65,
+    "stackDiameterM": 11.0,
+    "exitTemperatureK": 111,
+    "exitVelocityMPerS": 0.08
+  },
+
+  "meteo": {
+    "windSpeed": 6.0,
+    "windDirectionDeg": 270,
+    "stability": "C",
+    "ambientTemperature": 311,
+    "ambientPressure": 93600,
+    "windMeasurementHeightM": 3,
+    "roughnessLengthM": 0.0002
+  },
+
+  "domain": {
+    "sizeM": 800,
+    "gridResolution": 100,
+    "durationS": 240,
+    "timeStepS": 1.0
+  },
+
+  "solver": "RhoReactingBuoyantFoam",
+  "concentrationKind": "PeakOverTime",
+  "unit": "MassFraction",
+
+  "sensors": [
+    { "name": "arc-140m", "position": [140, 0, 1.0], "measuredKgM3": 0.0497 },
+    { "name": "arc-200m", "position": [200, 0, 1.0], "measuredKgM3": 0.0304 },
+    { "name": "arc-300m", "position": [300, 0, 1.0], "measuredKgM3": 0.0166 },
+    { "name": "arc-400m", "position": [400, 0, 1.0], "measuredKgM3": 0.0111 },
+    { "name": "arc-500m", "position": [500, 0, 1.0], "measuredKgM3": 0.0083 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.67, "max": 0.67 },
+    "RMSE": { "max": 3.0 },
+    "FAC2": { "min": 0.3, "max": 2.0 },
+    "MG":   { "min": 0.5, "max": 2.0 },
+    "VG":   { "max": 4.0 }
+  }
+}

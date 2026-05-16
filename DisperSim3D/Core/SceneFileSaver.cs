@@ -167,7 +167,12 @@ namespace DisperSim3D.Core
                 new XAttribute("GroundTextureTileSize", e.GroundTextureTileSize.ToString(inv)),
                 new XAttribute("GridMinorSpacing", e.GridMinorSpacing.ToString(inv)),
                 new XAttribute("GridMajorSpacing", e.GridMajorSpacing.ToString(inv)),
-                new XAttribute("GridHalfSize", e.GridHalfSize.ToString(inv)));
+                new XAttribute("GridHalfSize", e.GridHalfSize.ToString(inv)),
+                new XAttribute("ShadowsEnabled", e.ShadowsEnabled.ToString()),
+                new XAttribute("FogEnabled", e.FogEnabled.ToString()),
+                new XAttribute("FogDensity", e.FogDensity.ToString(inv)),
+                new XAttribute("SkyTextureBrightness", e.SkyTextureBrightness.ToString(inv)),
+                new XAttribute("SkyTextureVOffset", e.SkyTextureVOffset.ToString(inv)));
         }
 
         private static XElement? SerializeGeneralSettings(Scene3D scene, CultureInfo inv)

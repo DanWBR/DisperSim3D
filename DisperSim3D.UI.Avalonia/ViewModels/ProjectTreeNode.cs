@@ -21,9 +21,20 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
         /// opacity to the right of the title. Empty string hides the badge.</summary>
         public string Badge { get; }
 
+        /// <summary>Optional status chip (e.g. simulation name for views).
+        /// Empty string hides the chip.</summary>
+        public string StatusText { get; }
+
+        /// <summary>Hex colour for the status chip (foreground + tinted background).
+        /// Default is gray.</summary>
+        public string StatusColor { get; }
+
         /// <summary>Short emoji / unicode glyph used as a visual prefix.
         /// Cheap stand-in for proper icon assets until we wire SVG icons in.</summary>
         public string Icon { get; }
+
+        /// <summary>Hex colour for the icon glyph. Default is gray.</summary>
+        public string IconColor { get; }
 
         /// <summary>The underlying domain object this node represents, e.g. a
         /// <see cref="DisperSim3D.Models.ReleaseSource3D"/>, a
@@ -59,7 +70,9 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
 
         public ProjectTreeNode(string nodeId, string icon, string title,
             string badge = "", object? tag = null, bool hasVisibilityToggle = false,
-            bool initialVisibility = true)
+            bool initialVisibility = true,
+            string statusText = "", string statusColor = "",
+            string iconColor = "")
         {
             NodeId = nodeId;
             Icon = icon;
@@ -68,6 +81,9 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
             Tag = tag;
             HasVisibilityToggle = hasVisibilityToggle;
             _isVisible3D = initialVisibility;
+            StatusText = statusText;
+            StatusColor = string.IsNullOrEmpty(statusColor) ? "#888888" : statusColor;
+            IconColor = string.IsNullOrEmpty(iconColor) ? "#666666" : iconColor;
         }
     }
 }

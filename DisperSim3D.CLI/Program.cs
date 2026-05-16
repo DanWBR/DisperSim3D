@@ -65,6 +65,7 @@ namespace DisperSim3D.CLI
             bool memoryEstimate = false;
             string memSolverArg = null;
             int memNxArg = 0;
+            bool twoPhaseTest = false;
             int gpuDeviceId = int.MinValue;     // sentinel: unspecified
             string allocationSelector = null;
             string fieldComparePath = null;
@@ -134,6 +135,9 @@ namespace DisperSim3D.CLI
                         if (i + 1 < args.Length && int.TryParse(args[i + 1], out int parsedN))
                             { memNxArg = parsedN; i++; }
                         break;
+                    case "--twophase-test":
+                        twoPhaseTest = true;
+                        break;
                     case "--gpu-device":
                         if (i + 1 < args.Length && int.TryParse(args[++i], out int devId))
                             gpuDeviceId = devId;
@@ -162,6 +166,7 @@ namespace DisperSim3D.CLI
             if (geometrySelftest) return RunGeometrySelfTest();
             if (listIogpType != null) return RunListIogp(listIogpType);
             if (memoryEstimate) return RunMemoryEstimate(memSolverArg, memNxArg);
+            if (twoPhaseTest) return RunTwoPhaseTest();
 
             if (gpuDeviceId != int.MinValue)
             {
@@ -479,6 +484,164 @@ namespace DisperSim3D.CLI
                         Fmt(IogpFrequencyTable.FrequencyFor(t, 600, b)),
                         Fmt(IogpFrequencyTable.FrequencyFor(t, 900, b))));
                 }
+                Console.WriteLine();
+            }
+            return 0;
+        }
+
+        /// <summary>Smoke-tests the <see cref="TwoPhaseSourceCalculator"/> against
+        /// canned pressurized-release scenarios (CO2, NH3, Cl2). When DWSIM is
+        /// configured, prints the real-fluid flash result; otherwise the ideal-gas
+        /// fallback. Exit code 0 always (informational).</summary>
+        static int RunTwoPhaseTest()
+        {
+            Console.WriteLine("Two-Phase Source Calculator — smoke test");
+            Console.WriteLine();
+
+            string dwsimPath = AppSettings.Instance.DwsimInstallPath ?? "";
+            bool dwsimOk = !string.IsNullOrEmpty(dwsimPath) && DwsimThermo.Initialize(dwsimPath);
+            Console.WriteLine("DWSIM: " + (dwsimOk
+                ? "initialised @ " + dwsimPath
+                : "NOT initialised (" + DwsimThermo.LastError + ") — ideal-gas fallback active"));
+            if (dwsimOk)
+            {
+                var avail = DwsimThermo.AvailableCompounds();
+                if (avail != null && avail.Count > 0)
+                {
+                    Console.WriteLine("  available compounds: " + avail.Count
+                        + " (e.g. " + string.Join(", ", avail.Take(8)) + " ...)");
+                    foreach (var probe in new[] { "Carbon dioxide", "Carbon Dioxide", "CO2",
+                                                  "Ammonia", "Chlorine", "Methane", "Water" })
+                    {
+                        bool present = avail.Any(c => string.Equals(c, probe, StringComparison.OrdinalIgnoreCase));
+                        Console.WriteLine("    [" + (present ? "OK" : "  ") + "] " + probe);
+                    }
+                }
+            }
+            Console.WriteLine();
+
+            // Quick PT flash smoke test — verifies DWSIMCore's PR78 flash works.
+            if (dwsimOk)
+            {
+                Console.WriteLine("--- DWSIMCore PT flash smoke test ---");
+                foreach (var (name, T, P) in new[] {
+                    ("Carbon dioxide", 290.0, 8.5e6),  // supercritical CO2
+                    ("Carbon dioxide", 195.0, 101325.0),  // ~boiling point
+                    ("Chlorine", 290.0, 7.5e5),  // pressurized liquid Cl2
+                    ("Ammonia", 290.0, 9.0e5),  // pressurized liquid NH3
+                    ("Water", 298.0, 101325.0),  // ambient water (liquid)
+                })
+                {
+                    var p = DwsimThermo.ComputeMixtureProperties(
+                        new Dictionary<string, double> { [name] = 1.0 }, T, P);
+                    Console.WriteLine(string.Format(
+                        "  {0,-20} @ T={1,5:F1}K, P={2,9:E2}Pa → ρ={3,7:F2} kg/m³  x_v={4:F3}  M={5:F4} kg/mol{6}",
+                        name, T, P, p.DensityKgM3, p.VaporFraction, p.MolarMassKgMol,
+                        string.IsNullOrEmpty(p.Error) ? "" : "  ERR: " + p.Error));
+                }
+                Console.WriteLine();
+            }
+
+            var cases = new[]
+            {
+                new {
+                    Name = "Spadeadam DF1 Test 5 (BP cold-liquid CO2, 158 barg / 25.62 mm)",
+                    Compound = "Carbon dioxide",
+                    Leak = new HighPressureLeakParams
+                    {
+                        VesselPressurePa = 15.768e6 + 101325, // 157.68 barg → Pa absolute
+                        VesselTemperatureK = 278.15,           // 5 °C
+                        OrificeDiameterM = 0.02562,
+                        VesselVolumeM3 = 50.0,
+                        GasGamma = 1.30,
+                        GasMolarMassKgMol = 0.04401,
+                        AmbientPressurePa = 101325,
+                        DischargeCoefficient = 0.65,
+                    },
+                    AmbientK = 279.0
+                },
+                new {
+                    Name = "CO2PipeHaz INERIS (supercritical CO2, 85 barg / 6 mm)",
+                    Compound = "Carbon dioxide",
+                    Leak = new HighPressureLeakParams
+                    {
+                        VesselPressurePa = 8.5e6 + 101325,
+                        VesselTemperatureK = 290.0,
+                        OrificeDiameterM = 0.006,
+                        VesselVolumeM3 = 2.0,
+                        GasGamma = 1.30,
+                        GasMolarMassKgMol = 0.04401,
+                        AmbientPressurePa = 101325,
+                        DischargeCoefficient = 0.65,
+                    },
+                    AmbientK = 290.0
+                },
+                new {
+                    Name = "Desert Tortoise T4 (pressurized liquid NH3, ~9 barg / 94.5 mm)",
+                    Compound = "Ammonia",
+                    Leak = new HighPressureLeakParams
+                    {
+                        VesselPressurePa = 9.0e5,
+                        VesselTemperatureK = 290.0,
+                        OrificeDiameterM = 0.0945,
+                        VesselVolumeM3 = 50.0,
+                        GasGamma = 1.31,
+                        GasMolarMassKgMol = 0.01703,
+                        AmbientPressurePa = 91500,
+                        DischargeCoefficient = 0.65,
+                    },
+                    AmbientK = 305.0
+                },
+                new {
+                    Name = "Jack Rabbit II T1 (pressurized liquid Cl2, ~6.5 barg / 152 mm)",
+                    Compound = "Chlorine",
+                    Leak = new HighPressureLeakParams
+                    {
+                        VesselPressurePa = 6.5e5 + 101325,
+                        VesselTemperatureK = 290.0,
+                        OrificeDiameterM = 0.152,
+                        VesselVolumeM3 = 8.0,
+                        GasGamma = 1.32,
+                        GasMolarMassKgMol = 0.07090,
+                        AmbientPressurePa = 87000,
+                        DischargeCoefficient = 0.65,
+                    },
+                    AmbientK = 305.0
+                },
+            };
+
+            foreach (var c in cases)
+            {
+                Console.WriteLine("--- " + c.Name + " ---");
+                var r = TwoPhaseSourceCalculator.Compute(
+                    c.Leak, c.Compound, c.Leak.AmbientPressurePa, c.AmbientK);
+
+                if (!string.IsNullOrEmpty(r.Error))
+                {
+                    Console.WriteLine("  ERROR: " + r.Error);
+                    continue;
+                }
+                Console.WriteLine(string.Format(
+                    "  m_dot total      = {0:G4} kg/s",
+                    r.VaporMassFlowKgPerS + r.DropletMassFlowKgPerS));
+                Console.WriteLine(string.Format(
+                    "  vapor fraction   = {0:F3} ({1})",
+                    r.VaporFraction, r.IsTwoPhase ? "two-phase" : "single-phase"));
+                Console.WriteLine(string.Format(
+                    "  m_dot vapor      = {0:G4} kg/s  (to dispersion engine)",
+                    r.VaporMassFlowKgPerS));
+                Console.WriteLine(string.Format(
+                    "  m_dot rainout    = {0:G4} kg/s  (pool re-evaporation)",
+                    r.DropletMassFlowKgPerS));
+                Console.WriteLine(string.Format(
+                    "  T_exit           = {0:F1} K", r.TempExitK));
+                Console.WriteLine(string.Format(
+                    "  ρ_exit           = {0:F2} kg/m³", r.DensityExitKgM3));
+                Console.WriteLine(string.Format(
+                    "  D_pseudo (Birch) = {0:F4} m  @ V = {1:F0} m/s",
+                    r.DiameterPseudoM, r.VelocityExitMS));
+                Console.WriteLine("  DWSIM used       = " + r.DwsimUsed);
+                Console.WriteLine("  notes            = " + r.Notes);
                 Console.WriteLine();
             }
             return 0;

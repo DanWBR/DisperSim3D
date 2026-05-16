@@ -631,25 +631,25 @@ namespace DisperSim3D.Controls
             bool hasContours = scenario.ContourPlanes.Count > 0;
             var contourConfigs = hasContours ? scenario.ContourPlanes.Where(cp => cp.Visible).ToList() : null;
 
+            double lfl = ResolveScenarioLfl(scenario);
             var result = await Task.Run(() =>
             {
                 if (thresholds.Count == 0)
                 {
-                    renderer.ComputeIsosurfaces(engine, thresholds);
-                    double maxC = renderer.GetMaxConcentration();
-                    if (maxC > 1e-20)
+                    List<DispersionThreshold> autoThresholds = null;
+                    if (lfl > 0)
                     {
-                        var autoThresholds = new List<DispersionThreshold>
-                        {
-                            new DispersionThreshold { Name = "High", ConcentrationValue = maxC * 0.1,
-                                Color = System.Windows.Media.Colors.Red, Opacity = 0.6, Visible = true },
-                            new DispersionThreshold { Name = "Medium", ConcentrationValue = maxC * 0.01,
-                                Color = System.Windows.Media.Colors.Orange, Opacity = 0.35, Visible = true },
-                            new DispersionThreshold { Name = "Low", ConcentrationValue = maxC * 0.001,
-                                Color = System.Windows.Media.Colors.Yellow, Opacity = 0.12, Visible = true }
-                        };
-                        return ComputeSteadyState(renderer, engine, autoThresholds, monitors, contourConfigs, autoThresholds);
+                        autoThresholds = BuildLflThresholds(lfl);
                     }
+                    else
+                    {
+                        renderer.ComputeIsosurfaces(engine, thresholds);
+                        double maxC = renderer.GetMaxConcentration();
+                        if (maxC > 1e-20)
+                            autoThresholds = BuildFallbackThresholds(maxC);
+                    }
+                    if (autoThresholds != null)
+                        return ComputeSteadyState(renderer, engine, autoThresholds, monitors, contourConfigs, autoThresholds);
                 }
                 return ComputeSteadyState(renderer, engine, thresholds, monitors, contourConfigs, thresholds);
             });
@@ -1493,34 +1493,17 @@ namespace DisperSim3D.Controls
                             ? _cfdResult.TimeStepPaths[_cfdResult.TimeSteps[_cfdResult.TimeSteps.Count - 1]] : "N/A"));
                     _dispersionRenderer.SetScalarFieldDirect(lastField);
                 }
-                double maxC = _dispersionRenderer.GetMaxConcentration();
-                System.Diagnostics.Debug.WriteLine("maxC from renderer = " + maxC);
-                if (maxC > 1e-20)
+                double cfdLfl = ResolveScenarioLfl(scenario);
+                if (cfdLfl > 0)
                 {
-                    scenario.Thresholds.Add(new DispersionThreshold
-                    {
-                        Name = "High (10%)",
-                        ConcentrationValue = maxC * 0.1,
-                        Color = System.Windows.Media.Colors.Red,
-                        Opacity = 0.6,
-                        Visible = true
-                    });
-                    scenario.Thresholds.Add(new DispersionThreshold
-                    {
-                        Name = "Medium (1%)",
-                        ConcentrationValue = maxC * 0.01,
-                        Color = System.Windows.Media.Colors.Orange,
-                        Opacity = 0.35,
-                        Visible = true
-                    });
-                    scenario.Thresholds.Add(new DispersionThreshold
-                    {
-                        Name = "Low (0.1%)",
-                        ConcentrationValue = maxC * 0.001,
-                        Color = System.Windows.Media.Colors.Yellow,
-                        Opacity = 0.12,
-                        Visible = true
-                    });
+                    scenario.Thresholds.AddRange(BuildLflThresholds(cfdLfl));
+                }
+                else
+                {
+                    double maxC = _dispersionRenderer.GetMaxConcentration();
+                    System.Diagnostics.Debug.WriteLine("maxC from renderer = " + maxC);
+                    if (maxC > 1e-20)
+                        scenario.Thresholds.AddRange(BuildFallbackThresholds(maxC));
                 }
 
             if (scenario.Thresholds.Count > 0)
@@ -2772,11 +2755,30 @@ namespace DisperSim3D.Controls
                 new System.Xml.Linq.XAttribute("SunElevationDeg", e.SunElevationDeg.ToString(inv)),
                 new System.Xml.Linq.XAttribute("SunIntensity", e.SunIntensity.ToString(inv)),
                 new System.Xml.Linq.XAttribute("AmbientIntensity", e.AmbientIntensity.ToString(inv)),
+                new System.Xml.Linq.XAttribute("UseSolarClock", e.UseSolarClock.ToString()),
+                new System.Xml.Linq.XAttribute("Latitude", e.Latitude.ToString(inv)),
+                new System.Xml.Linq.XAttribute("DayOfYear", e.DayOfYear.ToString(inv)),
+                new System.Xml.Linq.XAttribute("TimeOfDayHours", e.TimeOfDayHours.ToString(inv)),
                 new System.Xml.Linq.XAttribute("SkydomeEnabled", e.SkydomeEnabled.ToString()),
                 new System.Xml.Linq.XAttribute("SkyZenith", e.SkyZenithColor.ToString()),
                 new System.Xml.Linq.XAttribute("SkyHorizon", e.SkyHorizonColor.ToString()),
                 new System.Xml.Linq.XAttribute("Ground", e.Ground.ToString()),
-                new System.Xml.Linq.XAttribute("ShowGridOverlay", e.ShowGridOverlay.ToString()));
+                new System.Xml.Linq.XAttribute("ShowGridOverlay", e.ShowGridOverlay.ToString()),
+                new System.Xml.Linq.XAttribute("ShowClouds", e.ShowClouds.ToString()),
+                new System.Xml.Linq.XAttribute("CloudSpeed", e.CloudSpeed.ToString(inv)),
+                new System.Xml.Linq.XAttribute("ShowGrassBlades", e.ShowGrassBlades.ToString()),
+                new System.Xml.Linq.XAttribute("GrassBladeCount", e.GrassBladeCount.ToString(inv)),
+                new System.Xml.Linq.XAttribute("SkyTexturePath", e.SkyTexturePath ?? ""),
+                new System.Xml.Linq.XAttribute("GroundTexturePath", e.GroundTexturePath ?? ""),
+                new System.Xml.Linq.XAttribute("GroundTextureTileSize", e.GroundTextureTileSize.ToString(inv)),
+                new System.Xml.Linq.XAttribute("GridMinorSpacing", e.GridMinorSpacing.ToString(inv)),
+                new System.Xml.Linq.XAttribute("GridMajorSpacing", e.GridMajorSpacing.ToString(inv)),
+                new System.Xml.Linq.XAttribute("GridHalfSize", e.GridHalfSize.ToString(inv)),
+                new System.Xml.Linq.XAttribute("ShadowsEnabled", e.ShadowsEnabled.ToString()),
+                new System.Xml.Linq.XAttribute("FogEnabled", e.FogEnabled.ToString()),
+                new System.Xml.Linq.XAttribute("FogDensity", e.FogDensity.ToString(inv)),
+                new System.Xml.Linq.XAttribute("SkyTextureBrightness", e.SkyTextureBrightness.ToString(inv)),
+                new System.Xml.Linq.XAttribute("SkyTextureVOffset", e.SkyTextureVOffset.ToString(inv)));
         }
 
         private void DeserializeEnvironment(System.Xml.Linq.XElement root, System.Globalization.CultureInfo inv, Scene3D fs)
@@ -2784,18 +2786,42 @@ namespace DisperSim3D.Controls
             var el = root.Element("Environment");
             if (el == null) { fs.Environment = new EnvironmentSettings(); return; }
             var e = new EnvironmentSettings();
-            bool b; double d;
+            bool b; double d; int i;
+            var ns = System.Globalization.NumberStyles.Float;
+
             if (bool.TryParse((string)el.Attribute("UseSunLighting"), out b)) e.UseSunLighting = b;
-            if (double.TryParse((string)el.Attribute("SunAzimuthDeg"), System.Globalization.NumberStyles.Float, inv, out d)) e.SunAzimuthDeg = d;
-            if (double.TryParse((string)el.Attribute("SunElevationDeg"), System.Globalization.NumberStyles.Float, inv, out d)) e.SunElevationDeg = d;
-            if (double.TryParse((string)el.Attribute("SunIntensity"), System.Globalization.NumberStyles.Float, inv, out d)) e.SunIntensity = d;
-            if (double.TryParse((string)el.Attribute("AmbientIntensity"), System.Globalization.NumberStyles.Float, inv, out d)) e.AmbientIntensity = d;
+            if (double.TryParse((string)el.Attribute("SunAzimuthDeg"), ns, inv, out d)) e.SunAzimuthDeg = d;
+            if (double.TryParse((string)el.Attribute("SunElevationDeg"), ns, inv, out d)) e.SunElevationDeg = d;
+            if (double.TryParse((string)el.Attribute("SunIntensity"), ns, inv, out d)) e.SunIntensity = d;
+            if (double.TryParse((string)el.Attribute("AmbientIntensity"), ns, inv, out d)) e.AmbientIntensity = d;
+            if (bool.TryParse((string)el.Attribute("UseSolarClock"), out b)) e.UseSolarClock = b;
+            if (double.TryParse((string)el.Attribute("Latitude"), ns, inv, out d)) e.Latitude = d;
+            if (int.TryParse((string)el.Attribute("DayOfYear"), System.Globalization.NumberStyles.Integer, inv, out i)) e.DayOfYear = i;
+            if (double.TryParse((string)el.Attribute("TimeOfDayHours"), ns, inv, out d)) e.TimeOfDayHours = d;
             if (bool.TryParse((string)el.Attribute("SkydomeEnabled"), out b)) e.SkydomeEnabled = b;
             try { e.SkyZenithColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString((string)el.Attribute("SkyZenith")); } catch { }
             try { e.SkyHorizonColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString((string)el.Attribute("SkyHorizon")); } catch { }
             GroundMaterial gm;
             if (Enum.TryParse((string)el.Attribute("Ground") ?? "Grass", out gm)) e.Ground = gm;
             if (bool.TryParse((string)el.Attribute("ShowGridOverlay"), out b)) e.ShowGridOverlay = b;
+            if (bool.TryParse((string)el.Attribute("ShowClouds"), out b)) e.ShowClouds = b;
+            if (double.TryParse((string)el.Attribute("CloudSpeed"), ns, inv, out d)) e.CloudSpeed = d;
+            if (bool.TryParse((string)el.Attribute("ShowGrassBlades"), out b)) e.ShowGrassBlades = b;
+            if (int.TryParse((string)el.Attribute("GrassBladeCount"), System.Globalization.NumberStyles.Integer, inv, out i)) e.GrassBladeCount = i;
+            var skyTex = (string)el.Attribute("SkyTexturePath");
+            if (skyTex != null) e.SkyTexturePath = skyTex;
+            var gndTex = (string)el.Attribute("GroundTexturePath");
+            if (gndTex != null) e.GroundTexturePath = gndTex;
+            if (double.TryParse((string)el.Attribute("GroundTextureTileSize"), ns, inv, out d)) e.GroundTextureTileSize = d;
+            if (double.TryParse((string)el.Attribute("GridMinorSpacing"), ns, inv, out d)) e.GridMinorSpacing = d;
+            if (double.TryParse((string)el.Attribute("GridMajorSpacing"), ns, inv, out d)) e.GridMajorSpacing = d;
+            if (double.TryParse((string)el.Attribute("GridHalfSize"), ns, inv, out d)) e.GridHalfSize = d;
+            if (bool.TryParse((string)el.Attribute("ShadowsEnabled"), out b)) e.ShadowsEnabled = b;
+            if (bool.TryParse((string)el.Attribute("FogEnabled"), out b)) e.FogEnabled = b;
+            if (double.TryParse((string)el.Attribute("FogDensity"), ns, inv, out d)) e.FogDensity = d;
+            if (double.TryParse((string)el.Attribute("SkyTextureBrightness"), ns, inv, out d)) e.SkyTextureBrightness = d;
+            if (double.TryParse((string)el.Attribute("SkyTextureVOffset"), ns, inv, out d)) e.SkyTextureVOffset = d;
+
             fs.Environment = e;
         }
 
@@ -6143,5 +6169,48 @@ namespace DisperSim3D.Controls
         }
 
         #endregion
+
+        private double ResolveScenarioLfl(DispersionScenario scenario)
+        {
+            if (scenario?.Sources == null || scenario.Sources.Count == 0) return 0;
+            var src = scenario.Sources[0];
+            if (!string.IsNullOrEmpty(src.GasRefId) && _scene?.GasLibrary != null)
+            {
+                var lib = _scene.GasLibrary.FirstOrDefault(g => g.Id == src.GasRefId);
+                if (lib != null)
+                {
+                    var props = lib.AsGasProperties();
+                    if (props != null && props.LFL > 0) return props.LFL;
+                }
+            }
+            if (src.Gas != null && src.Gas.LFL > 0) return src.Gas.LFL;
+            return 0;
+        }
+
+        private static List<DispersionThreshold> BuildLflThresholds(double lfl)
+        {
+            return new List<DispersionThreshold>
+            {
+                new DispersionThreshold { Name = "100% LFL", ConcentrationValue = lfl,
+                    Color = System.Windows.Media.Colors.Red, Opacity = 0.7, Visible = true },
+                new DispersionThreshold { Name = "60% LFL", ConcentrationValue = lfl * 0.6,
+                    Color = System.Windows.Media.Colors.DarkOrange, Opacity = 0.5, Visible = true },
+                new DispersionThreshold { Name = "20% LFL", ConcentrationValue = lfl * 0.2,
+                    Color = System.Windows.Media.Colors.Gold, Opacity = 0.3, Visible = true }
+            };
+        }
+
+        private static List<DispersionThreshold> BuildFallbackThresholds(double maxC)
+        {
+            return new List<DispersionThreshold>
+            {
+                new DispersionThreshold { Name = "High", ConcentrationValue = maxC * 0.1,
+                    Color = System.Windows.Media.Colors.Red, Opacity = 0.7, Visible = true },
+                new DispersionThreshold { Name = "Medium", ConcentrationValue = maxC * 0.01,
+                    Color = System.Windows.Media.Colors.DarkOrange, Opacity = 0.5, Visible = true },
+                new DispersionThreshold { Name = "Low", ConcentrationValue = maxC * 0.001,
+                    Color = System.Windows.Media.Colors.Gold, Opacity = 0.3, Visible = true }
+            };
+        }
     }
 }

@@ -1,0 +1,63 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "Hydrogen-Jet-Schefer",
+  "citation": "Schefer, R.W., Houf, W.G., Williams, T.C. (2008). Investigation of small-scale unintended releases of hydrogen: momentum-dominated regime. Int. J. Hydrogen Energy 33(21), 6373-6384. Representative case: 207 bar storage, 1.91 mm orifice, choked flow.",
+  "description": "Sandia hydrogen jet experiment - high-pressure release representative of vehicle fuel cell tank leakage. Storage at 207 bar absolute / 295 K through 1.91 mm orifice gives choked mass flow ~0.024 kg/s. Birch & Schefer expanded pseudo-source ~6 cm diameter at 100 m/s. Validation goals: (1) buoyant tracer handles POSITIVE buoyancy correctly (H2 lighter than air → rises, opposite of LNG slumping); (2) flammable cloud volume in LFL-UFL envelope (4-75 percent v/v). Sensor values estimated from Schefer 2008 LFL contour figures (confidence low - initial regression baseline). The H2 jet curves upward; sensor heights account for buoyant rise.",
+
+  "source": {
+    "name": "H2 jet 1.91mm @ 207bar",
+    "gas": {
+      "name": "Hydrogen (H2)",
+      "molarMass": 0.002016,
+      "lfl": 0.00289,
+      "ufl": 0.173,
+      "isCryogenic": false
+    },
+    "position": [0, 0, 1.0],
+    "releaseRateKgPerS": 0.024,
+    "releaseDurationS": 30,
+    "stackDiameterM": 0.0606,
+    "exitTemperatureK": 230,
+    "exitVelocityMPerS": 100
+  },
+
+  "meteo": {
+    "windSpeed": 2.0,
+    "windDirectionDeg": 270,
+    "stability": "D",
+    "ambientTemperature": 293.15,
+    "ambientPressure": 101325,
+    "windMeasurementHeightM": 10,
+    "roughnessLengthM": 0.03
+  },
+
+  "domain": {
+    "sizeM": 15,
+    "gridResolution": 80,
+    "durationS": 30,
+    "timeStepS": 0.5
+  },
+
+  "solver": "FluidX3DDispersion",
+  "concentrationKind": "PeakOverTime",
+  "concentrationField": "H2",
+  "unit": "MassFraction",
+
+  "expectedCloudVolumeM3": 0.5,
+
+  "sensors": [
+    { "name": "jet_1m",  "position": [1,  0, 1.0], "measuredKgM3": 0.030 },
+    { "name": "jet_2m",  "position": [2,  0, 1.1], "measuredKgM3": 0.012 },
+    { "name": "jet_3m",  "position": [3,  0, 1.3], "measuredKgM3": 0.006 },
+    { "name": "jet_5m",  "position": [5,  0, 1.7], "measuredKgM3": 0.003 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.67, "max": 0.67 },
+    "RMSE": { "max": 3.0 },
+    "FAC2": { "min": 0.3, "max": 2.0 },
+    "MG":   { "min": 0.5, "max": 2.0 },
+    "VG":   { "max": 4.0 },
+    "CloudVolumeRatio": { "min": 0.3, "max": 3.0 }
+  }
+}

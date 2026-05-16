@@ -676,6 +676,21 @@ namespace DisperSim3D.Core
             var gridHalf = (string)el.Attribute("GridHalfSize");
             if (gridHalf != null) env.GridHalfSize = double.Parse(gridHalf, inv);
 
+            var shadowsEn = (string)el.Attribute("ShadowsEnabled");
+            if (shadowsEn != null) env.ShadowsEnabled = bool.Parse(shadowsEn);
+
+            var fogEn = (string)el.Attribute("FogEnabled");
+            if (fogEn != null) env.FogEnabled = bool.Parse(fogEn);
+
+            var fogDens = (string)el.Attribute("FogDensity");
+            if (fogDens != null) env.FogDensity = double.Parse(fogDens, inv);
+
+            var skyBright = (string)el.Attribute("SkyTextureBrightness");
+            if (skyBright != null) env.SkyTextureBrightness = double.Parse(skyBright, inv);
+
+            var skyVOff = (string)el.Attribute("SkyTextureVOffset");
+            if (skyVOff != null) env.SkyTextureVOffset = double.Parse(skyVOff, inv);
+
             scene.Environment = env;
         }
 

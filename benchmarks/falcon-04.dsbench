@@ -1,0 +1,58 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "Falcon-Trial04",
+  "citation": "Brown, T.C., Cederwall, R.T., Chan, S.T., Ermak, D.L., Koopman, R.P., Lamson, K.C., McClure, J.W., Morris, L.K. (1990). Falcon series data report - 1987 LNG vapor barrier verification field trials. GRI-89/0138 / UCRL-CR-104316. Sensor concentrations extracted from Chan, S.T. (1990) FEM3A simulations of Falcon tests, UCRL-CR-105184, Table 3.8.",
+  "description": "Falcon Trial 4 - LNG spill in a fenced impoundment. 44.9 m^3 LNG released at 61.3 kg/s for 301 s into a 60 m x 40 m basin inside 88 m x 44 m vapour fence (8.7 m tall). Frenchman Flat, 1987. Tests vapour-fence performance for LNG terminal siting. Sensors at fence (50 m), 150 m and 250 m downwind, 1 m height. NOTE: fence geometry not captured by Gaussian or stock CFD without 3D obstacles. Sensor values primary (Chan 1990 Table 3.8).",
+
+  "source": {
+    "name": "Falcon T4 LNG pool inside fence",
+    "gas": {
+      "name": "CH4",
+      "molarMass": 0.01604,
+      "lfl": 0,
+      "ufl": 0,
+      "isCryogenic": true
+    },
+    "position": [0, 0, 0.5],
+    "releaseRateKgPerS": 61.3,
+    "releaseDurationS": 301,
+    "stackDiameterM": 40,
+    "exitTemperatureK": 111,
+    "exitVelocityMPerS": 0.05
+  },
+
+  "meteo": {
+    "windSpeed": 4.3,
+    "windDirectionDeg": 270,
+    "stability": "D",
+    "ambientTemperature": 304,
+    "ambientPressure": 87000,
+    "windMeasurementHeightM": 2,
+    "roughnessLengthM": 0.008
+  },
+
+  "domain": {
+    "sizeM": 500,
+    "gridResolution": 100,
+    "durationS": 400,
+    "timeStepS": 1.0
+  },
+
+  "solver": "RhoReactingBuoyantFoam",
+  "concentrationKind": "PeakOverTime",
+  "unit": "MassFraction",
+
+  "sensors": [
+    { "name": "fence-50m_G04",  "position": [50,  0, 1.0], "measuredKgM3": 0.0221 },
+    { "name": "arc-150m_G02",   "position": [150, 0, 1.0], "measuredKgM3": 0.0166 },
+    { "name": "arc-250m_G16",   "position": [250, 0, 1.0], "measuredKgM3": 0.0121 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.67, "max": 0.67 },
+    "RMSE": { "max": 3.0 },
+    "FAC2": { "min": 0.3, "max": 2.0 },
+    "MG":   { "min": 0.5, "max": 2.0 },
+    "VG":   { "max": 4.0 }
+  }
+}

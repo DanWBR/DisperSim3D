@@ -1,0 +1,61 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "Maplin-Sands-Trial27",
+  "citation": "Puttock, J.S., Blackmore, D.R., Colenbrander, G.W. (1982). Field experiments on dense gas dispersion. J. Hazardous Materials 6, 13-41. Maplin Sands Trial 27. Arc-max concentrations digitised from Gant et al. (2016) Harmo17 Fig. 3.",
+  "description": "Maplin Sands Trial 27 - LNG spill on water from spill pipe. 23.2 kg/s for 160 s onto seawater (no impoundment). Sensors on floating pontoons at ~1 m above water on arcs at 90, 180, 325, 400, 525, 650 m. PHMSA MVD Rev B 2024 Table 2-35 base case. Sensor values digitised from Gant et al. 2016 Fig. 3 (Harmo17 paper) - confidence medium. Refine against original Puttock 1982 tables (PHMSA MVD spreadsheet) when available.",
+
+  "source": {
+    "name": "Maplin Sands LNG pool on water",
+    "gas": {
+      "name": "CH4",
+      "molarMass": 0.01604,
+      "lfl": 0,
+      "ufl": 0,
+      "isCryogenic": true
+    },
+    "position": [0, 0, 0.3],
+    "releaseRateKgPerS": 23.2,
+    "releaseDurationS": 160,
+    "stackDiameterM": 10,
+    "exitTemperatureK": 111,
+    "exitVelocityMPerS": 0.04
+  },
+
+  "meteo": {
+    "windSpeed": 5.5,
+    "windDirectionDeg": 270,
+    "stability": "D",
+    "ambientTemperature": 289,
+    "ambientPressure": 101325,
+    "windMeasurementHeightM": 10,
+    "roughnessLengthM": 0.0003
+  },
+
+  "domain": {
+    "sizeM": 800,
+    "gridResolution": 100,
+    "durationS": 400,
+    "timeStepS": 1.0
+  },
+
+  "solver": "RhoReactingBuoyantFoam",
+  "concentrationKind": "PeakOverTime",
+  "unit": "MassFraction",
+
+  "sensors": [
+    { "name": "arc-90m",   "position": [90,  0, 1.0], "measuredKgM3": 0.0663 },
+    { "name": "arc-180m",  "position": [180, 0, 1.0], "measuredKgM3": 0.0304 },
+    { "name": "arc-325m",  "position": [325, 0, 1.0], "measuredKgM3": 0.0166 },
+    { "name": "arc-400m",  "position": [400, 0, 1.0], "measuredKgM3": 0.0138 },
+    { "name": "arc-525m",  "position": [525, 0, 1.0], "measuredKgM3": 0.0083 },
+    { "name": "arc-650m",  "position": [650, 0, 1.0], "measuredKgM3": 0.0055 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.67, "max": 0.67 },
+    "RMSE": { "max": 3.0 },
+    "FAC2": { "min": 0.3, "max": 2.0 },
+    "MG":   { "min": 0.5, "max": 2.0 },
+    "VG":   { "max": 4.0 }
+  }
+}

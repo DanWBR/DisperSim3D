@@ -22,19 +22,31 @@ using DisperSim3D.UI.Avalonia.ViewModels;
 
 namespace DisperSim3D.UI.Avalonia.Views
 {
-    /// <summary>
-    /// Cross-platform main shell. Replaces the early diagnostics-only smoke as
-    /// the startup window. Layout mirrors the WinForms <c>Scene3DEditorPanel</c>
-    /// at a high level — menu bar on top, project tree on the left, viewport
-    /// in the centre, inspector pane on the right, status bar on the bottom —
-    /// but here it's pure Avalonia 11 and compiles for net10.0 so it runs on
-    /// Windows, Linux and macOS from the same source.
-    ///
-    /// This is iteration 1 of the WPF→Avalonia port. The 3D viewport is a
-    /// placeholder; renderers will be ported to OpenTK/Silk.NET on top of
-    /// Avalonia's <c>OpenGlControlBase</c> in a follow-up. Dialogs, the
-    /// property grid, and the playback bar arrive in subsequent iterations.
-    /// </summary>
+    public sealed class HexColorToBrushConverter : global::Avalonia.Data.Converters.IValueConverter
+    {
+        public static readonly HexColorToBrushConverter Instance = new();
+
+        public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        {
+            if (value is string s && s.Length >= 4 && s[0] == '#')
+            {
+                try
+                {
+                    var color = Color.Parse(s);
+                    if (parameter is string op &&
+                        double.TryParse(op, CultureInfo.InvariantCulture, out double a))
+                        color = Color.FromArgb((byte)(a * 255), color.R, color.G, color.B);
+                    return new SolidColorBrush(color);
+                }
+                catch { }
+            }
+            return new SolidColorBrush(Colors.Gray);
+        }
+
+        public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+            => throw new NotSupportedException();
+    }
+
     public partial class MainWindow : Window
     {
         private Scene3D? _scene;
@@ -292,6 +304,11 @@ namespace DisperSim3D.UI.Avalonia.Views
                     {
                         if (obj.Tag != null && obj.Tag.EndsWith(guid))
                         { obj.Visible = visible; any = true; }
+                    }
+                    if (!any && visible)
+                    {
+                        Viewport3D.PopulateScene(_scene);
+                        return;
                     }
                     break;
 
@@ -1566,9 +1583,22 @@ namespace DisperSim3D.UI.Avalonia.Views
             var scenario = _scene.DispersionScenario;
             if (scenario == null || scenario.Sources.Count == 0)
             {
-                StatusText.Text = "No sources defined — cannot run simulation.";
+                StatusText.Text = "No dispersion scenario or sources — cannot run simulation.";
                 return;
             }
+
+            if (sim.SnapshotGridResolution > 0)
+                scenario.GridResolution = sim.SnapshotGridResolution;
+            if (sim.SnapshotDomainSizeM > 0)
+                scenario.DomainSizeM = sim.SnapshotDomainSizeM;
+            if (sim.SnapshotDurationS > 0)
+                scenario.SimulationDurationS = sim.SnapshotDurationS;
+            if (sim.SnapshotTimeStepS > 0)
+                scenario.TimeStepS = sim.SnapshotTimeStepS;
+            if (sim.SnapshotCount > 0)
+                scenario.SnapshotCount = sim.SnapshotCount;
+            if (!string.IsNullOrEmpty(sim.WindFieldId))
+                scenario.WindFieldScenarioId = sim.WindFieldId;
 
             var config = sim.SnapshotCfdConfig ?? scenario.CfdConfig ?? new CfdConfiguration();
 
@@ -1599,6 +1629,11 @@ namespace DisperSim3D.UI.Avalonia.Views
             }
 
             sim.Status = SimulationStatus.Queued;
+            var topSrc = _scene.TopLevelSources?.FirstOrDefault(s => s.Id == sim.SourceId);
+            if (topSrc != null) sim.SnapshotSource = topSrc;
+            if (!string.IsNullOrEmpty(topSrc?.GasRefId) && _scene.GasLibrary != null)
+                sim.SnapshotGas = _scene.GasLibrary.FirstOrDefault(g => g.Id == topSrc.GasRefId);
+
             SimulationManager.Enqueue(
                 scenario, sim.SolverType, config, _scene, env,
                 obstacles, hpProfiles, sim.Id);
@@ -2134,21 +2169,8 @@ namespace DisperSim3D.UI.Avalonia.Views
 
         private List<DispersionThreshold> BuildEffectiveThresholds(OpenFoamResult result)
         {
-            // Find peak concentration across all time steps (sample last step)
-            double maxConc = 0;
-            var lastField = result.GetField(result.TimeSteps[result.TimeSteps.Count - 1]);
-            if (lastField != null)
-            {
-                int nx = lastField.GetLength(0), ny = lastField.GetLength(1), nz = lastField.GetLength(2);
-                for (int i = 0; i < nx; i++)
-                    for (int j = 0; j < ny; j++)
-                        for (int k = 0; k < nz; k++)
-                            if (lastField[i, j, k] > maxConc) maxConc = lastField[i, j, k];
-            }
-
             var thresholds = new List<DispersionThreshold>();
 
-            // Add user-defined thresholds
             if (_playbackThresholds != null)
             {
                 foreach (var t in _playbackThresholds)
@@ -2156,38 +2178,105 @@ namespace DisperSim3D.UI.Avalonia.Views
                         thresholds.Add(t);
             }
 
-            // If no user thresholds, add built-in layers like WPF ComputeCloudVisual
-            if (thresholds.Count == 0 && maxConc > 0)
+            if (thresholds.Count == 0)
             {
-                var builtinFracs = new[] { 0.50, 0.20, 0.08, 0.03, 0.01, 0.003 };
-                var builtinColors = new[]
-                {
-                    DisperSim3D.Geometry.Color.FromArgb(200, 220, 40, 40),    // dark red
-                    DisperSim3D.Geometry.Color.FromArgb(180, 255, 100, 30),   // orange
-                    DisperSim3D.Geometry.Color.FromArgb(160, 255, 200, 50),   // yellow
-                    DisperSim3D.Geometry.Color.FromArgb(140, 100, 220, 100),  // green
-                    DisperSim3D.Geometry.Color.FromArgb(120, 80, 160, 255),   // light blue
-                    DisperSim3D.Geometry.Color.FromArgb(100, 180, 180, 220),  // pale blue
-                };
-                var builtinNames = new[] { "50%", "20%", "8%", "3%", "1%", "0.3%" };
-                var builtinOpacity = new[] { 0.40, 0.35, 0.30, 0.25, 0.20, 0.15 };
-
-                for (int i = 0; i < builtinFracs.Length; i++)
+                double lfl = ResolveGasLfl(_playbackSim, _scene);
+                if (lfl > 0)
                 {
                     thresholds.Add(new DispersionThreshold
                     {
-                        Name = builtinNames[i] + " max",
-                        ConcentrationValue = maxConc * builtinFracs[i],
-                        Color = builtinColors[i],
-                        Opacity = builtinOpacity[i],
+                        Name = "100% LFL",
+                        ConcentrationValue = lfl,
+                        Color = DisperSim3D.Geometry.Color.FromRgb(220, 20, 20),
+                        Opacity = 0.7,
+                        Visible = true
+                    });
+                    thresholds.Add(new DispersionThreshold
+                    {
+                        Name = "60% LFL",
+                        ConcentrationValue = lfl * 0.6,
+                        Color = DisperSim3D.Geometry.Color.FromRgb(255, 140, 0),
+                        Opacity = 0.5,
+                        Visible = true
+                    });
+                    thresholds.Add(new DispersionThreshold
+                    {
+                        Name = "20% LFL",
+                        ConcentrationValue = lfl * 0.2,
+                        Color = DisperSim3D.Geometry.Color.FromRgb(255, 220, 0),
+                        Opacity = 0.3,
                         Visible = true
                     });
                 }
+                else
+                {
+                    double maxConc = 0;
+                    var lastField = result.GetField(result.TimeSteps[result.TimeSteps.Count - 1]);
+                    if (lastField != null)
+                    {
+                        int nx = lastField.GetLength(0), ny = lastField.GetLength(1), nz = lastField.GetLength(2);
+                        for (int i = 0; i < nx; i++)
+                            for (int j = 0; j < ny; j++)
+                                for (int k = 0; k < nz; k++)
+                                    if (lastField[i, j, k] > maxConc) maxConc = lastField[i, j, k];
+                    }
+                    if (maxConc > 0)
+                    {
+                        thresholds.Add(new DispersionThreshold
+                        {
+                            Name = "High",
+                            ConcentrationValue = maxConc * 0.1,
+                            Color = DisperSim3D.Geometry.Color.FromRgb(220, 20, 20),
+                            Opacity = 0.7,
+                            Visible = true
+                        });
+                        thresholds.Add(new DispersionThreshold
+                        {
+                            Name = "Medium",
+                            ConcentrationValue = maxConc * 0.01,
+                            Color = DisperSim3D.Geometry.Color.FromRgb(255, 140, 0),
+                            Opacity = 0.5,
+                            Visible = true
+                        });
+                        thresholds.Add(new DispersionThreshold
+                        {
+                            Name = "Low",
+                            ConcentrationValue = maxConc * 0.001,
+                            Color = DisperSim3D.Geometry.Color.FromRgb(255, 220, 0),
+                            Opacity = 0.3,
+                            Visible = true
+                        });
+                    }
+                }
             }
 
-            // Sort descending by concentration (render inner shells first)
             thresholds.Sort((a, b) => b.ConcentrationValue.CompareTo(a.ConcentrationValue));
             return thresholds;
+        }
+
+        private static double ResolveGasLfl(Simulation? sim, Scene3D? scene)
+        {
+            if (sim == null) return 0;
+            if (sim.SnapshotGas != null)
+            {
+                var props = sim.SnapshotGas.AsGasProperties();
+                if (props != null && props.LFL > 0) return props.LFL;
+            }
+            if (sim.SnapshotSource != null)
+            {
+                if (!string.IsNullOrEmpty(sim.SnapshotSource.GasRefId) && scene?.GasLibrary != null)
+                {
+                    var lib = scene.GasLibrary.FirstOrDefault(g => g.Id == sim.SnapshotSource.GasRefId);
+                    if (lib != null)
+                    {
+                        var props = lib.AsGasProperties();
+                        if (props != null && props.LFL > 0) return props.LFL;
+                    }
+                }
+                if (sim.SnapshotSource.Gas != null && sim.SnapshotSource.Gas.LFL > 0)
+                    return sim.SnapshotSource.Gas.LFL;
+            }
+            return 0;
         }
 
         private void StopAndHidePlayback()

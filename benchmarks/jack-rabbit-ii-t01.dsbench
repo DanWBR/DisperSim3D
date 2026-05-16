@@ -1,0 +1,70 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "Jack-Rabbit-II-Trial01",
+  "citation": "Hanna, S. et al. (2021). Results of comparisons of the predictions of 17 dense gas models to the Jack Rabbit II data sets. Atmospheric Environment 244, 117887. Sensor values derived from Trial 7 observations (Table 5) using the paper's stated T1/T7 ratio = 0.20 on the x^(-5/3) best-fit line.",
+  "description": "Jack Rabbit II Trial 1 (August 2015) - pressurized liquefied Cl2 release from 0.152 m diameter pipe directed downward, into a mock urban array of Conex shipping containers. Dugway Proving Ground. 4509 kg Cl2 released in ~20 s, effective Q ≈ 224 kg/s. Sensors on arcs at 200, 500, 1000, 2000, 5000, 11000 m. NOTE: T1 values are SCALED from Trial 7 measurements using the paper's stated ratio (0.20); authoritative T1 tables are in Chang & Mazzola (2020) AE 246 QC database (paywalled). 200 m and 5000 m sensors were saturated during T1 - true peak values are higher than reported here. Pressurized two-phase + urban geometry require FluidX3D/CFD with obstacles.",
+
+  "source": {
+    "name": "JR II T1 Cl2 jet",
+    "gas": {
+      "name": "Cl2",
+      "molarMass": 0.07090,
+      "lfl": 0,
+      "ufl": 0,
+      "isCryogenic": false
+    },
+    "position": [0, 0, 1.0],
+    "releaseRateKgPerS": 224.0,
+    "releaseDurationS": 20,
+    "stackDiameterM": 0.152,
+    "exitTemperatureK": 240,
+    "exitVelocityMPerS": 80,
+    "twoPhase": {
+      "enabled": false,
+      "compoundName": "Chlorine",
+      "vesselPressurePa": 752325,
+      "vesselTemperatureK": 290.0,
+      "orificeDiameterM": 0.152,
+      "dischargeCoefficient": 0.65,
+      "targetExpandedVelocityMS": 80.0
+    }
+  },
+
+  "meteo": {
+    "windSpeed": 2.0,
+    "windDirectionDeg": 270,
+    "stability": "F",
+    "ambientTemperature": 305,
+    "ambientPressure": 87000,
+    "windMeasurementHeightM": 2,
+    "roughnessLengthM": 0.005
+  },
+
+  "domain": {
+    "sizeM": 11000,
+    "gridResolution": 120,
+    "durationS": 2400,
+    "timeStepS": 1.0
+  },
+
+  "solver": "GaussianPuff",
+  "concentrationKind": "PeakOverTime",
+  "unit": "KgPerM3",
+
+  "sensors": [
+    { "name": "arc-200m",   "position": [200,   0, 1.5], "measuredKgM3": 0.0459 },
+    { "name": "arc-500m",   "position": [500,   0, 1.5], "measuredKgM3": 0.01437 },
+    { "name": "arc-1000m",  "position": [1000,  0, 1.5], "measuredKgM3": 0.00166 },
+    { "name": "arc-2000m",  "position": [2000,  0, 1.5], "measuredKgM3": 0.00090 },
+    { "name": "arc-5000m",  "position": [5000,  0, 1.5], "measuredKgM3": 0.000237 },
+    { "name": "arc-11000m", "position": [11000, 0, 1.5], "measuredKgM3": 0.0000316 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.67, "max": 0.67 },
+    "RMSE": { "max": 3.0 },
+    "FAC2": { "min": 0.3, "max": 2.0 },
+    "MG":   { "min": 0.5, "max": 2.0 },
+    "VG":   { "max": 4.0 }
+  }
+}

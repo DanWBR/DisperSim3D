@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Linq;
 using DisperSim3D.Models;
 
 namespace DisperSim3D.UI.Avalonia.ViewModels
@@ -34,6 +35,25 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
         private const string ProjectIcon          = "mdi-folder-outline";
         private const string LeafIcon             = "mdi-chevron-right";
 
+        // Section icon colours — give each category a distinct tint
+        private const string ColGeneral  = "#6B7280"; // gray
+        private const string ColEnv      = "#0EA5E9"; // sky blue
+        private const string ColGas      = "#8B5CF6"; // violet
+        private const string ColGeometry = "#F59E0B"; // amber
+        private const string ColSource   = "#EF4444"; // red
+        private const string ColFire     = "#F97316"; // orange
+        private const string ColWind     = "#06B6D4"; // cyan
+        private const string ColSim      = "#10B981"; // emerald
+        private const string ColStudy    = "#6366F1"; // indigo
+        private const string ColAlloc    = "#EC4899"; // pink
+        private const string ColView     = "#14B8A6"; // teal
+        private const string ColCamera   = "#64748B"; // slate
+        private const string ColMonitor  = "#F59E0B"; // amber
+        private const string ColDetector = "#D946EF"; // fuchsia
+        private const string ColWindRose = "#0284C7"; // blue
+        private const string ColProject  = "#A3A3A3"; // neutral
+        private const string ColLeaf     = "#9CA3AF"; // gray-400
+
         public static ObservableCollection<ProjectTreeNode> Build(Scene3D? scene, string projectName)
         {
             var roots = new ObservableCollection<ProjectTreeNode>();
@@ -45,51 +65,54 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
             }
 
             var project = new ProjectTreeNode("project", ProjectIcon,
-                string.IsNullOrWhiteSpace(projectName) ? "Untitled" : projectName);
+                string.IsNullOrWhiteSpace(projectName) ? "Untitled" : projectName,
+                iconColor: ColProject);
 
             // ── General Settings ───────────────────────────────────────────
             project.Children.Add(new ProjectTreeNode(
                 "general", SectionIconGeneral, "General Settings",
-                tag: scene.GeneralSettings));
+                tag: scene.GeneralSettings, iconColor: ColGeneral));
 
             // ── Environment ───────────────────────────────────────────────
             project.Children.Add(new ProjectTreeNode(
                 "environment", SectionIconEnv, "Environment",
-                tag: scene.Environment));
+                tag: scene.Environment, iconColor: ColEnv));
 
             // ── Gases ──────────────────────────────────────────────────────
             var gases = new ProjectTreeNode("gases", SectionIconGas,
-                "Gases", Count(scene.GasLibrary?.Count));
+                "Gases", Count(scene.GasLibrary?.Count), iconColor: ColGas);
             if (scene.GasLibrary != null)
                 foreach (var g in scene.GasLibrary)
                     gases.Children.Add(new ProjectTreeNode(
                         "gas:" + g.Id, LeafIcon,
                         string.IsNullOrEmpty(g.Name) ? "(unnamed)" : g.Name,
-                        tag: g));
+                        tag: g, iconColor: ColLeaf));
             project.Children.Add(gases);
 
             // ── Geometry ───────────────────────────────────────────────────
             var geometry = new ProjectTreeNode("geometry", SectionIconGeometry,
-                "Geometry", Count(scene.Decorations?.Count));
+                "Geometry", Count(scene.Decorations?.Count), iconColor: ColGeometry);
             if (scene.Decorations != null)
                 foreach (var d in scene.Decorations)
                     geometry.Children.Add(new ProjectTreeNode(
                         "deco:" + d.Id, LeafIcon,
                         string.IsNullOrEmpty(d.Name) ? "(decoration)" : d.Name,
                         tag: d, hasVisibilityToggle: true,
-                        initialVisibility: d.IsVisible));
+                        initialVisibility: d.IsVisible,
+                        iconColor: ColLeaf));
             project.Children.Add(geometry);
 
             // ── Sources ────────────────────────────────────────────────────
             var sources = new ProjectTreeNode("sources", SectionIconSource,
-                "Sources", Count(scene.TopLevelSources?.Count));
+                "Sources", Count(scene.TopLevelSources?.Count), iconColor: ColSource);
             if (scene.TopLevelSources != null)
                 foreach (var s in scene.TopLevelSources)
                     sources.Children.Add(new ProjectTreeNode(
                         "src:" + s.Id, LeafIcon,
                         string.IsNullOrEmpty(s.Name) ? "(source)" : s.Name,
                         tag: s, hasVisibilityToggle: true,
-                        initialVisibility: s.IsVisible));
+                        initialVisibility: s.IsVisible,
+                        iconColor: ColLeaf));
             project.Children.Add(sources);
 
             // ── Fire Sources ───────────────────────────────────────────────
@@ -99,114 +122,145 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
             var fireSources = scene.FireScenario?.Sources;
             var fires = new ProjectTreeNode("fires", SectionIconFire,
                 "Fire Sources", Count(fireSources?.Count),
-                tag: scene.FireScenario);
+                tag: scene.FireScenario, iconColor: ColFire);
             if (fireSources != null)
                 foreach (var f in fireSources)
                     fires.Children.Add(new ProjectTreeNode(
                         "fire:" + f.Id, LeafIcon,
                         string.IsNullOrEmpty(f.Name) ? "(fire)" : f.Name,
                         tag: f, hasVisibilityToggle: true,
-                        initialVisibility: f.IsVisible));
+                        initialVisibility: f.IsVisible,
+                        iconColor: ColLeaf));
             project.Children.Add(fires);
 
             // ── Wind Fields ────────────────────────────────────────────────
             var winds = new ProjectTreeNode("winds", SectionIconWind,
-                "Wind Fields", Count(scene.WindFieldScenarios?.Count));
+                "Wind Fields", Count(scene.WindFieldScenarios?.Count), iconColor: ColWind);
             if (scene.WindFieldScenarios != null)
                 foreach (var w in scene.WindFieldScenarios)
                     winds.Children.Add(new ProjectTreeNode(
                         "wind:" + w.Id, LeafIcon,
                         string.IsNullOrEmpty(w.Name) ? "(wind field)" : w.Name,
                         tag: w, hasVisibilityToggle: true,
-                        initialVisibility: w.IsVisible));
+                        initialVisibility: w.IsVisible,
+                        iconColor: ColLeaf));
             project.Children.Add(winds);
 
             // ── Simulations ────────────────────────────────────────────────
             var sims = new ProjectTreeNode("simulations", SectionIconSim,
-                "Simulations", Count(scene.Simulations?.Count));
+                "Simulations", Count(scene.Simulations?.Count), iconColor: ColSim);
             if (scene.Simulations != null)
-                foreach (var s in scene.Simulations)
+                foreach (var sim in scene.Simulations)
+                {
+                    string srcName = scene.TopLevelSources?.FirstOrDefault(s => s.Id == sim.SourceId)?.Name
+                        ?? sim.SnapshotSource?.Name ?? "?";
+                    string wfName = scene.WindFieldScenarios?.FirstOrDefault(w => w.Id == sim.WindFieldId)?.Name
+                        ?? "?";
+                    string solverTag = DisperSim3D.Core.SolverCode.Of(sim.SolverType);
+                    string label = string.Format("{0}  [{1}]  [{2} / {3}]",
+                        string.IsNullOrEmpty(sim.Name) ? "(simulation)" : sim.Name,
+                        solverTag, srcName, wfName);
+                    string statusColor = sim.Status == SimulationStatus.Completed ? "#2E8B57"
+                        : sim.Status == SimulationStatus.Failed ? "#DC143C"
+                        : sim.Status == SimulationStatus.Running || sim.Status == SimulationStatus.Queued
+                            ? "#FF8C00" : "#888888";
                     sims.Children.Add(new ProjectTreeNode(
-                        "sim:" + s.Id, LeafIcon,
-                        string.IsNullOrEmpty(s.Name) ? "(simulation)" : s.Name,
-                        tag: s, hasVisibilityToggle: true,
-                        initialVisibility: s.IsVisible));
+                        "sim:" + sim.Id, LeafIcon, label,
+                        tag: sim, hasVisibilityToggle: true,
+                        initialVisibility: sim.IsVisible,
+                        statusText: sim.Status.ToString(),
+                        statusColor: statusColor,
+                        iconColor: ColLeaf));
+                }
             project.Children.Add(sims);
 
             // ── Dispersion Studies ─────────────────────────────────────────
             var studies = new ProjectTreeNode("studies", SectionIconStudy,
-                "Dispersion Studies", Count(scene.DispersionStudies?.Count));
+                "Dispersion Studies", Count(scene.DispersionStudies?.Count), iconColor: ColStudy);
             if (scene.DispersionStudies != null)
                 foreach (var s in scene.DispersionStudies)
                     studies.Children.Add(new ProjectTreeNode(
                         "study:" + s.Id, LeafIcon,
                         string.IsNullOrEmpty(s.Name) ? "(study)" : s.Name,
-                        tag: s));
+                        tag: s, iconColor: ColLeaf));
             project.Children.Add(studies);
 
             // ── Detector Allocations ───────────────────────────────────────
             var allocs = new ProjectTreeNode("allocations", SectionIconAlloc,
-                "Detector Allocations", Count(scene.DetectorAllocations?.Count));
+                "Detector Allocations", Count(scene.DetectorAllocations?.Count), iconColor: ColAlloc);
             if (scene.DetectorAllocations != null)
                 foreach (var a in scene.DetectorAllocations)
                     allocs.Children.Add(new ProjectTreeNode(
                         "alloc:" + a.Id, LeafIcon,
                         string.IsNullOrEmpty(a.Name) ? "(allocation)" : a.Name,
-                        tag: a));
+                        tag: a, iconColor: ColLeaf));
             project.Children.Add(allocs);
 
             // ── Views ──────────────────────────────────────────────────────
             var views = new ProjectTreeNode("views", SectionIconView,
-                "Views", Count(scene.Views?.Count));
+                "Views", Count(scene.Views?.Count), iconColor: ColView);
             if (scene.Views != null)
                 foreach (var v in scene.Views)
+                {
+                    var pinnedSim = scene.Simulations?.FirstOrDefault(s => s.Id == v.SimulationId);
+                    bool simReady = pinnedSim != null && pinnedSim.Status == SimulationStatus.Completed;
+                    string statusText = pinnedSim == null ? ""
+                        : simReady ? pinnedSim.Name : pinnedSim.Status.ToString();
+                    string statusColor = pinnedSim == null ? ""
+                        : simReady ? "#2E8B57" : "#FF8C00";
+                    string label = (string.IsNullOrEmpty(v.Name) ? "(view)" : v.Name)
+                        + "  [" + v.Kind + "]";
                     views.Children.Add(new ProjectTreeNode(
-                        "view:" + v.Id, LeafIcon,
-                        string.IsNullOrEmpty(v.Name) ? "(view)" : v.Name,
+                        "view:" + v.Id, LeafIcon, label,
                         tag: v, hasVisibilityToggle: true,
-                        initialVisibility: v.IsVisible));
+                        initialVisibility: v.IsVisible,
+                        statusText: statusText, statusColor: statusColor,
+                        iconColor: ColLeaf));
+                }
             project.Children.Add(views);
 
             // ── Camera Presets ─────────────────────────────────────────────
             var cams = new ProjectTreeNode("cameras", SectionIconCamera,
-                "Camera Presets", Count(scene.CameraPresets?.Count));
+                "Camera Presets", Count(scene.CameraPresets?.Count), iconColor: ColCamera);
             if (scene.CameraPresets != null)
                 foreach (var c in scene.CameraPresets)
                     cams.Children.Add(new ProjectTreeNode(
                         "cam:" + c.Id, LeafIcon,
                         string.IsNullOrEmpty(c.Name) ? "(camera)" : c.Name,
-                        tag: c));
+                        tag: c, iconColor: ColLeaf));
             project.Children.Add(cams);
 
             // ── Monitors ───────────────────────────────────────────────────
             var monitors = new ProjectTreeNode("monitors", SectionIconMonitor,
-                "Monitors", Count(scene.MonitorPoints?.Count));
+                "Monitors", Count(scene.MonitorPoints?.Count), iconColor: ColMonitor);
             if (scene.MonitorPoints != null)
                 foreach (var m in scene.MonitorPoints)
                     monitors.Children.Add(new ProjectTreeNode(
                         "mon:" + m.Id, LeafIcon,
                         string.IsNullOrEmpty(m.Name) ? "(monitor)" : m.Name,
                         tag: m, hasVisibilityToggle: true,
-                        initialVisibility: m.Visible));
+                        initialVisibility: m.Visible,
+                        iconColor: ColLeaf));
             project.Children.Add(monitors);
 
             // ── Detectors ──────────────────────────────────────────────────
             var detectors = new ProjectTreeNode("detectors", SectionIconDetector,
-                "Gas Detectors", Count(scene.GasDetectors?.Count));
+                "Gas Detectors", Count(scene.GasDetectors?.Count), iconColor: ColDetector);
             if (scene.GasDetectors != null)
                 foreach (var d in scene.GasDetectors)
                     detectors.Children.Add(new ProjectTreeNode(
                         "det:" + d.Id, LeafIcon,
                         string.IsNullOrEmpty(d.Name) ? "(detector)" : d.Name,
                         tag: d, hasVisibilityToggle: true,
-                        initialVisibility: d.Visible));
+                        initialVisibility: d.Visible,
+                        iconColor: ColLeaf));
             project.Children.Add(detectors);
 
             // ── Wind Rose ──────────────────────────────────────────────────
             if (scene.WindRose != null)
                 project.Children.Add(new ProjectTreeNode(
                     "windrose", SectionIconWindRose, "Wind Rose",
-                    tag: scene.WindRose));
+                    tag: scene.WindRose, iconColor: ColWindRose));
 
             roots.Add(project);
             return roots;

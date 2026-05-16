@@ -1,0 +1,58 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "Falcon-Trial01",
+  "citation": "Brown, T.C. et al. (1990). Falcon series data report - 1987 LNG vapor barrier verification field trials. GRI-89/0138 / UCRL-CR-104316. Trial 1 (largest Falcon spill). Parameters from PHMSA MVD Rev B 2024 Table 2-20.",
+  "description": "Falcon Trial 1 - largest Falcon series LNG spill. ~66.4 m^3 LNG, 81.0 kg/s for ~138 s, into 60 m x 40 m basin inside 88 m x 44 m vapour fence (8.7 m). Wind 1.7 m/s @ 2 m, stable F atmosphere - the low-wind, stable case in Falcon. Sensors at fence (50 m), 150 m, 250 m downwind. NOTE: stable low-wind enhances vapour retention behind fence and near-field concentrations vs Falcon 4. Sensor values approximated from Chan 1990 UCRL-CR-105184 figures (Trial 1 not in Chan T3.8 which is Trial 4 specific). Confidence medium-low.",
+
+  "source": {
+    "name": "Falcon T1 LNG pool inside fence",
+    "gas": {
+      "name": "CH4",
+      "molarMass": 0.01604,
+      "lfl": 0,
+      "ufl": 0,
+      "isCryogenic": true
+    },
+    "position": [0, 0, 0.5],
+    "releaseRateKgPerS": 81.0,
+    "releaseDurationS": 138,
+    "stackDiameterM": 40,
+    "exitTemperatureK": 111,
+    "exitVelocityMPerS": 0.05
+  },
+
+  "meteo": {
+    "windSpeed": 1.7,
+    "windDirectionDeg": 270,
+    "stability": "F",
+    "ambientTemperature": 306,
+    "ambientPressure": 87000,
+    "windMeasurementHeightM": 2,
+    "roughnessLengthM": 0.008
+  },
+
+  "domain": {
+    "sizeM": 500,
+    "gridResolution": 100,
+    "durationS": 400,
+    "timeStepS": 1.0
+  },
+
+  "solver": "RhoReactingBuoyantFoam",
+  "concentrationKind": "PeakOverTime",
+  "unit": "MassFraction",
+
+  "sensors": [
+    { "name": "fence-50m",  "position": [50,  0, 1.0], "measuredKgM3": 0.055 },
+    { "name": "arc-150m",   "position": [150, 0, 1.0], "measuredKgM3": 0.038 },
+    { "name": "arc-250m",   "position": [250, 0, 1.0], "measuredKgM3": 0.028 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.67, "max": 0.67 },
+    "RMSE": { "max": 3.0 },
+    "FAC2": { "min": 0.3, "max": 2.0 },
+    "MG":   { "min": 0.5, "max": 2.0 },
+    "VG":   { "max": 4.0 }
+  }
+}

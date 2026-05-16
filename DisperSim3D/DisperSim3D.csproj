@@ -37,4 +37,20 @@
     <Content Include="Resources\Icons\Air.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- DWSIMCore.Foundation — native .NET 10 thermodynamics library. Used by
+       DwsimThermo and TwoPhaseSourceCalculator for PT/PH/PS flashes and
+       compound property lookup. Replaces the old reflection-based wrapper
+       around DWSIM.Automation.FluentAPI which has a hard dependency on
+       BinaryFormatter (removed in .NET 10).
+       Shipped as a single 32 MB merged DLL produced by
+       scripts/bundle-dwsimcore.ps1 (ILRepack of DWSIMCore.Foundation +
+       CSharp helper + 18 NuGet runtime deps + 6 embedded compound DBs).
+       Rebuild after upgrading DWSIMCore by running that script. -->
+  <ItemGroup>
+    <Reference Include="DWSIMCore.Foundation">
+      <HintPath>$(MSBuildThisFileDirectory)..\lib\DWSIMCore\net10.0\DWSIMCore.Foundation.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
 </Project>

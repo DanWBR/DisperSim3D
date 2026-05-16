@@ -1,14 +1,29 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- Plain net10.0 — the headless runner consumes only the cross-platform
-         engine API and runs on Linux/macOS as well as Windows. The WPF/WinForms
-         desktop SDK is intentionally NOT enabled. -->
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- On Windows: multi-target net10.0 (cross-platform CFD runner) +
+         net10.0-windows (carries the WinForms runtime DWSIM's PropertyPackages
+         depend on, so twophase-test, mixture properties, and other
+         DWSIM-backed features work). On Linux/macOS: net10.0 only.
+         The Windows desktop SDK is enabled via UseWindowsForms below for the
+         net10.0-windows target ONLY. -->
+    <TargetFrameworks Condition="'$(OS)' == 'Windows_NT'">net10.0;net10.0-windows</TargetFrameworks>
+    <TargetFrameworks Condition="'$(OS)' != 'Windows_NT'">net10.0</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <RootNamespace>DisperSim3D.CLI</RootNamespace>
     <AssemblyName>DisperSim3D.CLI</AssemblyName>
     <NoWarn>WFO1000</NoWarn>
+  </PropertyGroup>
+
+  <!-- Enable WinForms only for the net10.0-windows target — DWSIM's
+       PropertyPackages.dll transitively references System.Windows.Forms.
+       Also re-enable BinaryFormatter (disabled by default in .NET 9+/10):
+       DWSIM uses it internally for legacy property-package state. We're
+       only ever deserialising our own DWSIM install, so the unsafe path
+       is acceptable here. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
   </PropertyGroup>
 
   <ItemGroup>

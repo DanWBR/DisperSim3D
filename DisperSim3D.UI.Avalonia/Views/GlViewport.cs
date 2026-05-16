@@ -402,13 +402,28 @@ void main()
     if (uUseSkyTexture > 0.5)
     {
         float u = atan(dir.y, dir.x) / (2.0 * PI) + 0.5;
-        float v = 0.5 - asin(clamp(dir.z, -1.0, 1.0)) / PI;
+        float rawV = 0.5 - asin(clamp(dir.z, -1.0, 1.0)) / PI;
+
+        // Compress V near horizon — texture features there appear smaller/farther.
+        // Upper hemi: rawV 0..0.5;  lower hemi: rawV 0.5..1.
+        float upper = clamp(rawV * 2.0, 0.0, 1.0);
+        upper = pow(upper, 1.4);
+        float lower = clamp((rawV - 0.5) * 2.0, 0.0, 1.0);
+        lower = pow(lower, 0.7);
+        float v = rawV < 0.5 ? upper * 0.5 : 0.5 + lower * 0.5;
+
         v = clamp(v + uSkyVOffset, 0.0, 1.0);
         vec4 texCol = texture(uSkyTexture, vec2(u, v));
         float gamma = 1.0 / max(0.01, uSkyBrightness);
         vec3 texRgb = pow(texCol.rgb, vec3(gamma));
-        // Horizon fog band — fade texture into fog near the horizon
+
+        // Atmospheric perspective — always-on haze near horizon
         float texEl = max(dir.z, 0.0);
+        float atmosFade = 1.0 - smoothstep(0.0, 0.18, texEl);
+        vec3 hazeCol = uFogDensity > 0.0001 ? uFogColor : vec3(0.72, 0.78, 0.88);
+        texRgb = mix(texRgb, hazeCol, atmosFade * 0.45);
+
+        // Horizon fog band — additional fade when fog is enabled
         float texFogBand = 1.0 - smoothstep(0.0, 0.05 + uFogDensity * 50.0, texEl);
         texRgb = mix(texRgb, uFogColor, texFogBand * clamp(uFogDensity * 250.0, 0.0, 0.85));
         fragColor = vec4(texRgb, texCol.a);
@@ -2094,12 +2109,9 @@ void main() { }
                 var horizon = new Vector4(
                     env.SkyHorizonColor.ScR, env.SkyHorizonColor.ScG,
                     env.SkyHorizonColor.ScB, 1f);
-                bool hasSkyTex = _skyTextureId != 0;
                 var (skyV, skyI) = GlMeshBuffer.GenerateHemisphere(
-                    500f, zenith, horizon,
-                    stacks: hasSkyTex ? 48 : 24,
-                    slices: hasSkyTex ? 64 : 32,
-                    fullSphere: hasSkyTex);
+                    5000f, zenith, horizon,
+                    stacks: 48, slices: 64, fullSphere: true);
                 _skyDomeMesh = new GlMeshBuffer();
                 _skyDomeMesh.Upload(gl, skyV, skyI);
             }
@@ -2203,12 +2215,9 @@ void main() { }
                 var horizon = new Vector4(
                     env.SkyHorizonColor.ScR, env.SkyHorizonColor.ScG,
                     env.SkyHorizonColor.ScB, 1f);
-                bool hasSkyTex = _skyTextureId != 0;
                 var (skyV, skyI) = GlMeshBuffer.GenerateHemisphere(
-                    500f, zenith, horizon,
-                    stacks: hasSkyTex ? 48 : 24,
-                    slices: hasSkyTex ? 64 : 32,
-                    fullSphere: hasSkyTex);
+                    5000f, zenith, horizon,
+                    stacks: 48, slices: 64, fullSphere: true);
                 _skyDomeMesh = new GlMeshBuffer();
                 _skyDomeMesh.Upload(gl, skyV, skyI);
             }
@@ -2255,18 +2264,10 @@ void main() { }
                 _shadowCatcherMesh.Upload(gl, scV, scI);
             }
 
-            // Grass blades — independent toggle; exclusion zones come from decorations
+            // Grass is deferred until after decorations are loaded so
+            // bounding boxes can be computed from the mesh vertices.
             _grassMesh?.Cleanup(gl);
             _grassMesh = null;
-            if (env.ShowGrassBlades && scene != null)
-            {
-                var exclusions = BuildDecorationFootprints(scene);
-                int bladeCount = Math.Clamp(env.GrassBladeCount, 500, 100000);
-                var (gV, gI) = GlMeshBuffer.GenerateGrassBlades(80f, bladeCount,
-                    exclusionZones: exclusions);
-                _grassMesh = new GlMeshBuffer();
-                _grassMesh.Upload(gl, gV, gI);
-            }
 
             if (scene is null) return;
 
@@ -2395,6 +2396,10 @@ void main() { }
                     var texturedSubs = MeshFileLoader.LoadTextured(deco.FilePath);
                     if (texturedSubs != null)
                     {
+                        // Compute AABB from all submesh vertices for grass exclusion
+                        if (deco.BoundingBox == null)
+                            deco.BoundingBox = ComputeBoundingBoxFromTextured(texturedSubs);
+
                         // Standalone TexturePath overrides all MTL textures
                         string? overrideTex = !string.IsNullOrEmpty(deco.TexturePath)
                             && File.Exists(deco.TexturePath) ? deco.TexturePath : null;
@@ -2438,6 +2443,9 @@ void main() { }
                     var loaded = MeshFileLoader.Load(deco.FilePath, decoColor);
                     if (loaded == null) continue;
 
+                    if (deco.BoundingBox == null)
+                        deco.BoundingBox = ComputeBoundingBoxFromSolid(loaded.Value.verts);
+
                     var solidMesh = new GlMeshBuffer();
                     solidMesh.Upload(gl, loaded.Value.verts, loaded.Value.indices,
                         keepCpuCopy: true);
@@ -2445,6 +2453,17 @@ void main() { }
                     _sceneObjects.Add(new SceneObject(
                         solidMesh, model, "deco:" + i));
                 }
+            }
+
+            // Grass blades — generated AFTER decorations so bounding boxes are available
+            if (env.ShowGrassBlades)
+            {
+                var exclusions = BuildDecorationFootprints(scene);
+                int bladeCount = Math.Clamp(env.GrassBladeCount, 500, 100000);
+                var (gV, gI) = GlMeshBuffer.GenerateGrassBlades(80f, bladeCount,
+                    exclusionZones: exclusions);
+                _grassMesh = new GlMeshBuffer();
+                _grassMesh.Upload(gl, gV, gI);
             }
 
             // ── Wind field streamlines ────────────────────────────────
@@ -3340,6 +3359,45 @@ void main() { }
             }
 
             return result;
+        }
+
+        private static BoundingBox ComputeBoundingBoxFromTextured(
+            List<TexturedSubmesh> subs)
+        {
+            float xMin = float.MaxValue, yMin = float.MaxValue, zMin = float.MaxValue;
+            float xMax = float.MinValue, yMax = float.MinValue, zMax = float.MinValue;
+            foreach (var sub in subs)
+                foreach (var v in sub.Vertices)
+                {
+                    if (v.Position.X < xMin) xMin = v.Position.X;
+                    if (v.Position.Y < yMin) yMin = v.Position.Y;
+                    if (v.Position.Z < zMin) zMin = v.Position.Z;
+                    if (v.Position.X > xMax) xMax = v.Position.X;
+                    if (v.Position.Y > yMax) yMax = v.Position.Y;
+                    if (v.Position.Z > zMax) zMax = v.Position.Z;
+                }
+            return new BoundingBox(
+                new DisperSim3D.Geometry.Point3D(xMin, yMin, zMin),
+                new DisperSim3D.Geometry.Point3D(xMax, yMax, zMax));
+        }
+
+        private static BoundingBox ComputeBoundingBoxFromSolid(
+            SolidVertex[] verts)
+        {
+            float xMin = float.MaxValue, yMin = float.MaxValue, zMin = float.MaxValue;
+            float xMax = float.MinValue, yMax = float.MinValue, zMax = float.MinValue;
+            foreach (var v in verts)
+            {
+                if (v.Position.X < xMin) xMin = v.Position.X;
+                if (v.Position.Y < yMin) yMin = v.Position.Y;
+                if (v.Position.Z < zMin) zMin = v.Position.Z;
+                if (v.Position.X > xMax) xMax = v.Position.X;
+                if (v.Position.Y > yMax) yMax = v.Position.Y;
+                if (v.Position.Z > zMax) zMax = v.Position.Z;
+            }
+            return new BoundingBox(
+                new DisperSim3D.Geometry.Point3D(xMin, yMin, zMin),
+                new DisperSim3D.Geometry.Point3D(xMax, yMax, zMax));
         }
 
         private static (Vector3 min, Vector3 max) ComputeSceneBounds(Scene3D scene)

@@ -67,7 +67,10 @@ namespace DisperSim3D.Core
                 }
                 double H = Math.Min(baseHeight, _mixingHeight);
 
-                double windSpeed = localWindSpeedOverride > 0 ? localWindSpeedOverride : meteo.WindSpeedAtHeight(H);
+                // PGT sigma curves were calibrated with wind at measurement height,
+                // so for near-ground sources use at least that height for consistency.
+                double windEvalHeight = Math.Max(H, meteo.WindMeasurementHeightM);
+                double windSpeed = localWindSpeedOverride > 0 ? localWindSpeedOverride : meteo.WindSpeedAtHeight(windEvalHeight);
                 if (windSpeed < MinWindSpeed) windSpeed = MinWindSpeed;
 
                 double exitVel = src.ComputedExitVelocity;

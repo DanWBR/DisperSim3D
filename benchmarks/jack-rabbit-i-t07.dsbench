@@ -1,0 +1,68 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "Jack-Rabbit-I-Trial07",
+  "citation": "Hanna, S.R., Britter, R., Argenta, E., Chang, J. (2012). The Jack Rabbit chlorine release experiments: implications of dense gas removal from a depression and a channel. J. Hazardous Materials 213-214, 406-412. Sensor values from Hanna, Chang & Huq (2016) Atmospheric Environment 125, 252-256, Table 1 (primary tabulation).",
+  "description": "Jack Rabbit I Trial 7 - pressurized liquefied chlorine release into a 2 m x 50 m x 1.5 m deep depression. Dugway Proving Ground, May 2010. 2000 kg Cl2 released; depression detrainment extends effective duration to ~660 s (effective Q ≈ 3.03 kg/s). Sensors on arcs at 25, 50, 100, 300, 500 m. NOTE: pressurized two-phase + depression accumulation requires CFD with terrain and aerosol modelling. Wind 1.4 m/s @ 2m (very low), stable atmosphere. T7 500m sensor had no usable value. Sensor values primary (Hanna et al. 2016 Table 1).",
+
+  "source": {
+    "name": "JR I T7 Cl2 jet",
+    "gas": {
+      "name": "Cl2",
+      "molarMass": 0.07090,
+      "lfl": 0,
+      "ufl": 0,
+      "isCryogenic": false
+    },
+    "position": [0, 0, 0.6],
+    "releaseRateKgPerS": 3.03,
+    "releaseDurationS": 660,
+    "stackDiameterM": 0.305,
+    "exitTemperatureK": 240,
+    "exitVelocityMPerS": 30,
+    "twoPhase": {
+      "enabled": false,
+      "compoundName": "Chlorine",
+      "vesselPressurePa": 670000,
+      "vesselTemperatureK": 290.0,
+      "orificeDiameterM": 0.305,
+      "dischargeCoefficient": 0.65,
+      "targetExpandedVelocityMS": 30.0
+    }
+  },
+
+  "meteo": {
+    "windSpeed": 1.4,
+    "windDirectionDeg": 270,
+    "stability": "F",
+    "ambientTemperature": 295,
+    "ambientPressure": 87000,
+    "windMeasurementHeightM": 2,
+    "roughnessLengthM": 0.003
+  },
+
+  "domain": {
+    "sizeM": 600,
+    "gridResolution": 100,
+    "durationS": 900,
+    "timeStepS": 1.0
+  },
+
+  "solver": "GaussianPuff",
+  "concentrationKind": "PeakOverTime",
+  "unit": "KgPerM3",
+
+  "sensors": [
+    { "name": "arc-25m",  "position": [25,  0, 1.0], "measuredKgM3": 0.184 },
+    { "name": "arc-50m",  "position": [50,  0, 1.0], "measuredKgM3": 0.0763 },
+    { "name": "arc-100m", "position": [100, 0, 1.0], "measuredKgM3": 0.0253 },
+    { "name": "arc-300m", "position": [300, 0, 1.0], "measuredKgM3": 0.00335 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.67, "max": 0.67 },
+    "RMSE": { "max": 3.0 },
+    "FAC2": { "min": 0.3, "max": 2.0 },
+    "MG":   { "min": 0.5, "max": 2.0 },
+    "VG":   { "max": 4.0 }
+  }
+}

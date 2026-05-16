@@ -1,0 +1,68 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "CO2PipeHaz-INERIS-6mm",
+  "citation": "Gant, S.E., Kelsey, A., McNally, K., Witlox, H.W.M., Bilio, M. (2014). Evaluation of multi-phase atmospheric dispersion models for application to carbon capture and storage. J. Loss Prev. Process Ind. 32, 286-298. Sensor values digitised from Woolley et al. (2014) Energy Procedia GHGT-12 Fig. 8, CO2PipeHaz WP2.1 Test 2.",
+  "description": "CO2PipeHaz INERIS WP2.1 Test 2 - supercritical CO2 release through 6 mm orifice from 2 m^3 insulated vessel (~85 bar / 290 K). Two-phase jet with sublimating solid CO2 particles. Sensors at 5, 10, 15, 20 m on jet centerline. NOTE: this is directly in DisperSim's target range (6 mm orifice, pressurized supercritical CO2 < 1 kg/s). Sensor values low confidence (figure digitization); authoritative numerical dataset is INERIS CO2PipeHaz deliverable D5.x (request from INERIS).",
+
+  "source": {
+    "name": "INERIS CO2 supercritical jet",
+    "gas": {
+      "name": "CO2",
+      "molarMass": 0.04401,
+      "lfl": 0,
+      "ufl": 0,
+      "isCryogenic": false
+    },
+    "position": [0, 0, 1.5],
+    "releaseRateKgPerS": 0.20,
+    "releaseDurationS": 60,
+    "stackDiameterM": 0.006,
+    "exitTemperatureK": 195,
+    "exitVelocityMPerS": 250,
+    "twoPhase": {
+      "enabled": false,
+      "compoundName": "Carbon dioxide",
+      "vesselPressurePa": 8601325,
+      "vesselTemperatureK": 290.0,
+      "orificeDiameterM": 0.006,
+      "dischargeCoefficient": 0.65,
+      "targetExpandedVelocityMS": 100.0
+    }
+  },
+
+  "meteo": {
+    "windSpeed": 2.5,
+    "windDirectionDeg": 270,
+    "stability": "D",
+    "ambientTemperature": 290,
+    "ambientPressure": 101325,
+    "windMeasurementHeightM": 10,
+    "roughnessLengthM": 0.03
+  },
+
+  "domain": {
+    "sizeM": 30,
+    "gridResolution": 80,
+    "durationS": 60,
+    "timeStepS": 0.5
+  },
+
+  "solver": "FluidX3DDispersion",
+  "concentrationKind": "PeakOverTime",
+  "unit": "MassFraction",
+
+  "sensors": [
+    { "name": "jet-5m",  "position": [5,  0, 1.5], "measuredKgM3": 0.336 },
+    { "name": "jet-10m", "position": [10, 0, 1.5], "measuredKgM3": 0.117 },
+    { "name": "jet-15m", "position": [15, 0, 1.5], "measuredKgM3": 0.0595 },
+    { "name": "jet-20m", "position": [20, 0, 1.5], "measuredKgM3": 0.0374 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.67, "max": 0.67 },
+    "RMSE": { "max": 3.0 },
+    "FAC2": { "min": 0.3, "max": 2.0 },
+    "MG":   { "min": 0.5, "max": 2.0 },
+    "VG":   { "max": 4.0 }
+  }
+}

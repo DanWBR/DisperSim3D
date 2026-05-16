@@ -1,0 +1,70 @@
+{
+  "$schema": "dsbench/v1",
+  "name": "Jack-Rabbit-II-Trial07",
+  "citation": "Mazzola, T., Hanna, S., Chang, J. et al. (2021). Results of comparisons of the predictions of 17 dense gas models to the Jack Rabbit II data sets for concentration and cloud dimensions. Atmospheric Environment 244, 117887. Trial 7 arc-max values from Table 5 (primary tabulation).",
+  "description": "Jack Rabbit II Trial 7 (August 2016) - largest pressurized liquefied Cl2 release of the JR II series. ~9100 kg Cl2 from 0.152 m diameter pipe directed downward, 1 m above ground. Dugway Proving Ground. Arc-max ppm v/v measured at 0.2, 0.5, 1, 2, 5, 11 km downwind. NOTE: 200 m and 5000 m sensors saturated during T7 - true peak values higher than reported. Pressurized two-phase release + mock urban array (Conex containers) - geometry not captured by Gaussian model. Sensor values are primary observations from Mazzola 2021 Table 5.",
+
+  "source": {
+    "name": "JR II T7 Cl2 jet",
+    "gas": {
+      "name": "Cl2",
+      "molarMass": 0.07090,
+      "lfl": 0,
+      "ufl": 0,
+      "isCryogenic": false
+    },
+    "position": [0, 0, 1.0],
+    "releaseRateKgPerS": 455.0,
+    "releaseDurationS": 20,
+    "stackDiameterM": 0.152,
+    "exitTemperatureK": 240,
+    "exitVelocityMPerS": 80,
+    "twoPhase": {
+      "enabled": false,
+      "compoundName": "Chlorine",
+      "vesselPressurePa": 752325,
+      "vesselTemperatureK": 290.0,
+      "orificeDiameterM": 0.152,
+      "dischargeCoefficient": 0.65,
+      "targetExpandedVelocityMS": 80.0
+    }
+  },
+
+  "meteo": {
+    "windSpeed": 2.0,
+    "windDirectionDeg": 270,
+    "stability": "D",
+    "ambientTemperature": 305,
+    "ambientPressure": 87000,
+    "windMeasurementHeightM": 2,
+    "roughnessLengthM": 0.005
+  },
+
+  "domain": {
+    "sizeM": 11000,
+    "gridResolution": 120,
+    "durationS": 7200,
+    "timeStepS": 2.0
+  },
+
+  "solver": "GaussianPuff",
+  "concentrationKind": "PeakOverTime",
+  "unit": "KgPerM3",
+
+  "sensors": [
+    { "name": "arc-200m",   "position": [200,   0, 1.5], "measuredKgM3": 0.230 },
+    { "name": "arc-500m",   "position": [500,   0, 1.5], "measuredKgM3": 0.0718 },
+    { "name": "arc-1000m",  "position": [1000,  0, 1.5], "measuredKgM3": 0.00830 },
+    { "name": "arc-2000m",  "position": [2000,  0, 1.5], "measuredKgM3": 0.00448 },
+    { "name": "arc-5000m",  "position": [5000,  0, 1.5], "measuredKgM3": 0.00118 },
+    { "name": "arc-11000m", "position": [11000, 0, 1.5], "measuredKgM3": 0.000158 }
+  ],
+
+  "acceptance": {
+    "MRB":  { "min": -0.67, "max": 0.67 },
+    "RMSE": { "max": 3.0 },
+    "FAC2": { "min": 0.3, "max": 2.0 },
+    "MG":   { "min": 0.5, "max": 2.0 },
+    "VG":   { "max": 4.0 }
+  }
+}
