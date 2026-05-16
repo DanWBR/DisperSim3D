@@ -251,6 +251,141 @@ namespace DisperSim3D.Core
             }
         }
 
+        /// <summary>Result of an isenthalpic (PH) flash: post-expansion state.</summary>
+        public sealed class PHFlashResult
+        {
+            public double TemperatureK;        // resulting temperature
+            public double VaporFraction;       // mass fraction in vapor phase (0..1)
+            public double DensityKgM3;         // density at the flash state (dominant phase)
+            public string Error;
+        }
+
+        /// <summary>Performs an isenthalpic (Joule-Thomson) flash at a given pressure.
+        /// Use to model adiabatic free expansion of a pressurised fluid through an orifice
+        /// or valve: from vessel state (P_v, T_v) compute h_vessel via <see cref="GetMassEnthalpyKJperKg"/>,
+        /// then call this with (P_ambient, h_vessel) to obtain the post-expansion T and vapor fraction.
+        /// Returns NaN values + Error string on failure.</summary>
+        public static PHFlashResult PHFlash(
+            IDictionary<string, double> moleFractions,
+            double pressurePa,
+            double massEnthalpyKJPerKg,
+            double initialTKEstimate = 300.0)
+        {
+            var res = new PHFlashResult();
+            if (!IsAvailable) { res.Error = "DWSIMCore not initialised."; return res; }
+            try
+            {
+                double sum = 0;
+                foreach (var v in moleFractions.Values) sum += v;
+                if (sum <= 0) { res.Error = "All mole fractions are zero."; return res; }
+
+                var compounds = moleFractions.Keys.ToArray();
+                var fracs = compounds.Select(k => moleFractions[k] / sum).ToArray();
+
+                // PH flash matrix layout (DWSIMCore Calculator.PHFlash):
+                //   row 0:        phase labels (string)
+                //   row 1:        phase mole fractions
+                //   rows 2..N+1:  compound mole fractions per phase
+                //   row N+2 @ col 0: final temperature in K
+                var flash = _calc.PHFlash(_propPackName, 2, pressurePa, massEnthalpyKJPerKg,
+                    compounds, fracs, null, null, null, null, initialTKEstimate);
+
+                int nPhases = flash.GetLength(1);
+                double xvMole = 0;
+                for (int p = 0; p < nPhases; p++)
+                {
+                    var lbl = flash[0, p] as string ?? "";
+                    if (lbl.Equals("Vapor", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (flash[1, p] is double f) xvMole += f;
+                        else if (flash[1, p] != null) xvMole += Convert.ToDouble(flash[1, p]);
+                    }
+                }
+
+                // Final temperature from the last row.
+                int tRow = compounds.Length + 2;
+                double T;
+                var tObj = flash[tRow, 0];
+                if (tObj is double td) T = td;
+                else T = Convert.ToDouble(tObj);
+
+                res.TemperatureK = T;
+
+                // For mass-based vapor fraction we need the vapor and liquid molar masses;
+                // for a single-compound flash, mass fraction == mole fraction.
+                if (compounds.Length == 1)
+                {
+                    res.VaporFraction = xvMole;
+                }
+                else
+                {
+                    // Approximate: mass fraction ≈ mole fraction when mol weights are
+                    // close. For accurate multi-component we'd need the per-phase
+                    // molar mass which requires extra CalcProp calls. Single-compound
+                    // covers all current use cases (pure Cl2/NH3/CO2 releases).
+                    res.VaporFraction = xvMole;
+                }
+
+                // Density of the dominant phase at the flash state.
+                string label = xvMole >= 0.5 ? "Vapor" : "Liquid";
+                res.DensityKgM3 = CalcProp("density", label, "Mass",
+                    compounds, fracs, T, pressurePa);
+                if (double.IsNaN(res.DensityKgM3) || res.DensityKgM3 <= 0)
+                {
+                    // Ideal-gas fallback for vapor; rough water-like default for liquid.
+                    double M = SumMolarMass(compounds, fracs);
+                    res.DensityKgM3 = xvMole >= 0.5
+                        ? pressurePa * M / (8.314 * Math.Max(T, 100.0))
+                        : 1000.0;
+                }
+                return res;
+            }
+            catch (Exception ex)
+            {
+                var root = ex;
+                while (root.InnerException != null) root = root.InnerException;
+                res.Error = root.GetType().Name + ": " + root.Message;
+                return res;
+            }
+        }
+
+        /// <summary>Returns the mass enthalpy (kJ/kg) of a mixture at given T, P.
+        /// Runs a PT flash internally to determine which phase is present then
+        /// queries the property package for h_mass on that phase. Falls back to
+        /// NaN on failure.</summary>
+        public static double GetMassEnthalpyKJperKg(
+            IDictionary<string, double> moleFractions,
+            double temperatureK,
+            double pressurePa)
+        {
+            if (!IsAvailable) return double.NaN;
+            try
+            {
+                double sum = 0;
+                foreach (var v in moleFractions.Values) sum += v;
+                if (sum <= 0) return double.NaN;
+
+                var compounds = moleFractions.Keys.ToArray();
+                var fracs = compounds.Select(k => moleFractions[k] / sum).ToArray();
+
+                // Probe vapor fraction via PT flash to pick the right phase label.
+                var props = ComputeMixtureProperties(moleFractions, temperatureK, pressurePa);
+                if (!string.IsNullOrEmpty(props.Error)) return double.NaN;
+                string label = props.VaporFraction >= 0.5 ? "Vapor" : "Liquid";
+
+                // CalcProp returns enthalpy in J/kg (SI mass basis) when basis="Mass".
+                // PHFlash takes kJ/kg, so divide by 1000.
+                double hJPerKg = CalcProp("enthalpy", label, "Mass",
+                    compounds, fracs, temperatureK, pressurePa);
+                if (double.IsNaN(hJPerKg)) return double.NaN;
+                return hJPerKg / 1000.0;
+            }
+            catch
+            {
+                return double.NaN;
+            }
+        }
+
         /// <summary>Returns the composition-weighted molar mass in kg/mol.</summary>
         private static double SumMolarMass(string[] compounds, double[] moleFractions)
         {

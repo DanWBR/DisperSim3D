@@ -210,7 +210,37 @@ namespace DisperSim3D.Core
                 return result;
             }
 
-            // 2. Look up compound thermodynamics for the flash-fraction calculation
+            // 2. Try the real-fluid isenthalpic (PH) flash via DWSIMCore. This is the
+            //    physically correct adiabatic expansion model:
+            //      - PT flash at vessel (P_v, T_v) → h_vessel (mass enthalpy)
+            //      - PH flash at (P_ambient, h_vessel) → T_exit, vapor fraction
+            //    The DWSIMCore PR78 EoS captures the real fluid behaviour: supercritical
+            //    expansion through the dome, near-critical departures from ideal gas,
+            //    actual liquid densities for cold cryogenic releases.
+            if (DwsimThermo.IsAvailable && !string.IsNullOrEmpty(compoundName))
+            {
+                var comp = new Dictionary<string, double> { [compoundName] = 1.0 };
+                double hVessel = DwsimThermo.GetMassEnthalpyKJperKg(comp,
+                    leak.VesselTemperatureK, leak.VesselPressurePa);
+                if (!double.IsNaN(hVessel))
+                {
+                    var ph = DwsimThermo.PHFlash(comp, ambientPressurePa, hVessel,
+                        leak.VesselTemperatureK);
+                    if (string.IsNullOrEmpty(ph.Error) && !double.IsNaN(ph.TemperatureK)
+                        && ph.TemperatureK > 50 && ph.TemperatureK < 2000)
+                    {
+                        FillFromPHFlash(result, leak, mdot, ph, ambientPressurePa,
+                            targetExpandedVelocityMS, compoundName, hVessel);
+                        return result;
+                    }
+                    // PH flash failed → fall through to analytical Clapeyron below.
+                }
+            }
+
+            // 3. Analytical Clapeyron fallback when DWSIM unavailable or PH flash fails.
+            //    Uses a built-in compound table (CO2, NH3, Cl2, CH4, propane, n-butane,
+            //    H2S) plus DwsimThermo.GetCompoundInfo + Watson correlation for less
+            //    common substances.
             var fd = GetFlashData(compoundName);
             if (fd == null)
             {
@@ -219,7 +249,7 @@ namespace DisperSim3D.Core
                 return result;
             }
 
-            // 3. Decide phase regime by comparing vessel T against critical T
+            // Decide phase regime by comparing vessel T against critical T
             bool supercritical = leak.VesselTemperatureK > fd.T_critical_K
                                  && leak.VesselPressurePa > fd.P_critical_Pa;
 
@@ -228,36 +258,18 @@ namespace DisperSim3D.Core
             // For supercritical storage, the JT expansion drops T to T_bp regardless.
             double Texit = fd.T_bp_K;
 
-            // 4. Clapeyron flash fraction: the sensible heat available from cooling the
-            //    liquid from vessel T down to T_bp provides the latent heat that flashes
-            //    a fraction x_v of the liquid into vapor at ambient pressure.
-            //
-            //        x_v = C_p,liq · (T_vessel - T_bp) / ΔH_vap
-            //
-            //    For supercritical fluids, the analogous estimate uses the fluid's
-            //    pseudo-liquid Cp and gives a higher vapor fraction (the supercritical
-            //    fluid expands through the saturation envelope and crosses to vapor).
-            //    Both clamped to [0, 1].
+            // Clapeyron flash fraction:
+            //   x_v = C_p,liq · (T_vessel - T_bp) / ΔH_vap
             double dT = leak.VesselTemperatureK - fd.T_bp_K;
             double xv;
             if (dT <= 0)
             {
-                // Vessel colder than NBP — sub-cooled or below triple point. All vapor
-                // for atmospheric expansion of a (very cold) gas, all liquid for sub-cooled
-                // liquid below NBP. The Clapeyron formula gives <= 0 here; cap at 0.
                 xv = 0.0;
             }
             else
             {
                 xv = fd.Cp_liq_J_per_kgK * dT / fd.DeltaHvap_J_per_kg;
-                if (supercritical)
-                {
-                    // Supercritical correction: above T_c the fluid has no real "liquid
-                    // phase", so x_v is bounded from below by 0.5 (the supercritical
-                    // expansion to ambient typically yields majority vapor with some
-                    // condensate / solid CO2 entrainment).
-                    xv = Math.Max(xv, 0.50);
-                }
+                if (supercritical) xv = Math.Max(xv, 0.50);
             }
             if (xv > 1.0) xv = 1.0;
             if (xv < 0.0) xv = 0.0;
@@ -265,14 +277,11 @@ namespace DisperSim3D.Core
             double mdotVapor = mdot * xv;
             double mdotDroplet = mdot * (1.0 - xv);
 
-            // 5. Density at the expanded state: ideal-gas density of the vapor phase
-            //    at (P_amb, T_exit). For supercritical CO2 this slightly underestimates
-            //    density (the cloud carries entrained solid particles), but for the
-            //    pseudo-source geometry it's adequate.
+            // Ideal-gas density of the vapor phase at (P_amb, T_exit).
             double M = leak.GasMolarMassKgMol > 0 ? leak.GasMolarMassKgMol : 0.029;
             double rhoExit = ambientPressurePa * M / (R * Math.Max(Texit, 150.0));
 
-            // 6. Birch & Schefer pseudo-source for the VAPOR fraction only
+            // Birch & Schefer pseudo-source for the VAPOR fraction only
             double dPseudo;
             if (mdotVapor > 0 && targetExpandedVelocityMS > 0)
             {
@@ -292,7 +301,7 @@ namespace DisperSim3D.Core
             result.DiameterPseudoM = dPseudo;
             result.DensityExitKgM3 = rhoExit;
             result.IsTwoPhase = xv > 0.01 && xv < 0.99;
-            result.DwsimUsed = false; // analytical Clapeyron, not a DWSIM flowsheet solve
+            result.DwsimUsed = false; // analytical Clapeyron, not a DWSIM flash
             result.Notes = string.Format(
                 "Clapeyron flash ({4}): T_vessel={0:F1} K, T_bp={1:F1} K, ΔH_vap={2:F0} kJ/kg, C_p,liq={3:F0} J/kg/K → x_v={5:F3}; mdot_total={6:F4} kg/s, vapor={7:F4} kg/s, rainout={8:F4} kg/s",
                 leak.VesselTemperatureK, fd.T_bp_K, fd.DeltaHvap_J_per_kg / 1000.0,
@@ -300,6 +309,67 @@ namespace DisperSim3D.Core
                 supercritical ? "supercritical" : "subcritical liquid",
                 xv, mdot, mdotVapor, mdotDroplet);
             return result;
+        }
+
+        private static void FillFromPHFlash(
+            TwoPhaseSourceResult result, HighPressureLeakParams leak, double mdot,
+            DwsimThermo.PHFlashResult ph, double ambientPressurePa,
+            double targetExpandedVelocityMS, string compoundName, double hVessel)
+        {
+            double xv = ph.VaporFraction;
+            if (xv < 0 || double.IsNaN(xv)) xv = 0.0;
+            if (xv > 1) xv = 1.0;
+
+            double mdotVapor = mdot * xv;
+            double mdotDroplet = mdot * (1.0 - xv);
+
+            // For Birch pseudo-source, use the VAPOR-phase density at the flash state.
+            // ph.DensityKgM3 is the dominant-phase density which is liquid for low x_v.
+            // For two-phase / vapor-rich expansion we want the gaseous portion's density.
+            double rhoVapor;
+            if (xv >= 0.5)
+            {
+                rhoVapor = ph.DensityKgM3;
+            }
+            else
+            {
+                // Query vapor-phase density explicitly via CalcProp at the flash T,P.
+                rhoVapor = DwsimThermo.CalcProp("density", "Vapor", "Mass",
+                    new[] { compoundName }, new[] { 1.0 },
+                    ph.TemperatureK, ambientPressurePa);
+                if (double.IsNaN(rhoVapor) || rhoVapor <= 0)
+                {
+                    var info = DwsimThermo.GetCompoundInfo(compoundName);
+                    double M = info != null ? info.MolarMassKgMol : 0.029;
+                    rhoVapor = ambientPressurePa * M / (R * Math.Max(ph.TemperatureK, 150.0));
+                }
+            }
+
+            double dPseudo;
+            if (mdotVapor > 0 && targetExpandedVelocityMS > 0 && rhoVapor > 0)
+            {
+                double areaPseudo = mdotVapor / (rhoVapor * targetExpandedVelocityMS);
+                dPseudo = Math.Sqrt(4.0 * areaPseudo / Math.PI);
+            }
+            else
+            {
+                dPseudo = leak.OrificeDiameterM;
+            }
+
+            result.VaporMassFlowKgPerS = mdotVapor;
+            result.DropletMassFlowKgPerS = mdotDroplet;
+            result.VaporFraction = xv;
+            result.TempExitK = ph.TemperatureK;
+            result.VelocityExitMS = targetExpandedVelocityMS;
+            result.DiameterPseudoM = dPseudo;
+            result.DensityExitKgM3 = rhoVapor;
+            result.IsTwoPhase = xv > 0.01 && xv < 0.99;
+            result.DwsimUsed = true;
+            result.Notes = string.Format(
+                "DWSIMCore PH flash: P_v={0:E2} Pa → P_amb={1:E2} Pa, h_vessel={2:F1} kJ/kg → T_exit={3:F1} K, x_v={4:F3}, ρ_vapor={5:F3} kg/m³; mdot_total={6:F4} kg/s, vapor={7:F4} kg/s, rainout={8:F4} kg/s",
+                leak.VesselPressurePa, ambientPressurePa, hVessel,
+                ph.TemperatureK, xv, rhoVapor,
+                mdot, mdotVapor, mdotDroplet);
         }
 
         private static void FillIdealGasFallback(

@@ -59,21 +59,15 @@ namespace DisperSim3D.UI.Avalonia.Views
         // ── DWSIM bootstrap ──────────────────────────────────────────────────
         private async void TryAutoInit()
         {
-            string path = AppSettings.Instance.DwsimInstallPath ?? "";
-            if (string.IsNullOrEmpty(path))
-            {
-                LblStatus.Text = "DWSIM install path not configured — open Tools → DWSIM Settings...";
-                return;
-            }
-
+            // DWSIMCore is bundled directly into the engine (lib/DWSIMCore/);
+            // no external install path is needed. Initialise + load compounds
+            // off the UI thread to avoid freezing on a cold start.
             LblStatus.Text = "Loading compound database...";
-            // Initialize + AvailableCompounds touch the FluentAPI; both run
-            // off the UI thread so the dialog doesn't freeze on a cold load.
-            bool ok = await Task.Run(() => DwsimThermo.Initialize(path));
+            DwsimThermo.SetPropertyPackage(AppSettings.Instance.DwsimPropertyPackage);
+            bool ok = await Task.Run(() => DwsimThermo.Initialize());
             if (!ok)
             {
-                LblStatus.Text = "DWSIM init failed: " + (DwsimThermo.LastError ?? "(unknown)")
-                    + "  (configure via Tools → DWSIM Settings...)";
+                LblStatus.Text = "DWSIMCore init failed: " + (DwsimThermo.LastError ?? "(unknown)");
                 return;
             }
 

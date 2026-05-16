@@ -804,9 +804,6 @@ namespace DisperSim3D.UI.Avalonia.Views
         private async void MenuToolsAllocate_Click(object? sender, RoutedEventArgs e)
             => await ShowDetectorAllocationAsync();
 
-        private async void MenuToolsDwsim_Click(object? sender, RoutedEventArgs e)
-            => await EditDwsimSettingsAsync();
-
         private async void MenuToolsWindFieldMgr_Click(object? sender, RoutedEventArgs e)
             => await ShowWindFieldManagerAsync();
 
@@ -1952,16 +1949,6 @@ namespace DisperSim3D.UI.Avalonia.Views
                 Math.Min(dlg.SelectedIndex, _scene.DispersionScenarios.Count - 1));
             MarkDirtyAndRefresh("Scenarios: " + _scene.DispersionScenarios.Count
                 + " (active = " + _scene.ActiveScenarioIndex + ")");
-        }
-
-        // ── DWSIM settings (application-level) ───────────────────────────────
-        private async Task EditDwsimSettingsAsync()
-        {
-            var dlg = new DwsimSettingsDialog();
-            if (!await dlg.ShowDialog<bool>(this)) return;
-            // DwsimSettingsDialog saves AppSettings + resets the cached
-            // flowsheet itself; we only surface the change in the status bar.
-            StatusText.Text = "DWSIM settings updated";
         }
 
         // ── GPU / performance settings (application-level) ───────────────────

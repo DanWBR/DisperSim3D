@@ -498,11 +498,12 @@ namespace DisperSim3D.CLI
             Console.WriteLine("Two-Phase Source Calculator — smoke test");
             Console.WriteLine();
 
-            string dwsimPath = AppSettings.Instance.DwsimInstallPath ?? "";
-            bool dwsimOk = !string.IsNullOrEmpty(dwsimPath) && DwsimThermo.Initialize(dwsimPath);
-            Console.WriteLine("DWSIM: " + (dwsimOk
-                ? "initialised @ " + dwsimPath
-                : "NOT initialised (" + DwsimThermo.LastError + ") — ideal-gas fallback active"));
+            // DWSIMCore is bundled into the engine (lib/DWSIMCore/); no install path needed.
+            DwsimThermo.SetPropertyPackage(AppSettings.Instance.DwsimPropertyPackage);
+            bool dwsimOk = DwsimThermo.Initialize();
+            Console.WriteLine("DWSIMCore: " + (dwsimOk
+                ? "initialised (PP=" + AppSettings.Instance.DwsimPropertyPackage + ")"
+                : "NOT initialised (" + DwsimThermo.LastError + ") — analytical fallback active"));
             if (dwsimOk)
             {
                 var avail = DwsimThermo.AvailableCompounds();

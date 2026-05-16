@@ -298,20 +298,17 @@ namespace DisperSim3D.Dialogs
 
         private void TryAutoInit()
         {
-            string path = AppSettings.Instance.DwsimInstallPath;
-            if (string.IsNullOrEmpty(path))
-            {
-                _lblStatus.Text = "DWSIM install path not configured — open Dispersion → DWSIM Settings...";
-                return;
-            }
-            if (DwsimThermo.Initialize(path))
+            // DWSIMCore is now bundled directly into the engine (lib/DWSIMCore/),
+            // so initialisation no longer requires an external install path. Just
+            // load the calculator and populate the compound list.
+            DwsimThermo.SetPropertyPackage(AppSettings.Instance.DwsimPropertyPackage);
+            if (DwsimThermo.Initialize())
             {
                 LoadCompoundList();
             }
             else
             {
-                _lblStatus.Text = "DWSIM init failed: " + DwsimThermo.LastError +
-                    "  (configure via Dispersion → DWSIM Settings...)";
+                _lblStatus.Text = "DWSIMCore init failed: " + DwsimThermo.LastError;
             }
         }
 

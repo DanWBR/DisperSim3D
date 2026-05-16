@@ -31,14 +31,11 @@ namespace DisperSim3D.Core
         /// </summary>
         public CfdConfiguration CfdDefaults { get; set; }
 
-        /// <summary>Filesystem path to the DWSIM installation directory (the folder
-        /// containing DWSIM.Automation.FluentAPI.dll). When empty, DWSIM-driven
-        /// thermodynamics features are disabled.</summary>
-        public string DwsimInstallPath { get; set; } = "";
-
         /// <summary>DWSIM property-package name to use for mixture flashes. Defaults
-        /// to Peng-Robinson 1978 (PR78). Set via the DWSIM Settings dialog; consumed
-        /// by <see cref="DwsimThermo.ComputeMixtureProperties"/>.</summary>
+        /// to Peng-Robinson 1978 (PR78). Consumed by
+        /// <see cref="DwsimThermo.ComputeMixtureProperties"/> via
+        /// <see cref="DwsimThermo.SetPropertyPackage"/>. DWSIMCore is bundled
+        /// directly into the engine (lib/DWSIMCore/) so no install path is needed.</summary>
         public string DwsimPropertyPackage { get; set; } = "Peng-Robinson 1978 (PR78)";
 
         /// <summary>Preferred OpenCL device ID for FluidX3D compute (LBM wind / GPU
@@ -158,7 +155,9 @@ namespace DisperSim3D.Core
                 var dwsim = root.Element("Dwsim");
                 if (dwsim != null)
                 {
-                    DwsimInstallPath = (string)dwsim.Attribute("InstallPath") ?? "";
+                    // InstallPath attribute is read but ignored — kept for backward
+                    // compatibility with settings files written before DWSIMCore
+                    // was bundled into the engine.
                     string pp = (string)dwsim.Attribute("PropertyPackage");
                     if (!string.IsNullOrEmpty(pp)) DwsimPropertyPackage = pp;
                 }
@@ -228,7 +227,6 @@ namespace DisperSim3D.Core
                             new XAttribute("UseWindField", CfdDefaults.UseWindField)
                         ),
                         new XElement("Dwsim",
-                            new XAttribute("InstallPath", DwsimInstallPath ?? ""),
                             new XAttribute("PropertyPackage", DwsimPropertyPackage ?? "")),
                         new XElement("Gpu",
                             new XAttribute("PreferredComputeDeviceId",

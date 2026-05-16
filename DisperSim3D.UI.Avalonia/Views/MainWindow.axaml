@@ -119,9 +119,6 @@
         <MenuItem Header="_CFD Settings..." x:Name="MenuToolsCfd" Click="MenuToolsCfd_Click">
           <MenuItem.Icon><i:Icon Value="mdi-cog-outline" /></MenuItem.Icon>
         </MenuItem>
-        <MenuItem Header="D_WSIM Settings..." x:Name="MenuToolsDwsim" Click="MenuToolsDwsim_Click">
-          <MenuItem.Icon><i:Icon Value="mdi-flask-outline" /></MenuItem.Icon>
-        </MenuItem>
         <MenuItem Header="_GPU / Performance..." x:Name="MenuToolsGpu" Click="MenuToolsGpu_Click">
           <MenuItem.Icon><i:Icon Value="mdi-expansion-card-variant" /></MenuItem.Icon>
         </MenuItem>
