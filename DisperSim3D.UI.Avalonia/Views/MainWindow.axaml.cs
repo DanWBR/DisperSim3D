@@ -93,6 +93,12 @@ namespace DisperSim3D.UI.Avalonia.Views
                 }
                 catch { }
             };
+            // ── Primitive draw completion handler ────────────────────────
+            // Fired when the user finishes a click-drag in draw-primitive
+            // mode. Turn the (kind, centre, halfXY, height) tuple into a
+            // Decoration3D and add it to the scene.
+            Viewport3D.DrawPrimitiveCompleted += OnDrawPrimitiveCompleted;
+
             Inspector.ValueChanged += (_, _) =>
             {
                 if (_scene == null) return;
@@ -612,6 +618,18 @@ namespace DisperSim3D.UI.Avalonia.Views
                 _scene = loaded;
                 _projectPath = path;
                 _isDirty = false;
+
+                // Resolve any RELATIVE asset paths (decoration STL/OBJ files
+                // and per-decoration texture overrides) against the .dsproj
+                // directory. Old projects often stored just "Refinery.stl"
+                // which only works while the process cwd happens to match —
+                // the first PopulateScene at load looked OK but later rebuilds
+                // (triggered by a property edit) would silently drop the
+                // decoration when cwd had drifted. Absolute paths are kept
+                // as-is and missing files stay as the stored value so the
+                // user can see / fix them in the inspector.
+                ResolveSceneAssetPaths(_scene, path);
+
                 RebuildTree();
                 Viewport3D.PopulateScene(_scene);
                 StatusText.Text = "Loaded " + Path.GetFileName(path);
@@ -625,6 +643,42 @@ namespace DisperSim3D.UI.Avalonia.Views
                 StatusText.Text = "Load failed";
                 Inspector.SetTarget(null,
                     "Failed to load " + path + "\n" + ex.GetType().Name + ": " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Walks every asset path on the scene that can be stored as a relative
+        /// reference and rewrites it as an absolute path under
+        /// <paramref name="projectPath"/>'s directory when the relative form
+        /// exists there. Leaves already-absolute paths, missing files and
+        /// "builtin:" preset tokens untouched.
+        /// </summary>
+        private static void ResolveSceneAssetPaths(Scene3D scene, string projectPath)
+        {
+            string projectDir = Path.GetDirectoryName(projectPath) ?? "";
+            if (string.IsNullOrEmpty(projectDir)) return;
+
+            static string? Resolve(string? raw, string baseDir)
+            {
+                if (string.IsNullOrWhiteSpace(raw)) return raw;
+                if (raw.StartsWith("builtin:", StringComparison.OrdinalIgnoreCase)) return raw;
+                if (raw.StartsWith("primitive:", StringComparison.OrdinalIgnoreCase)) return raw;
+                if (Path.IsPathRooted(raw)) return raw;
+                try
+                {
+                    string combined = Path.GetFullPath(Path.Combine(baseDir, raw));
+                    return File.Exists(combined) ? combined : raw;
+                }
+                catch { return raw; }
+            }
+
+            if (scene.Decorations != null)
+            {
+                foreach (var d in scene.Decorations)
+                {
+                    d.FilePath = Resolve(d.FilePath, projectDir) ?? d.FilePath;
+                    d.TexturePath = Resolve(d.TexturePath, projectDir) ?? d.TexturePath;
+                }
             }
         }
 
@@ -1199,6 +1253,42 @@ namespace DisperSim3D.UI.Avalonia.Views
                     }
                     AddItem("Add from OBJ File…", "mdi-file-import-outline",
                         (_, _) => _ = AddDecorationFromFileAsync());
+
+                    // ── Parametric primitives ─────────────────────────────
+                    // Built procedurally (no STL/OBJ required). Round-trip
+                    // via FilePath = "primitive:<kind>[?w=…&h=…]". Default
+                    // sizes are 1 m so the Decoration's Scale field stays
+                    // the natural way to resize them.
+                    AddItem("Add Cube",     "mdi-cube-outline",
+                        (_, _) => AddPrimitiveDecoration("Cube",     "primitive:cube",
+                            "mdi-cube-outline"));
+                    AddItem("Add Sphere",   "mdi-sphere",
+                        (_, _) => AddPrimitiveDecoration("Sphere",   "primitive:sphere",
+                            "mdi-sphere"));
+                    AddItem("Add Cylinder", "mdi-cylinder",
+                        (_, _) => AddPrimitiveDecoration("Cylinder", "primitive:cylinder",
+                            "mdi-cylinder"));
+                    AddItem("Add Cone",     "mdi-cone",
+                        (_, _) => AddPrimitiveDecoration("Cone",     "primitive:cone",
+                            "mdi-cone"));
+                    AddItem("Add Pyramid",  "mdi-pyramid",
+                        (_, _) => AddPrimitiveDecoration("Pyramid",  "primitive:pyramid",
+                            "mdi-pyramid"));
+
+                    // ── Click-drag drawing ─────────────────────────────────
+                    // Same primitives, but placed by clicking the ground and
+                    // dragging to size. Status hint tells the user how to
+                    // cancel (right-click) once they're in draw mode.
+                    AddItem("Draw Cube (drag)",     "mdi-cube",
+                        (_, _) => BeginDrawPrimitive(GlViewport.PrimitiveKind.Cube));
+                    AddItem("Draw Sphere (drag)",   "mdi-sphere",
+                        (_, _) => BeginDrawPrimitive(GlViewport.PrimitiveKind.Sphere));
+                    AddItem("Draw Cylinder (drag)", "mdi-cylinder",
+                        (_, _) => BeginDrawPrimitive(GlViewport.PrimitiveKind.Cylinder));
+                    AddItem("Draw Cone (drag)",     "mdi-cone",
+                        (_, _) => BeginDrawPrimitive(GlViewport.PrimitiveKind.Cone));
+                    AddItem("Draw Pyramid (drag)",  "mdi-pyramid",
+                        (_, _) => BeginDrawPrimitive(GlViewport.PrimitiveKind.Pyramid));
                     return;
                 case "windrose":
                     // The wind-rose section node IS the rose — there is at
@@ -1576,6 +1666,110 @@ namespace DisperSim3D.UI.Avalonia.Views
             };
             _scene.Decorations.Add(deco);
             MarkDirtyAndRefresh("Added decoration: " + preset.Label);
+        }
+
+        /// <summary>
+        /// Add a parametric primitive (cube, sphere, cylinder, cone, pyramid)
+        /// as a <see cref="Decoration3D"/>. The FilePath carries the spec
+        /// string (e.g. "primitive:cube") so the project XML round-trips
+        /// without any extra schema. <see cref="PrimitiveBuilder"/> turns the
+        /// spec into a solid mesh at render time. Default size is 1 m; resize
+        /// via the decoration's Scale or by appending query params (?w=&amp;h=&amp;d=).
+        /// </summary>
+        /// <param name="iconKey">Material icon hint for the project tree (not
+        /// rendered in 3D — purely a tree-view affordance).</param>
+        /// <summary>
+        /// Enter primitive-drawing mode on the viewport and surface a hint
+        /// in the status bar so the user knows how to use it. Cancel with
+        /// right-click.
+        /// </summary>
+        private void BeginDrawPrimitive(GlViewport.PrimitiveKind kind)
+        {
+            if (_scene is null) { StatusText.Text = "Open or create a project first."; return; }
+            Viewport3D.BeginDrawPrimitive(kind);
+            StatusText.Text = $"Draw {kind}: click on the ground and drag to size. Right-click to cancel.";
+        }
+
+        /// <summary>
+        /// Bridge from the viewport's draw-primitive event to the scene.
+        /// Builds a <c>primitive:&lt;kind&gt;?…</c> spec encoding the dragged
+        /// dimensions (so the .dsproj round-trips them exactly) and drops a
+        /// new Decoration3D at the centre. <c>Scale</c> stays 1 because the
+        /// dimensions are already baked into the spec — keeps the user's
+        /// later resizing in the Inspector intuitive.
+        /// </summary>
+        private void OnDrawPrimitiveCompleted(
+            GlViewport.PrimitiveKind kind, System.Numerics.Vector3 centre,
+            float halfXY, float height)
+        {
+            if (_scene is null) return;
+
+            string spec;
+            string label;
+            switch (kind)
+            {
+                case GlViewport.PrimitiveKind.Cube:
+                    spec = $"primitive:cube?w={halfXY * 2:0.###}&d={halfXY * 2:0.###}&h={height:0.###}";
+                    label = "Cube";
+                    break;
+                case GlViewport.PrimitiveKind.Sphere:
+                    spec = $"primitive:sphere?r={halfXY:0.###}";
+                    label = "Sphere";
+                    break;
+                case GlViewport.PrimitiveKind.Cylinder:
+                    spec = $"primitive:cylinder?r={halfXY:0.###}&h={height:0.###}";
+                    label = "Cylinder";
+                    break;
+                case GlViewport.PrimitiveKind.Cone:
+                    spec = $"primitive:cone?r={halfXY:0.###}&h={height:0.###}";
+                    label = "Cone";
+                    break;
+                case GlViewport.PrimitiveKind.Pyramid:
+                    spec = $"primitive:pyramid?s={halfXY * 2:0.###}&h={height:0.###}";
+                    label = "Pyramid";
+                    break;
+                default: return;
+            }
+
+            // Disambiguate name when the user drops several in a row.
+            int n = 1;
+            string finalName = label;
+            while (_scene.Decorations.Any(d => string.Equals(d.Name, finalName, StringComparison.OrdinalIgnoreCase)))
+                finalName = $"{label} {++n}";
+
+            var deco = new DisperSim3D.Models.Decoration3D
+            {
+                Name = finalName,
+                FilePath = spec,
+                Scale = 1.0,
+                Position = new DisperSim3D.Geometry.Point3D(centre.X, centre.Y, centre.Z),
+                UseCustomMaterial = true,
+                MaterialColor = DisperSim3D.Geometry.Colors.LightGray,
+            };
+            _scene.Decorations.Add(deco);
+            MarkDirtyAndRefresh($"Drew primitive: {finalName} ({halfXY:0.##} m × {height:0.##} m)");
+        }
+
+        private void AddPrimitiveDecoration(string name, string filePath, string iconKey)
+        {
+            if (_scene is null) { StatusText.Text = "Open or create a project first."; return; }
+            // Disambiguate the tree label when several of the same primitive
+            // are dropped in succession.
+            int n = 1;
+            string finalName = name;
+            while (_scene.Decorations.Any(d => string.Equals(d.Name, finalName, StringComparison.OrdinalIgnoreCase)))
+                finalName = $"{name} {++n}";
+
+            var deco = new DisperSim3D.Models.Decoration3D
+            {
+                Name = finalName,
+                FilePath = filePath,
+                Scale = 1.0,
+                UseCustomMaterial = true,
+                MaterialColor = DisperSim3D.Geometry.Colors.LightGray,
+            };
+            _scene.Decorations.Add(deco);
+            MarkDirtyAndRefresh($"Added primitive: {finalName}");
         }
 
         private async Task AddDecorationFromFileAsync()

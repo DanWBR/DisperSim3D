@@ -28,8 +28,17 @@ namespace DisperSim3D.UI.Avalonia.Views
         public static (SolidVertex[] verts, uint[] indices)? Load(
             string filePath, Vector4 color)
         {
-            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
-                return null;
+            if (string.IsNullOrEmpty(filePath)) return null;
+
+            // Procedural primitives: FilePath of the form
+            //   "primitive:<kind>"            — unit-sized default
+            //   "primitive:<kind>?k=v&k=v"    — sized via query params
+            // Lets the user add simple geometry (cube, sphere, cylinder, cone,
+            // pyramid) without needing an STL/OBJ on disk.
+            if (filePath.StartsWith("primitive:", StringComparison.OrdinalIgnoreCase))
+                return PrimitiveBuilder.Build(filePath, color);
+
+            if (!File.Exists(filePath)) return null;
 
             string ext = Path.GetExtension(filePath).ToLowerInvariant();
             try
@@ -196,17 +205,21 @@ namespace DisperSim3D.UI.Avalonia.Views
 
                 if (parts[0] == "v" && parts.Length >= 4)
                 {
-                    positions.Add(new Vector3(
-                        float.Parse(parts[1], inv),
-                        float.Parse(parts[2], inv),
-                        float.Parse(parts[3], inv)));
+                    // OBJ convention is Y-up; DisperSim world is Z-up.
+                    // Apply Rx(90°): (x, y, z) → (x, -z, y) so a model
+                    // exported from Blender/MeshLab/etc. comes in standing
+                    // upright instead of lying on its side.
+                    float vx = float.Parse(parts[1], inv);
+                    float vy = float.Parse(parts[2], inv);
+                    float vz = float.Parse(parts[3], inv);
+                    positions.Add(new Vector3(vx, -vz, vy));
                 }
                 else if (parts[0] == "vn" && parts.Length >= 4)
                 {
-                    normals.Add(new Vector3(
-                        float.Parse(parts[1], inv),
-                        float.Parse(parts[2], inv),
-                        float.Parse(parts[3], inv)));
+                    float nx = float.Parse(parts[1], inv);
+                    float ny = float.Parse(parts[2], inv);
+                    float nz = float.Parse(parts[3], inv);
+                    normals.Add(new Vector3(nx, -nz, ny));
                 }
                 else if (parts[0] == "f" && parts.Length >= 4)
                 {
@@ -286,18 +299,24 @@ namespace DisperSim3D.UI.Avalonia.Views
                         break;
 
                     case "v" when parts.Length >= 4:
-                        positions.Add(new Vector3(
-                            float.Parse(parts[1], inv),
-                            float.Parse(parts[2], inv),
-                            float.Parse(parts[3], inv)));
+                    {
+                        // OBJ Y-up → DisperSim Z-up: Rx(90°) maps
+                        // (x, y, z) → (x, -z, y).
+                        float vx = float.Parse(parts[1], inv);
+                        float vy = float.Parse(parts[2], inv);
+                        float vz = float.Parse(parts[3], inv);
+                        positions.Add(new Vector3(vx, -vz, vy));
                         break;
+                    }
 
                     case "vn" when parts.Length >= 4:
-                        normals.Add(new Vector3(
-                            float.Parse(parts[1], inv),
-                            float.Parse(parts[2], inv),
-                            float.Parse(parts[3], inv)));
+                    {
+                        float nx = float.Parse(parts[1], inv);
+                        float ny = float.Parse(parts[2], inv);
+                        float nz = float.Parse(parts[3], inv);
+                        normals.Add(new Vector3(nx, -nz, ny));
                         break;
+                    }
 
                     case "vt" when parts.Length >= 3:
                         texCoords.Add(new Vector2(

@@ -277,6 +277,28 @@ namespace DisperSim3D.UI.Avalonia.Views
         /// Parameters: world position, outward surface normal.</summary>
         internal event Action<Vector3, Vector3>? PickCompleted;
 
+        // ── Primitive draw mode state ───────────────────────────────────
+        // Drag-on-the-ground placement for cube/sphere/cylinder/cone/pyramid.
+        // Click sets the base point on Z=0; drag extends a preview mesh;
+        // release fires DrawPrimitiveCompleted with the kind + the final
+        // bounding values so MainWindow can spawn the actual Decoration3D.
+        public enum PrimitiveKind { Cube, Sphere, Cylinder, Cone, Pyramid }
+        private bool _drawActive;
+        private PrimitiveKind _drawKind;
+        private bool _drawDragging;
+        private Vector3 _drawAnchor;
+        private Vector3 _drawCurrent;
+        private SceneObject? _drawPreview;
+        private const string DrawPreviewTag = "draw:preview";
+
+        /// <summary>
+        /// Fired when the user finishes a click-drag in primitive draw mode.
+        /// Args: kind, base world-space centre (XY on ground, Z=0), planar
+        /// half-extent in metres (max(|dx|,|dy|) from the anchor), height in
+        /// metres. The MainWindow turns this into a Decoration3D.
+        /// </summary>
+        internal event Action<PrimitiveKind, Vector3, float, float>? DrawPrimitiveCompleted;
+
         // ── GLSL shader bodies ──────────────────────────────────────────
         // The #version prefix is prepended at compile time depending on
         // whether the context is desktop GL or GL ES.
@@ -1477,6 +1499,10 @@ void main() { }
                 ApplyDispersionFrame(gl, req);
             }
 
+            // ── Deferred draw-mode preview upload ───────────────────────
+            if (_pendingDrawPreview != null)
+                ApplyPendingDrawPreview(gl);
+
             gl.BindFramebuffer(GL_FRAMEBUFFER, fb);
 
             // Pixel-accurate viewport (accounts for HiDPI scaling)
@@ -1567,12 +1593,27 @@ void main() { }
                 warmB = 0.70f + 0.30f * MathF.Min(1f, primElRad / 1.0f);
             }
 
-            // Fog parameters — derive colour from sky horizon for seamless blend
+            // Fog parameters — derive colour from sky horizon for a seamless
+            // blend at the horizon line. At night the sky shader hard-codes a
+            // deep-navy horizon (vec3(0.04, 0.06, 0.13)); using the day-time
+            // SkyHorizonColor in that case left a bright fog band against the
+            // dark sky, visible as a seam. Match the shader's night palette
+            // when isNight so ground/fog/sky line up.
             float fogDensity = env.FogEnabled ? (float)env.FogDensity : 0f;
-            var hc = env.SkyHorizonColor;
-            float fogR = hc.R / 255f;
-            float fogG = hc.G / 255f;
-            float fogB = hc.B / 255f;
+            float fogR, fogG, fogB;
+            if (isNight)
+            {
+                fogR = 0.04f;
+                fogG = 0.06f;
+                fogB = 0.13f;
+            }
+            else
+            {
+                var hc = env.SkyHorizonColor;
+                fogR = hc.R / 255f;
+                fogG = hc.G / 255f;
+                fogB = hc.B / 255f;
+            }
             var camPos = _camera.Eye;
 
             // ── 0. Shadow depth pass ────────────────────────────────────
@@ -3208,6 +3249,27 @@ void main() { }
                 return;
             }
 
+            // ── Primitive draw mode ─────────────────────────────────────
+            if (_drawActive && pt.Properties.IsLeftButtonPressed)
+            {
+                var ground = RaycastGroundPoint(pt.Position.X, pt.Position.Y);
+                if (ground != null)
+                {
+                    _drawAnchor = ground.Value;
+                    _drawCurrent = ground.Value;
+                    _drawDragging = true;
+                    BuildOrUpdateDrawPreview();
+                }
+                e.Handled = true;
+                return;
+            }
+            if (_drawActive && pt.Properties.IsRightButtonPressed)
+            {
+                CancelDrawPrimitive();
+                e.Handled = true;
+                return;
+            }
+
             if (pt.Properties.IsLeftButtonPressed)
             {
                 _panning = true;
@@ -3237,6 +3299,20 @@ void main() { }
                 return;
             }
 
+            // ── Primitive draw mode — update preview while dragging ────
+            if (_drawActive && _drawDragging)
+            {
+                var pos = e.GetPosition(this);
+                var ground = RaycastGroundPoint(pos.X, pos.Y);
+                if (ground != null)
+                {
+                    _drawCurrent = ground.Value;
+                    BuildOrUpdateDrawPreview();
+                }
+                e.Handled = true;
+                return;
+            }
+
             if (!_orbiting && !_panning) return;
 
             var mpos = e.GetPosition(this);
@@ -3256,6 +3332,19 @@ void main() { }
         protected override void OnPointerReleased(PointerReleasedEventArgs e)
         {
             base.OnPointerReleased(e);
+
+            // Commit primitive draw on left-button release.
+            if (_drawActive && _drawDragging)
+            {
+                _drawDragging = false;
+                var (centre, halfXY, height) = ComputeDrawDims();
+                ClearDrawPreview();
+                _drawActive = false;
+                Cursor = global::Avalonia.Input.Cursor.Default;
+                DrawPrimitiveCompleted?.Invoke(_drawKind, centre, halfXY, height);
+                RequestNextFrameRendering();
+            }
+
             _orbiting = false;
             _panning  = false;
         }
@@ -3302,6 +3391,174 @@ void main() { }
             if (_ghostArrow != null) { _ghostArrow.Visible = false; }
             Cursor = global::Avalonia.Input.Cursor.Default;
             RequestNextFrameRendering();
+        }
+
+        /// <summary>Begin click-drag placement of a primitive on the ground.</summary>
+        internal void BeginDrawPrimitive(PrimitiveKind kind)
+        {
+            _drawActive = true;
+            _drawKind = kind;
+            _drawDragging = false;
+            Cursor = new global::Avalonia.Input.Cursor(
+                global::Avalonia.Input.StandardCursorType.Cross);
+            RequestNextFrameRendering();
+        }
+
+        /// <summary>Cancel draw mode without emitting a primitive (Esc / RMB).</summary>
+        internal void CancelDrawPrimitive()
+        {
+            _drawActive = false;
+            _drawDragging = false;
+            ClearDrawPreview();
+            Cursor = global::Avalonia.Input.Cursor.Default;
+            RequestNextFrameRendering();
+        }
+
+        internal bool IsDrawPrimitiveActive => _drawActive;
+
+        private void ClearDrawPreview()
+        {
+            if (_drawPreview == null) return;
+            // Remove from scene list. The mesh is freed lazily on next
+            // rebuild — keeping the GL cleanup off the input thread.
+            for (int i = _sceneObjects.Count - 1; i >= 0; i--)
+                if (ReferenceEquals(_sceneObjects[i], _drawPreview))
+                    _sceneObjects.RemoveAt(i);
+            _drawPreview = null;
+        }
+
+        /// <summary>
+        /// Project a screen position straight onto the Z=0 ground plane.
+        /// Returns null when the camera is parallel to the ground or looking
+        /// up at the sky (no intersection in front of the camera).
+        /// </summary>
+        private Vector3? RaycastGroundPoint(double mouseX, double mouseY)
+        {
+            float w = (float)Bounds.Width;
+            float h = (float)Bounds.Height;
+            if (w < 1 || h < 1) return null;
+            var view = _camera.ViewMatrix;
+            var proj = _camera.ProjectionMatrix(w / h);
+            var (origin, dir) = RayCaster.ScreenToRay(mouseX, mouseY, w, h, view, proj);
+            var hit = RayCaster.RaycastGroundPlane(origin, dir);
+            return hit?.Position;
+        }
+
+        /// <summary>
+        /// Convert (anchor, current) drag points into the parameters the
+        /// primitive builders want: a centre point on the ground, a planar
+        /// half-extent (sphere/cone/cylinder radius, or half-side for box /
+        /// pyramid), and a height. Height is derived so the primitive looks
+        /// proportional — clamp tiny drags to a 0.5 m floor so a click
+        /// without drag still produces a visible object.
+        /// </summary>
+        private (Vector3 centre, float halfXY, float height) ComputeDrawDims()
+        {
+            var d = _drawCurrent - _drawAnchor;
+            float halfXY;
+            Vector3 centre;
+            switch (_drawKind)
+            {
+                case PrimitiveKind.Cube:
+                    // Anchor is one base corner; current is opposite corner.
+                    // The box's centre is the midpoint of the diagonal.
+                    halfXY = MathF.Max(MathF.Abs(d.X), MathF.Abs(d.Y)) * 0.5f;
+                    if (halfXY < 0.25f) halfXY = 0.5f;
+                    centre = new Vector3(
+                        (_drawAnchor.X + _drawCurrent.X) * 0.5f,
+                        (_drawAnchor.Y + _drawCurrent.Y) * 0.5f, 0);
+                    break;
+                default:
+                    // Anchor is centre; current sets the radius.
+                    halfXY = new Vector2(d.X, d.Y).Length();
+                    if (halfXY < 0.25f) halfXY = 0.5f;
+                    centre = _drawAnchor;
+                    break;
+            }
+            // Height heuristic: 2× the planar half-extent so primitives look
+            // proportional (a 1 m-radius cylinder is 2 m tall, etc.). Box /
+            // pyramid follow the same rule.
+            float height = halfXY * 2f;
+            return (centre, halfXY, height);
+        }
+
+        /// <summary>
+        /// Build (or rebuild) the wireframe-like preview mesh shown while
+        /// the user drags. Same primitive type and parameters as what would
+        /// be committed on release — the user gets WYSIWYG feedback.
+        /// </summary>
+        private void BuildOrUpdateDrawPreview()
+        {
+            var (centre, halfXY, height) = ComputeDrawDims();
+
+            // Semi-transparent cyan so the preview reads as a placement
+            // affordance and not a real object.
+            var color = new Vector4(0.20f, 0.85f, 1.0f, 0.45f);
+            (SolidVertex[] verts, uint[] idx) mesh;
+            switch (_drawKind)
+            {
+                case PrimitiveKind.Cube:
+                    mesh = GlMeshBuffer.GenerateBox(
+                        new Vector3(centre.X, centre.Y, height * 0.5f),
+                        halfXY * 2f, halfXY * 2f, height, color);
+                    break;
+                case PrimitiveKind.Sphere:
+                    mesh = GlMeshBuffer.GenerateSphere(
+                        new Vector3(centre.X, centre.Y, halfXY),
+                        halfXY, color, 24, 16);
+                    break;
+                case PrimitiveKind.Cylinder:
+                    mesh = GlMeshBuffer.GenerateCylinder(
+                        centre, halfXY, height, color, 24);
+                    break;
+                case PrimitiveKind.Cone:
+                    mesh = GlMeshBuffer.GenerateCone(
+                        centre, halfXY, height, color, 24);
+                    break;
+                case PrimitiveKind.Pyramid:
+                    mesh = GlMeshBuffer.GeneratePyramid(
+                        centre, halfXY * 2f, height, color);
+                    break;
+                default:
+                    return;
+            }
+
+            // The mesh upload requires an active GL context. Schedule the
+            // rebuild on the next render frame instead of doing it here on
+            // the input thread.
+            _pendingDrawPreview = mesh;
+            RequestNextFrameRendering();
+        }
+
+        private (SolidVertex[] verts, uint[] idx)? _pendingDrawPreview;
+
+        /// <summary>
+        /// Called from OnOpenGlRender when there's a queued preview mesh.
+        /// Replaces the previous preview SceneObject (if any) with a fresh
+        /// upload. Keeping it as a SceneObject means it goes through the
+        /// regular lit-solid pipeline → user sees a properly-shaded blue
+        /// ghost of what they're about to drop.
+        /// </summary>
+        private void ApplyPendingDrawPreview(GlInterface gl)
+        {
+            if (_pendingDrawPreview == null) return;
+            var (v, i) = _pendingDrawPreview.Value;
+            _pendingDrawPreview = null;
+
+            // Free the previous preview's GPU buffer before replacing it.
+            if (_drawPreview != null)
+            {
+                _drawPreview.Mesh.Cleanup(gl);
+                for (int k = _sceneObjects.Count - 1; k >= 0; k--)
+                    if (ReferenceEquals(_sceneObjects[k], _drawPreview))
+                        _sceneObjects.RemoveAt(k);
+                _drawPreview = null;
+            }
+
+            var mesh = new GlMeshBuffer();
+            mesh.Upload(gl, v, i);
+            _drawPreview = new SceneObject(mesh, Matrix4x4.Identity, DrawPreviewTag);
+            _sceneObjects.Add(_drawPreview);
         }
 
         private RayHit? DoRaycast(double mouseX, double mouseY)

@@ -483,6 +483,186 @@ namespace DisperSim3D.UI.Avalonia.Views
         }
 
         /// <summary>
+        /// Generate an axis-aligned box centred on the origin. <paramref name="sx"/>,
+        /// <paramref name="sy"/> and <paramref name="sz"/> are FULL extents
+        /// (not half). 24 vertices (one per face corner) so face normals are
+        /// flat — looks like a clean machined block rather than a smooth
+        /// rounded one.
+        /// </summary>
+        public static (SolidVertex[] verts, uint[] indices) GenerateBox(
+            Vector3 center, float sx, float sy, float sz, Vector4 color)
+        {
+            float hx = sx * 0.5f, hy = sy * 0.5f, hz = sz * 0.5f;
+            // 6 faces × 4 verts = 24 verts, 6 × 2 tris × 3 idx = 36 indices.
+            var verts = new SolidVertex[24];
+            var idx   = new uint[36];
+
+            void AddFace(int baseV, int baseI, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 n)
+            {
+                verts[baseV + 0] = new SolidVertex(center + a, n, color);
+                verts[baseV + 1] = new SolidVertex(center + b, n, color);
+                verts[baseV + 2] = new SolidVertex(center + c, n, color);
+                verts[baseV + 3] = new SolidVertex(center + d, n, color);
+                idx[baseI + 0] = (uint)(baseV + 0);
+                idx[baseI + 1] = (uint)(baseV + 1);
+                idx[baseI + 2] = (uint)(baseV + 2);
+                idx[baseI + 3] = (uint)(baseV + 0);
+                idx[baseI + 4] = (uint)(baseV + 2);
+                idx[baseI + 5] = (uint)(baseV + 3);
+            }
+
+            // +X face
+            AddFace(0,  0,
+                new(+hx, -hy, -hz), new(+hx, +hy, -hz),
+                new(+hx, +hy, +hz), new(+hx, -hy, +hz),
+                new(+1, 0, 0));
+            // -X face
+            AddFace(4,  6,
+                new(-hx, +hy, -hz), new(-hx, -hy, -hz),
+                new(-hx, -hy, +hz), new(-hx, +hy, +hz),
+                new(-1, 0, 0));
+            // +Y face
+            AddFace(8,  12,
+                new(+hx, +hy, -hz), new(-hx, +hy, -hz),
+                new(-hx, +hy, +hz), new(+hx, +hy, +hz),
+                new(0, +1, 0));
+            // -Y face
+            AddFace(12, 18,
+                new(-hx, -hy, -hz), new(+hx, -hy, -hz),
+                new(+hx, -hy, +hz), new(-hx, -hy, +hz),
+                new(0, -1, 0));
+            // +Z face (top)
+            AddFace(16, 24,
+                new(-hx, -hy, +hz), new(+hx, -hy, +hz),
+                new(+hx, +hy, +hz), new(-hx, +hy, +hz),
+                new(0, 0, +1));
+            // -Z face (bottom)
+            AddFace(20, 30,
+                new(-hx, +hy, -hz), new(+hx, +hy, -hz),
+                new(+hx, -hy, -hz), new(-hx, -hy, -hz),
+                new(0, 0, -1));
+
+            return (verts, idx);
+        }
+
+        /// <summary>
+        /// Generate a vertical cone with apex pointing +Z. Base sits on the
+        /// plane through <paramref name="baseCenter"/>. Closed at the bottom.
+        /// </summary>
+        public static (SolidVertex[] verts, uint[] indices) GenerateCone(
+            Vector3 baseCenter, float radius, float height, Vector4 color,
+            int slices = 24)
+        {
+            if (slices < 3) slices = 3;
+
+            // Side: 2 verts per slice (apex+base), slices×3 indices.
+            // Cap : 1 centre + (slices+1) ring, slices×3 indices.
+            int sideV = (slices + 1) * 2;
+            int capV  = slices + 2;
+            var verts = new SolidVertex[sideV + capV];
+            var idx   = new System.Collections.Generic.List<uint>(slices * 6);
+
+            var apex = baseCenter + new Vector3(0, 0, height);
+            // Cone slant for side normals
+            float slant = MathF.Sqrt(radius * radius + height * height);
+            float nz = radius / slant;
+            float nr = height / slant; // radial component
+
+            int vi = 0;
+            for (int i = 0; i <= slices; i++)
+            {
+                float theta = 2f * MathF.PI * i / slices;
+                float cx = MathF.Cos(theta);
+                float cy = MathF.Sin(theta);
+                var sideN = new Vector3(cx * nr, cy * nr, nz);
+                // Base ring
+                verts[vi++] = new SolidVertex(
+                    baseCenter + new Vector3(cx * radius, cy * radius, 0),
+                    sideN, color);
+                // Apex (duplicated per slice so each side triangle has its own normal)
+                verts[vi++] = new SolidVertex(apex, sideN, color);
+            }
+            for (int i = 0; i < slices; i++)
+            {
+                uint bl = (uint)(i * 2);
+                uint al = bl + 1;
+                uint br = (uint)((i + 1) * 2);
+                idx.Add(bl); idx.Add(br); idx.Add(al);
+            }
+
+            // Bottom cap (faces -Z)
+            uint capStart = (uint)vi;
+            var downN = -Vector3.UnitZ;
+            verts[vi++] = new SolidVertex(baseCenter, downN, color); // centre
+            for (int i = 0; i <= slices; i++)
+            {
+                float theta = 2f * MathF.PI * i / slices;
+                verts[vi++] = new SolidVertex(
+                    baseCenter + new Vector3(
+                        MathF.Cos(theta) * radius,
+                        MathF.Sin(theta) * radius, 0),
+                    downN, color);
+            }
+            for (int i = 0; i < slices; i++)
+            {
+                idx.Add(capStart);
+                idx.Add(capStart + (uint)i + 2);
+                idx.Add(capStart + (uint)i + 1);
+            }
+
+            return (verts, idx.ToArray());
+        }
+
+        /// <summary>
+        /// Square-based pyramid pointing +Z. Side <paramref name="side"/>,
+        /// height <paramref name="height"/>. 4 triangular faces + a square
+        /// base; each face gets its own normal (no shared verts).
+        /// </summary>
+        public static (SolidVertex[] verts, uint[] indices) GeneratePyramid(
+            Vector3 baseCenter, float side, float height, Vector4 color)
+        {
+            float h = side * 0.5f;
+            var apex  = baseCenter + new Vector3(0, 0, height);
+            var c00 = baseCenter + new Vector3(-h, -h, 0);
+            var c10 = baseCenter + new Vector3( h, -h, 0);
+            var c11 = baseCenter + new Vector3( h,  h, 0);
+            var c01 = baseCenter + new Vector3(-h,  h, 0);
+
+            // 4 side faces (3 verts each) + 1 base face (4 verts as 2 tris).
+            var verts = new SolidVertex[4 * 3 + 4];
+            var idx   = new uint[4 * 3 + 6];
+            int vi = 0, ii = 0;
+
+            void Side(Vector3 a, Vector3 b)
+            {
+                var n = Vector3.Normalize(Vector3.Cross(b - a, apex - a));
+                verts[vi + 0] = new SolidVertex(a,    n, color);
+                verts[vi + 1] = new SolidVertex(b,    n, color);
+                verts[vi + 2] = new SolidVertex(apex, n, color);
+                idx[ii + 0] = (uint)(vi + 0);
+                idx[ii + 1] = (uint)(vi + 1);
+                idx[ii + 2] = (uint)(vi + 2);
+                vi += 3; ii += 3;
+            }
+
+            Side(c00, c10);
+            Side(c10, c11);
+            Side(c11, c01);
+            Side(c01, c00);
+
+            // Base (faces -Z)
+            var downN = -Vector3.UnitZ;
+            verts[vi + 0] = new SolidVertex(c00, downN, color);
+            verts[vi + 1] = new SolidVertex(c01, downN, color);
+            verts[vi + 2] = new SolidVertex(c11, downN, color);
+            verts[vi + 3] = new SolidVertex(c10, downN, color);
+            idx[ii + 0] = (uint)(vi + 0); idx[ii + 1] = (uint)(vi + 1); idx[ii + 2] = (uint)(vi + 2);
+            idx[ii + 3] = (uint)(vi + 0); idx[ii + 4] = (uint)(vi + 2); idx[ii + 5] = (uint)(vi + 3);
+
+            return (verts, idx);
+        }
+
+        /// <summary>
         /// Generate a diamond / octahedron shape (for fire source markers).
         /// </summary>
         public static (SolidVertex[] verts, uint[] indices) GenerateDiamond(
