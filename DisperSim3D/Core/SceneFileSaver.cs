@@ -172,7 +172,12 @@ namespace DisperSim3D.Core
                 new XAttribute("FogEnabled", e.FogEnabled.ToString()),
                 new XAttribute("FogDensity", e.FogDensity.ToString(inv)),
                 new XAttribute("SkyTextureBrightness", e.SkyTextureBrightness.ToString(inv)),
-                new XAttribute("SkyTextureVOffset", e.SkyTextureVOffset.ToString(inv)));
+                new XAttribute("SkyTextureVOffset", e.SkyTextureVOffset.ToString(inv)),
+                new XAttribute("NightMode", e.NightMode.ToString()),
+                new XAttribute("MoonAzimuthDeg", e.MoonAzimuthDeg.ToString(inv)),
+                new XAttribute("MoonElevationDeg", e.MoonElevationDeg.ToString(inv)),
+                new XAttribute("MoonIntensity", e.MoonIntensity.ToString(inv)),
+                new XAttribute("ShowStars", e.ShowStars.ToString()));
         }
 
         private static XElement? SerializeGeneralSettings(Scene3D scene, CultureInfo inv)

@@ -14,7 +14,7 @@
 
     <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
             Margin="0,10,0,0" Padding="0,8,0,0">
-      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="8">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto" ColumnSpacing="8">
         <Button Grid.Column="0" x:Name="BtnAdd" Click="BtnAdd_Click">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <i:Icon Value="mdi-plus" />
@@ -27,8 +27,22 @@
             <TextBlock Text="Remove Selected" />
           </StackPanel>
         </Button>
-        <Button Grid.Column="3" x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
-        <Button Grid.Column="4" x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+        <Button Grid.Column="2" x:Name="BtnPickColor" Click="BtnPickColor_Click"
+                ToolTip.Tip="Open the colour picker for the selected row (preserves the current alpha).">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <i:Icon Value="mdi-palette" />
+            <TextBlock Text="Pick color..." />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="3" x:Name="BtnResetDefaults" Click="BtnResetDefaults_Click"
+                ToolTip.Tip="Reset to the 3-layer LFL set the renderer uses by default (100% / 60% / 20% LFL).">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <i:Icon Value="mdi-restore" />
+            <TextBlock Text="Reset defaults" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="5" x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button Grid.Column="6" x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
                 IsDefault="True" Background="#0078D4" Foreground="White" />
       </Grid>
     </Border>

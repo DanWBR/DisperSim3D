@@ -225,6 +225,7 @@ namespace DisperSim3D.Controls
                 new ToolStripMenuItem("Wind Rose...", Img("icons8-wind.png"), (s, e) => DoWindRose()),
                 new ToolStripMenuItem("Optimize Detector Placement...", Img("icons8-ecg.png"), (s, e) => DoOptimizeDetectors()),
                 new ToolStripMenuItem("Validate against Benchmarks...", Img("icons8-ecg.png"), (s, e) => DoValidateBenchmarks()),
+                new ToolStripMenuItem("Edit Dispersion Thresholds...", Img("cog.png"), (s, e) => DoThresholds()),
                 new ToolStripSeparator(),
                 // Results group
                 new ToolStripMenuItem("Exceedance Curves...", Img("icons8-combo_chart.png"), (s, e) => DoExceedanceCurves()),
@@ -458,6 +459,16 @@ namespace DisperSim3D.Controls
                 btnSolverSettings.Text = "...";
             btnSolverSettings.Click += (s, e) => DoSolverSettings();
 
+            // Always-visible thresholds button next to the playback controls
+            // so users can re-colour / re-tune the 100 % / 60 % / 20 % LFL
+            // isosurfaces without hunting through the Simulate menu.
+            var btnThresholds = new ToolStripButton("Thresholds...", Img("cog.png"))
+            {
+                ToolTipText = "Edit colour and opacity of the dispersion isosurface layers",
+                DisplayStyle = ToolStripItemDisplayStyle.ImageAndText
+            };
+            btnThresholds.Click += (s, e) => DoThresholds();
+
             _simToolStrip.Items.AddRange(new ToolStripItem[] {
                 new ToolStripLabel("Scenario:"), _scenarioCombo, btnEditScenario,
                 new ToolStripSeparator(),
@@ -468,7 +479,9 @@ namespace DisperSim3D.Controls
                 new ToolStripLabel("Speed:"), speedCombo,
                 new ToolStripSeparator(),
                 new ToolStripLabel("Ground Z:"), nudGroundLevel,
-                new ToolStripLabel("Size:"), nudGroundSize
+                new ToolStripLabel("Size:"), nudGroundSize,
+                new ToolStripSeparator(),
+                btnThresholds
             });
 
             // --- Editor control ---

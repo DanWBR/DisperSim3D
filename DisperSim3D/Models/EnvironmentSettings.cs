@@ -27,7 +27,7 @@ namespace DisperSim3D.Models
     public class EnvironmentSettings
     {
         [Category("Lighting")]
-        [Description("Use a directional Sun + sky-ambient pair instead of HelixToolkit's flat DefaultLights. Turn off to recover the legacy look.")]
+        [Description("Use the directional Sun as the primary daytime light (with sky-ambient fill). Turn off for flat ambient-only lighting during the day. Has no effect at night — the Moon is the night-time directional light and is controlled by NightMode / MoonIntensity.")]
         public bool UseSunLighting { get; set; } = true;
 
         [Category("Lighting")]
@@ -109,6 +109,26 @@ namespace DisperSim3D.Models
         [Category("Lighting")]
         [Description("Cast shadows from the sun onto the ground and objects. Requires UseSunLighting.")]
         public bool ShadowsEnabled { get; set; } = true;
+
+        [Category("Lighting")]
+        [Description("Render the scene at night. When on, the moon replaces the sun as the primary directional light (cool blue-white, low intensity), the sky becomes a deep blue gradient, and a star field is overlaid. NightMode works independently of UseSunLighting — enabling night always activates the moon. If UseSolarClock is on, night mode auto-activates whenever the solar elevation goes below −2° (sun below horizon).")]
+        public bool NightMode { get; set; } = false;
+
+        [Category("Lighting")]
+        [Description("Moon azimuth in degrees (0 = North, clockwise). Independent of the sun's azimuth.")]
+        public double MoonAzimuthDeg { get; set; } = 220;
+
+        [Category("Lighting")]
+        [Description("Moon elevation above horizon in degrees (0 = on horizon, 90 = overhead). Below 0 = moon down (scene only lit by faint ambient).")]
+        public double MoonElevationDeg { get; set; } = 50;
+
+        [Category("Lighting")]
+        [Description("Moon brightness multiplier (0–1). A full moon at zenith is about 0.3 of a sunny day — go higher only for stylised scenes.")]
+        public double MoonIntensity { get; set; } = 0.30;
+
+        [Category("Lighting")]
+        [Description("Show a procedural star field on the night sky. Density and brightness are fixed; toggle only.")]
+        public bool ShowStars { get; set; } = true;
 
         [Category("Atmosphere")]
         [Description("Enable distance-based atmospheric fog that blends distant objects into the sky horizon color.")]

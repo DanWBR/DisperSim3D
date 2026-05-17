@@ -528,6 +528,99 @@ namespace DisperSim3D.UI.Avalonia.Views
         }
 
         /// <summary>
+        /// Generate a stylised flame mesh — a tapered, slightly wavy cone
+        /// with a vertical colour gradient: deep red at the base, orange in
+        /// the body, bright yellow / white near the tip. Each vertex carries
+        /// the gradient colour so the existing solid lit shader paints the
+        /// flame naturally; the fire point-light pass illuminates nearby
+        /// decorations independently from this mesh.
+        ///
+        /// The mesh is intentionally simple (no animated displacement) so
+        /// the GPU cost stays low — the flicker the user perceives comes
+        /// from the fire-point-light shader pulse, not vertex morphing.
+        /// </summary>
+        public static (SolidVertex[] verts, uint[] indices) GenerateFlame(
+            Vector3 baseCenter, float baseRadius, float height,
+            int slices = 16, int stacks = 6)
+        {
+            if (slices < 4) slices = 4;
+            if (stacks < 2) stacks = 2;
+
+            // Palette: deep-red base → orange-yellow → near-white tip
+            Vector4 colBase  = new(0.85f, 0.08f, 0.04f, 0.9f);
+            Vector4 colMid   = new(1.00f, 0.55f, 0.12f, 0.85f);
+            Vector4 colTip   = new(1.00f, 0.95f, 0.70f, 0.7f);
+
+            var verts = new SolidVertex[(stacks + 1) * slices + 1];
+            int vi = 0;
+
+            // Rings from base (t=0) to just below tip (t=1).
+            for (int s = 0; s <= stacks; s++)
+            {
+                float t = (float)s / stacks;
+                // Radius profile: full at base, tapers to ~0 at tip.
+                // sqrt for a fuller belly; pow 2.4 for a sharp top.
+                float taper = MathF.Pow(1.0f - t, 0.55f);
+                float r = baseRadius * (0.55f + 0.45f * MathF.Sqrt(taper)) * taper;
+                if (s == stacks) r = baseRadius * 0.01f;
+                float z = height * t;
+                Vector4 col = t < 0.5f
+                    ? Vector4.Lerp(colBase, colMid, t * 2f)
+                    : Vector4.Lerp(colMid, colTip, (t - 0.5f) * 2f);
+
+                for (int i = 0; i < slices; i++)
+                {
+                    float a = (float)(2.0 * Math.PI * i / slices);
+                    // Small wobble so the silhouette isn't a perfect cone.
+                    float wob = 1.0f + 0.06f * MathF.Sin(a * 3.0f + t * 4.0f);
+                    var p = baseCenter + new Vector3(r * MathF.Cos(a) * wob,
+                                                     r * MathF.Sin(a) * wob,
+                                                     z);
+                    // Outward-and-slightly-up normal, suitable for the
+                    // shader's Lambert dot product against the sun / moon.
+                    var n = Vector3.Normalize(new Vector3(MathF.Cos(a), MathF.Sin(a), 0.3f));
+                    verts[vi++] = new SolidVertex(p, n, col);
+                }
+            }
+            // Single apex vertex
+            int apexIdx = vi;
+            verts[vi++] = new SolidVertex(
+                baseCenter + new Vector3(0, 0, height * 1.02f),
+                new Vector3(0, 0, 1), colTip);
+
+            // Triangulate sides + apex cap. Side quads are CCW seen from
+            // outside; the top stack is wired into the apex as a fan.
+            int triCount = stacks * slices * 2 + slices;
+            var indices = new uint[triCount * 3];
+            int ii = 0;
+            for (int s = 0; s < stacks; s++)
+            {
+                int row0 = s * slices;
+                int row1 = (s + 1) * slices;
+                for (int i = 0; i < slices; i++)
+                {
+                    int i1 = (i + 1) % slices;
+                    uint a = (uint)(row0 + i);
+                    uint b = (uint)(row0 + i1);
+                    uint c = (uint)(row1 + i);
+                    uint d = (uint)(row1 + i1);
+                    indices[ii++] = a; indices[ii++] = c; indices[ii++] = b;
+                    indices[ii++] = b; indices[ii++] = c; indices[ii++] = d;
+                }
+            }
+            // Apex fan from last ring
+            int last = stacks * slices;
+            for (int i = 0; i < slices; i++)
+            {
+                int i1 = (i + 1) % slices;
+                indices[ii++] = (uint)(last + i);
+                indices[ii++] = (uint)apexIdx;
+                indices[ii++] = (uint)(last + i1);
+            }
+            return (verts, indices);
+        }
+
+        /// <summary>
         /// Generate a 3D arrow (cylinder shaft + cone head) oriented along
         /// the given direction vector. Used for release-direction indicators.
         /// </summary>

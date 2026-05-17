@@ -227,7 +227,7 @@
         <Border DockPanel.Dock="Bottom" Background="#F0F0F0" BorderBrush="#CCC"
                 BorderThickness="0,1,0,0"
                 x:Name="PlaybackPanel" IsVisible="False">
-          <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="6,4">
+          <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto" Margin="6,4">
             <Button Grid.Column="0" x:Name="BtnPlayPause" Click="BtnPlayPause_Click"
                     Width="32" Height="28" Padding="0"
                     ToolTip.Tip="Play / Pause">
@@ -259,6 +259,18 @@
             <TextBlock Grid.Column="5" x:Name="PlaybackTotalLabel"
                        Text="" VerticalAlignment="Center"
                        Foreground="#666" />
+            <!-- Always-visible thresholds button. Editing the colour / opacity
+                 of the 3 LFL isosurface layers lives here, where the user is
+                 already looking at the rendering, instead of being buried in
+                 the Tools menu. -->
+            <Button Grid.Column="6" x:Name="BtnPlaybackThresholds"
+                    Click="MenuToolsThresholds_Click" Margin="8,0,0,0"
+                    Padding="6,2" ToolTip.Tip="Edit colour / opacity of the dispersion isosurface layers">
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <i:Icon Value="mdi-palette" FontSize="14" />
+                <TextBlock Text="Thresholds..." />
+              </StackPanel>
+            </Button>
           </Grid>
         </Border>
         <Grid Background="#C8CDD4">

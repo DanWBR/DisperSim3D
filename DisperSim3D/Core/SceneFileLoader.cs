@@ -707,6 +707,17 @@ namespace DisperSim3D.Core
             var skyVOff = (string)el.Attribute("SkyTextureVOffset");
             if (skyVOff != null) env.SkyTextureVOffset = double.Parse(skyVOff, inv);
 
+            var night = (string)el.Attribute("NightMode");
+            if (night != null) env.NightMode = bool.Parse(night);
+            var moonAz = (string)el.Attribute("MoonAzimuthDeg");
+            if (moonAz != null) env.MoonAzimuthDeg = double.Parse(moonAz, inv);
+            var moonEl = (string)el.Attribute("MoonElevationDeg");
+            if (moonEl != null) env.MoonElevationDeg = double.Parse(moonEl, inv);
+            var moonI = (string)el.Attribute("MoonIntensity");
+            if (moonI != null) env.MoonIntensity = double.Parse(moonI, inv);
+            var stars = (string)el.Attribute("ShowStars");
+            if (stars != null) env.ShowStars = bool.Parse(stars);
+
             scene.Environment = env;
         }
 

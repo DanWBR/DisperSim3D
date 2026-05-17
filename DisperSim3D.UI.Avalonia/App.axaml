@@ -10,6 +10,11 @@
          unthemed (no headers, no row separators). -->
     <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
 
+    <!-- ColorPicker / ColorView (Avalonia.Controls.ColorPicker package).
+         Same story as DataGrid — without this include the ColorView renders
+         as an empty white box because its control template isn't loaded. -->
+    <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
+
     <!-- Tighten Avalonia 11's Fluent defaults to something closer to the
          WinForms WPF density. Avalonia ships FontSize=14 and tall row
          heights; the WPF host uses ~11 with shorter rows, which fits more

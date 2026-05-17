@@ -505,17 +505,39 @@ namespace DisperSim3D.UI.Avalonia.Views
             }
         }
 
+        // Guards against overlapping scans when a previous one is still running
+        // (e.g. the work dir is multi-GB and the 30s timer fires before the
+        // previous walk finished).
+        private int _workDirScanInFlight;
+
         private void RefreshWorkDirStatus()
         {
-            try
+            // GetWorkDirSize recursively enumerates the entire work directory.
+            // With a multi-GB cache this can take several seconds — running it
+            // on the UI thread freezes the whole app. Push the I/O onto a
+            // background thread and marshal the formatted string back via the
+            // dispatcher.
+            if (System.Threading.Interlocked.Exchange(ref _workDirScanInFlight, 1) == 1)
+                return;
+
+            Task.Run(() =>
             {
-                long size = DisperSim3D.Core.TempManager.GetWorkDirSize();
-                StatusWorkDir.Text = $"Work: {DisperSim3D.Core.TempManager.FormatBytes(size)}";
-            }
-            catch
-            {
-                StatusWorkDir.Text = "";
-            }
+                string text;
+                try
+                {
+                    long size = DisperSim3D.Core.TempManager.GetWorkDirSize();
+                    text = $"Work: {DisperSim3D.Core.TempManager.FormatBytes(size)}";
+                }
+                catch
+                {
+                    text = "";
+                }
+                Dispatcher.UIThread.Post(() =>
+                {
+                    StatusWorkDir.Text = text;
+                    System.Threading.Interlocked.Exchange(ref _workDirScanInFlight, 0);
+                });
+            });
         }
 
         // ── File menu ────────────────────────────────────────────────────────
@@ -1478,6 +1500,18 @@ namespace DisperSim3D.UI.Avalonia.Views
             var dlg = new ThresholdsDialog(scenario.Thresholds);
             if (!await dlg.ShowDialog<bool>(this) || dlg.Result is null) return;
             scenario.Thresholds = dlg.Result;
+
+            // If a simulation is currently in playback, swap its thresholds and
+            // re-render the active frame so colour/opacity edits show up live
+            // without having to stop & restart playback.
+            if (_playbackSim != null && _playbackResult != null)
+            {
+                _playbackThresholds = new List<DispersionThreshold>(dlg.Result);
+                _playbackEffectiveThresholds = BuildEffectiveThresholds(_playbackResult);
+                BuildLegend();
+                RenderPlaybackFrame(_playbackTimeS);
+            }
+
             MarkDirtyAndRefresh("Updated dispersion thresholds (" + dlg.Result.Count + ")");
         }
 
@@ -2091,9 +2125,19 @@ namespace DisperSim3D.UI.Avalonia.Views
         private void InitPlayback(Simulation sim)
         {
             StopPlaybackTimer();
+            _lastRenderedStepT = double.NaN;
+            _lastRenderedThresholds = null;
 
             _playbackSim = sim;
-            _playbackThresholds = sim.SnapshotThresholds ?? new List<DispersionThreshold>();
+            // Prefer the live scenario thresholds (what the dialog edits) over
+            // the per-sim snapshot, so re-toggling a sim doesn't wipe edits the
+            // user made via the Thresholds dialog. Fall back to snapshot if the
+            // scenario has none (legacy projects).
+            var liveThresholds = _scene?.DispersionScenario?.Thresholds;
+            if (liveThresholds != null && liveThresholds.Count > 0)
+                _playbackThresholds = new List<DispersionThreshold>(liveThresholds);
+            else
+                _playbackThresholds = sim.SnapshotThresholds ?? new List<DispersionThreshold>();
 
             OpenFoamResult? result = sim.ResultTag as OpenFoamResult;
             if (result == null && !string.IsNullOrEmpty(sim.CasePath)
@@ -2272,6 +2316,8 @@ namespace DisperSim3D.UI.Avalonia.Views
             _playbackSim = null;
             _playbackResult = null;
             _playbackEffectiveThresholds = null;
+            _lastRenderedStepT = double.NaN;
+            _lastRenderedThresholds = null;
             _playbackPlaying = false;
             PlaybackPanel.IsVisible = false;
             LegendPanel.IsVisible = false;
@@ -2439,6 +2485,15 @@ namespace DisperSim3D.UI.Avalonia.Views
             PlaybackTimeLabel.Text = $"{_playbackTimeS:F1} s";
         }
 
+        // Cache key for the last GL-pushed dispersion frame. The playback
+        // timer fires at 30 Hz but the simulation typically has only ~20
+        // timesteps over the whole duration, so most ticks resolve to the
+        // SAME step + SAME thresholds. Marching cubes on every tick was
+        // making the viewport stutter — skip the GL push when the result
+        // would be identical to what's already on screen.
+        private double _lastRenderedStepT = double.NaN;
+        private List<DispersionThreshold>? _lastRenderedThresholds;
+
         private void RenderPlaybackFrame(double timeS)
         {
             if (_playbackResult == null || _playbackResult.TimeSteps.Count == 0
@@ -2452,15 +2507,23 @@ namespace DisperSim3D.UI.Avalonia.Views
                 if (d < bestDelta) { bestDelta = d; bestT = t; }
             }
 
+            PlaybackTimeLabel.Text = $"{bestT:F1} s";
+
+            // Skip the expensive GL rebuild when the snapped step and the
+            // threshold list reference are unchanged from the last push.
+            if (bestT == _lastRenderedStepT
+                && ReferenceEquals(_lastRenderedThresholds, _playbackEffectiveThresholds))
+                return;
+
             var field = _playbackResult.GetField(bestT);
             if (field == null) return;
 
             double half = _playbackSim.SnapshotDomainSizeM > 0
                 ? _playbackSim.SnapshotDomainSizeM : 200;
 
-            PlaybackTimeLabel.Text = $"{bestT:F1} s";
-
             Viewport3D.UpdateDispersionFrame(field, _playbackEffectiveThresholds, half);
+            _lastRenderedStepT = bestT;
+            _lastRenderedThresholds = _playbackEffectiveThresholds;
         }
 
         // ── Help menu ────────────────────────────────────────────────────────

@@ -771,17 +771,7 @@ namespace DisperSim3D.Core
         }
 
         private static List<DispersionThreshold> BuildLflThresholds(double lfl)
-        {
-            return new List<DispersionThreshold>
-            {
-                new DispersionThreshold { Name = "100% LFL", ConcentrationValue = lfl,
-                    Color = System.Windows.Media.Colors.Red, Opacity = 0.7, Visible = true },
-                new DispersionThreshold { Name = "60% LFL", ConcentrationValue = lfl * 0.6,
-                    Color = System.Windows.Media.Colors.DarkOrange, Opacity = 0.5, Visible = true },
-                new DispersionThreshold { Name = "20% LFL", ConcentrationValue = lfl * 0.2,
-                    Color = System.Windows.Media.Colors.Gold, Opacity = 0.3, Visible = true }
-            };
-        }
+            => DispersionThreshold.BuildDefaultLflLayers(lfl);
 
         private static List<DispersionThreshold> BuildFallbackThresholds(double maxC)
         {

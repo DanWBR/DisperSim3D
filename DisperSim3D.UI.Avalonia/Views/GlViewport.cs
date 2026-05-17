@@ -59,6 +59,9 @@ namespace DisperSim3D.UI.Avalonia.Views
         private int _skySkyTextureUniform;
         private int _skyBrightnessUniform;
         private int _skyVOffsetUniform;
+        private int _skyNightModeUniform;
+        private int _skyShowStarsUniform;
+        private int _skyMoonDirUniform;
         private int _skyTextureId;
 
         // Shader state — grass blades (animated sway)
@@ -98,6 +101,11 @@ namespace DisperSim3D.UI.Avalonia.Views
         private int _solidAmbientUniform;
         private int _solidRimDirUniform;
         private int _solidRimColorUniform;
+        private int _solidFireCountUniform;
+        private int _solidFirePosUniform;
+        private int _solidFireColorUniform;
+        private int _solidFireRadiusUniform;
+        private int _solidFireTimeUniform;
         private int _solidAlphaUniform;
 
         // Shader state — textured (lit) program for OBJ+MTL meshes
@@ -126,10 +134,14 @@ namespace DisperSim3D.UI.Avalonia.Views
         private unsafe delegate void D_glUniformMatrix3fv(
             int loc, int count, bool transpose, float* value);
         private delegate void D_glUniform1i(int loc, int v0);
+        private unsafe delegate void D_glUniform3fv(int loc, int count, float* value);
+        private unsafe delegate void D_glUniform1fv(int loc, int count, float* value);
         private D_glUniform3f? _glUniform3f;
         private D_glUniform2f? _glUniform2f;
         private D_glUniform1f? _glUniform1f;
         private D_glUniform1i? _glUniform1i;
+        private D_glUniform3fv? _glUniform3fv;
+        private D_glUniform1fv? _glUniform1fv;
         private D_glBlendFunc? _glBlendFunc;
         private D_glCullFace? _glCullFace;
         private D_glPolygonOffset? _glPolygonOffset;
@@ -363,6 +375,9 @@ uniform float uSkyBrightness;
 uniform float uSkyVOffset;
 uniform vec3  uFogColor;
 uniform float uFogDensity;
+uniform float uNightMode;   // 0 = day, 1 = night
+uniform float uShowStars;   // 0/1 — only honoured in night mode
+uniform vec3  uMoonDir;     // used as the moon disc location in night mode
 
 layout(location = 0) out vec4 fragColor;
 
@@ -432,26 +447,89 @@ void main()
 
     float el = max(dir.z, 0.0);
 
-    // --- sky gradient (deep blue zenith -> light horizon) ---
-    vec3 zenith  = vec3(0.22, 0.40, 0.82);
-    vec3 horizon = vec3(0.68, 0.80, 0.94);
+    // --- sky gradient (zenith → horizon) — day vs night palette ---
+    vec3 zenithDay  = vec3(0.22, 0.40, 0.82);
+    vec3 horizonDay = vec3(0.68, 0.80, 0.94);
+    vec3 zenithNight  = vec3(0.01, 0.02, 0.06);     // near-black with hint of blue
+    vec3 horizonNight = vec3(0.04, 0.06, 0.13);     // deep navy near horizon
+    vec3 zenith  = mix(zenithDay,  zenithNight,  uNightMode);
+    vec3 horizon = mix(horizonDay, horizonNight, uNightMode);
     vec3 sky = mix(horizon, zenith, pow(el, 0.55));
 
-    // subtle warm band near horizon (atmospheric scatter)
+    // subtle warm band near horizon (atmospheric scatter) — daytime only
     float hBand = exp(-el * 12.0);
-    sky += vec3(0.12, 0.06, 0.0) * hBand;
+    sky += vec3(0.12, 0.06, 0.0) * hBand * (1.0 - uNightMode);
 
-    // --- sun disc + glow + halo ---
-    vec3 sd = normalize(uSunDir);
-    float cosA = dot(dir, sd);
+    if (uNightMode > 0.5)
+    {
+        // --- stars ---
+        // Spherical-coord hash grid. For each cell whose hash exceeds the
+        // density threshold we render a single point-like star: random
+        // position inside the cell + radial Gaussian falloff (core + halo)
+        // so it looks like a tiny glowing point instead of a flat cell-sized
+        // square. Twinkle phase and colour temperature vary per-star.
+        if (uShowStars > 0.5)
+        {
+            vec2 starUV = vec2(atan(dir.y, dir.x), asin(clamp(dir.z, -1.0, 1.0))) * 80.0;
+            vec2 cell  = floor(starUV);
+            vec2 frac  = fract(starUV) - 0.5;
+            float starHash = hash21(cell);
+            if (starHash > 0.965)
+            {
+                // Randomised position within the cell (kept slightly inset so
+                // the star never lands exactly on a cell boundary).
+                float hx = hash21(cell + vec2(13.7,  5.1));
+                float hy = hash21(cell + vec2(91.3, 47.9));
+                vec2  starCenter = (vec2(hx, hy) - 0.5) * 0.7;
+                float d = length(frac - starCenter);
 
-    float disc = smoothstep(0.9996, 0.9999, cosA);
-    float glow = pow(max(cosA, 0.0), 128.0) * 0.8;
-    float halo = pow(max(cosA, 0.0), 12.0) * 0.25;
+                // 0..1 intensity scale across the eligible hash band.
+                float starIntensity = (starHash - 0.965) / 0.035;
 
-    vec3 sunCol  = vec3(1.0, 0.97, 0.88);
-    vec3 haloCol = vec3(1.0, 0.85, 0.55);
-    sky += sunCol * disc + sunCol * glow + haloCol * halo;
+                // Tight bright core + wider soft glow.
+                float coreR = 0.020 + 0.020 * starIntensity;
+                float haloR = 0.060 + 0.060 * starIntensity;
+                float core  = exp(-(d * d) / (coreR * coreR));
+                float halo  = exp(-(d * d) / (haloR * haloR)) * 0.45;
+
+                // Per-star twinkle: phase + frequency vary so stars pulse
+                // asynchronously (some fast, some slow).
+                float twHash = hash21(cell + vec2(7.3, 2.1));
+                float twFreq = 1.2 + 3.5 * twHash;
+                float twinkle = 0.45 + 0.55 * sin(uTime * twFreq + starHash * 31.4);
+
+                // Subtle colour temperature variation (warm gold ↔ cool blue).
+                vec3 starCol = mix(vec3(1.00, 0.94, 0.82),
+                                   vec3(0.82, 0.90, 1.00),
+                                   hash21(cell + vec2(3.1, 9.9)));
+
+                float horizonFade = smoothstep(0.0, 0.15, el);
+                sky += starCol * (core + halo) * starIntensity * twinkle * horizonFade;
+            }
+        }
+
+        // --- moon disc + soft halo ---
+        vec3 md = normalize(uMoonDir);
+        float cosM = dot(dir, md);
+        float mDisc = smoothstep(0.9985, 0.9995, cosM);
+        float mHalo = pow(max(cosM, 0.0), 96.0) * 0.5
+                    + pow(max(cosM, 0.0), 12.0) * 0.10;
+        vec3 moonCol = vec3(0.92, 0.94, 1.0);
+        sky += moonCol * mDisc;
+        sky += moonCol * mHalo;
+    }
+    else
+    {
+        // --- sun disc + glow + halo ---
+        vec3 sd = normalize(uSunDir);
+        float cosA = dot(dir, sd);
+        float disc = smoothstep(0.9996, 0.9999, cosA);
+        float glow = pow(max(cosA, 0.0), 128.0) * 0.8;
+        float halo = pow(max(cosA, 0.0), 12.0) * 0.25;
+        vec3 sunCol  = vec3(1.0, 0.97, 0.88);
+        vec3 haloCol = vec3(1.0, 0.85, 0.55);
+        sky += sunCol * disc + sunCol * glow + haloCol * halo;
+    }
 
     // --- clouds (FBM noise on projected dome coords) ---
     vec2 cuv = dir.xy / (dir.z + 0.25) * 2.5;
@@ -467,9 +545,14 @@ void main()
     // fade clouds near horizon to avoid hard edge
     cloud *= smoothstep(0.0, 0.18, el);
 
-    // cloud lit side vs shadow
-    float cLit = 0.6 + 0.4 * max(dot(vec3(0, 0, 1), sd), 0.0);
-    vec3 cloudCol = vec3(cLit, cLit, cLit * 0.98);
+    // cloud lit side vs shadow. The sd reference above (sun in day) only
+    // existed inside the daytime else-branch, so for the cloud-lighting
+    // computation we re-derive the active primary light direction here.
+    vec3 cloudLightDir = mix(normalize(uSunDir), normalize(uMoonDir), uNightMode);
+    float cLit = 0.6 + 0.4 * max(dot(vec3(0, 0, 1), cloudLightDir), 0.0);
+    vec3 cloudColDay   = vec3(cLit, cLit, cLit * 0.98);
+    vec3 cloudColNight = vec3(0.08, 0.10, 0.16);    // dark greyblue at night
+    vec3 cloudCol = mix(cloudColDay, cloudColNight, uNightMode);
     sky = mix(sky, cloudCol, cloud * 0.75 * uShowClouds);
 
     // Horizon fog band — matches the scene's distance-based fog
@@ -700,6 +783,15 @@ void main()
     float fogDist = length(vWorldPos - uCameraPos);
     float fd = uFogDensity * fogDist;
     fragColor.rgb = mix(uFogColor, fragColor.rgb, clamp(exp(-fd * fd), 0.0, 1.0));
+
+    // Soft horizon — over the outer band of the disc (in world XY, measured
+    // from origin) blend the ground colour fully into the sky/fog colour so
+    // there is no hard rim where the disc geometry ends. Disc radius is
+    // 2000 m (see GenerateGroundDisc call); fade band 1300–1980 m gives the
+    // user ~1.3 km of fully-opaque ground around the origin.
+    float rXY = length(vWorldPos.xy);
+    float horizonBand = smoothstep(1300.0, 1980.0, rXY);
+    fragColor.rgb = mix(fragColor.rgb, uFogColor, horizonBand);
 }
 ";
 
@@ -802,6 +894,16 @@ uniform vec3  uFogColor;
 uniform float uFogDensity;
 uniform vec3  uCameraPos;
 
+// Up to 8 fire point lights. uFireColor carries the tint pre-multiplied
+// by intensity (the C# side does that scaling), and uFireRadius is the
+// physical flame radius — beyond ~5R the light is effectively zero.
+#define MAX_FIRES 8
+uniform int   uFireCount;
+uniform vec3  uFirePos[MAX_FIRES];
+uniform vec3  uFireColor[MAX_FIRES];
+uniform float uFireRadius[MAX_FIRES];
+uniform float uFireTime;
+
 layout(location = 0) out vec4 fragColor;
 
 float calcShadow()
@@ -831,6 +933,24 @@ void main()
     float rim  = max(dot(N, normalize(uRimDir)), 0.0);
     float shadow = calcShadow();
     vec3 light = uAmbient + (uSunColor * diff + uRimColor * rim) * (1.0 - shadow * 0.7);
+
+    // Fire point lights — Lambert diffuse with 1/(1 + a·d + b·d²) attenuation,
+    // a smoothstep falloff that cuts the contribution to zero at ~5R, and a
+    // shader-side flicker so each flame pulses asynchronously.
+    for (int i = 0; i < uFireCount && i < MAX_FIRES; i++)
+    {
+        vec3  toFire = uFirePos[i] - vWorldPos;
+        float d = length(toFire);
+        if (d < 1e-3 || d > uFireRadius[i] * 8.0) continue;
+        vec3  L = toFire / d;
+        float att = 1.0 / (1.0 + 0.15 * d + 0.04 * d * d);
+        att *= smoothstep(uFireRadius[i] * 8.0, uFireRadius[i] * 0.5, d);
+        float flick = 0.78 + 0.22 * sin(uFireTime * 28.0 + float(i) * 4.3)
+                            * cos(uFireTime * 17.0 + float(i) * 9.1);
+        float fdiff = max(dot(N, L), 0.0);
+        light += uFireColor[i] * fdiff * att * flick;
+    }
+
     fragColor  = vec4(vCol.rgb * light, vCol.a * uAlpha);
 
     // Atmospheric fog (exponential squared)
@@ -1124,6 +1244,12 @@ void main() { }
                 var p1c = gl.GetProcAddress("glUniform2f");
                 if (p1c != IntPtr.Zero)
                     _glUniform2f = Marshal.GetDelegateForFunctionPointer<D_glUniform2f>(p1c);
+                var p1d = gl.GetProcAddress("glUniform3fv");
+                if (p1d != IntPtr.Zero)
+                    _glUniform3fv = Marshal.GetDelegateForFunctionPointer<D_glUniform3fv>(p1d);
+                var p1e = gl.GetProcAddress("glUniform1fv");
+                if (p1e != IntPtr.Zero)
+                    _glUniform1fv = Marshal.GetDelegateForFunctionPointer<D_glUniform1fv>(p1e);
                 var p2 = gl.GetProcAddress("glBlendFunc");
                 if (p2 != IntPtr.Zero)
                     _glBlendFunc = Marshal.GetDelegateForFunctionPointer<D_glBlendFunc>(p2);
@@ -1179,6 +1305,11 @@ void main() { }
                 _solidRimDirUniform  = GetUniformLoc(gl, _solidProgram, "uRimDir");
                 _solidRimColorUniform = GetUniformLoc(gl, _solidProgram, "uRimColor");
                 _solidAlphaUniform   = GetUniformLoc(gl, _solidProgram, "uAlpha");
+                _solidFireCountUniform  = GetUniformLoc(gl, _solidProgram, "uFireCount");
+                _solidFirePosUniform    = GetUniformLoc(gl, _solidProgram, "uFirePos");
+                _solidFireColorUniform  = GetUniformLoc(gl, _solidProgram, "uFireColor");
+                _solidFireRadiusUniform = GetUniformLoc(gl, _solidProgram, "uFireRadius");
+                _solidFireTimeUniform   = GetUniformLoc(gl, _solidProgram, "uFireTime");
 
                 // ── Compile cloud (gas leak) shader ─────────────────────
                 _cloudProgram          = CompileProgram(gl, SolidVertBody, CloudFragBody);
@@ -1275,6 +1406,9 @@ void main() { }
 
                 _skyFogColorUniform   = GetUniformLoc(gl, _skyProgram, "uFogColor");
                 _skyFogDensityUniform = GetUniformLoc(gl, _skyProgram, "uFogDensity");
+                _skyNightModeUniform  = GetUniformLoc(gl, _skyProgram, "uNightMode");
+                _skyShowStarsUniform  = GetUniformLoc(gl, _skyProgram, "uShowStars");
+                _skyMoonDirUniform    = GetUniformLoc(gl, _skyProgram, "uMoonDir");
 
                 // ── Compile shadow depth shader + create FBO ────────────
                 _shadowProgram = CompileProgram(gl, ShadowVertBody, ShadowFragBody);
@@ -1374,23 +1508,64 @@ void main() { }
             float azRad  = (float)(sunAz * Math.PI / 180.0);
             float elRad  = (float)(sunEl * Math.PI / 180.0);
             float cosEl  = MathF.Cos(elRad);
-            float sunX   = cosEl * MathF.Sin(azRad);
-            float sunY   = cosEl * MathF.Cos(azRad);
-            float sunZ   = MathF.Sin(elRad);
-            float sunI   = (float)env.SunIntensity;
-            float ambI   = (float)env.AmbientIntensity;
+            // True sun direction (always — used for shader sky disc + cloud
+            // lighting fallback even at night, since `sun` is what we hand
+            // to the sky shader as the daytime disc position).
+            float sunTrueX = cosEl * MathF.Sin(azRad);
+            float sunTrueY = cosEl * MathF.Cos(azRad);
+            float sunTrueZ = MathF.Sin(elRad);
 
-            // When sun lighting is disabled, use flat ambient only
-            if (!env.UseSunLighting)
+            // Moon direction
+            float moonAzRad = (float)(env.MoonAzimuthDeg * Math.PI / 180.0);
+            float moonElRad = (float)(env.MoonElevationDeg * Math.PI / 180.0);
+            float moonCosEl = MathF.Cos(moonElRad);
+            float moonX = moonCosEl * MathF.Sin(moonAzRad);
+            float moonY = moonCosEl * MathF.Cos(moonAzRad);
+            float moonZ = MathF.Sin(moonElRad);
+
+            // Decide night vs day. Manual NightMode flag wins; otherwise
+            // auto-night when the solar clock is on and the sun is below the
+            // horizon by more than 2° (gives a brief twilight band rather
+            // than snapping at exactly the horizon).
+            bool autoNight = env.UseSolarClock && sunEl < -2.0;
+            bool isNight = env.NightMode || autoNight;
+
+            // Primary light direction passed to all lit shaders. In night
+            // mode the moon acts as the directional light.
+            float sunX = isNight ? moonX : sunTrueX;
+            float sunY = isNight ? moonY : sunTrueY;
+            float sunZ = isNight ? moonZ : sunTrueZ;
+            float primElRad = isNight ? moonElRad : elRad;
+
+            float sunI   = (float)(isNight ? env.MoonIntensity : env.SunIntensity);
+            float ambI   = (float)env.AmbientIntensity * (isNight ? 0.3f : 1.0f);
+
+            // UseSunLighting only gates the daytime Sun. At night the Moon is
+            // the primary directional light and is governed by NightMode /
+            // MoonIntensity, independent of UseSunLighting — otherwise turning
+            // off Sun would silently kill the Moon too, which is surprising
+            // (Sun and Moon are mutually-exclusive light sources, not coupled).
+            if (!env.UseSunLighting && !isNight)
             {
                 sunI = 0f;
                 ambI = 1f;
             }
 
-            // Warm sun tint (more orange at low elevation)
-            float warmR = 1.0f;
-            float warmG = 0.85f + 0.15f * MathF.Min(1f, elRad / 1.0f);
-            float warmB = 0.70f + 0.30f * MathF.Min(1f, elRad / 1.0f);
+            // Light tint: warm for sun (more orange at low elevation), cool
+            // blue-white for moon.
+            float warmR, warmG, warmB;
+            if (isNight)
+            {
+                warmR = 0.70f;
+                warmG = 0.78f;
+                warmB = 1.00f;
+            }
+            else
+            {
+                warmR = 1.0f;
+                warmG = 0.85f + 0.15f * MathF.Min(1f, primElRad / 1.0f);
+                warmB = 0.70f + 0.30f * MathF.Min(1f, primElRad / 1.0f);
+            }
 
             // Fog parameters — derive colour from sky horizon for seamless blend
             float fogDensity = env.FogEnabled ? (float)env.FogDensity : 0f;
@@ -1568,7 +1743,14 @@ void main() { }
                 gl.UseProgram(_skyProgram);
 
                 float timeSky = (float)_animClock.Elapsed.TotalSeconds;
-                _glUniform3f?.Invoke(_skySunDirUniform, sunX, sunY, sunZ);
+                // Sky shader gets the TRUE sun direction so the sun disc /
+                // halo render at the real position even at night (when the
+                // sun is below the horizon you simply won't see them);
+                // moon direction goes in a separate uniform.
+                _glUniform3f?.Invoke(_skySunDirUniform, sunTrueX, sunTrueY, sunTrueZ);
+                _glUniform3f?.Invoke(_skyMoonDirUniform, moonX, moonY, moonZ);
+                _glUniform1f?.Invoke(_skyNightModeUniform, isNight ? 1f : 0f);
+                _glUniform1f?.Invoke(_skyShowStarsUniform, env.ShowStars ? 1f : 0f);
                 _glUniform1f?.Invoke(_skyTimeUniform, timeSky);
                 _glUniform1f?.Invoke(_skyShowCloudsUniform, env.ShowClouds ? 1f : 0f);
                 _glUniform1f?.Invoke(_skyCloudSpeedUniform, (float)env.CloudSpeed);
@@ -1768,6 +1950,12 @@ void main() { }
                     _glActiveTexture?.Invoke(GL_TEXTURE0);
                 }
 
+                // Fire point lights — gather up to 8 from the active scene's
+                // FireScenario and feed them as packed float arrays. The
+                // shader does the per-fragment falloff + flicker.
+                BindFireLights(gl, _solidFireCountUniform, _solidFirePosUniform,
+                    _solidFireColorUniform, _solidFireRadiusUniform, _solidFireTimeUniform);
+
                 gl.Enable(GL_CULL_FACE);
                 _glCullFace?.Invoke(GL_BACK);
 
@@ -1843,15 +2031,44 @@ void main() { }
                 _glUniform3f?.Invoke(_cloudFogColorUniform, fogR, fogG, fogB);
                 _glUniform1f?.Invoke(_cloudFogDensityUniform, 0f);
 
+                // Transparent-isosurface render state. We deliberately *keep*
+                // depth TESTING on so opaque geometry in front still occludes
+                // cloud fragments, but turn depth WRITES off so successive
+                // cloud layers blend together instead of the first one
+                // killing all subsequent ones via the z-buffer. Two-sided
+                // (no cull) so the back face of each shell is visible from
+                // inside. The clouds are then drawn back-to-front by their
+                // bbox centroid distance from the camera — this is the same
+                // ordering HelixToolkit applies automatically in the WPF
+                // path, and is what makes nested 100 % / 60 % / 20 % LFL
+                // surfaces composite correctly.
                 gl.Disable(GL_CULL_FACE);
                 gl.Enable(GL_BLEND);
                 _glBlendFunc?.Invoke(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                gl.DepthMask(0);
 
+                // Gather visible cloud objects, compute world-space centroid
+                // for each (cached on the SceneObject), sort by descending
+                // camera distance so the FAR layers paint first and the
+                // NEAR layers blend over them.
+                var cloudObjs = new System.Collections.Generic.List<SceneObject>();
                 foreach (var obj in _sceneObjects)
                 {
                     if (!obj.Visible || !obj.UseCloudShader || obj.Mesh.IsLineGeometry || obj.Mesh.IsTextured)
                         continue;
+                    cloudObjs.Add(obj);
+                }
+                cloudObjs.Sort((a, b) =>
+                {
+                    var ca = ComputeWorldCentroid(a);
+                    var cb = ComputeWorldCentroid(b);
+                    float da = Vector3.DistanceSquared(ca, camPos);
+                    float db = Vector3.DistanceSquared(cb, camPos);
+                    return db.CompareTo(da); // descending: far first
+                });
 
+                foreach (var obj in cloudObjs)
+                {
                     var model = obj.ModelMatrix;
                     _glUniform1f?.Invoke(_cloudAlphaUniform, 1.0f);
 
@@ -1868,6 +2085,7 @@ void main() { }
                     obj.Mesh.Draw(gl);
                 }
 
+                gl.DepthMask(1);
                 gl.Disable(GL_BLEND);
                 gl.UseProgram(0);
             }
@@ -2132,8 +2350,12 @@ void main() { }
             _groundShowGridOverlay = env.ShowGridOverlay;
             {
                 var fallback = new Vector4(0.48f, 0.58f, 0.35f, 1f);
+                // Disc radius pushed out to 2000 m so the horizon fade band
+                // (1300–1980 m, see ground frag shader) has room and the user
+                // can't easily walk to the disc edge in typical refinery
+                // viewpoints. Old radius was 500 m which exposed a sharp rim.
                 var (gndV, gndI) = GlMeshBuffer.GenerateGroundDisc(
-                    500f, fallback);
+                    2000f, fallback);
                 _groundPlaneMesh = new GlMeshBuffer();
                 _groundPlaneMesh.Upload(gl, gndV, gndI, keepCpuCopy: true);
             }
@@ -2141,7 +2363,7 @@ void main() { }
             _shadowCatcherMesh?.Cleanup(gl);
             _shadowCatcherMesh = null;
             {
-                float sc = 500f;
+                float sc = 2000f;
                 float z  = 0.01f;
                 var scV = new SolidVertex[]
                 {
@@ -2240,8 +2462,10 @@ void main() { }
             _groundShowGridOverlay = env.ShowGridOverlay;
             {
                 var fallback = new Vector4(0.48f, 0.58f, 0.35f, 1f);
+                // Matches the other rebuild path above — 2000 m disc with
+                // horizon fade in the outer band so the rim isn't visible.
                 var (gndV, gndI) = GlMeshBuffer.GenerateGroundDisc(
-                    500f, fallback);
+                    2000f, fallback);
                 _groundPlaneMesh = new GlMeshBuffer();
                 _groundPlaneMesh.Upload(gl, gndV, gndI, keepCpuCopy: true);
             }
@@ -2250,7 +2474,7 @@ void main() { }
             _shadowCatcherMesh?.Cleanup(gl);
             _shadowCatcherMesh = null;
             {
-                float sc = 500f;
+                float sc = 2000f;
                 float z  = 0.01f;
                 var scV = new SolidVertex[]
                 {
@@ -2307,7 +2531,13 @@ void main() { }
                 }
             }
 
-            // ── Fire sources → red-orange diamonds ─────────────────────
+            // ── Fire sources → stylised flame mesh ──────────────────────
+            // Replaces the legacy red-orange diamond marker. Pool fires use
+            // a wide base proportional to the pool diameter; jet fires use a
+            // narrower base scaled from the orifice (so a 25 mm orifice still
+            // shows a visible flame). The flame mesh is purely visual — the
+            // physical illumination of nearby decorations is handled by the
+            // fire point-light uniforms in the solid lit shader.
             if (scene.FireScenario?.Sources != null)
             {
                 for (int i = 0; i < scene.FireScenario.Sources.Count; i++)
@@ -2317,8 +2547,20 @@ void main() { }
                     var pos = fire.Position;
                     float x = (float)pos.X, y = (float)pos.Y, z = (float)pos.Z;
 
-                    var (verts, idx) = GlMeshBuffer.GenerateDiamond(
-                        new Vector3(x, y, z), 2f, 5f, FireColor);
+                    float baseR, flameH;
+                    if (fire.IsPoolFire)
+                    {
+                        baseR  = (float)Math.Max(0.4, fire.PoolDiameterM * 0.5);
+                        flameH = baseR * 4.0f;
+                    }
+                    else
+                    {
+                        baseR  = (float)Math.Max(0.2, fire.OrificeDiameterM * 4.0);
+                        flameH = baseR * 7.0f;
+                    }
+
+                    var (verts, idx) = GlMeshBuffer.GenerateFlame(
+                        new Vector3(x, y, z), baseR, flameH);
 
                     var mesh = new GlMeshBuffer();
                     mesh.Upload(gl, verts, idx);
@@ -2664,12 +2906,17 @@ void main() { }
             var isoColor = new Vector4(c.ScR, c.ScG, c.ScB, alpha);
 
             var (verts, idx) = GlMeshBuffer.FromIsosurfaceResult(isoResult.Value, isoColor);
+            // Pre-compute the local-space centroid for the cloud back-to-front
+            // sort. We don't keep the CPU vertex copy alive (~MBs per surface)
+            // because the value never changes for an immutable iso mesh.
+            var centroid = ComputeCentroidFromSolidVerts(verts);
             var mesh = new GlMeshBuffer();
             mesh.Upload(gl, verts, idx);
             _sceneObjects.Add(new SceneObject(
                 mesh, Matrix4x4.Identity, $"view:iso:{view.Id}")
             {
-                UseCloudShader = view.UseCloudAppearance
+                UseCloudShader = view.UseCloudAppearance,
+                LocalCentroid = centroid,
             });
 
             System.Diagnostics.Debug.WriteLine(
@@ -2911,17 +3158,19 @@ void main() { }
 
                 if (isoResult == null) continue;
 
-                float alpha = (float)Math.Max(0.1, Math.Min(1, th.Opacity));
+                float alpha = (float)Math.Max(0, Math.Min(1, th.Opacity));
                 var c = th.UseCloudAppearance ? th.CloudColor : th.Color;
                 var color = new Vector4(c.ScR, c.ScG, c.ScB, alpha);
 
                 var (verts, idx) = GlMeshBuffer.FromIsosurfaceResult(isoResult.Value, color);
+                var centroid = ComputeCentroidFromSolidVerts(verts);
                 var mesh = new GlMeshBuffer();
                 mesh.Upload(gl, verts, idx);
                 _sceneObjects.Add(new SceneObject(
                     mesh, Matrix4x4.Identity, $"dispersion:{th.Name}")
                 {
-                    UseCloudShader = th.UseCloudAppearance
+                    UseCloudShader = th.UseCloudAppearance,
+                    LocalCentroid = centroid,
                 });
             }
         }
@@ -3210,6 +3459,105 @@ void main() { }
             _shadowReady = false;
         }
 
+        /// <summary>
+        /// Mean of vertex positions — small helper used at upload time so
+        /// the SceneObject's LocalCentroid is populated up front instead of
+        /// requiring the CPU vertex copy to be kept alive for the
+        /// back-to-front depth sort.
+        /// </summary>
+        private static Vector3 ComputeCentroidFromSolidVerts(SolidVertex[] verts)
+        {
+            if (verts == null || verts.Length == 0) return Vector3.Zero;
+            var sum = Vector3.Zero;
+            for (int i = 0; i < verts.Length; i++) sum += verts[i].Position;
+            return sum / verts.Length;
+        }
+
+        /// <summary>
+        /// World-space centroid of a SceneObject, used as the depth-sort key
+        /// for the back-to-front cloud render pass. Lazily computes the
+        /// local-space centroid from the mesh's host-side vertex copy
+        /// (caches on the SceneObject so subsequent frames are O(1)) then
+        /// transforms it through the current ModelMatrix.
+        /// </summary>
+        private static Vector3 ComputeWorldCentroid(SceneObject obj)
+        {
+            if (obj.LocalCentroid == null)
+            {
+                var sum = Vector3.Zero;
+                int n = 0;
+                var sv = obj.Mesh.CpuVertices;
+                if (sv != null && sv.Length > 0)
+                {
+                    foreach (var v in sv) { sum += v.Position; n++; }
+                }
+                else
+                {
+                    var tv = obj.Mesh.CpuTexturedVertices;
+                    if (tv != null && tv.Length > 0)
+                        foreach (var v in tv) { sum += v.Position; n++; }
+                }
+                obj.LocalCentroid = n > 0 ? sum / n : Vector3.Zero;
+            }
+            return Vector3.Transform(obj.LocalCentroid.Value, obj.ModelMatrix);
+        }
+
+        /// <summary>
+        /// Build the per-fire light arrays from the currently loaded scene's
+        /// FireScenario and push them as uniform arrays to whichever lit
+        /// shader is currently bound. Up to 8 fires are honoured; extras
+        /// are dropped. Pass −1 for any uniform location that the active
+        /// shader doesn't expose.
+        /// </summary>
+        private unsafe void BindFireLights(GlInterface gl,
+            int locCount, int locPos, int locColor, int locRadius, int locTime)
+        {
+            if (locCount < 0) return;
+            var scene = _pendingScene ?? _loadedScene;
+            int count = 0;
+            const int MAX = 8;
+            var posBuf = stackalloc float[MAX * 3];
+            var colBuf = stackalloc float[MAX * 3];
+            var radBuf = stackalloc float[MAX];
+            if (scene?.FireScenario?.Sources != null)
+            {
+                foreach (var fire in scene.FireScenario.Sources)
+                {
+                    if (count >= MAX) break;
+                    if (!fire.IsVisible) continue;
+                    // Sit the light source slightly above the base so the
+                    // illumination glances down onto nearby decorations.
+                    posBuf[count * 3 + 0] = (float)fire.Position.X;
+                    posBuf[count * 3 + 1] = (float)fire.Position.Y;
+                    posBuf[count * 3 + 2] = (float)(fire.Position.Z + 1.5);
+                    // Warm fire tint, intensity baked in. Pool fires
+                    // (broader base) feel a bit more orange; jet fires
+                    // tend brighter / whiter at the tip but for the
+                    // ambient-illumination pass we use the same colour.
+                    const float intensity = 3.0f;
+                    colBuf[count * 3 + 0] = 1.00f * intensity;
+                    colBuf[count * 3 + 1] = 0.55f * intensity;
+                    colBuf[count * 3 + 2] = 0.18f * intensity;
+                    // Radius drives the falloff envelope. For a jet use the
+                    // orifice, for a pool use the diameter.
+                    double r = fire.IsPoolFire
+                        ? Math.Max(0.5, fire.PoolDiameterM * 0.5)
+                        : Math.Max(0.25, fire.OrificeDiameterM * 6.0);
+                    radBuf[count] = (float)r;
+                    count++;
+                }
+            }
+            _glUniform1i?.Invoke(locCount, count);
+            if (count > 0)
+            {
+                if (locPos    >= 0) _glUniform3fv?.Invoke(locPos,    count, posBuf);
+                if (locColor  >= 0) _glUniform3fv?.Invoke(locColor,  count, colBuf);
+                if (locRadius >= 0) _glUniform1fv?.Invoke(locRadius, count, radBuf);
+            }
+            if (locTime >= 0)
+                _glUniform1f?.Invoke(locTime, (float)_animClock.Elapsed.TotalSeconds);
+        }
+
         /// <summary>Upload a System.Numerics Matrix4x4 to a mat4 uniform.</summary>
         private static unsafe void SetMatrixUniform(
             GlInterface gl, int location, Matrix4x4 mat)
@@ -3483,6 +3831,13 @@ void main() { }
         /// <summary>Render with the cloud (gas leak) shader instead of the solid shader.</summary>
         public bool UseCloudShader { get; set; }
 
+        /// <summary>
+        /// Cached local-space centroid of the mesh (mean of CpuVertices /
+        /// CpuTexturedVertices). Computed lazily on first read; set to
+        /// <c>null</c> if the mesh has no host-side vertex data, in which
+        /// case callers fall back to ModelMatrix.Translation.
+        /// </summary>
+        public Vector3? LocalCentroid { get; set; }
     }
 }
 
