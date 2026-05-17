@@ -43,6 +43,13 @@ namespace DisperSim3D.Core
         /// IDs match <see cref="FluidX3DBridge.ListDevicesJson"/>.</summary>
         public int PreferredComputeDeviceId { get; set; } = -1;
 
+        /// <summary>Process-wide preference for the GPU buoyant tracer engine.
+        /// Set by CLI <c>--gpu-tracer</c>. Honoured by
+        /// <see cref="DisperSim3D.Validation.ValidationRunner"/> when populating
+        /// <see cref="CfdConfiguration.UseGpuBuoyantTracer"/> on the synthesised
+        /// SnapshotCfdConfig for a bench.</summary>
+        public bool UseGpuBuoyantTracerPreferred { get; set; } = false;
+
         /// <summary>Root directory for all DisperSim 3D working files (simulation
         /// cases, temp snapshots, project sessions). Defaults to
         /// <c>%LOCALAPPDATA%\DisperSim3D\Work</c>. The user can change this via

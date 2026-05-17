@@ -111,6 +111,13 @@ namespace DisperSim3D.UI.Avalonia.Views
             TxtSubgridMargin.IsEnabled = Result.UseGaussianSubgrid;
             ChkWindField.IsChecked  = Result.UseWindField;
 
+            bool gpuAvailable = DisperSim3D.Core.FluidX3DBridge.IsAvailable();
+            ChkGpuTracer.IsChecked = Result.UseGpuBuoyantTracer && gpuAvailable;
+            ChkGpuTracer.IsEnabled = gpuAvailable;
+            if (!gpuAvailable)
+                global::Avalonia.Controls.ToolTip.SetTip(ChkGpuTracer,
+                    "DISABLED: " + DisperSim3D.Core.FluidX3DBridge.LastAvailabilityError);
+
             OnEnvTypeChanged();
         }
 
@@ -318,6 +325,7 @@ namespace DisperSim3D.UI.Avalonia.Views
 
             Result.UseWindField    = ChkWindField.IsChecked == true;
             Result.UseAtmosphericBL = ChkAtmBL.IsChecked == true;
+            Result.UseGpuBuoyantTracer = ChkGpuTracer.IsChecked == true;
 
             if (double.TryParse(TxtSct.Text, NumberStyles.Float, inv, out double dv) && dv > 0)
                 Result.TurbulentSchmidtNumber = dv;

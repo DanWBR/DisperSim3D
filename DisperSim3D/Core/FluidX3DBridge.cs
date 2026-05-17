@@ -169,6 +169,59 @@ namespace DisperSim3D.Core
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern void fx3d_destroy(ulong h);
 
+        // ─── Buoyant tracer (GPU port of BuoyantTracerEngine, phase 1) ──────
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern ulong fx3d_tracer_create(
+            uint Nx, uint Ny, uint Nz,
+            float domainHalfM, float domainHeightM,
+            float gasMolarMassKgPerMol,
+            float ambientTK, float ambientPPa,
+            float speciesDiffM2PerS, float thermalDiffM2PerS,
+            int deviceId);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void fx3d_tracer_set_wind(ulong h,
+            [In] float[] ux, [In] float[] uy, [In] float[] uz);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void fx3d_tracer_set_obstacles(ulong h,
+            [In] byte[] blocked);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void fx3d_tracer_set_source_sphere(ulong h,
+            float xSi, float ySi, float zSi,
+            float radiusM,
+            float releaseRateKgPerS,
+            float airDensityKgPerM3,
+            float exitTemperatureK);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void fx3d_tracer_set_source_pool(ulong h,
+            float xSi, float ySi,
+            float radiusM,
+            float releaseRateKgPerS,
+            float airDensityKgPerM3,
+            float exitTemperatureK);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void fx3d_tracer_set_initial_concentration(ulong h,
+            [In] float[] Y);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int fx3d_tracer_step(ulong h, float dtS);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void fx3d_tracer_read_concentration(ulong h,
+            [Out] float[] outY);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void fx3d_tracer_read_temperature(ulong h,
+            [Out] float[] outT);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void fx3d_tracer_destroy(ulong h);
+
         /// <summary>Last reason <see cref="IsAvailable"/> returned <c>false</c>.
         /// Populated with one of: "" (available), "DllNotFound: <message>",
         /// "BadImageFormat: <message>", "fx3d_create returned 0 (no OpenCL device)",

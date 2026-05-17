@@ -23,8 +23,13 @@ namespace DisperSim3D.Core
     /// reduces numerical diffusion from first to second order, using three
     /// semi-Lagrangian passes per timestep instead of one.
     /// </summary>
-    public class BuoyantTracerEngine
+    public class BuoyantTracerEngine : IBuoyantTracerEngine
     {
+        // CPU engine owns no native resources — Dispose is a no-op kept for
+        // interface parity with the GPU implementation.
+        public void Dispose() { }
+
+
         public int Nx { get; }
         public int Ny { get; }
         public int Nz { get; }

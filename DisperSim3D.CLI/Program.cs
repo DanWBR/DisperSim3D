@@ -61,6 +61,7 @@ namespace DisperSim3D.CLI
             bool listGpus = false;
             bool iogpSelftest = false;
             bool geometrySelftest = false;
+            bool tracerGpuSelftest = false;
             string listIogpType = null;        // null = "no --list-iogp"; "" = all 24; otherwise the type name
             bool memoryEstimate = false;
             string memSolverArg = null;
@@ -119,6 +120,12 @@ namespace DisperSim3D.CLI
                     case "--iogp-selftest":
                         iogpSelftest = true;
                         break;
+                    case "--tracer-gpu-selftest":
+                        tracerGpuSelftest = true;
+                        break;
+                    case "--gpu-tracer":
+                        AppSettings.Instance.UseGpuBuoyantTracerPreferred = true;
+                        break;
                     case "--geometry-selftest":
                         geometrySelftest = true;
                         break;
@@ -163,6 +170,7 @@ namespace DisperSim3D.CLI
             // ── Standalone modes (don't need a project file) ──────────────
             if (listGpus) return RunListGpus();
             if (iogpSelftest) return RunIogpSelfTest();
+            if (tracerGpuSelftest) return RunTracerGpuSelfTest();
             if (geometrySelftest) return RunGeometrySelfTest();
             if (listIogpType != null) return RunListIogp(listIogpType);
             if (memoryEstimate) return RunMemoryEstimate(memSolverArg, memNxArg);
@@ -403,6 +411,37 @@ namespace DisperSim3D.CLI
             {
                 Console.Error.WriteLine("Failed to list GPUs: " + ex.Message);
                 return 1;
+            }
+        }
+
+        /// <summary>Smoke-test the GPU port of BuoyantTracerEngine: seeds a
+        /// Gaussian blob on a 32³ grid, advects 10 steps in uniform wind, checks
+        /// the centre-of-mass shifted by U·dt·steps within one cell. Validates
+        /// host → device → kernel → device → host plumbing works end-to-end.</summary>
+        static int RunTracerGpuSelfTest()
+        {
+            Console.WriteLine("BuoyantTracerEngineGpu self-test");
+            Console.WriteLine();
+            if (!FluidX3DBridge.IsAvailable())
+            {
+                Console.WriteLine("  SKIP: FluidX3D.dll not available — " + FluidX3DBridge.LastAvailabilityError);
+                return 1;
+            }
+            try
+            {
+                Console.WriteLine("[1/2] Smoke test — Gaussian blob advection");
+                var (ok1, msg1) = BuoyantTracerEngineGpu.SelfTest();
+                Console.WriteLine("  " + msg1);
+                Console.WriteLine();
+                Console.WriteLine("[2/2] Cross-validation vs CPU baseline");
+                var (ok2, msg2) = BuoyantTracerEngineGpu.CrossValidateVsCpu();
+                Console.WriteLine("  " + msg2);
+                return (ok1 && ok2) ? 0 : 1;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("  ERROR: " + ex.GetType().Name + ": " + ex.Message);
+                return 2;
             }
         }
 

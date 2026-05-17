@@ -247,6 +247,9 @@ namespace DisperSim3D.Core
             if (!string.IsNullOrEmpty(iterAttr) && int.TryParse(iterAttr, System.Globalization.NumberStyles.Integer, inv, out int it))
                 cfd.AblPrecursorIterations = it;
             cfd.UseCryogenicPatchInjection = ((string)el.Attribute("CryoPatch") ?? "0") == "1";
+            // Missing attribute → keep the constructor default (true). Only
+            // an explicit "0" turns the GPU tracer off on load.
+            cfd.UseGpuBuoyantTracer = ((string)el.Attribute("GpuTracer") ?? "1") != "0";
             return cfd;
         }
 

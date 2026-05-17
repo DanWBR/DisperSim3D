@@ -39,6 +39,7 @@ namespace DisperSim3D.Dialogs
         private TextBox _txtGroundT;
         private TextBox _txtGroundQ;
         private CheckBox _chkWindField;
+        private CheckBox _chkGpuTracer;
         private Button _btnOk;
         private Button _btnCancel;
         private Button _btnTest;
@@ -624,6 +625,38 @@ namespace DisperSim3D.Dialogs
             rightCol.SetColumnSpan(_chkWindField, 2);
             rightCol.Controls.Add(_chkWindField, 0, rRow++);
 
+            // GPU tracer toggle — only relevant to FluidX3DDispersion runs.
+            // Greyed out when the native FluidX3D.dll is not loadable so the
+            // user knows why the GPU path is unavailable (also surfaces
+            // FluidX3DBridge.LastAvailabilityError as a tooltip suffix).
+            bool gpuAvailable = DisperSim3D.Core.FluidX3DBridge.IsAvailable();
+            _chkGpuTracer = new CheckBox
+            {
+                Text = "Use GPU buoyant tracer (FluidX3D, FP32, ~10× faster)",
+                AutoSize = true,
+                Checked = Result.UseGpuBuoyantTracer && gpuAvailable,
+                Enabled = gpuAvailable,
+                Margin = new Padding(0, 6, 0, 0)
+            };
+            string gpuTooltip =
+                "When on (default), FluidX3DDispersion runs the buoyant scalar tracer\n" +
+                "as an OpenCL pipeline on the same GPU as the LBM wind field instead\n" +
+                "of the C# CPU semi-Lagrangian engine.\n\n" +
+                "Validated 2026-05-17 on RTX 5070: matches the CPU baseline to 3–4\n" +
+                "significant digits on atmospheric / urban / cryogenic-pool cases\n" +
+                "(must-trial-11, spadeadam-co2). Loses 15–25 % accuracy on sharp\n" +
+                "sonic-jet sources (gant-ivings-style) because the GPU uses\n" +
+                "single-precision floats vs the CPU's double precision.\n\n" +
+                "Aggregate wallclock speedup: ~8–10× on the full FluidX3D bench\n" +
+                "batch, ~30× on the tracer step alone. Falls back to CPU\n" +
+                "automatically when FluidX3D.dll is unavailable.";
+            if (!gpuAvailable)
+                gpuTooltip += "\n\nDISABLED: " + DisperSim3D.Core.FluidX3DBridge.LastAvailabilityError;
+            _tip.SetToolTip(_chkGpuTracer, gpuTooltip);
+            rightCol.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            rightCol.SetColumnSpan(_chkGpuTracer, 2);
+            rightCol.Controls.Add(_chkGpuTracer, 0, rRow++);
+
             // Assemble: columns side-by-side, then a button row spanning both columns.
             outer.Controls.Add(layout,   0, 0);
             outer.Controls.Add(rightCol, 1, 0);
@@ -784,6 +817,7 @@ namespace DisperSim3D.Dialogs
             if (double.TryParse(_txtSubgridMargin.Text, System.Globalization.NumberStyles.Float, inv, out margin))
                 Result.SubgridMarginFactor = Math.Max(1.0, Math.Min(3.0, margin));
             Result.UseWindField = _chkWindField.Checked;
+            Result.UseGpuBuoyantTracer = _chkGpuTracer.Checked;
 
             // Atmospheric BL block
             Result.UseAtmosphericBL = _chkAtmBL.Checked;

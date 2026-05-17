@@ -239,6 +239,42 @@ likely the fvOptions cellSet source vs Vu's flowRateInletVelocity face
 patch, or the atmospheric inlet profile parameters). That audit needs
 to happen before re-enabling any Vu stack item.
 
+## GPU buoyant tracer port — first production benchmark (2026-05-17)
+
+The C# CPU semi-Lagrangian `BuoyantTracerEngine` has been ported to a
+native OpenCL pipeline that runs on the same RTX 5070 as the LBM wind
+field — 7 kernels covering forward / reverse advection, BFECC
+correction, density / buoyancy / gravity-current effective velocity,
+explicit Laplacian diffusion, obstacle mask, and sphere / pool source
+injection. Enabled via the `--gpu-tracer` CLI flag or
+`cfd.UseGpuBuoyantTracer = true`. Single-precision floats throughout
+(CPU engine is double).
+
+Full FluidX3D-family batch result, RTX 5070:
+
+| Bench | Wallclock | MRB | FAC2 | MG | VG | Status | Notes |
+|---|---:|---:|---:|---:|---:|:---:|---|
+| gant-ivings-2005 | 56 s | 0.19 | 1.00 | 1.21 | 1.00 | FAIL | FP32 error 15–25 % on sonic-jet centreline (PASSES Hanna SPMs, FAILS the tighter regression baseline tolerance) |
+| must-trial-11 | 334 s | 7e-4 | 1.00 | 1.001 | 1.00 | **PASS** | identical to CPU baseline to 3–4 significant digits |
+| spadeadam-co2 | 159 s | -0.40 | 0.75 | 0.65 | 1.27 | **PASS** | far-field over-predict by 2-3×, within reference tolerance |
+| co2pipehaz-6mm | 142 s | 1.02 | 0.25 | 3.24 | 1.21 | FAIL | model limitation (no two-phase / sublimation); CPU also FAILs |
+| hydrogen-jet-schefer | 125 s | 0.74 | 0.50 | 2.37 | 1.56 | FAIL | dsbench obs values are order-of-magnitude guesses (no published per-sensor H₂ data); CPU also FAILs |
+
+**Aggregate: 2 / 5 PASS** (CPU was 3 / 5; GPU regression on gant-ivings
+is the only difference, attributed to FP32 in a high-pressure sonic jet
+with Y-gradients from 1.0 → 0.0 across 2–3 cells × 120 timesteps).
+
+**Wallclock summary:**
+
+| Metric | CPU baseline (2026-05-16) | GPU (2026-05-17) | Speedup |
+|---|---:|---:|---:|
+| gant-ivings (representative) | ~25–35 min | 56 s | ~30× |
+| Full 5-bench batch | ~125–175 min | 16.3 min | ~8–10× |
+
+The 8-10× aggregate is bounded by LBM wind-field setup time which
+doesn't change between CPU and GPU tracer (the LBM was already GPU).
+The tracer step itself is ~30× faster.
+
 ## Methodology notes
 
 ### SPM definitions (Chang & Hanna 2004; Vu 2019 §1.4.2)

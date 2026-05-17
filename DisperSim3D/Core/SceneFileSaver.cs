@@ -490,6 +490,9 @@ namespace DisperSim3D.Core
             }
             if (cfd.UseCryogenicPatchInjection)
                 el.Add(new XAttribute("CryoPatch", "1"));
+            // Always emit so user's explicit OFF persists across saves
+            // (default is true, so missing attribute reads back as true).
+            el.Add(new XAttribute("GpuTracer", cfd.UseGpuBuoyantTracer ? "1" : "0"));
             return el;
         }
 

@@ -81,6 +81,8 @@
 if exist "$(SolutionDir)DisperSim3D.App\bin\Debug\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D.App\bin\Debug\net10.0-windows\"
 if exist "$(SolutionDir)DisperSim3D.CLI\bin\Release\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D.CLI\bin\Release\net10.0-windows\"
 if exist "$(SolutionDir)DisperSim3D.CLI\bin\Debug\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D.CLI\bin\Debug\net10.0-windows\"
+if exist "$(SolutionDir)DisperSim3D.CLI\bin\Release\net10.0" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D.CLI\bin\Release\net10.0\"
+if exist "$(SolutionDir)DisperSim3D.CLI\bin\Debug\net10.0" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D.CLI\bin\Debug\net10.0\"
 if exist "$(SolutionDir)DisperSim3D\bin\Release\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D\bin\Release\net10.0-windows\"
 if exist "$(SolutionDir)DisperSim3D\bin\Debug\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D\bin\Debug\net10.0-windows\"</Command>
       <Message>Copying FluidX3D.dll to C# output directories</Message>
@@ -112,6 +114,7 @@ if exist "$(SolutionDir)DisperSim3D\bin\Debug\net10.0-windows" copy /Y "$(Target
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\disp_bridge.cpp" />
+    <ClCompile Include="src\tracer_bridge.cpp" />
     <ClCompile Include="src\graphics.cpp" />
     <ClCompile Include="src\info.cpp" />
     <ClCompile Include="src\kernel.cpp" />

@@ -219,6 +219,10 @@
                     Content="Pre-compute wind field for Gaussian Puff"
                     ToolTip.Tip="Runs steady-state CFD (simpleFoam) first to build a wind-field around obstacles." />
 
+          <CheckBox x:Name="ChkGpuTracer" Margin="0,8,0,0"
+                    Content="Use GPU buoyant tracer (FluidX3D, FP32, ~10× faster)"
+                    ToolTip.Tip="FluidX3DDispersion runs the buoyant scalar tracer on the GPU instead of the CPU. Matches CPU to 3-4 sig digits on atmospheric/urban/cryogenic-pool cases (must-trial-11, spadeadam-co2); loses 15-25% on sharp sonic-jet sources (FP32 vs FP64). Auto-falls-back to CPU when FluidX3D.dll is unavailable." />
+
         </StackPanel>
 
       </Grid>

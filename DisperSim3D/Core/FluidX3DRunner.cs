@@ -120,15 +120,28 @@ namespace DisperSim3D.Core
                     }
 
                     DispersionTracerEngine passiveEngine = null;
-                    BuoyantTracerEngine buoyantEngine = null;
+                    IBuoyantTracerEngine buoyantEngine = null;
 
                     if (useBuoyant)
                     {
-                        buoyantEngine = new BuoyantTracerEngine(wind, domain, height, tnx, tny, tnz,
-                            diff, gasMW, ambientT, ambientP, 2.2e-5, decay, _obstacles);
-                        Report(0.05, string.Format(
-                            "FluidX3D buoyant tracer: MW={0:F4} kg/mol, Texit={1:F1} K, Tamb={2:F1} K, grid={3}x{4}x{5} cell={6:F1}m",
-                            gasMW, exitT, ambientT, tnx, tny, tnz, tracerCellM));
+                        bool useGpu = config != null && config.UseGpuBuoyantTracer
+                            && FluidX3DBridge.IsAvailable();
+                        if (useGpu)
+                        {
+                            buoyantEngine = new BuoyantTracerEngineGpu(wind, domain, height, tnx, tny, tnz,
+                                diff, gasMW, ambientT, ambientP, 2.2e-5, _obstacles);
+                            Report(0.05, string.Format(
+                                "FluidX3D buoyant tracer [GPU]: MW={0:F4} kg/mol, Texit={1:F1} K, Tamb={2:F1} K, grid={3}x{4}x{5} cell={6:F1}m",
+                                gasMW, exitT, ambientT, tnx, tny, tnz, tracerCellM));
+                        }
+                        else
+                        {
+                            buoyantEngine = new BuoyantTracerEngine(wind, domain, height, tnx, tny, tnz,
+                                diff, gasMW, ambientT, ambientP, 2.2e-5, decay, _obstacles);
+                            Report(0.05, string.Format(
+                                "FluidX3D buoyant tracer [CPU]: MW={0:F4} kg/mol, Texit={1:F1} K, Tamb={2:F1} K, grid={3}x{4}x{5} cell={6:F1}m",
+                                gasMW, exitT, ambientT, tnx, tny, tnz, tracerCellM));
+                        }
                     }
                     else
                     {

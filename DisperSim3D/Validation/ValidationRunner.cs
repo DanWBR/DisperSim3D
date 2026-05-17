@@ -318,6 +318,8 @@ namespace DisperSim3D.Validation
             // Bench grid resolution wins over the CfdConfiguration default — HeadlessRunner.RunCfd
             // copies cfdConfig.GridResolution onto scenario.GridResolution, so we have to set it here.
             sim.SnapshotCfdConfig.GridResolution = spec.Domain.GridResolution;
+            // Propagate the GPU-tracer preference (set by CLI `--gpu-tracer`).
+            sim.SnapshotCfdConfig.UseGpuBuoyantTracer = AppSettings.Instance.UseGpuBuoyantTracerPreferred;
             scene.Simulations.Add(sim);
 
             // Monitor points (so the engine has them registered if needed downstream)
