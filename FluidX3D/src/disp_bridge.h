@@ -120,6 +120,86 @@ FX3D_API void fx3d_read_temperature(uint64_t h, float* t);
 // Destroy the LBM instance and release GPU memory.
 FX3D_API void fx3d_destroy(uint64_t h);
 
+// ─── Buoyant scalar tracer (GPU port of BuoyantTracerEngine.cs) ──────────
+//
+// The tracer is an independent OpenCL pipeline that solves a passive
+// (mass-fraction Y, temperature T) advection-diffusion on the same grid
+// as a wind field, with density-based buoyancy and gravity-current
+// lateral spreading for dense / cryogenic gas clouds.
+//
+// Usage:
+//   1. fx3d_tracer_create(...)  → returns handle
+//   2. fx3d_tracer_set_wind(h, ux, uy, uz)  (one-shot, ~Nx*Ny*Nz floats each)
+//   3. fx3d_tracer_set_obstacles(h, blocked)   (optional)
+//   4. fx3d_tracer_set_source_*(h, ...)        (optional, before stepping)
+//   5. loop: fx3d_tracer_step(h, dt) until done
+//   6. fx3d_tracer_read_*(h, out) to copy fields back to host
+//   7. fx3d_tracer_destroy(h)
+//
+// Coordinates: SI metres, centred at (0, 0, 0) with z=0 at ground; the
+// case has horizontal extent ±DomainHalfM and vertical 0..DomainHeightM,
+// resolved by Nx × Ny × Nz cells. Index = i + Nx*(j + Ny*k).
+
+FX3D_API uint64_t fx3d_tracer_create(
+    uint32_t Nx, uint32_t Ny, uint32_t Nz,
+    float domain_half_m, float domain_height_m,
+    float gas_molar_mass_kg_per_mol,
+    float ambient_T_k, float ambient_P_pa,
+    float species_diff_m2_per_s, float thermal_diff_m2_per_s,
+    int32_t device_id);
+
+// Upload the wind field. Three arrays of Nx*Ny*Nz floats each, layout
+// matches the lattice index above. Call once at setup (no per-step
+// re-upload is supported in this version — wind is treated as frozen).
+FX3D_API void fx3d_tracer_set_wind(uint64_t h,
+    const float* ux, const float* uy, const float* uz);
+
+// Mark cells as obstacles. blocked[n] != 0 → cell is solid (Y and T
+// are zeroed every step and advection cannot draw mass from it).
+// Array size Nx*Ny*Nz. NULL clears any existing obstacles.
+FX3D_API void fx3d_tracer_set_obstacles(uint64_t h, const uint8_t* blocked);
+
+// Sphere mass source. Inject release_rate_kg_per_s of species mass
+// uniformly across all cells inside the sphere of radius_m centred at
+// (x, y, z). exit_temperature_k sets the source-cell temperature target
+// (cells with higher Y get pulled toward this T linearly). Replaces any
+// previously configured source.
+FX3D_API void fx3d_tracer_set_source_sphere(uint64_t h,
+    float x_si, float y_si, float z_si,
+    float radius_m,
+    float release_rate_kg_per_s,
+    float air_density_kg_per_m3,
+    float exit_temperature_k);
+
+// Pool evaporation source — like sphere but only injects in the k=0..1
+// ground layer, modelling LNG / LPG spills where vapour rises from the
+// liquid surface at near-zero velocity.
+FX3D_API void fx3d_tracer_set_source_pool(uint64_t h,
+    float x_si, float y_si,
+    float radius_m,
+    float release_rate_kg_per_s,
+    float air_density_kg_per_m3,
+    float exit_temperature_k);
+
+// Set a host-side initial concentration field directly. Use for tests
+// (drop a Gaussian blob and check it advects) or to seed a non-zero
+// initial state. NULL is allowed and means "leave current state alone".
+FX3D_API void fx3d_tracer_set_initial_concentration(uint64_t h, const float* Y);
+
+// Advance the tracer by dt_s seconds. Runs the full pipeline:
+// density → effective velocity → BFECC advection → diffusion → decay →
+// obstacle mask → source injection. Returns 0 on success, non-zero on
+// CL error.
+FX3D_API int fx3d_tracer_step(uint64_t h, float dt_s);
+
+// Copy the current concentration / temperature field back to host.
+// Output arrays must be sized Nx*Ny*Nz.
+FX3D_API void fx3d_tracer_read_concentration(uint64_t h, float* out_Y);
+FX3D_API void fx3d_tracer_read_temperature(uint64_t h, float* out_T);
+
+// Release GPU memory and destroy the tracer instance.
+FX3D_API void fx3d_tracer_destroy(uint64_t h);
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

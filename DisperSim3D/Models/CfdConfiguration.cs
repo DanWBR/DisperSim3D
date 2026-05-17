@@ -99,6 +99,46 @@ namespace DisperSim3D.Models
         [Description("Ground heat flux (W/m^2, into the gas) used when GroundThermalBC = FixedFlux.")]
         public double GroundHeatFluxWPerM2 { get; set; }
 
+        // ─── Patched Sct solver dispatch via WSL (Vu 2019) ───
+        // Stock rhoReactingBuoyantFoam hard-codes Sct = 1.0 via
+        // turbulence->muEff(). For LNG/cryogenic runs we want to dispatch a
+        // user-built patched binary (rhoReactingBuoyantFoamSct) that reads
+        // Sct from transportProperties. The patched binary lives in WSL
+        // because the build is easiest on Linux; see
+        // scripts/build-rhoReactingBuoyantFoamSct.sh.
+
+        [Category("PatchedSolver")]
+        [Description("When true, the runner dispatches PatchedSctSolverBinary via WSL instead of the stock solver. Only effective for RhoReactingBuoyantFoam runs. Automatically enabled by the Vu 2019 cryogenic preset.")]
+        public bool UsePatchedSctSolver { get; set; }
+
+        [Category("PatchedSolver")]
+        [Description("Name of the patched solver binary (built by scripts/build-rhoReactingBuoyantFoamSct.sh). Must be on PATH inside the WSL distro after sourcing PatchedSctSolverBashrc.")]
+        public string PatchedSctSolverBinary { get; set; }
+
+        [Category("PatchedSolver")]
+        [Description("WSL distro name where the patched binary lives (e.g. Ubuntu-24.04).")]
+        public string PatchedSctSolverWslDistro { get; set; }
+
+        [Category("PatchedSolver")]
+        [Description("Path inside WSL to the OpenFOAM bashrc to source before running the patched binary (e.g. /usr/lib/openfoam/openfoam2412/etc/bashrc).")]
+        public string PatchedSctSolverBashrc { get; set; }
+
+        [Category("PatchedSolver")]
+        [Description("When true, the LNG/cryogenic case generators emit wind-aligned, height-constrained refinement boxes matching Vu (2019) §5.4.1 Mesh2 (300/150/75 m downwind × 100/50/25 m lateral × 15/7.5/4 m tall at 3 progressively-finer levels). Replaces the default cube + Gaussian-corridor refinement. Auto-enabled by the Vu 2019 cryogenic preset together with UsePatchedSctSolver.")]
+        public bool UseVu2019MeshRefinement { get; set; }
+
+        [Category("PatchedSolver")]
+        [Description("When true, the runner executes a steady buoyantSimpleFoam precursor before the main transient solver, so U/k/epsilon are converged onto the atmospheric BL profile before the gas release starts. Required by Vu (2019) §5.3.4 to reproduce LNG dispersion FAC2 = 1.0. Without it the transient starts from a uniform internal field that takes most of the release duration to develop.")]
+        public bool UseAblPrecursor { get; set; }
+
+        [Category("PatchedSolver")]
+        [Description("Number of steady-state iterations for the ABL precursor solver. Default 500 — enough to converge k-epsilon on a typical 100³ mesh, fast on a single core.")]
+        public int AblPrecursorIterations { get; set; }
+
+        [Category("PatchedSolver")]
+        [Description("When true, cryogenic / LNG case generators replace the scalarSemiImplicitSource fvOption with a real patch-based injection (Vu 2019 §5.3.1 method): topoSet + createPatch extract a `gasInlet` patch from the ground at the pool footprint, then U / T / Yi / k / epsilon / p_rgh are written with flowRateInletVelocity / fixedValue BCs there. Inject cold (T=Tbp) dense (Y_CH4=1) jet → real slumping → matches Vu's setup. Auto-enabled by the Vu 2019 cryogenic preset.")]
+        public bool UseCryogenicPatchInjection { get; set; }
+
         /// <summary>
         /// Initializes a new instance of the <see cref="CfdConfiguration"/> class with default solver parameters.
         /// </summary>
@@ -137,6 +177,15 @@ namespace DisperSim3D.Models
             GroundThermalBC = GroundThermalBoundary.Adiabatic;
             GroundTemperatureK = 293.15;
             GroundHeatFluxWPerM2 = 0;
+
+            UsePatchedSctSolver = false;
+            PatchedSctSolverBinary = "rhoReactingBuoyantFoamSct";
+            PatchedSctSolverWslDistro = "Ubuntu-24.04";
+            PatchedSctSolverBashrc = "/usr/lib/openfoam/openfoam2412/etc/bashrc";
+            UseVu2019MeshRefinement = false;
+            UseAblPrecursor = false;
+            AblPrecursorIterations = 500;
+            UseCryogenicPatchInjection = false;
         }
     }
 }

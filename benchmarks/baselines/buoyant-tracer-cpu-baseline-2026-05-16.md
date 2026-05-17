@@ -65,13 +65,57 @@ Notes:
 SPMs against reference (regression baseline): MRB = 7.3e-4, RMSE = 8.4e-4,
 FAC2 = 1.0, MG = 1.001, VG = 1.0.
 
-### Pending in same batch (still running)
+### co2pipehaz-6mm.dsbench
 
-- co2pipehaz-6mm.dsbench (FluidX3D, 6 mm supercritical CO2)
-- spadeadam-co2.dsbench (FluidX3D, 25.62 mm cold liquid CO2)
-- hydrogen-jet-schefer.dsbench (FluidX3D, 1.91 mm H2 at 207 bar)
+Supercritical CO2 release through 6 mm orifice (INERIS CO2PipeHaz Test 2).
+Grid: 240 cubed (4x base of 60). Cell ~0.125 m. Wind LBM 320 cubed.
 
-These will be added to this baseline as they complete.
+| Sensor | Position [m] | Predicted (mass fraction) |
+|---|---|---|
+| jet-5m  | [5, 0, 1.5]  | 0.05907 |
+| jet-10m | [10, 0, 1.5] | 0.02002 |
+| jet-15m | [15, 0, 1.5] | 0.009946 |
+| jet-20m | [20, 0, 1.5] | 0.006182 |
+
+The bench fails its reference acceptance because the buoyant tracer does
+not model the two-phase / solid-CO2 sublimation that dominates the
+near-field of a supercritical release. The numbers above are still the
+authoritative CPU baseline for the algorithm as implemented today.
+
+### spadeadam-co2.dsbench
+
+Cold liquid CO2 release through 25.62 mm orifice (BP CO2PIPETRANS Test 5).
+Grid: 240 cubed. Wind LBM 320 cubed.
+
+| Sensor | Position [m] | Predicted (mass fraction) |
+|---|---|---|
+| jet-5m  | [5, 0, 1.5]  | 0.4675 |
+| jet-10m | [10, 0, 1.5] | 0.1978 |
+| jet-20m | [20, 0, 1.5] | 0.07033 |
+| jet-40m | [40, 0, 1.5] | 0.02266 |
+
+SPMs against the Witlox 2014 digitised values: MRB = 0.005, RMSE = 0.49,
+FAC2 = 1.0, MG = 1.003, VG = 1.21. This is the cleanest match in the
+FluidX3D family and is a strong regression target.
+
+### hydrogen-jet-schefer.dsbench
+
+High-pressure H2 release at 207 bar through 1.91 mm orifice (Schefer 2008).
+Tests positive-buoyancy handling (H2 lighter than air).
+Grid: 240 cubed. Wind LBM 320 cubed.
+
+| Sensor | Position [m] | Predicted (mass fraction) |
+|---|---|---|
+| jet_1m | [1, 0, 1.0] | 0.005981 |
+| jet_2m | [2, 0, 1.1] | 0.003649 |
+| jet_3m | [3, 0, 1.3] | 0.003469 |
+| jet_5m | [5, 0, 1.7] | 0.003306 |
+
+Cloud volume (LFL = 0.00289, UFL = 0.173 mass fraction H2): **8.184 m^3**.
+The bench fails reference because the sensor estimates in the .dsbench were
+order-of-magnitude guesses (no published per-sensor H2 data). The
+algorithm-validation result is positive: the engine runs to completion
+without crashing on positive buoyancy and the cloud is plausible.
 
 ## Algorithm choices reflected in the predictions
 

@@ -470,6 +470,26 @@ namespace DisperSim3D.Core
                 new XAttribute("GroundQ", cfd.GroundHeatFluxWPerM2.ToString(inv)));
             if (cfd.BuoyancyEpsCoefficient.HasValue)
                 el.Add(new XAttribute("Ceps3", cfd.BuoyancyEpsCoefficient.Value.ToString(inv)));
+            if (cfd.UsePatchedSctSolver)
+            {
+                el.Add(new XAttribute("PatchedSct", "1"));
+                if (!string.IsNullOrEmpty(cfd.PatchedSctSolverBinary))
+                    el.Add(new XAttribute("PatchedBin", cfd.PatchedSctSolverBinary));
+                if (!string.IsNullOrEmpty(cfd.PatchedSctSolverWslDistro))
+                    el.Add(new XAttribute("PatchedDistro", cfd.PatchedSctSolverWslDistro));
+                if (!string.IsNullOrEmpty(cfd.PatchedSctSolverBashrc))
+                    el.Add(new XAttribute("PatchedBashrc", cfd.PatchedSctSolverBashrc));
+            }
+            if (cfd.UseVu2019MeshRefinement)
+                el.Add(new XAttribute("VuMesh", "1"));
+            if (cfd.UseAblPrecursor)
+            {
+                el.Add(new XAttribute("AblPrec", "1"));
+                if (cfd.AblPrecursorIterations > 0 && cfd.AblPrecursorIterations != 500)
+                    el.Add(new XAttribute("AblPrecIters", cfd.AblPrecursorIterations.ToString(inv)));
+            }
+            if (cfd.UseCryogenicPatchInjection)
+                el.Add(new XAttribute("CryoPatch", "1"));
             return el;
         }
 

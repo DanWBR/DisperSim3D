@@ -48,6 +48,10 @@ namespace DisperSim3D.Models
         [Description("Dry deposition velocity (m/s). Zero disables deposition.")]
         public double DryDepositionVelocityMPerS { get; set; }
 
+        [Category("Physical")]
+        [Description("Cryogenic release (e.g. LNG vapour at ~111 K). When true, OpenFOAM case generators emit cold-jet boundary conditions matching Vu (2019) §5.3: T = Tbp at the source patch, flowRateInletVelocity, gasInlet patch via topoSet + createPatch. Mirrors the same flag on GasLibraryItem.")]
+        public bool IsCryogenic { get; set; }
+
         /// <summary>
         /// Initializes a new instance of the <see cref="GasProperties"/> class with default values (air-like gas).
         /// </summary>

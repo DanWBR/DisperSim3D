@@ -234,6 +234,19 @@ namespace DisperSim3D.Core
             var ceps3Attr = (string)el.Attribute("Ceps3");
             cfd.BuoyancyEpsCoefficient = string.IsNullOrEmpty(ceps3Attr)
                 ? (double?)null : double.Parse(ceps3Attr, inv);
+            cfd.UsePatchedSctSolver = ((string)el.Attribute("PatchedSct") ?? "0") == "1";
+            var binAttr = (string)el.Attribute("PatchedBin");
+            if (!string.IsNullOrEmpty(binAttr)) cfd.PatchedSctSolverBinary = binAttr;
+            var distroAttr = (string)el.Attribute("PatchedDistro");
+            if (!string.IsNullOrEmpty(distroAttr)) cfd.PatchedSctSolverWslDistro = distroAttr;
+            var bashrcAttr = (string)el.Attribute("PatchedBashrc");
+            if (!string.IsNullOrEmpty(bashrcAttr)) cfd.PatchedSctSolverBashrc = bashrcAttr;
+            cfd.UseVu2019MeshRefinement = ((string)el.Attribute("VuMesh") ?? "0") == "1";
+            cfd.UseAblPrecursor = ((string)el.Attribute("AblPrec") ?? "0") == "1";
+            var iterAttr = (string)el.Attribute("AblPrecIters");
+            if (!string.IsNullOrEmpty(iterAttr) && int.TryParse(iterAttr, System.Globalization.NumberStyles.Integer, inv, out int it))
+                cfd.AblPrecursorIterations = it;
+            cfd.UseCryogenicPatchInjection = ((string)el.Attribute("CryoPatch") ?? "0") == "1";
             return cfd;
         }
 

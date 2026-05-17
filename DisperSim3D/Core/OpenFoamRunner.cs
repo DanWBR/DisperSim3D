@@ -124,6 +124,17 @@ namespace DisperSim3D.Core
                 default: solverCommand = "scalarTransportFoam"; break;
             }
 
+            // Vu 2019 cryogenic LNG path: when the user (or the preset) asks for
+            // the patched Sct-aware binary, the solver step is dispatched to a
+            // WSL-built rhoReactingBuoyantFoamSct that reads Sct from
+            // transportProperties. blockMesh / topoSet / decomposePar /
+            // reconstructPar still run on the configured _env. Only applies to
+            // rhoReactingBuoyantFoam — other solvers are unaffected.
+            bool useWslPatchedSolver = solverType == CfdSolverType.RhoReactingBuoyantFoam
+                && config != null
+                && config.UsePatchedSctSolver
+                && !string.IsNullOrEmpty(config.PatchedSctSolverBinary);
+
             _worker = new BackgroundWorker { WorkerSupportsCancellation = true };
             _worker.DoWork += (s, e) =>
             {
@@ -160,7 +171,7 @@ namespace DisperSim3D.Core
 
                     if (System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "refineMeshDict")))
                     {
-                        for (int rl = 0; rl < 2; rl++)
+                        for (int rl = 0; rl < 4; rl++)
                         {
                             string dictFile = "system/topoSetDict_refine" + rl;
                             if (!System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "topoSetDict_refine" + rl)))
@@ -173,7 +184,12 @@ namespace DisperSim3D.Core
                         }
                     }
 
-                    if (scenario.Sources.Count > 0)
+                    // Default topoSetDict creates the `sourceZone_N` cellSets used
+                    // by setFields and the scalarSemiImplicitSource fvOption. For
+                    // the cryogenic-patch path these are skipped entirely (the
+                    // gasInlet patch handles injection), so the file may not exist.
+                    if (scenario.Sources.Count > 0 &&
+                        System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "topoSetDict")))
                     {
                         ReportProgress(0.05, "Running topoSet...", "");
                         RunStep("topoSet");
@@ -187,6 +203,33 @@ namespace DisperSim3D.Core
                         if (_worker.CancellationPending) { e.Cancel = true; return; }
                     }
 
+                    // Cryogenic patch injection (Vu §5.3.1 method) — promote the
+                    // ground faces inside each spill pool footprint to their own
+                    // `gasInlet_N` patch via topoSet + createPatch. The 0/* files
+                    // were written with matching boundaryField entries up-front,
+                    // so the solver finds the new patches when it starts.
+                    if (System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "createPatchDict")))
+                    {
+                        ReportProgress(0.065, "Creating gasInlet patches (topoSet)...", "");
+                        RunStep("topoSet -dict system/topoSetDict_gasInlet");
+                        if (_worker.CancellationPending) { e.Cancel = true; return; }
+                        ReportProgress(0.07, "Creating gasInlet patches (createPatch)...", "");
+                        RunStep("createPatch -overwrite");
+                        if (_worker.CancellationPending) { e.Cancel = true; return; }
+                    }
+
+                    // ABL precursor — converge atmospheric BL on the ground field
+                    // before the transient solver starts the gas release. Only
+                    // runs when the case writer emitted controlDict.precursor
+                    // (i.e. CfdConfiguration.UseAblPrecursor was true).
+                    if (config != null && config.UseAblPrecursor &&
+                        System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "controlDict.precursor")))
+                    {
+                        ReportProgress(0.07, "Running ABL precursor (buoyantSimpleFoam)...", "");
+                        RunAblPrecursor();
+                        if (_worker.CancellationPending) { e.Cancel = true; return; }
+                    }
+
                     bool useParallel = _nProcs > 1 && _env.CanRunParallel;
                     if (useParallel)
                     {
@@ -194,9 +237,17 @@ namespace DisperSim3D.Core
                         RunStep("decomposePar");
                         if (_worker.CancellationPending) { e.Cancel = true; return; }
 
-                        string mpiCmd = _env.BuildMpiCommand(_nProcs, solverCommand + " -parallel");
-                        ReportProgress(0.1, string.Format("Running {0} ({1} CPUs)...", solverCommand, _nProcs), "");
-                        RunSolver(mpiCmd);
+                        string solverArg = (useWslPatchedSolver
+                            ? config.PatchedSctSolverBinary
+                            : solverCommand) + " -parallel";
+                        ReportProgress(0.1, string.Format("Running {0} ({1} CPUs){2}...",
+                            useWslPatchedSolver ? config.PatchedSctSolverBinary : solverCommand,
+                            _nProcs,
+                            useWslPatchedSolver ? " [WSL]" : ""), "");
+                        if (useWslPatchedSolver)
+                            RunWslPatchedSolver(config, _nProcs, solverArg);
+                        else
+                            RunSolver(_env.BuildMpiCommand(_nProcs, solverArg));
                         if (_worker.CancellationPending) { e.Cancel = true; return; }
 
                         ReportProgress(0.93, "Running reconstructPar...", "");
@@ -205,8 +256,15 @@ namespace DisperSim3D.Core
                     }
                     else
                     {
-                        ReportProgress(0.1, string.Format("Running {0}...", solverCommand), "");
-                        RunSolver(solverCommand);
+                        string solverArg = useWslPatchedSolver
+                            ? config.PatchedSctSolverBinary
+                            : solverCommand;
+                        ReportProgress(0.1, string.Format("Running {0}{1}...",
+                            solverArg, useWslPatchedSolver ? " [WSL]" : ""), "");
+                        if (useWslPatchedSolver)
+                            RunWslPatchedSolver(config, 1, solverArg);
+                        else
+                            RunSolver(solverArg);
                         if (_worker.CancellationPending) { e.Cancel = true; return; }
                     }
 
@@ -319,7 +377,7 @@ namespace DisperSim3D.Core
 
                     if (System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "refineMeshDict")))
                     {
-                        for (int rl = 0; rl < 2; rl++)
+                        for (int rl = 0; rl < 4; rl++)
                         {
                             string dictFile = "system/topoSetDict_refine" + rl;
                             if (!System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "topoSetDict_refine" + rl)))
@@ -550,7 +608,7 @@ namespace DisperSim3D.Core
 
             if (System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "refineMeshDict")))
             {
-                for (int rl = 0; rl < 2; rl++)
+                for (int rl = 0; rl < 4; rl++)
                 {
                     string dictFile = "system/topoSetDict_refine" + rl;
                     if (!System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "topoSetDict_refine" + rl)))
@@ -839,6 +897,232 @@ namespace DisperSim3D.Core
                     catch { }
                 }
                 throw new Exception(command + " failed (exit " + _currentProcess.ExitCode + "): " + err);
+            }
+            _currentProcess = null;
+        }
+
+        /// <summary>
+        /// Runs a steady buoyantSimpleFoam ABL precursor on the case in-place:
+        /// swaps the four main dicts (controlDict, fvSchemes, fvSolution,
+        /// fvOptions) with their .precursor variants, runs the steady solver
+        /// in serial, copies converged U / T / p / p_rgh / k / epsilon / nut /
+        /// alphat / rho from the final time directory back into 0/ (so the
+        /// transient picks them up as initial conditions), wipes the precursor
+        /// time directories, and restores the main dicts. Per-step failures
+        /// always restore the main dicts to keep the case runnable.
+        /// </summary>
+        private void RunAblPrecursor()
+        {
+            string sys = System.IO.Path.Combine(_casePath, "system");
+            string[] dicts = { "controlDict", "fvSchemes", "fvSolution", "fvOptions" };
+
+            // 1. Swap main dicts to .main, precursor dicts to active name.
+            foreach (var d in dicts)
+            {
+                string main = System.IO.Path.Combine(sys, d);
+                string mainBak = System.IO.Path.Combine(sys, d + ".main");
+                string prec = System.IO.Path.Combine(sys, d + ".precursor");
+                if (System.IO.File.Exists(main))
+                {
+                    if (System.IO.File.Exists(mainBak)) System.IO.File.Delete(mainBak);
+                    System.IO.File.Move(main, mainBak);
+                }
+                if (System.IO.File.Exists(prec))
+                    System.IO.File.Copy(prec, main, true);
+            }
+
+            try
+            {
+                // 2. Run the precursor solver in serial. buoyantSimpleFoam is
+                //    cheap (a few hundred steady SIMPLE iters) and avoids the
+                //    decomposePar / reconstructPar round trip for this step.
+                RunSolver("buoyantSimpleFoam");
+
+                // 3. Copy converged fields from the latest time dir into 0/.
+                //    Skip the dict-side files (controlDict etc. live in system,
+                //    not in time dirs) and any species fields a future solver
+                //    might dump there.
+                string latest = FindLatestNumericTimeDir(_casePath, excludeZero: true);
+                if (latest != null)
+                {
+                    string zeroDir = System.IO.Path.Combine(_casePath, "0");
+                    string[] copyFields = { "U", "T", "p", "p_rgh", "k", "epsilon", "nut", "alphat", "rho" };
+                    foreach (var f in copyFields)
+                    {
+                        string src = System.IO.Path.Combine(latest, f);
+                        if (!System.IO.File.Exists(src)) continue;
+                        string dst = System.IO.Path.Combine(zeroDir, f);
+                        System.IO.File.Copy(src, dst, true);
+                    }
+                    ReportProgress(-1, null, "ABL precursor: copied converged fields from " +
+                        System.IO.Path.GetFileName(latest) + " back to 0/");
+                }
+
+                // 4. Remove all numeric time dirs except 0 so the transient
+                //    starts clean from the (now-overwritten) 0/ fields.
+                foreach (var dir in System.IO.Directory.GetDirectories(_casePath))
+                {
+                    string name = System.IO.Path.GetFileName(dir);
+                    if (IsNumericTimeDirName(name) && name != "0")
+                    {
+                        try { System.IO.Directory.Delete(dir, true); } catch { }
+                    }
+                }
+            }
+            finally
+            {
+                // 5. Always restore main dicts, even if the precursor failed.
+                foreach (var d in dicts)
+                {
+                    string main = System.IO.Path.Combine(sys, d);
+                    string mainBak = System.IO.Path.Combine(sys, d + ".main");
+                    if (System.IO.File.Exists(mainBak))
+                    {
+                        if (System.IO.File.Exists(main)) System.IO.File.Delete(main);
+                        System.IO.File.Move(mainBak, main);
+                    }
+                }
+            }
+        }
+
+        private static string FindLatestNumericTimeDir(string casePath, bool excludeZero)
+        {
+            string latest = null;
+            double latestVal = double.MinValue;
+            foreach (var dir in System.IO.Directory.GetDirectories(casePath))
+            {
+                string name = System.IO.Path.GetFileName(dir);
+                if (!IsNumericTimeDirName(name)) continue;
+                if (!double.TryParse(name, NumberStyles.Float, CultureInfo.InvariantCulture, out double v)) continue;
+                if (excludeZero && v == 0) continue;
+                if (v > latestVal) { latestVal = v; latest = dir; }
+            }
+            return latest;
+        }
+
+        private static bool IsNumericTimeDirName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            return double.TryParse(name, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
+        }
+
+        /// <summary>
+        /// Runs the user-built patched solver (e.g. rhoReactingBuoyantFoamSct)
+        /// inside WSL, bypassing the native OpenFOAM environment for this step
+        /// only. blockMesh, topoSet, decomposePar, reconstructPar still run via
+        /// the configured _env. The case directory is shared via /mnt/c.
+        /// </summary>
+        private void RunWslPatchedSolver(Models.CfdConfiguration config, int nProcs, string solverArg)
+        {
+            string linuxCase = OpenFoamEnvironment.WindowsToWslPath(_casePath);
+            string distro = string.IsNullOrEmpty(config.PatchedSctSolverWslDistro)
+                ? "Ubuntu" : config.PatchedSctSolverWslDistro;
+            string bashrc = string.IsNullOrEmpty(config.PatchedSctSolverBashrc)
+                ? "/usr/lib/openfoam/openfoam2412/etc/bashrc" : config.PatchedSctSolverBashrc;
+
+            // mpirun lives under $WM_PROJECT_DIR/.../bin after sourcing bashrc.
+            string runCmd = nProcs > 1
+                ? "mpirun -np " + nProcs + " " + solverArg
+                : solverArg;
+
+            string bashCmd = ". '" + bashrc + "' && " +
+                "cd '" + linuxCase + "' && " + runCmd;
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "wsl",
+                Arguments = "-d " + distro + " -- bash -c \"" + bashCmd.Replace("\"", "\\\"") + "\"",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                StandardOutputEncoding = System.Text.Encoding.UTF8
+            };
+            _currentProcess = Process.Start(psi);
+
+            // Reuse the same regex-driven progress parsing as the native solver path.
+            var timeRegex = new Regex(@"^Time\s*=\s*([\d.eE+-]+)", RegexOptions.Compiled);
+            var residualRegex = new Regex(@"Solving for (\w+).*Final residual\s*=\s*([\d.eE+-]+)", RegexOptions.Compiled);
+            var courantRegex = new Regex(@"Courant Number mean:\s*([\d.eE+-]+)\s+max:\s*([\d.eE+-]+)", RegexOptions.Compiled);
+            var deltaTRegex = new Regex(@"deltaT\s*=\s*([\d.eE+-]+)", RegexOptions.Compiled);
+
+            string logPath = System.IO.Path.Combine(_casePath, "log." + config.PatchedSctSolverBinary);
+            System.IO.StreamWriter logWriter = null;
+            try { logWriter = new System.IO.StreamWriter(logPath, false) { AutoFlush = true }; }
+            catch { }
+
+            var stderrBuilder = new System.Text.StringBuilder();
+            _currentProcess.ErrorDataReceived += (s, ev) =>
+            {
+                if (ev.Data != null)
+                {
+                    stderrBuilder.AppendLine(ev.Data);
+                    try { logWriter?.WriteLine("[stderr] " + ev.Data); } catch { }
+                }
+            };
+            _currentProcess.BeginErrorReadLine();
+
+            string lastResidual = "";
+            string lastCourant = "";
+            string lastDeltaT = "";
+
+            while (!_currentProcess.StandardOutput.EndOfStream)
+            {
+                string line = _currentProcess.StandardOutput.ReadLine();
+                if (line == null) continue;
+                try { logWriter?.WriteLine(line); } catch { }
+
+                var timeMatch = timeRegex.Match(line);
+                if (timeMatch.Success)
+                {
+                    double t;
+                    if (double.TryParse(timeMatch.Groups[1].Value, NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out t))
+                    {
+                        double fraction = 0.1 + 0.85 * (t / _endTime);
+                        string step = "Solving [WSL] (t=" + t.ToString("F2") + "/" +
+                            _endTime.ToString("F0") + "s)";
+                        if (!string.IsNullOrEmpty(lastDeltaT)) step += "  dt=" + lastDeltaT;
+                        if (!string.IsNullOrEmpty(lastCourant)) step += "  Co=" + lastCourant;
+                        if (!string.IsNullOrEmpty(lastResidual)) step += "  res=" + lastResidual;
+                        ReportProgress(fraction, step, line);
+                    }
+                }
+                else
+                {
+                    var m = residualRegex.Match(line);
+                    if (m.Success) { lastResidual = m.Groups[2].Value; ReportProgress(-1, null, line); }
+                    else
+                    {
+                        var c = courantRegex.Match(line);
+                        if (c.Success) { lastCourant = c.Groups[2].Value; ReportProgress(-1, null, line); }
+                        else
+                        {
+                            var d = deltaTRegex.Match(line);
+                            if (d.Success) { lastDeltaT = d.Groups[1].Value; ReportProgress(-1, null, line); }
+                        }
+                    }
+                }
+
+                if (_worker.CancellationPending)
+                {
+                    try { _currentProcess.Kill(); } catch { }
+                    return;
+                }
+            }
+            try { logWriter?.Dispose(); } catch { }
+
+            const int timeoutMs = 30 * 60 * 1000;
+            if (!_currentProcess.WaitForExit(timeoutMs))
+            {
+                try { _currentProcess.Kill(); } catch { }
+                throw new Exception("WSL patched solver timed out after " + (timeoutMs / 60000) + " min");
+            }
+            if (_currentProcess.ExitCode != 0)
+            {
+                string err = stderrBuilder.ToString().Trim();
+                throw new Exception("WSL " + config.PatchedSctSolverBinary +
+                    " failed (exit " + _currentProcess.ExitCode + "): " + err);
             }
             _currentProcess = null;
         }

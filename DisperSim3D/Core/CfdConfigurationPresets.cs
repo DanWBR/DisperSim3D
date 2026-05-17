@@ -74,11 +74,57 @@ namespace DisperSim3D.Core
             if (cfd == null || gas == null || !gas.IsCryogenic) return;
             if (!cfd.UseAtmosphericBL) return; // Gaussian solvers — skip
 
-            cfd.TurbulentSchmidtNumber = 0.15;
+            cfd.TurbulentSchmidtNumber = 0.15;  // Vu 2019 §5.4.3 (LNG Burro); for dense gas wind tunnel Vu §5.2.2 uses 0.3. Solver uses muEff/Sct form (textbook), so Sct<1 amplifies turbulent species diffusion.
             cfd.GroundThermalBC = GroundThermalBoundary.FixedTemperature;
             cfd.GroundTemperatureK = (meteo != null && meteo.AmbientTemperature > 0)
                 ? meteo.AmbientTemperature
                 : 293.15;
+
+            // Stock rhoReactingBuoyantFoam hard-codes Sct = 1.0 in YEqn.H, so the
+            // 0.15 we just set above is ignored unless we dispatch the patched
+            // binary that actually reads Sct from transportProperties.
+            // See scripts/build-rhoReactingBuoyantFoamSct.sh.
+            cfd.UsePatchedSctSolver = true;
+
+            // The cryogenic patch injection (cfd.UseCryogenicPatchInjection)
+            // is intentionally NOT enabled here. Empirical test on Coyote 3
+            // (2026-05-16, isolated with stock effective Sct=1.0): replacing
+            // the fvOptions scalarSemiImplicitSource with the gasInlet patch
+            // (cold T=Tbp + flowRateInletVelocity + Y_CH4=1 BCs via topoSet +
+            // createPatch on the pool footprint) made FAC2 fall from 0.60 to
+            // 0.00 and MG jump from 2.30 to 3.53. The cold dense pocket slumps
+            // near the source as designed, but at our 8 m base cell the cold
+            // mass is mixed with ambient air within 1-2 timesteps, so the
+            // slumping layer never forms; the plume instead stays narrow and
+            // far-field arcs receive much less mass than stock. Combined with
+            // Sct=0.15 it gets even worse (FAC2 0.00, MG 4.32, ratios
+            // 0.14-0.34). The infra is correct per Vu §5.3.1 but only useful
+            // as part of her full stack (cryo patch + Vu mesh + ABL precursor
+            // + polynomial thermo). Users can still set
+            // cfd.UseCryogenicPatchInjection = true manually for experiments.
+
+            // The ABL precursor (cfd.UseAblPrecursor) is intentionally NOT
+            // enabled here. Empirical test on Coyote 3 (2026-05-16): adding the
+            // precursor on top of the patched Sct = 0.15 solver pushed FAC2 from
+            // 0.40 → 0.00 and MG from 2.15 → 17.75. Same pattern as Vu mesh:
+            // converging k-epsilon (so mut is realistic instead of underestimated
+            // by the uniform initial field) only makes the muEff/Sct amplification
+            // disperse the cloud even more. Our case under-predicts at baseline
+            // — Vu's amplifications go the wrong direction for us. See TODO.md
+            // item 6 "Audit source/BC model vs Vu thesis" for the right next
+            // step before re-enabling any Vu stack item.
+
+            // The Vu mesh refinement (cfd.UseVu2019MeshRefinement) is intentionally
+            // NOT enabled here. Empirical test on Coyote 3 (2026-05-16): combining
+            // the patched Sct = 0.15 solver with the 3-level Vu refinement makes
+            // FAC2 collapse from 0.40 to 0.00 and MG explode from 2.15 to 6.37.
+            // The amplified turbulent diffusion (muEff/Sct = 6.67·muEff) finally
+            // gets resolved by the fine mesh, dispersing the cloud too aggressively.
+            // Vu's case reaches FAC2 = 1.0 only because the rest of her stack
+            // (steady ABL precursor, polynomial T-dependent thermo, modified k-ε
+            // constants — TODO.md items 3, 4, 5) holds the cloud together. Until
+            // those land, enabling Vu mesh on its own degrades results. Users can
+            // still set cfd.UseVu2019MeshRefinement = true manually for experiments.
         }
     }
 }

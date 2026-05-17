@@ -268,6 +268,10 @@ namespace DisperSim3D.Validation
             };
             // Mirror legacy Gas property so engines that don't go through GasRefId still see it.
             src.Gas = gasItem.PureGas;
+            // Mirror the cryogenic flag onto src.Gas (it lives only on
+            // GasLibraryItem in general, but case generators only see the
+            // inline GasProperties).
+            if (src.Gas != null) src.Gas.IsCryogenic = gasItem.IsCryogenic;
             scene.TopLevelSources.Add(src);
 
             // Meteo

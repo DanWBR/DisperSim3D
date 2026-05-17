@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using DisperSim3D.Geometry;
 using DisperSim3D.Models;
@@ -1219,14 +1220,137 @@ namespace DisperSim3D.Core
             WriteFile(Path.Combine(caseDir, "system", "setFieldsDict"), sb.ToString());
         }
 
+        /// <summary>
+        /// Emits three nested wind-aligned refinement boxes around each spill source
+        /// per Vu (2019) §5.4.1 Mesh2 (LNG Burro): downwind extents of 300, 150, 75 m
+        /// with full lateral widths of 100, 50, 25 m and heights of 15, 7.5, 4 m
+        /// (level 0 → 1 → 2, each level halves the cell size). Replaces the default
+        /// cube + Gaussian-corridor refinement for cryogenic releases. Combined with
+        /// the patched rhoReactingBuoyantFoamSct binary, this is the Vu setup that
+        /// reaches FAC2 = 1.0 on Burro 3/7/8/9 (thesis Table 5.15).
+        /// </summary>
+        private static void WriteVu2019RefinementDicts(string caseDir,
+            List<ReleaseSource3D> sources, List<Models.BoundingBox> obstacles,
+            MeteorologicalConditions meteo)
+        {
+            var w = meteo.WindVector;
+            double mag = Math.Sqrt(w.X * w.X + w.Y * w.Y);
+            double wDx = mag > 1e-6 ? w.X / mag : 1.0;
+            double wDy = mag > 1e-6 ? w.Y / mag : 0.0;
+            double pDx = -wDy;   // perpendicular to wind (CCW 90°)
+            double pDy =  wDx;
+
+            // Vu 2019 §5.4.1 Table 5.12 box dimensions (downwind / lateral / height).
+            // Level 0 is the outermost (coarsest refinement); level 2 is the innermost
+            // (finest). The lBack value is Vu's upwind extent — small, just enough to
+            // capture the pool's recirculation zone.
+            var boxes = new[]
+            {
+                new { LFwd = 300.0, LBack = 50.0, WHalf = 50.0,   H = 15.0 },  // level 0
+                new { LFwd = 150.0, LBack = 25.0, WHalf = 25.0,   H = 7.5 },   // level 1
+                new { LFwd =  75.0, LBack = 12.5, WHalf = 12.5,   H = 4.0 },   // level 2
+            };
+
+            int obsCount = obstacles != null ? obstacles.Count : 0;
+
+            for (int level = 0; level < boxes.Length; level++)
+            {
+                var b = boxes[level];
+                string dictName = string.Format("topoSetDict_refine{0}", level);
+
+                var sb = new StringBuilder();
+                sb.Append(FoamHeader("dictionary", dictName));
+                sb.Append("actions\n(\n");
+
+                bool firstAction = true;
+
+                foreach (var src in sources)
+                {
+                    var pos = src.EffectivePosition;
+                    // 4 ground-plane corners of the wind-aligned rectangle, then AABB.
+                    var corners = new[]
+                    {
+                        (X: pos.X + wDx * b.LFwd + pDx * b.WHalf, Y: pos.Y + wDy * b.LFwd + pDy * b.WHalf),
+                        (X: pos.X + wDx * b.LFwd - pDx * b.WHalf, Y: pos.Y + wDy * b.LFwd - pDy * b.WHalf),
+                        (X: pos.X - wDx * b.LBack + pDx * b.WHalf, Y: pos.Y - wDy * b.LBack + pDy * b.WHalf),
+                        (X: pos.X - wDx * b.LBack - pDx * b.WHalf, Y: pos.Y - wDy * b.LBack - pDy * b.WHalf),
+                    };
+                    double xMin = corners[0].X, xMax = corners[0].X;
+                    double yMin = corners[0].Y, yMax = corners[0].Y;
+                    for (int i = 1; i < 4; i++)
+                    {
+                        if (corners[i].X < xMin) xMin = corners[i].X;
+                        if (corners[i].X > xMax) xMax = corners[i].X;
+                        if (corners[i].Y < yMin) yMin = corners[i].Y;
+                        if (corners[i].Y > yMax) yMax = corners[i].Y;
+                    }
+                    double zMin = Math.Max(0, pos.Z);
+                    double zMax = pos.Z + b.H;
+
+                    string action = firstAction ? "new" : "add";
+                    sb.AppendFormat(Inv,
+                        "    {{\n        name    refineZone;\n        type    cellSet;\n        action  {0};\n", action);
+                    sb.Append("        source  boxToCell;\n        sourceInfo\n        {\n");
+                    sb.AppendFormat(Inv, "            min ({0} {1} {2});\n", xMin, yMin, zMin);
+                    sb.AppendFormat(Inv, "            max ({0} {1} {2});\n", xMax, yMax, zMax);
+                    sb.Append("        }\n    }\n\n");
+                    firstAction = false;
+                }
+
+                // Keep obstacle refinement at level 0 only (margin sized to the level
+                // box). Cryogenic LNG benches in our matrix have no obstacles so this
+                // is exercised mostly when somebody later runs Vu-refinement on a case
+                // with containers / fences.
+                if (level == 0 && obsCount > 0)
+                {
+                    double margin = 0.5 * b.WHalf;
+                    foreach (var box in obstacles)
+                    {
+                        string action = firstAction ? "new" : "add";
+                        sb.AppendFormat(Inv,
+                            "    {{\n        name    refineZone;\n        type    cellSet;\n        action  {0};\n", action);
+                        sb.Append("        source  boxToCell;\n        sourceInfo\n        {\n");
+                        sb.AppendFormat(Inv, "            min ({0} {1} {2});\n",
+                            box.Min.X - margin, box.Min.Y - margin, Math.Max(0, box.Min.Z - margin));
+                        sb.AppendFormat(Inv, "            max ({0} {1} {2});\n",
+                            box.Max.X + margin, box.Max.Y + margin, box.Max.Z + margin);
+                        sb.Append("        }\n    }\n\n");
+                        firstAction = false;
+                    }
+                }
+
+                sb.Append(");\n");
+                WriteFile(Path.Combine(caseDir, "system", dictName), sb.ToString());
+            }
+
+            // Single refineMeshDict reused across all levels (refineMesh consumes the
+            // current refineZone cellSet, which is rewritten by each topoSetDict).
+            var rmSb = new StringBuilder();
+            rmSb.Append(FoamHeader("dictionary", "refineMeshDict"));
+            rmSb.Append("set             refineZone;\n\n");
+            rmSb.Append("coordinateSystem global;\n\n");
+            rmSb.Append("directions\n(\n    tan1\n    tan2\n    normal\n);\n\n");
+            rmSb.Append("useHexTopology  true;\n\n");
+            rmSb.Append("geometricCut    false;\n\n");
+            rmSb.Append("writeMesh       true;\n");
+            WriteFile(Path.Combine(caseDir, "system", "refineMeshDict"), rmSb.ToString());
+        }
+
         private static void WriteRefinementDicts(string caseDir, List<ReleaseSource3D> sources,
             double cellSize, List<Models.BoundingBox> obstacles,
-            MeteorologicalConditions meteo = null, double domainHalfExtentM = 0)
+            MeteorologicalConditions meteo = null, double domainHalfExtentM = 0,
+            bool useVu2019Boxes = false)
         {
             int srcCount = sources != null ? sources.Count : 0;
             int obsCount = obstacles != null ? obstacles.Count : 0;
             if (srcCount == 0 && obsCount == 0)
                 return; // nothing to refine — skip writing dicts entirely
+
+            if (useVu2019Boxes && srcCount > 0 && meteo != null)
+            {
+                WriteVu2019RefinementDicts(caseDir, sources, obstacles, meteo);
+                return;
+            }
 
             double coarseRadius = cellSize * 8;
             double fineRadius = cellSize * 3;
@@ -1589,19 +1713,52 @@ namespace DisperSim3D.Core
             WriteReactingCombustionProperties(caseDir);
             WriteRhoReactingReactions(caseDir);
             WriteTurbulenceProperties(caseDir, true, config);
+            // transportProperties is consumed by the user-built
+            // rhoReactingBuoyantFoamSct patched binary (createFields.H
+            // looks up Sct here). Stock rhoReactingBuoyantFoam does not
+            // read this file but its presence is harmless.
+            WriteBuoyantTransportProperties(caseDir, config?.DiffusivityM2PerS ?? 1e-5, config);
             WriteGravity(caseDir);
-            WriteBuoyantUField(caseDir, wind.X, wind.Y, wind.Z, config, scenario.Meteo);
-            WriteBuoyantPRghField(caseDir);
-            WriteReactingPField(caseDir);
-            WriteBuoyantTemperatureField(caseDir, ambientT, config);
-            WriteSpeciesFields(caseDir, scenario.Sources);
-            WriteAlphatField(caseDir);
-            WriteKEpsilonFields(caseDir, wind.Length, config, scenario.Meteo);
-            WriteReactingSetFieldsDict(caseDir, scenario.Sources, wind, cellSize);
-            WriteTopoSetDict(caseDir, scenario.Sources, cellSize);
-            WriteReactingSpeciesSourceFvOptions(caseDir, scenario.Sources, compressible: true);
+            WriteBuoyantUField(caseDir, wind.X, wind.Y, wind.Z, config, scenario.Meteo, scenario.Sources);
+            WriteBuoyantPRghField(caseDir, config, scenario.Sources);
+            WriteReactingPField(caseDir, config, scenario.Sources);
+            WriteBuoyantTemperatureField(caseDir, ambientT, config, scenario.Sources);
+            WriteSpeciesFields(caseDir, scenario.Sources, config);
+            WriteAlphatField(caseDir, config, scenario.Sources);
+            WriteKEpsilonFields(caseDir, wind.Length, config, scenario.Meteo, scenario.Sources);
+            bool useCryoPatch = config != null && config.UseCryogenicPatchInjection
+                && scenario.Sources.Any(IsCryogenicSource);
+
+            // setFields / sourceZone topoSet / fvOptions all act on the
+            // non-cryogenic sources only when the patch path is on (the
+            // cryogenic sources are handled by the gasInlet patch BCs).
+            var nonCryoSources = useCryoPatch
+                ? scenario.Sources.Where(s => !IsCryogenicSource(s)).ToList()
+                : scenario.Sources;
+
+            if (nonCryoSources.Count > 0)
+            {
+                WriteReactingSetFieldsDict(caseDir, nonCryoSources, wind, cellSize);
+                WriteTopoSetDict(caseDir, nonCryoSources, cellSize);
+            }
+
+            if (useCryoPatch)
+            {
+                WriteCryogenicGasInletDicts(caseDir, scenario.Sources);
+                if (nonCryoSources.Count > 0)
+                    WriteReactingSpeciesSourceFvOptions(caseDir, nonCryoSources, compressible: true);
+                else
+                    WriteEmptyFvOptions(caseDir);
+            }
+            else
+            {
+                WriteReactingSpeciesSourceFvOptions(caseDir, scenario.Sources, compressible: true);
+            }
             WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null,
-                scenario.Meteo, scenario.DomainSizeM);
+                scenario.Meteo, scenario.DomainSizeM,
+                useVu2019Boxes: config != null && config.UseVu2019MeshRefinement);
+            if (config != null && config.UseAblPrecursor)
+                WriteAblPrecursorDicts(caseDir, config);
 
             if (config.NumberOfProcessors > 1)
                 WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
@@ -1882,7 +2039,8 @@ namespace DisperSim3D.Core
         }
 
         private static void WriteKEpsilonFields(string caseDir, double windSpeed,
-            CfdConfiguration cfd = null, MeteorologicalConditions meteo = null)
+            CfdConfiguration cfd = null, MeteorologicalConditions meteo = null,
+            List<ReleaseSource3D> sources = null)
         {
             double U = Math.Max(windSpeed, 0.5);
             double I = 0.05;
@@ -1891,6 +2049,7 @@ namespace DisperSim3D.Core
             if (epsilon < 1e-6) epsilon = 1e-4;
             double nut = 0.09 * k * k / epsilon;
             bool atm = cfd != null && cfd.UseAtmosphericBL && meteo != null;
+            bool cryo = cfd != null && cfd.UseCryogenicPatchInjection && sources != null;
 
             var sb = new StringBuilder();
             sb.Append(FoamHeader("volScalarField", "k"));
@@ -1900,6 +2059,7 @@ namespace DisperSim3D.Core
             if (atm) AppendAtmInletK(sb, "atmosphere", k, meteo);
             else sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform {0};\n    }}\n", k);
             sb.Append("    ground\n    {\n        type            kqRWallFunction;\n        value           uniform 0;\n    }\n");
+            if (cryo) AppendGasInletEntries(sb, sources, GasInletFieldKind.K);
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "k"), sb.ToString());
 
@@ -1911,6 +2071,7 @@ namespace DisperSim3D.Core
             if (atm) AppendAtmInletEpsilon(sb, "atmosphere", epsilon, meteo);
             else sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform {0};\n    }}\n", epsilon);
             sb.Append("    ground\n    {\n        type            epsilonWallFunction;\n        value           uniform 0;\n    }\n");
+            if (cryo) AppendGasInletEntries(sb, sources, GasInletFieldKind.Epsilon);
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "epsilon"), sb.ToString());
 
@@ -1922,6 +2083,7 @@ namespace DisperSim3D.Core
             sb.Append("    atmosphere\n    {\n        type            calculated;\n        value           uniform 0;\n    }\n");
             if (atm) AppendAtmGroundNut(sb, meteo);
             else sb.Append("    ground\n    {\n        type            nutkWallFunction;\n        value           uniform 0;\n    }\n");
+            if (cryo) AppendGasInletEntries(sb, sources, GasInletFieldKind.Nut);
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "nut"), sb.ToString());
         }
@@ -1992,6 +2154,273 @@ namespace DisperSim3D.Core
             WriteFile(Path.Combine(caseDir, "constant", "transportProperties"), sb.ToString());
         }
 
+        private static bool IsCryogenicSource(ReleaseSource3D src)
+        {
+            return src != null && src.Gas != null && src.Gas.IsCryogenic;
+        }
+
+        private enum GasInletFieldKind
+        {
+            Velocity, Temperature, Pressure, PressureRgh,
+            SpeciesPrimary, SpeciesOther, K, Epsilon, Nut, Alphat,
+        }
+
+        /// <summary>
+        /// Emits a `gasInlet_N` boundary entry per cryogenic source for one
+        /// field kind. Called by the field writers when
+        /// CfdConfiguration.UseCryogenicPatchInjection is on. The runner's
+        /// createPatch step (after blockMesh/refineMesh) actually creates the
+        /// matching patches on the polyMesh.
+        /// </summary>
+        private static void AppendGasInletEntries(StringBuilder sb,
+            List<ReleaseSource3D> sources, GasInletFieldKind kind,
+            string speciesPrimary = null)
+        {
+            for (int s = 0; s < sources.Count; s++)
+            {
+                var src = sources[s];
+                if (!IsCryogenicSource(src)) continue;
+
+                sb.AppendFormat(Inv, "    gasInlet_{0}\n    {{\n", s);
+                switch (kind)
+                {
+                    case GasInletFieldKind.Velocity:
+                        {
+                            // Vu §5.3.1: flowRateInletVelocity with volumetric
+                            // flow rate from Q / rho_vapour(Tbp). Direction is
+                            // normal to the patch (here +Z, into the domain).
+                            double q = src.EffectiveReleaseRateKgPerS;
+                            double tbp = src.ExitTemperatureK > 0 ? src.ExitTemperatureK : 111.0;
+                            double mw = src.Gas != null && src.Gas.MolarMass > 0
+                                ? src.Gas.MolarMass : 0.01604;
+                            // ρ = pM / RT, p = 1 atm, R = 8.314 J/(mol·K)
+                            double rhoVap = 101325.0 * mw / (8.314 * tbp);
+                            double vdot = rhoVap > 1e-12 ? q / rhoVap : 1e-6;
+                            sb.Append("        type            flowRateInletVelocity;\n");
+                            sb.AppendFormat(Inv, "        volumetricFlowRate constant {0};\n", vdot);
+                            sb.Append("        extrapolateProfile no;\n");
+                            sb.Append("        value           uniform (0 0 0);\n");
+                            break;
+                        }
+                    case GasInletFieldKind.Temperature:
+                        {
+                            double tbp = src.ExitTemperatureK > 0 ? src.ExitTemperatureK : 111.0;
+                            sb.Append("        type            fixedValue;\n");
+                            sb.AppendFormat(Inv, "        value           uniform {0};\n", tbp);
+                            break;
+                        }
+                    case GasInletFieldKind.Pressure:
+                        sb.Append("        type            calculated;\n");
+                        sb.Append("        value           uniform 1e5;\n");
+                        break;
+                    case GasInletFieldKind.PressureRgh:
+                        sb.Append("        type            fixedFluxPressure;\n");
+                        sb.Append("        value           uniform 0;\n");
+                        break;
+                    case GasInletFieldKind.SpeciesPrimary:
+                        {
+                            // The species this source releases gets 1.0 here.
+                            string spec = ResolveOpenFoamSpecies(src);
+                            if (spec == speciesPrimary)
+                            {
+                                sb.Append("        type            fixedValue;\n");
+                                sb.Append("        value           uniform 1;\n");
+                            }
+                            else
+                            {
+                                sb.Append("        type            fixedValue;\n");
+                                sb.Append("        value           uniform 0;\n");
+                            }
+                            break;
+                        }
+                    case GasInletFieldKind.SpeciesOther:
+                        sb.Append("        type            fixedValue;\n");
+                        sb.Append("        value           uniform 0;\n");
+                        break;
+                    case GasInletFieldKind.K:
+                        // Low turbulence injection from a pool evaporation —
+                        // not a high-momentum jet. Small k preserves the
+                        // density-driven slumping in the near field.
+                        sb.Append("        type            fixedValue;\n");
+                        sb.Append("        value           uniform 1e-4;\n");
+                        break;
+                    case GasInletFieldKind.Epsilon:
+                        sb.Append("        type            fixedValue;\n");
+                        sb.Append("        value           uniform 1e-4;\n");
+                        break;
+                    case GasInletFieldKind.Nut:
+                        sb.Append("        type            calculated;\n");
+                        sb.Append("        value           uniform 0;\n");
+                        break;
+                    case GasInletFieldKind.Alphat:
+                        sb.Append("        type            calculated;\n");
+                        sb.Append("        value           uniform 0;\n");
+                        break;
+                }
+                sb.Append("    }\n");
+            }
+        }
+
+        private static void WriteEmptyFvOptions(string caseDir)
+        {
+            var sb = new StringBuilder();
+            sb.Append(FoamHeader("dictionary", "fvOptions"));
+            // limitTemperature is still useful even without sources to keep the
+            // (h, p, Y) → T inversion robust against any transient artefact.
+            sb.Append("temperatureLimit\n{\n");
+            sb.Append("    type            limitTemperature;\n");
+            sb.Append("    active          true;\n");
+            sb.Append("    selectionMode   all;\n");
+            sb.Append("    min             80;\n");
+            sb.Append("    max             1000;\n");
+            sb.Append("}\n");
+            WriteFile(Path.Combine(caseDir, "constant", "fvOptions"), sb.ToString());
+        }
+
+        /// <summary>
+        /// Writes the topoSetDict and createPatchDict needed to extract a
+        /// `gasInlet` patch from the ground at each cryogenic source's pool
+        /// footprint. The runner runs `topoSet -dict topoSetDict_gasInlet`
+        /// then `createPatch -overwrite` after blockMesh/refineMesh, before
+        /// decomposePar. The resulting patch carries the LNG-vapour injection
+        /// BCs (flowRateInletVelocity for U, fixedValue Tbp for T, fixedValue
+        /// 1 for Y_CH4) and replaces the scalarSemiImplicitSource fvOption
+        /// (which only injects mass fraction with no cold density and no jet
+        /// momentum, missing the slumping that LNG dispersion needs).
+        /// </summary>
+        private static void WriteCryogenicGasInletDicts(string caseDir,
+            List<ReleaseSource3D> sources)
+        {
+            // topoSetDict — thin Z box at pool footprint catches the ground
+            // boundary faces. createPatch only considers boundary faces in the
+            // set, so a generous z slice (±0.5 m) is safe.
+            var ts = new StringBuilder();
+            ts.Append(FoamHeader("dictionary", "topoSetDict"));
+            ts.Append("actions\n(\n");
+
+            for (int s = 0; s < sources.Count; s++)
+            {
+                var src = sources[s];
+                var pos = src.EffectivePosition;
+                double diameter = src.StackDiameterM > 0 ? src.StackDiameterM : 1.0;
+                double half = diameter * 0.5;
+
+                ts.AppendFormat(Inv,
+                    "    {{\n        name    gasInletFaces_{0};\n        type    faceSet;\n        action  new;\n", s);
+                ts.Append("        source  boxToFace;\n        sourceInfo\n        {\n");
+                ts.AppendFormat(Inv, "            box ({0} {1} -0.5) ({2} {3} 0.5);\n",
+                    pos.X - half, pos.Y - half, pos.X + half, pos.Y + half);
+                ts.Append("        }\n    }\n\n");
+            }
+            ts.Append(");\n");
+            WriteFile(Path.Combine(caseDir, "system", "topoSetDict_gasInlet"), ts.ToString());
+
+            // createPatchDict — promote the face set to a real patch.
+            var cp = new StringBuilder();
+            cp.Append(FoamHeader("dictionary", "createPatchDict"));
+            cp.Append("pointSync false;\n\n");
+            cp.Append("patches\n(\n");
+            for (int s = 0; s < sources.Count; s++)
+            {
+                cp.AppendFormat(Inv, "    {{\n        name            gasInlet_{0};\n", s);
+                cp.Append("        patchInfo\n        {\n            type            patch;\n        }\n");
+                cp.Append("        constructFrom   set;\n");
+                cp.AppendFormat(Inv, "        set             gasInletFaces_{0};\n", s);
+                cp.Append("    }\n");
+            }
+            cp.Append(");\n");
+            WriteFile(Path.Combine(caseDir, "system", "createPatchDict"), cp.ToString());
+        }
+
+        // ─── ABL precursor dicts (buoyantSimpleFoam, steady) ─────────────────
+        //
+        // Vu (§5.3.4) runs a steady ABL precursor (ablBuoyantSimpleFoam, a
+        // custom variant) to converge U / k / epsilon on the atmospheric BL
+        // profile before the transient LNG release starts. We use stock
+        // buoyantSimpleFoam — same field set as rhoReactingBuoyantFoam minus
+        // species. The runner swaps these `.precursor` dicts in, runs
+        // buoyantSimpleFoam for N steady iterations, copies the converged
+        // fields back to `0/`, then restores the main dicts.
+
+        /// <summary>
+        /// Writes the precursor variants of controlDict / fvSchemes / fvSolution /
+        /// fvOptions next to the main dicts. The runner picks these up when
+        /// <see cref="Models.CfdConfiguration.UseAblPrecursor"/> is true.
+        /// </summary>
+        private static void WriteAblPrecursorDicts(string caseDir, CfdConfiguration config)
+        {
+            int iters = config != null && config.AblPrecursorIterations > 0
+                ? config.AblPrecursorIterations : 500;
+
+            // controlDict.precursor
+            var cd = new StringBuilder();
+            cd.Append(FoamHeader("dictionary", "controlDict"));
+            cd.Append("application     buoyantSimpleFoam;\n");
+            cd.Append("startFrom       startTime;\n");
+            cd.Append("startTime       0;\n");
+            cd.Append("stopAt          endTime;\n");
+            cd.AppendFormat(Inv, "endTime         {0};\n", iters);
+            cd.Append("deltaT          1;\n");
+            cd.Append("writeControl    timeStep;\n");
+            cd.AppendFormat(Inv, "writeInterval   {0};\n", iters);
+            cd.Append("purgeWrite      2;\n");
+            cd.Append("writeFormat     ascii;\n");
+            cd.Append("writePrecision  8;\n");
+            cd.Append("writeCompression off;\n");
+            cd.Append("timeFormat      general;\n");
+            cd.Append("timePrecision   6;\n");
+            cd.Append("runTimeModifiable yes;\n");
+            WriteFile(Path.Combine(caseDir, "system", "controlDict.precursor"), cd.ToString());
+
+            // fvSchemes.precursor — steady-state ddt, upwind everywhere for
+            // robustness during the precursor (cell quality near the spill pool
+            // is not yet refined, and we want a converged solution fast, not a
+            // high-fidelity one).
+            var fs = new StringBuilder();
+            fs.Append(FoamHeader("dictionary", "fvSchemes"));
+            fs.Append("ddtSchemes\n{\n    default         steadyState;\n}\n\n");
+            fs.Append("gradSchemes\n{\n    default         cellLimited Gauss linear 1;\n}\n\n");
+            fs.Append("divSchemes\n{\n    default         none;\n");
+            fs.Append("    div(phi,U)      bounded Gauss upwind;\n");
+            fs.Append("    div(phi,h)      bounded Gauss upwind;\n");
+            fs.Append("    div(phi,K)      bounded Gauss upwind;\n");
+            fs.Append("    div(phi,k)      bounded Gauss upwind;\n");
+            fs.Append("    div(phi,epsilon) bounded Gauss upwind;\n");
+            fs.Append("    div(((rho*nuEff)*dev2(T(grad(U))))) Gauss linear;\n}\n\n");
+            fs.Append("laplacianSchemes\n{\n    default         Gauss linear corrected;\n}\n\n");
+            fs.Append("interpolationSchemes\n{\n    default         linear;\n}\n\n");
+            fs.Append("snGradSchemes\n{\n    default         corrected;\n}\n\n");
+            fs.Append("wallDist\n{\n    method meshWave;\n}\n\n");
+            fs.Append("fluxRequired\n{\n    default         no;\n    p_rgh           ;\n}\n");
+            WriteFile(Path.Combine(caseDir, "system", "fvSchemes.precursor"), fs.ToString());
+
+            // fvSolution.precursor — SIMPLE with strong under-relaxation.
+            var fv = new StringBuilder();
+            fv.Append(FoamHeader("dictionary", "fvSolution"));
+            fv.Append("solvers\n{\n");
+            fv.Append("    \"rho.*\"\n    {\n        solver          diagonal;\n    }\n");
+            fv.Append("    p_rgh\n    {\n        solver          GAMG;\n        tolerance       1e-06;\n        relTol          0.01;\n        smoother        GaussSeidel;\n    }\n");
+            fv.Append("    \"(U|h|k|epsilon)\"\n    {\n        solver          PBiCGStab;\n        preconditioner  DILU;\n        tolerance       1e-06;\n        relTol          0.1;\n    }\n");
+            fv.Append("}\n\n");
+            fv.Append("SIMPLE\n{\n    nNonOrthogonalCorrectors 1;\n    pRefCell        0;\n    pRefValue       0;\n");
+            fv.Append("    residualControl\n    {\n");
+            fv.Append("        p_rgh           1e-4;\n");
+            fv.Append("        U               1e-4;\n");
+            fv.Append("        h               1e-4;\n");
+            fv.Append("        \"(k|epsilon)\"   1e-4;\n    }\n");
+            fv.Append("}\n\n");
+            fv.Append("relaxationFactors\n{\n    fields { rho 1.0; p_rgh 0.3; }\n");
+            fv.Append("    equations { U 0.5; h 0.5; \"(k|epsilon)\" 0.5; }\n}\n");
+            WriteFile(Path.Combine(caseDir, "system", "fvSolution.precursor"), fv.ToString());
+
+            // fvOptions.precursor — empty. The species source fvOption used by
+            // the transient must be inactive during the precursor (no species
+            // to release, buoyantSimpleFoam does not solve species transport).
+            var fo = new StringBuilder();
+            fo.Append(FoamHeader("dictionary", "fvOptions"));
+            WriteFile(Path.Combine(caseDir, "system", "fvOptions.precursor"), fo.ToString());
+        }
+
         private static void WriteBuoyantThermophysicalProperties(string caseDir, double ambientT)
         {
             var sb = new StringBuilder();
@@ -2014,7 +2443,8 @@ namespace DisperSim3D.Core
         }
 
         private static void WriteBuoyantUField(string caseDir, double ux, double uy, double uz,
-            CfdConfiguration cfd = null, MeteorologicalConditions meteo = null)
+            CfdConfiguration cfd = null, MeteorologicalConditions meteo = null,
+            List<ReleaseSource3D> sources = null)
         {
             var sb = new StringBuilder();
             sb.Append(FoamHeader("volVectorField", "U"));
@@ -2026,6 +2456,8 @@ namespace DisperSim3D.Core
             else
                 sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform ({0} {1} {2});\n    }}\n", ux, uy, uz);
             sb.Append("    ground\n    {\n        type            noSlip;\n    }\n");
+            if (cfd != null && cfd.UseCryogenicPatchInjection && sources != null)
+                AppendGasInletEntries(sb, sources, GasInletFieldKind.Velocity);
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "U"), sb.ToString());
         }
@@ -2043,7 +2475,8 @@ namespace DisperSim3D.Core
             WriteFile(Path.Combine(caseDir, "0", "p"), sb.ToString());
         }
 
-        private static void WriteBuoyantPRghField(string caseDir)
+        private static void WriteBuoyantPRghField(string caseDir,
+            CfdConfiguration cfd = null, List<ReleaseSource3D> sources = null)
         {
             var sb = new StringBuilder();
             sb.Append(FoamHeader("volScalarField", "p_rgh"));
@@ -2052,12 +2485,14 @@ namespace DisperSim3D.Core
             sb.Append("boundaryField\n{\n");
             sb.Append("    atmosphere\n    {\n        type            fixedValue;\n        value           uniform 1e5;\n    }\n");
             sb.Append("    ground\n    {\n        type            fixedFluxPressure;\n        value           uniform 1e5;\n    }\n");
+            if (cfd != null && cfd.UseCryogenicPatchInjection && sources != null)
+                AppendGasInletEntries(sb, sources, GasInletFieldKind.PressureRgh);
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "p_rgh"), sb.ToString());
         }
 
         private static void WriteBuoyantTemperatureField(string caseDir, double ambientT,
-            CfdConfiguration cfd = null)
+            CfdConfiguration cfd = null, List<ReleaseSource3D> sources = null)
         {
             var sb = new StringBuilder();
             sb.Append(FoamHeader("volScalarField", "T"));
@@ -2066,11 +2501,14 @@ namespace DisperSim3D.Core
             sb.Append("boundaryField\n{\n");
             sb.AppendFormat(Inv, "    atmosphere\n    {{\n        type            fixedValue;\n        value           uniform {0};\n    }}\n", ambientT);
             AppendGroundT(sb, cfd);
+            if (cfd != null && cfd.UseCryogenicPatchInjection && sources != null)
+                AppendGasInletEntries(sb, sources, GasInletFieldKind.Temperature);
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "T"), sb.ToString());
         }
 
-        private static void WriteAlphatField(string caseDir)
+        private static void WriteAlphatField(string caseDir,
+            CfdConfiguration cfd = null, List<ReleaseSource3D> sources = null)
         {
             var sb = new StringBuilder();
             sb.Append(FoamHeader("volScalarField", "alphat"));
@@ -2079,6 +2517,8 @@ namespace DisperSim3D.Core
             sb.Append("boundaryField\n{\n");
             sb.Append("    atmosphere\n    {\n        type            calculated;\n        value           uniform 0;\n    }\n");
             sb.Append("    ground\n    {\n        type            compressible::alphatWallFunction;\n        value           uniform 0;\n    }\n");
+            if (cfd != null && cfd.UseCryogenicPatchInjection && sources != null)
+                AppendGasInletEntries(sb, sources, GasInletFieldKind.Alphat);
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "alphat"), sb.ToString());
         }
@@ -2212,7 +2652,8 @@ namespace DisperSim3D.Core
             WriteFile(Path.Combine(caseDir, "constant", "combustionProperties"), sb.ToString());
         }
 
-        private static void WriteReactingPField(string caseDir)
+        private static void WriteReactingPField(string caseDir,
+            CfdConfiguration cfd = null, List<ReleaseSource3D> sources = null)
         {
             var sb = new StringBuilder();
             sb.Append(FoamHeader("volScalarField", "p"));
@@ -2221,13 +2662,18 @@ namespace DisperSim3D.Core
             sb.Append("boundaryField\n{\n");
             sb.Append("    atmosphere\n    {\n        type            calculated;\n        value           uniform 1e5;\n    }\n");
             sb.Append("    ground\n    {\n        type            calculated;\n        value           uniform 1e5;\n    }\n");
+            if (cfd != null && cfd.UseCryogenicPatchInjection && sources != null)
+                AppendGasInletEntries(sb, sources, GasInletFieldKind.Pressure);
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "p"), sb.ToString());
         }
 
-        private static void WriteSpeciesFields(string caseDir, List<ReleaseSource3D> sources)
+        private static void WriteSpeciesFields(string caseDir, List<ReleaseSource3D> sources,
+            CfdConfiguration cfd = null)
         {
-            // CH4 — starts at 0 everywhere (injected via setFields)
+            bool cryo = cfd != null && cfd.UseCryogenicPatchInjection && sources != null;
+
+            // CH4 — starts at 0 everywhere (injected via setFields or gasInlet patch)
             var sb = new StringBuilder();
             sb.Append(FoamHeader("volScalarField", "CH4"));
             sb.Append("dimensions      [0 0 0 0 0 0 0];\n\n");
@@ -2235,6 +2681,8 @@ namespace DisperSim3D.Core
             sb.Append("boundaryField\n{\n");
             sb.Append("    atmosphere\n    {\n        type            inletOutlet;\n        inletValue      uniform 0;\n        value           uniform 0;\n    }\n");
             sb.Append("    ground\n    {\n        type            zeroGradient;\n    }\n");
+            if (cryo)
+                AppendGasInletEntries(sb, sources, GasInletFieldKind.SpeciesPrimary, "CH4");
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "CH4"), sb.ToString());
 
@@ -2246,6 +2694,8 @@ namespace DisperSim3D.Core
             sb.Append("boundaryField\n{\n");
             sb.Append("    atmosphere\n    {\n        type            fixedValue;\n        value           uniform 0.23;\n    }\n");
             sb.Append("    ground\n    {\n        type            zeroGradient;\n    }\n");
+            if (cryo)
+                AppendGasInletEntries(sb, sources, GasInletFieldKind.SpeciesOther);
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "O2"), sb.ToString());
 
@@ -2257,6 +2707,8 @@ namespace DisperSim3D.Core
             sb.Append("boundaryField\n{\n");
             sb.Append("    atmosphere\n    {\n        type            fixedValue;\n        value           uniform 0.77;\n    }\n");
             sb.Append("    ground\n    {\n        type            zeroGradient;\n    }\n");
+            if (cryo)
+                AppendGasInletEntries(sb, sources, GasInletFieldKind.SpeciesOther);
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "N2"), sb.ToString());
 
@@ -2268,6 +2720,8 @@ namespace DisperSim3D.Core
             sb.Append("boundaryField\n{\n");
             sb.Append("    atmosphere\n    {\n        type            inletOutlet;\n        inletValue      uniform 0;\n        value           uniform 0;\n    }\n");
             sb.Append("    ground\n    {\n        type            zeroGradient;\n    }\n");
+            if (cryo)
+                AppendGasInletEntries(sb, sources, GasInletFieldKind.SpeciesPrimary, "SF6");
             sb.Append("}\n");
             WriteFile(Path.Combine(caseDir, "0", "SF6"), sb.ToString());
         }
