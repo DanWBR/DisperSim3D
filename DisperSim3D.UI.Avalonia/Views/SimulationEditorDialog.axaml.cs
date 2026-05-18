@@ -123,23 +123,19 @@ namespace DisperSim3D.UI.Avalonia.Views
                 return;
             }
 
-            // Map combo index → CfdSolverType. Matches the WPF dialog row-for-row.
+            // Map combo index → CfdSolverType. Matches the WPF dialog
+            // row-for-row. The 7 legacy OpenFOAM solver variants were
+            // retired — the dialog now offers only the active set
+            // (Gaussian puff/plume, rhoReactingBuoyantFoam, FluidX3D family).
             CfdSolverType solverType = CmbSolver.SelectedIndex switch
             {
                 0 => CfdSolverType.GaussianPuff,
                 1 => CfdSolverType.GaussianPlume,
-                2 => CfdSolverType.ScalarTransportFoam,
-                3 => CfdSolverType.ScalarTransportFoamSteady,
-                4 => CfdSolverType.ScalarSimpleFoam,
-                5 => CfdSolverType.PimpleFoam,
-                6 => CfdSolverType.BuoyantPimpleFoam,
-                7 => CfdSolverType.ReactingFoam,
-                8 => CfdSolverType.RhoSimpleFoam,
-                9 => CfdSolverType.RhoReactingBuoyantFoam,
-                10 => CfdSolverType.FluidX3DWind,
-                11 => CfdSolverType.FluidX3DDispersion,
-                12 => CfdSolverType.FluidX3DFire,
-                13 => CfdSolverType.FluidX3DDispersionSteady,
+                2 => CfdSolverType.RhoReactingBuoyantFoam,
+                3 => CfdSolverType.FluidX3DWind,
+                4 => CfdSolverType.FluidX3DDispersion,
+                5 => CfdSolverType.FluidX3DFire,
+                6 => CfdSolverType.FluidX3DDispersionSteady,
                 _ => CfdSolverType.GaussianPuff
             };
 

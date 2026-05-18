@@ -231,13 +231,6 @@ namespace DisperSim3D.Core
                     case CfdSolverType.GaussianPuff:
                         await RunGaussianPuffAsync(job);
                         break;
-                    case CfdSolverType.ScalarTransportFoam:
-                    case CfdSolverType.ScalarTransportFoamSteady:
-                    case CfdSolverType.ScalarSimpleFoam:
-                    case CfdSolverType.PimpleFoam:
-                    case CfdSolverType.BuoyantPimpleFoam:
-                    case CfdSolverType.ReactingFoam:
-                    case CfdSolverType.RhoSimpleFoam:
                     case CfdSolverType.RhoReactingBuoyantFoam:
                         await RunCfdAsync(job);
                         break;
@@ -688,9 +681,10 @@ namespace DisperSim3D.Core
             };
             runner.Completed += (s, result) =>
             {
-                bool isSteady = job.SolverType == CfdSolverType.ScalarTransportFoamSteady
-                             || job.SolverType == CfdSolverType.ScalarSimpleFoam
-                             || job.SolverType == CfdSolverType.RhoSimpleFoam;
+                // The OpenFOAM steady-state solvers were retired; the only
+                // surviving steady path is FluidX3DDispersionSteady which is
+                // dispatched from RunFluidX3DSteadyAsync, not here.
+                bool isSteady = false;
                 string solverLabel = "[" + SolverCode.Of(job.SolverType) + "] " + SolverCode.DisplayName(job.SolverType);
 
                 var entry = new CfdSimulationEntry
@@ -723,12 +717,9 @@ namespace DisperSim3D.Core
                 tcs.TrySetCanceled();
             });
 
-            if (job.SolverType == CfdSolverType.ScalarTransportFoamSteady ||
-                job.SolverType == CfdSolverType.ScalarSimpleFoam ||
-                job.SolverType == CfdSolverType.RhoSimpleFoam)
-                runner.RunSteadyAsync(scenario, config, job.SolverType);
-            else
-                runner.RunAsync(scenario, config, job.SolverType);
+            // OpenFOAM steady-state solver variants were retired; only the
+            // transient rhoReactingBuoyantFoam path remains.
+            runner.RunAsync(scenario, config, job.SolverType);
 
             return tcs.Task;
         }

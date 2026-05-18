@@ -9,32 +9,35 @@ O DisperSim 3D utiliza extensivamente o OpenFOAM para simulacao de dispersao atm
 
 ## 1. Solvers Disponiveis no OpenFOAM
 
-### Ja implementados no DisperSim 3D:
+### Solver ativo no DisperSim 3D:
 | Solver | Tipo | Descricao | Campo escalar |
 |--------|------|-----------|---------------|
-| **scalarTransportFoam** | Transiente/Steady | Transporte de escalar passivo (solver principal do app) | `T` (direto) |
-| **simpleFoam** | Steady-state | Algoritmo SIMPLE para escoamento incompressivel | `T` (direto) |
-| **pimpleFoam** | Transiente | PIMPLE (PISO+SIMPLE) para escoamento incompressivel turbulento | `T` (via scalarTransport FO) |
-| **buoyantPimpleFoam** | Transiente | Escoamento compressivel com empuxo e transferencia de calor | `s` (via scalarTransport FO) |
-| **reactingFoam** | Transiente | Multi-especie compressivel (CH4, O2, N2) | `CH4` (especie nativa) |
-| **rhoSimpleFoam** | Steady-state | SIMPLE compressivel com escalar passivo | `s` (via scalarTransport FO) |
+| **rhoReactingBuoyantFoam** | Transiente | Compressivel + empuxo + multi-especie (CH4, O2, N2), combustao desligada. Solver universal para todos os cenarios de dispersao (Fiates & Vianna 2016) | `CH4` (especie nativa) |
 
-### Arquitetura de transporte de escalar por solver:
+> **Nota:** As versoes anteriores do DisperSim suportavam 7 solvers OpenFOAM adicionais
+> (scalarTransportFoam, simpleFoam, pimpleFoam, buoyantPimpleFoam, reactingFoam,
+> rhoSimpleFoam e suas variantes steady). Esses foram consolidados em
+> `rhoReactingBuoyantFoam`, que cobre todos os cenarios (subsonic, sonic, leve, pesado,
+> criogenico) com uma unica configuracao. Projetos antigos com esses solvers sao
+> automaticamente migrados para `rhoReactingBuoyantFoam` ao carregar.
 
-Os solvers se dividem em dois grupos quanto ao transporte do escalar de concentracao:
+### Arquitetura de transporte de escalar:
+
+O `rhoReactingBuoyantFoam` transporta `CH4` como especie nativa do sistema multi-componente (`reactingMixture`). O termo fonte e definido via `fvOptions` no `constant/fvOptions`.
+
+### Referencia historica — solvers legados:
+
+Os solvers abaixo foram usados em versoes anteriores e a documentacao abaixo e mantida como referencia OpenFOAM:
 
 **Grupo 1 - Escalar resolvido diretamente pelo solver:**
-- `scalarTransportFoam`, `simpleFoam`: O solver resolve a equacao de transporte para `T` nativamente. O termo fonte em `constant/fvOptions` e aplicado durante o solve matricial.
+- `scalarTransportFoam`, `simpleFoam`: O solver resolve a equacao de transporte para `T` nativamente.
 
 **Grupo 2 - Escalar resolvido via function object `scalarTransport`:**
 - `pimpleFoam`: Usa FO para transportar `T` (incompressivel, sem conflito de nomes)
 - `buoyantPimpleFoam`: Usa FO para transportar `s` (campo `T` reservado para temperatura termodinamica)
 - `rhoSimpleFoam`: Usa FO para transportar `s` (idem)
 
-**Grupo 3 - Escalar como especie quimica nativa:**
-- `reactingFoam`: Transporta `CH4` como especie do sistema multi-componente
-
-### IMPORTANTE - fvOptions em solvers compressiveis:
+### IMPORTANTE - fvOptions em solvers compressiveis (referencia):
 
 Para solvers do Grupo 2 compressiveis (buoyantPimpleFoam, rhoSimpleFoam), o termo fonte **NAO deve** ser colocado em `constant/fvOptions`. O motivo:
 - O `constant/fvOptions` e lido pelo solver principal E pelo scalarTransport FO
@@ -42,6 +45,8 @@ Para solvers do Grupo 2 compressiveis (buoyantPimpleFoam, rhoSimpleFoam), o term
 - Isso causa acumulo de concentracao sem transporte, resultando em valores irreais e artefatos visuais (pontos dispersos)
 
 **Solucao correta:** Definir o fvOptions **INLINE** dentro do bloco do scalarTransport function object no `controlDict`. Assim, o source so e aplicado pela equacao de transporte do FO.
+
+> Nota: Este problema nao afeta `rhoReactingBuoyantFoam` (solver ativo), que transporta `CH4` nativamente.
 
 ### Solvers adicionais relevantes para dispersao (nao implementados):
 | Solver | Tipo | Potencial uso |
@@ -451,7 +456,7 @@ O `fvOptions` dentro do FO deve ser um **sub-dicionario** (bloco `{ }`), nao um 
 ## 12. Mapeamento: DisperSim 3D vs Documentacao OpenFOAM
 
 ### O que JA esta bem implementado:
-- 6 solvers para dispersao (scalarTransportFoam, simpleFoam, pimpleFoam, buoyantPimpleFoam, reactingFoam, rhoSimpleFoam)
+- Solver universal `rhoReactingBuoyantFoam` para dispersao (compressivel + empuxo + multi-especie)
 - Geracao de malha com blockMesh + refinamento local
 - Esquemas numericos fundamentais (Euler, linearUpwind, Gauss linear)
 - Condicoes de contorno basicas e wall functions k-epsilon

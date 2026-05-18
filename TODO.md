@@ -72,8 +72,8 @@ To-do:
   20× wider than tall). Today block mesh is cubic, which means we
   refine 8× per level instead of Vu's 4× (skips vertical refinement on
   her stretched mesh). Not blocking but doubles refined-cell count.
-- Once enabled by default, also wire it into `GenerateBuoyantPimpleFoam`
-  and `GenerateReactingFoam` for the other heavy-gas solvers.
+- Once enabled by default, verify it works correctly with the
+  `GenerateRhoReactingBuoyantFoam` code path (the only OpenFOAM solver now).
 
 ### 3. Steady ABL precursor before the release — BUILT, DISABLED BY DEFAULT
 

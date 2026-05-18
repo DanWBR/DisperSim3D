@@ -28,28 +28,6 @@ namespace DisperSim3D.Core
                     cfd.UseAtmosphericBL = false;
                     break;
 
-                case CfdSolverType.ScalarTransportFoam:
-                case CfdSolverType.ScalarTransportFoamSteady:
-                    // Passive scalar on a frozen wind field. No buoyancy in solver itself.
-                    cfd.UseAtmosphericBL = true;
-                    cfd.TurbulentSchmidtNumber = 0.7;
-                    cfd.BuoyancyEpsCoefficient = null;
-                    cfd.KEpsilonSigmaEpsilon = 1.3;
-                    cfd.GroundThermalBC = GroundThermalBoundary.Adiabatic;
-                    break;
-
-                case CfdSolverType.ScalarSimpleFoam:
-                case CfdSolverType.PimpleFoam:
-                case CfdSolverType.RhoSimpleFoam:
-                    // Wind-field / momentum solvers without active buoyancy.
-                    cfd.UseAtmosphericBL = true;
-                    cfd.BuoyancyEpsCoefficient = null;
-                    cfd.KEpsilonSigmaEpsilon = 1.167; // Vu HHTSL
-                    cfd.GroundThermalBC = GroundThermalBoundary.Adiabatic;
-                    break;
-
-                case CfdSolverType.BuoyantPimpleFoam:
-                case CfdSolverType.ReactingFoam:
                 case CfdSolverType.RhoReactingBuoyantFoam:
                     // Heavy-gas / reactive / buoyant — full atmospheric treatment.
                     cfd.UseAtmosphericBL = true;
@@ -58,6 +36,9 @@ namespace DisperSim3D.Core
                     cfd.KEpsilonSigmaEpsilon = 1.167;   // Vu HHTSL
                     cfd.GroundThermalBC = GroundThermalBoundary.Adiabatic;
                     break;
+
+                // FluidX3D paths don't go through the OpenFOAM CfdConfiguration
+                // block; their defaults are managed inside FluidX3DRunner.
             }
 
             ApplyCryogenicOverride(cfd, gas, meteo);

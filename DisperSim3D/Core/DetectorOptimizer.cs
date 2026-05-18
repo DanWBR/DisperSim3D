@@ -287,16 +287,12 @@ namespace DisperSim3D.Core
 
         private static string ResolveFieldName(Simulation sim)
         {
-            switch (sim.SolverType)
-            {
-                case CfdSolverType.ReactingFoam:
-                case CfdSolverType.RhoReactingBuoyantFoam:
-                    return "CH4";
-                case CfdSolverType.BuoyantPimpleFoam:
-                    return "s";
-                default:
-                    return "T";
-            }
+            // After dropping the legacy OpenFOAM solver variants, only
+            // rhoReactingBuoyantFoam writes a species mass-fraction field
+            // (CH4). The FluidX3D paths use T as the concentration proxy.
+            return sim.SolverType == CfdSolverType.RhoReactingBuoyantFoam
+                ? "CH4"
+                : "T";
         }
 
         private static LoadedField ToLoadedField(OpenFoamResult r)

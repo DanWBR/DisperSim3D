@@ -63,13 +63,6 @@
           <ComboBox  Grid.Row="4" Grid.Column="1" x:Name="CmbSolver" HorizontalAlignment="Stretch">
             <ComboBoxItem Content="Gaussian Puff (Transient)" />
             <ComboBoxItem Content="Gaussian Plume (Steady-State)" />
-            <ComboBoxItem Content="CFD Transient (scalarTransportFoam)" />
-            <ComboBoxItem Content="CFD Steady (scalarTransportFoam)" />
-            <ComboBoxItem Content="CFD Steady (simpleFoam + scalar)" />
-            <ComboBoxItem Content="CFD Transient (pimpleFoam)" />
-            <ComboBoxItem Content="CFD Transient (buoyantPimpleFoam)" />
-            <ComboBoxItem Content="CFD Transient (reactingFoam)" />
-            <ComboBoxItem Content="CFD Steady (rhoSimpleFoam)" />
             <ComboBoxItem Content="CFD Transient (rhoReactingBuoyantFoam) — universal" />
             <ComboBoxItem Content="★ FluidX3D Wind (GPU LBM)" />
             <ComboBoxItem Content="★ FluidX3D Dispersion (GPU LBM)" />

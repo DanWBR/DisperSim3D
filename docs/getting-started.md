@@ -158,9 +158,7 @@ detector allocations (incl. RRF for risk-strategy runs), wind rose,
 monitor points, and gas detectors.
 
 `-s <solver>` accepts the analytical names (`plume`, `puff`), the OpenFOAM
-gallery (`scalarTransportFoam`, `pimpleFoam`, `buoyantPimpleFoam`,
-`reactingFoam`, `rhoSimpleFoam`, `rhoReactingBuoyantFoam`, etc.) **and the
-FluidX3D family** (`fluidx3dDispersion`, `fluidx3dDispersionSteady`,
+solver (`rhoReactingBuoyantFoam`) **and the FluidX3D family** (`fluidx3dDispersion`, `fluidx3dDispersionSteady`,
 `fluidx3dFire`). FluidX3D solvers run in-process via the GPU bridge  -  no
 OpenFOAM environment required.
 

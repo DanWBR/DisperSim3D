@@ -109,13 +109,6 @@ namespace DisperSim3D.Dialogs
             cmbSolver.Items.AddRange(new object[] {
                 "Gaussian Puff (Transient)",
                 "Gaussian Plume (Steady-State)",
-                "CFD Transient (scalarTransportFoam)",
-                "CFD Steady (scalarTransportFoam)",
-                "CFD Steady (simpleFoam + scalar)",
-                "CFD Transient (pimpleFoam)",
-                "CFD Transient (buoyantPimpleFoam)",
-                "CFD Transient (reactingFoam)",
-                "CFD Steady (rhoSimpleFoam)",
                 "CFD Transient (rhoReactingBuoyantFoam) — universal",
                 "FluidX3D Wind (GPU LBM)",
                 "FluidX3D Dispersion (GPU LBM)",
@@ -222,22 +215,17 @@ namespace DisperSim3D.Dialogs
             }
 
             CfdSolverType solverType = CfdSolverType.GaussianPuff;
+            // Combo trimmed down after the 7 redundant OpenFOAM variants were
+            // retired. Order must match cmbSolver.Items.AddRange below.
             switch (cmbSolver.SelectedIndex)
             {
                 case 0: solverType = CfdSolverType.GaussianPuff; break;
                 case 1: solverType = CfdSolverType.GaussianPlume; break;
-                case 2: solverType = CfdSolverType.ScalarTransportFoam; break;
-                case 3: solverType = CfdSolverType.ScalarTransportFoamSteady; break;
-                case 4: solverType = CfdSolverType.ScalarSimpleFoam; break;
-                case 5: solverType = CfdSolverType.PimpleFoam; break;
-                case 6: solverType = CfdSolverType.BuoyantPimpleFoam; break;
-                case 7: solverType = CfdSolverType.ReactingFoam; break;
-                case 8: solverType = CfdSolverType.RhoSimpleFoam; break;
-                case 9: solverType = CfdSolverType.RhoReactingBuoyantFoam; break;
-                case 10: solverType = CfdSolverType.FluidX3DWind; break;
-                case 11: solverType = CfdSolverType.FluidX3DDispersion; break;
-                case 12: solverType = CfdSolverType.FluidX3DFire; break;
-                case 13: solverType = CfdSolverType.FluidX3DDispersionSteady; break;
+                case 2: solverType = CfdSolverType.RhoReactingBuoyantFoam; break;
+                case 3: solverType = CfdSolverType.FluidX3DWind; break;
+                case 4: solverType = CfdSolverType.FluidX3DDispersion; break;
+                case 5: solverType = CfdSolverType.FluidX3DFire; break;
+                case 6: solverType = CfdSolverType.FluidX3DDispersionSteady; break;
             }
 
             // Edit existing sim in place (preserves Id) when launched via the editing

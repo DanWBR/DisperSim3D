@@ -26,7 +26,7 @@ DisperSim 3D is an open-source desktop application for simulating accidental gas
 - Four solver families:
   - **Gaussian Puff** (transient analytical)
   - **Gaussian Plume** (steady-state analytical with bent-plume trajectory)
-  - **CFD** (OpenFOAM v2512+): scalarTransportFoam, simpleFoam, pimpleFoam, buoyantPimpleFoam, reactingFoam, rhoSimpleFoam, **rhoReactingBuoyantFoam** (recommended universal, after Fiates & Vianna 2016)
+  - **CFD** (OpenFOAM v2512+): **rhoReactingBuoyantFoam** — the universal compressible + buoyant + multi-species solver (Fiates & Vianna 2016)
   - **GPU LBM** (FluidX3D): `FluidX3DWind`, `FluidX3DDispersion`, `FluidX3DDispersionSteady`, `FluidX3DFire` — invoked in-process via `FluidX3D.dll` and a C-ABI bridge, no temp-file round-trip
 - High-pressure leak modelling with **Birch & Schefer expanded-diameter** for sonic releases
 - Pre-computed wind fields shared across multiple dispersion runs
@@ -146,13 +146,7 @@ Solvers (Core/)                          External pipeline
 
 | Enum | OpenFOAM / native solver | Use case |
 |---|---|---|
-| `ScalarTransportFoam` / `ScalarTransportFoamSteady` | `scalarTransportFoam` | Passive scalar in a frozen velocity field |
-| `ScalarSimpleFoam` | `simpleFoam` + scalar | Steady-state RANS |
-| `RhoSimpleFoam` | `rhoSimpleFoam` + scalar | Compressible steady |
-| `PimpleFoam` | `pimpleFoam` + fvOptions scalar | Transient incompressible |
-| `BuoyantPimpleFoam` | `buoyantPimpleFoam` | Transient with buoyancy (heavy/light gas) |
-| `ReactingFoam` | `reactingFoam` | Multi-species, combustion off |
-| **`RhoReactingBuoyantFoam`** | `rhoReactingBuoyantFoam` | **Recommended CFD**: compressible + buoyant + multi-species, subsonic & sonic, combustion off |
+| **`RhoReactingBuoyantFoam`** | `rhoReactingBuoyantFoam` | **Universal CFD**: compressible + buoyant + multi-species, subsonic & sonic, combustion off |
 | `FluidX3DWind` | FluidX3D LBM (D3Q19 FP32 + SUBGRID) | GPU steady wind field, seconds-to-minutes |
 | `FluidX3DDispersion` | FluidX3D wind + CPU `DispersionTracerEngine` | GPU wind + semi-Lagrangian transient tracer |
 | `FluidX3DDispersionSteady` | FluidX3D wind + CPU tracer, convergence-driven | Single converged frame, L2-delta tolerance |
@@ -187,9 +181,7 @@ Per-solver presets (configurable in code via `CfdConfigurationPresets`):
 | Solver | UseAtmBL | Sc_t | C_ε3 | σ_ε | Ground T BC |
 |---|---|---|---|---|---|
 | Gaussian Plume / Puff | n/a | n/a | n/a | n/a | n/a |
-| ScalarTransportFoam(Steady) | true | 0.7 | – | 1.3 | Adiabatic |
-| ScalarSimpleFoam / PimpleFoam / RhoSimpleFoam | true | – | – | 1.167 | Adiabatic |
-| BuoyantPimpleFoam / ReactingFoam / **RhoReactingBuoyantFoam** | true | 0.7 | -0.33 | 1.167 | Adiabatic |
+| **RhoReactingBuoyantFoam** | true | 0.7 | -0.33 | 1.167 | Adiabatic |
 
 When the source's gas (`GasLibraryItem.IsCryogenic = true`) flags cryogenic LNG behaviour, the preset further bumps Sc_t to 0.15 and switches the ground BC to `FixedTemperature` at the ambient air temperature (Vu 2019 §5.4).
 

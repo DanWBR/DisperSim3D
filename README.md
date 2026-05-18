@@ -50,13 +50,7 @@ DisperSim 3D organizes work around a **Project** with discrete sections shown in
 
 Choose a solver per simulation:
 
-- **scalarTransportFoam** — passive scalar transport on a steady wind field
-- **simpleFoam** — steady-state RANS wind field generation
-- **pimpleFoam** — transient incompressible
-- **buoyantPimpleFoam** — buoyant transient
-- **reactingFoam** — combustion / dispersion with reactions
-- **rhoSimpleFoam** — compressible steady-state
-- **rhoReactingBuoyantFoam** — compressible buoyant reactive transient (recommended for heavy gas / fuel-air clouds, per Fiates & Vianna 2016)
+- **rhoReactingBuoyantFoam** — compressible buoyant reactive transient, the universal CFD solver for heavy gas / fuel-air clouds (Fiates & Vianna 2016)
 
 Automatic mesh generation with snappyHexMesh, building/obstacle refinement zones, and proper handling of v2512 `topoSetDict` syntax. Default `MaxCourantNumber = 10` and `wallDist meshWave` follow Fiates & Vianna recommendations.
 

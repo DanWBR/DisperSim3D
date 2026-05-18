@@ -33,13 +33,7 @@ The full `CfdSolverType` enum:
 |---|---|---|
 | `GaussianPlume` | Analytical, steady | [`GaussianPlumeEngine.cs`](https://github.com/DanWBR/DisperSim3D/blob/main/DisperSim3D/Core/GaussianPlumeEngine.cs) |
 | `GaussianPuff` | Analytical, transient | [`GaussianPuffEngine.cs`](https://github.com/DanWBR/DisperSim3D/blob/main/DisperSim3D/Core/GaussianPuffEngine.cs) |
-| `ScalarTransportFoam` / `ScalarTransportFoamSteady` | OpenFOAM passive scalar | `OpenFoamCaseGenerator.cs` |
-| `ScalarSimpleFoam` | OpenFOAM steady RANS + scalar | same |
-| `RhoSimpleFoam` | OpenFOAM compressible steady | same |
-| `PimpleFoam` | OpenFOAM transient incompressible | same |
-| `BuoyantPimpleFoam` | OpenFOAM transient buoyant | same |
-| `ReactingFoam` | OpenFOAM multi-species, combustion off | same |
-| **`RhoReactingBuoyantFoam`** | **Recommended CFD**  -  compressible + buoyant + multi-species | same |
+| **`RhoReactingBuoyantFoam`** | **Universal CFD**  -  compressible + buoyant + multi-species | `OpenFoamCaseGenerator.cs` |
 | `FluidX3DWind` | GPU LBM wind field | [`FluidX3DWindFieldRunner.cs`](https://github.com/DanWBR/DisperSim3D/blob/main/DisperSim3D/Core/FluidX3DWindFieldRunner.cs) |
 | `FluidX3DDispersion` | GPU LBM wind + CPU tracer | [`FluidX3DRunner.cs`](https://github.com/DanWBR/DisperSim3D/blob/main/DisperSim3D/Core/FluidX3DRunner.cs) |
 | `FluidX3DDispersionSteady` | GPU LBM + CPU tracer to convergence | [`FluidX3DSteadyDispersionRunner.cs`](https://github.com/DanWBR/DisperSim3D/blob/main/DisperSim3D/Core/FluidX3DSteadyDispersionRunner.cs) |
@@ -50,9 +44,7 @@ The six-character `SolverCode` for headless / CLI / file-format consumers:
 | Code | Solver |
 |---|---|
 | `GAUSSP` / `GAUSSPL` | Gaussian Puff / Plume |
-| `SCTRFM` / `SCTRFS` | scalarTransportFoam transient / steady |
-| `PIMPLE` / `BPIMPL` | pimpleFoam / buoyantPimpleFoam |
-| `REACFM` / `RHRBFM` | reactingFoam / rhoReactingBuoyantFoam |
+| `RHRBFM` | rhoReactingBuoyantFoam |
 | `FX3DWN` | FluidX3D wind field |
 | `FX3DDP` | FluidX3D dispersion (transient) |
 | `FX3DDS` | FluidX3D dispersion (steady-state) |
@@ -150,9 +142,7 @@ Per-solver presets, configurable in code via `CfdConfigurationPresets`:
 | Solver | UseAtmBL | Sc_t | C_ε3 | σ_ε | Ground T BC |
 |---|---|---|---|---|---|
 | Gaussian Plume / Puff | n/a | n/a | n/a | n/a | n/a |
-| ScalarTransportFoam(Steady) | true | 0.7 | – | 1.3 | Adiabatic |
-| ScalarSimpleFoam / PimpleFoam / RhoSimpleFoam | true | – | – | 1.167 | Adiabatic |
-| BuoyantPimpleFoam / ReactingFoam / **RhoReactingBuoyantFoam** | true | 0.7 | -0.33 | 1.167 | Adiabatic |
+| **RhoReactingBuoyantFoam** | true | 0.7 | -0.33 | 1.167 | Adiabatic |
 
 When the source gas has `IsCryogenic = true`, the preset bumps Sc_t to 0.15
 and switches the ground BC to `FixedTemperature` at ambient air temperature

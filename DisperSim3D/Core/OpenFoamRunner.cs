@@ -97,7 +97,7 @@ namespace DisperSim3D.Core
         /// <param name="scenario">The dispersion scenario defining sources, domain, and simulation parameters.</param>
         /// <param name="config">The CFD configuration specifying solver settings and parallelism.</param>
         public void RunAsync(DispersionScenario scenario, CfdConfiguration config,
-            CfdSolverType solverType = CfdSolverType.ScalarTransportFoam)
+            CfdSolverType solverType = CfdSolverType.RhoReactingBuoyantFoam)
         {
             if (IsRunning) return;
             if (!_env.IsAvailable)
@@ -114,15 +114,12 @@ namespace DisperSim3D.Core
             if (nz < 1) nz = 1;
             double domain = scenario.DomainSizeM;
 
-            string solverCommand;
-            switch (solverType)
-            {
-                case CfdSolverType.PimpleFoam: solverCommand = "pimpleFoam"; break;
-                case CfdSolverType.BuoyantPimpleFoam: solverCommand = "buoyantPimpleFoam"; break;
-                case CfdSolverType.ReactingFoam: solverCommand = "reactingFoam"; break;
-                case CfdSolverType.RhoReactingBuoyantFoam: solverCommand = "rhoReactingBuoyantFoam"; break;
-                default: solverCommand = "scalarTransportFoam"; break;
-            }
+            // Only RhoReactingBuoyantFoam is supported now (all the older
+            // OpenFOAM variants — scalarTransportFoam, pimpleFoam,
+            // buoyantPimpleFoam, reactingFoam, rhoSimpleFoam, scalarSimpleFoam —
+            // were removed as redundant). The patched WSL build replaces this
+            // binary at dispatch time when UsePatchedSctSolver is set.
+            string solverCommand = "rhoReactingBuoyantFoam";
 
             // Vu 2019 cryogenic LNG path: when the user (or the preset) asks for
             // the patched Sct-aware binary, the solver step is dispatched to a
@@ -141,24 +138,7 @@ namespace DisperSim3D.Core
                 try
                 {
                     ReportProgress(0, "Generating case...", "");
-                    switch (solverType)
-                    {
-                        case CfdSolverType.PimpleFoam:
-                            _casePath = OpenFoamCaseGenerator.GeneratePimpleFoam(scenario, config);
-                            break;
-                        case CfdSolverType.BuoyantPimpleFoam:
-                            _casePath = OpenFoamCaseGenerator.GenerateBuoyantPimpleFoam(scenario, config);
-                            break;
-                        case CfdSolverType.ReactingFoam:
-                            _casePath = OpenFoamCaseGenerator.GenerateReactingFoam(scenario, config);
-                            break;
-                        case CfdSolverType.RhoReactingBuoyantFoam:
-                            _casePath = OpenFoamCaseGenerator.GenerateRhoReactingBuoyantFoam(scenario, config);
-                            break;
-                        default:
-                            _casePath = OpenFoamCaseGenerator.Generate(scenario, config);
-                            break;
-                    }
+                    _casePath = OpenFoamCaseGenerator.GenerateRhoReactingBuoyantFoam(scenario, config);
 
                     if (!string.IsNullOrEmpty(_casePath))
                         TempManager.RegisterActive(_casePath);
@@ -274,14 +254,11 @@ namespace DisperSim3D.Core
                         try { RunStep("postProcess -func writeCellCentres"); } catch { }
                     }
 
-                    string fieldName;
-                    switch (solverType)
-                    {
-                        case CfdSolverType.ReactingFoam: fieldName = "CH4"; break;
-                        case CfdSolverType.RhoReactingBuoyantFoam: fieldName = "CH4"; break;
-                        case CfdSolverType.BuoyantPimpleFoam: fieldName = "s"; break;
-                        default: fieldName = "T"; break;
-                    }
+                    // rhoReactingBuoyantFoam writes the species mass-fraction
+                    // field. We use CH4 as the canonical concentration field —
+                    // gas-specific overrides can be added back if needed when
+                    // we re-enable multi-species cases.
+                    string fieldName = "CH4";
                     ReportProgress(0.95, "Reading results...", "");
                     var result = OpenFoamResultReader.ReadResults(_casePath, nx, ny, nz, domain,
                         (frac, msg) => ReportProgress(0.95 + frac * 0.04, msg, ""),
@@ -320,172 +297,23 @@ namespace DisperSim3D.Core
         }
 
         /// <summary>
-        /// Runs a steady-state scalar transport simulation asynchronously.
-        /// Supports both scalarTransportFoam (with steadyState ddtSchemes) and simpleFoam (with scalar).
+        /// Legacy steady-state entry point retained only so older UI / CLI
+        /// callers that still reference it compile. The steady-state solver
+        /// set (scalarSimpleFoam, rhoSimpleFoam, scalarTransportFoamSteady)
+        /// was retired — calls now forward to <see cref="RunAsync"/> with
+        /// rhoReactingBuoyantFoam (transient run to controlDict.endTime).
+        /// Remove once all callers migrate.
         /// </summary>
+        [Obsolete("Steady-state OpenFOAM solvers were removed. Use RunAsync with RhoReactingBuoyantFoam instead.", error: false)]
         public void RunSteadyAsync(DispersionScenario scenario, CfdConfiguration config, CfdSolverType solverType)
         {
-            if (IsRunning) return;
-            if (!_env.IsAvailable)
-            {
-                Failed?.Invoke(this, _env.StatusMessage);
-                return;
-            }
-
-            _nProcs = config.NumberOfProcessors > 1 ? config.NumberOfProcessors : 1;
-            int nx = scenario.GridResolution;
-            int ny = scenario.GridResolution;
-            int nz = scenario.GridResolution / 2;
-            if (nz < 1) nz = 1;
-            double domain = scenario.DomainSizeM;
-
-            string solverName;
-            switch (solverType)
-            {
-                case CfdSolverType.ScalarSimpleFoam: solverName = "simpleFoam"; break;
-                case CfdSolverType.RhoSimpleFoam: solverName = "rhoSimpleFoam"; break;
-                default: solverName = "scalarTransportFoam"; break;
-            }
-
-            _worker = new BackgroundWorker { WorkerSupportsCancellation = true };
-            _worker.DoWork += (s, e) =>
-            {
-                try
-                {
-                    ReportProgress(0, "Generating steady-state case...", "");
-                    switch (solverType)
-                    {
-                        case CfdSolverType.ScalarSimpleFoam:
-                            _casePath = OpenFoamCaseGenerator.GenerateSteadyStateSIMPLE(scenario, config);
-                            break;
-                        case CfdSolverType.RhoSimpleFoam:
-                            _casePath = OpenFoamCaseGenerator.GenerateRhoSimpleFoam(scenario, config);
-                            break;
-                        default:
-                            _casePath = OpenFoamCaseGenerator.GenerateSteadyState(scenario, config);
-                            break;
-                    }
-
-                    if (!string.IsNullOrEmpty(_casePath))
-                        TempManager.RegisterActive(_casePath);
-
-                    if (_worker.CancellationPending) { e.Cancel = true; return; }
-
-                    ReportProgress(0.02, "Running blockMesh...", "");
-                    RunStep("blockMesh");
-                    if (_worker.CancellationPending) { e.Cancel = true; return; }
-
-                    if (System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "refineMeshDict")))
-                    {
-                        for (int rl = 0; rl < 4; rl++)
-                        {
-                            string dictFile = "system/topoSetDict_refine" + rl;
-                            if (!System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "topoSetDict_refine" + rl)))
-                                break;
-                            ReportProgress(0.03 + rl * 0.01, "Refining mesh (level " + (rl + 1) + ")...", "");
-                            RunStep("topoSet -dict " + dictFile);
-                            if (_worker.CancellationPending) { e.Cancel = true; return; }
-                            RunStep("refineMesh -dict system/refineMeshDict -overwrite");
-                            if (_worker.CancellationPending) { e.Cancel = true; return; }
-                        }
-                    }
-
-                    if (scenario.Sources.Count > 0)
-                    {
-                        ReportProgress(0.05, "Running topoSet...", "");
-                        RunStep("topoSet");
-                        if (_worker.CancellationPending) { e.Cancel = true; return; }
-
-                        if ((solverType == CfdSolverType.ScalarSimpleFoam || solverType == CfdSolverType.RhoSimpleFoam)
-                            && System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "setFieldsDict")))
-                        {
-                            bool hasJet = false;
-                            foreach (var src in scenario.Sources)
-                                if (src.ComputedExitVelocity > 0) { hasJet = true; break; }
-                            if (hasJet)
-                            {
-                                ReportProgress(0.07, "Running setFields (jet velocity)...", "");
-                                RunStep("setFields");
-                                if (_worker.CancellationPending) { e.Cancel = true; return; }
-                            }
-                        }
-                    }
-
-                    if (solverType != CfdSolverType.ScalarSimpleFoam
-                        && solverType != CfdSolverType.RhoSimpleFoam
-                        && System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "setFieldsDict")))
-                    {
-                        ReportProgress(0.06, "Running setFields (jet velocity)...", "");
-                        RunStep("setFields");
-                        if (_worker.CancellationPending) { e.Cancel = true; return; }
-                    }
-
-                    bool useParallel = _nProcs > 1 && _env.CanRunParallel;
-                    if (useParallel)
-                    {
-                        ReportProgress(0.08, "Running decomposePar...", "");
-                        RunStep("decomposePar");
-                        if (_worker.CancellationPending) { e.Cancel = true; return; }
-
-                        string mpiCmd = _env.BuildMpiCommand(_nProcs, solverName + " -parallel");
-                        ReportProgress(0.1, string.Format("Running {0} steady-state ({1} CPUs)...", solverName, _nProcs), "");
-                        RunSteadySolverAsync(mpiCmd);
-                        if (_worker.CancellationPending) { e.Cancel = true; return; }
-
-                        ReportProgress(0.93, "Running reconstructPar...", "");
-                        RunStep("reconstructPar");
-                        if (_worker.CancellationPending) { e.Cancel = true; return; }
-                    }
-                    else
-                    {
-                        ReportProgress(0.1, string.Format("Running {0} steady-state...", solverName), "");
-                        RunSteadySolverAsync(solverName);
-                        if (_worker.CancellationPending) { e.Cancel = true; return; }
-                    }
-
-                    if (System.IO.File.Exists(System.IO.Path.Combine(_casePath, "system", "refineMeshDict")))
-                    {
-                        ReportProgress(0.94, "Writing cell centres...", "");
-                        try { RunStep("postProcess -func writeCellCentres"); } catch { }
-                    }
-
-                    string ssFieldName = solverType == CfdSolverType.RhoSimpleFoam ? "s" : "T";
-                    ReportProgress(0.95, "Reading results...", "");
-                    var result = OpenFoamResultReader.ReadResults(_casePath, nx, ny, nz, domain,
-                        (frac, msg) => ReportProgress(0.95 + frac * 0.04, msg, ""),
-                        ssFieldName);
-
-                    e.Result = result;
-                }
-                catch (Exception ex)
-                {
-                    e.Result = ex;
-                }
-            };
-
-            _worker.RunWorkerCompleted += (s, e) =>
-            {
-                if (e.Cancelled)
-                {
-                    Failed?.Invoke(this, "Cancelled by user");
-                }
-                else if (e.Result is Exception ex)
-                {
-                    Failed?.Invoke(this, ex.Message);
-                }
-                else if (e.Result is OpenFoamResult result)
-                {
-                    ReportProgress(1.0, "Complete", "", isComplete: true);
-                    Completed?.Invoke(this, result);
-                }
-                else
-                {
-                    Failed?.Invoke(this, "Unknown error");
-                }
-            };
-
-            _worker.RunWorkerAsync();
+            RunAsync(scenario, config, CfdSolverType.RhoReactingBuoyantFoam);
         }
+
+        // Steady-state body and RunSteadySolverAsync helper removed along with
+        // the steady-state solver variants. The transient rhoReactingBuoyantFoam
+        // can be configured to run to a residual-converged endTime for the same
+        // effect.
 
         private void RunSteadySolverAsync(string command)
         {

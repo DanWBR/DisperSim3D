@@ -231,14 +231,10 @@ namespace DisperSim3D.Core
                 done.Set();
             };
 
-            bool isSteady = solverType == CfdSolverType.ScalarTransportFoamSteady
-                         || solverType == CfdSolverType.ScalarSimpleFoam
-                         || solverType == CfdSolverType.RhoSimpleFoam;
-
-            if (isSteady)
-                runner.RunSteadyAsync(scenario, cfdConfig, solverType);
-            else
-                runner.RunAsync(scenario, cfdConfig, solverType);
+            // All surviving OpenFOAM solvers are transient — the old
+            // steady-state pseudo-transient variants (scalarTransportFoamSteady,
+            // scalarSimpleFoam, rhoSimpleFoam) were removed as redundant.
+            runner.RunAsync(scenario, cfdConfig, solverType);
 
             while (!done.Wait(500))
             {
@@ -521,12 +517,6 @@ namespace DisperSim3D.Core
             {
                 switch (solver)
                 {
-                    case "scalartransportfoam": solverType = CfdSolverType.ScalarTransportFoam; break;
-                    case "buoyantpimplefoam": solverType = CfdSolverType.BuoyantPimpleFoam; break;
-                    case "pimplefoam": solverType = CfdSolverType.PimpleFoam; break;
-                    case "reactingfoam": solverType = CfdSolverType.ReactingFoam; break;
-                    case "scalarsimplefoam": solverType = CfdSolverType.ScalarSimpleFoam; break;
-                    case "rhosimplefoam": solverType = CfdSolverType.RhoSimpleFoam; break;
                     case "rhoreactingbuoyantfoam": solverType = CfdSolverType.RhoReactingBuoyantFoam; break;
                     // FluidX3D GPU LBM family. The wind-field runner has no
                     // DispersionScenario shape so it can't be invoked through
@@ -535,6 +525,20 @@ namespace DisperSim3D.Core
                     case "fluidx3ddispersion":       solverType = CfdSolverType.FluidX3DDispersion; break;
                     case "fluidx3ddispersionsteady": solverType = CfdSolverType.FluidX3DDispersionSteady; break;
                     case "fluidx3dfire":             solverType = CfdSolverType.FluidX3DFire; break;
+
+                    // Legacy aliases — silently route to rhoReactingBuoyantFoam
+                    // so older CLI scripts and CI pipelines still work.
+                    case "scalartransportfoam":
+                    case "scalartransportfoamsteady":
+                    case "buoyantpimplefoam":
+                    case "pimplefoam":
+                    case "reactingfoam":
+                    case "scalarsimplefoam":
+                    case "rhosimplefoam":
+                        solverType = CfdSolverType.RhoReactingBuoyantFoam;
+                        log?.Invoke($"[deprecation] Solver '{solver}' is no longer supported; routing to rhoReactingBuoyantFoam.");
+                        break;
+
                     default:
                         return new HeadlessResult
                         {

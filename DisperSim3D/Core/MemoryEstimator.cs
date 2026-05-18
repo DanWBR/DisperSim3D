@@ -166,26 +166,12 @@ namespace DisperSim3D.Core
                           :                       10.0;
             long cells = (long)(baseCells * refMult);
 
-            long perCell;
-            string notes;
-            switch (solver)
-            {
-                case CfdSolverType.ScalarSimpleFoam:
-                case CfdSolverType.RhoSimpleFoam:
-                case CfdSolverType.ScalarTransportFoamSteady:
-                    perCell = 150;   // U, p, k, eps, scalar
-                    notes = "OpenFOAM steady (RANS)";
-                    break;
-                case CfdSolverType.RhoReactingBuoyantFoam:
-                case CfdSolverType.ReactingFoam:
-                    perCell = 450;   // U, p, p_rgh, T, h, rho, Y_i × ~4, k, eps, nut, alphat
-                    notes = "OpenFOAM compressible reactive";
-                    break;
-                default:
-                    perCell = 200;   // pimpleFoam / buoyantPimpleFoam transient
-                    notes = "OpenFOAM transient";
-                    break;
-            }
+            // Only rhoReactingBuoyantFoam survives among the OpenFOAM solvers —
+            // it's compressible, reactive-capable and multi-species, so it has
+            // the highest per-cell field count (U, p, p_rgh, T, h, rho, Y_i,
+            // k, eps, nut, alphat).
+            long perCell = 450;
+            string notes = "OpenFOAM compressible reactive";
             long ram = cells * perCell;
             int snaps = Math.Max(1, snapshotCount);
             long disk = cells * perCell * snaps;

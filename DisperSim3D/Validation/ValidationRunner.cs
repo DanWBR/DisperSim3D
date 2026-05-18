@@ -295,7 +295,10 @@ namespace DisperSim3D.Validation
                 DomainHeightM = spec.Domain.SizeM,
                 GridResolution = spec.Domain.GridResolution
             };
-            CfdConfigurationPresets.ApplyForSolver(wf.CfdConfig, CfdSolverType.ScalarSimpleFoam, gasItem, meteo);
+            // Wind field defaults: rhoReactingBuoyantFoam preset gives the
+            // right ABL parameters (Vu HHTSL k-ε constants, Mack & Spruijt
+            // buoyancy coeff). The old ScalarSimpleFoam preset was retired.
+            CfdConfigurationPresets.ApplyForSolver(wf.CfdConfig, CfdSolverType.RhoReactingBuoyantFoam, gasItem, meteo);
             scene.WindFieldScenarios.Add(wf);
 
             // Simulation

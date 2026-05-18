@@ -48,7 +48,13 @@ namespace DisperSim3D.Core
                     DomainSizeM = windScenario.DomainSizeM,
                     GridResolution = windScenario.GridResolution,
                     Meteo = windScenario.Meteo,
-                    SolverType = CfdSolverType.ScalarSimpleFoam
+                    // Wind-field runs used to flag the scenario with the old
+                    // simpleFoam-based solver type. Now that the OpenFOAM
+                    // wind-field path is deprecated in favour of FluidX3DWind,
+                    // we tag the proxy with the universal solver type — the
+                    // case generator (GenerateWindCase) handles the actual
+                    // simpleFoam invocation independently of this tag.
+                    SolverType = CfdSolverType.RhoReactingBuoyantFoam
                 };
 
                 string caseDir = OpenFoamCaseGenerator.GenerateWindCase(

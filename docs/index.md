@@ -37,8 +37,8 @@ It combines three solver families inside a single project-centric workflow:
 
 - **Analytical**  -  Gaussian puff, Gaussian plume, Briggs plume rise, TNO
   Yellow Book jets, Birch &amp; Schefer expanded source for sonic releases.
-- **CFD with OpenFOAM v2512+**  -  `simpleFoam`, `pimpleFoam`,
-  `buoyantPimpleFoam`, `rhoReactingBuoyantFoam` and friends, with Fiates &amp;
+- **CFD with OpenFOAM v2512+**  -  `rhoReactingBuoyantFoam` (universal
+  compressible + buoyant + multi-species solver), with Fiates &amp;
   Vianna 2016 / Vu 2019 / Mack &amp; Spruijt 2013 atmospheric BCs baked in.
 - **GPU LBM with FluidX3D**  -  wind field, dispersion, steady-state dispersion
   and fire-plume runners that finish in seconds on a consumer GPU. Multi-GPU

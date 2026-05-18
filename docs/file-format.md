@@ -136,13 +136,6 @@ through the headless / CLI layer:
 |---|---|
 | `GAUSSP` | `GaussianPuff` |
 | `GAUSSPL` (note 7 chars  -  historical) | `GaussianPlume` |
-| `SCTRFM` | `ScalarTransportFoam` |
-| `SCTRFS` | `ScalarTransportFoamSteady` |
-| `SCSMFM` | `ScalarSimpleFoam` |
-| `RSIMFM` | `RhoSimpleFoam` |
-| `PIMPLE` | `PimpleFoam` |
-| `BPIMPL` | `BuoyantPimpleFoam` |
-| `REACFM` | `ReactingFoam` |
 | `RHRBFM` | `RhoReactingBuoyantFoam` |
 | `FX3DWN` | `FluidX3DWind` |
 | `FX3DDP` | `FluidX3DDispersion` |

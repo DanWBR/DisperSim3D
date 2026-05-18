@@ -1187,8 +1187,9 @@ namespace DisperSim3D.Controls
                 {
                     _dispersionState = DispersionSimulationState.Stopped;
 
-                    bool isSteady = scenario.SolverType == CfdSolverType.ScalarTransportFoamSteady
-                                 || scenario.SolverType == CfdSolverType.ScalarSimpleFoam;
+                    // Steady-state OpenFOAM variants were removed; only the
+                    // transient rhoReactingBuoyantFoam path remains.
+                    bool isSteady = false;
                     string solverLabel = "[" + Core.SolverCode.Of(scenario.SolverType) + "] " + Core.SolverCode.DisplayName(scenario.SolverType);
                     string baseName = string.IsNullOrEmpty(scenario.Name) ? solverLabel : scenario.Name;
                     var entry = new CfdSimulationEntry
@@ -1233,12 +1234,8 @@ namespace DisperSim3D.Controls
                 }));
             };
 
-            if (scenario.SolverType == CfdSolverType.ScalarTransportFoamSteady ||
-                scenario.SolverType == CfdSolverType.ScalarSimpleFoam ||
-                scenario.SolverType == CfdSolverType.RhoSimpleFoam)
-                _cfdRunner.RunSteadyAsync(scenario, config, scenario.SolverType);
-            else
-                _cfdRunner.RunAsync(scenario, config, scenario.SolverType);
+            // OpenFOAM steady-state solvers were retired — always run transient.
+            _cfdRunner.RunAsync(scenario, config, scenario.SolverType);
         }
 
         public void RunGaussianPuffAsync()

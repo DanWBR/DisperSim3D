@@ -86,20 +86,13 @@ namespace DisperSim3D.Validation
         public string ResolveConcentrationField()
         {
             if (!string.IsNullOrEmpty(ConcentrationField)) return ConcentrationField;
-            switch (ResolveSolverType())
-            {
-                case CfdSolverType.RhoReactingBuoyantFoam:
-                case CfdSolverType.ReactingFoam:
-                    return "CH4";
-                case CfdSolverType.ScalarTransportFoam:
-                case CfdSolverType.ScalarTransportFoamSteady:
-                case CfdSolverType.ScalarSimpleFoam:
-                case CfdSolverType.PimpleFoam:
-                case CfdSolverType.BuoyantPimpleFoam:
-                    return "s";
-                default:
-                    return "T";
-            }
+            // Only rhoReactingBuoyantFoam survives among the OpenFOAM
+            // solvers and writes the CH4 species mass fraction. FluidX3D
+            // and analytical Gaussian engines use T as the concentration
+            // proxy.
+            return ResolveSolverType() == CfdSolverType.RhoReactingBuoyantFoam
+                ? "CH4"
+                : "T";
         }
 
         public CfdSolverType ResolveSolverType()

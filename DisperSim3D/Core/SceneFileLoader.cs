@@ -9,6 +9,39 @@ namespace DisperSim3D.Core
 {
     public static class SceneFileLoader
     {
+        /// <summary>
+        /// Backward-compatible <see cref="CfdSolverType"/> parser. As the
+        /// engine evolved we removed seven OpenFOAM solver variants that
+        /// were either redundant with <c>RhoReactingBuoyantFoam</c> or
+        /// superseded by the FluidX3D path. Older .dsproj files may still
+        /// reference those names — map them to the closest survivor so the
+        /// project still loads instead of falling back to a Gaussian model
+        /// silently.
+        /// </summary>
+        private static CfdSolverType ParseSolverType(string s, CfdSolverType fallback)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return fallback;
+            if (Enum.TryParse<CfdSolverType>(s, ignoreCase: true, out var parsed))
+                return parsed;
+
+            // Legacy names → closest current solver. All of the deprecated
+            // OpenFOAM variants are subsets of rhoReactingBuoyantFoam, so
+            // they migrate cleanly.
+            switch (s.Trim().ToLowerInvariant())
+            {
+                case "scalartransportfoam":
+                case "scalartransportfoamsteady":
+                case "scalarsimplefoam":
+                case "pimplefoam":
+                case "buoyantpimplefoam":
+                case "reactingfoam":
+                case "rhosimplefoam":
+                    return CfdSolverType.RhoReactingBuoyantFoam;
+                default:
+                    return fallback;
+            }
+        }
+
         public static Scene3D Load(string filePath)
         {
             if (!System.IO.File.Exists(filePath))
@@ -163,9 +196,9 @@ namespace DisperSim3D.Core
                     CasePath = (string)se.Attribute("CasePath") ?? "",
                     MaxConcentration = double.Parse((string)se.Attribute("MaxC") ?? "0", inv)
                 };
-                CfdSolverType solverType;
-                if (Enum.TryParse((string)se.Attribute("SolverType") ?? "GaussianPuff", out solverType))
-                    sim.SolverType = solverType;
+                sim.SolverType = ParseSolverType(
+                    (string)se.Attribute("SolverType") ?? "GaussianPuff",
+                    CfdSolverType.GaussianPuff);
                 SimulationStatus statusVal;
                 if (Enum.TryParse((string)se.Attribute("Status") ?? "Configured", out statusVal))
                     sim.Status = statusVal;
@@ -354,11 +387,7 @@ namespace DisperSim3D.Core
 
             var solverTypeStr = (string)dEl.Attribute("SolverType");
             if (!string.IsNullOrEmpty(solverTypeStr))
-            {
-                CfdSolverType parsed;
-                if (Enum.TryParse(solverTypeStr, out parsed))
-                    sc.SolverType = parsed;
-            }
+                sc.SolverType = ParseSolverType(solverTypeStr, sc.SolverType);
 
             var wfId = (string)dEl.Attribute("WindFieldId");
             sc.WindFieldScenarioId = string.IsNullOrEmpty(wfId) ? null : wfId;

@@ -221,13 +221,6 @@ namespace DisperSim3D.UI.Avalonia.Core
                     case CfdSolverType.GaussianPuff:
                         await RunGaussianPuffAsync(job);
                         break;
-                    case CfdSolverType.ScalarTransportFoam:
-                    case CfdSolverType.ScalarTransportFoamSteady:
-                    case CfdSolverType.ScalarSimpleFoam:
-                    case CfdSolverType.PimpleFoam:
-                    case CfdSolverType.BuoyantPimpleFoam:
-                    case CfdSolverType.ReactingFoam:
-                    case CfdSolverType.RhoSimpleFoam:
                     case CfdSolverType.RhoReactingBuoyantFoam:
                         await RunCfdAsync(job);
                         break;
@@ -636,12 +629,11 @@ namespace DisperSim3D.UI.Avalonia.Core
             };
             job.Cts.Token.Register(() => { runner.Cancel(); tcs.TrySetCanceled(); });
 
-            bool isSteady = job.SolverType is CfdSolverType.ScalarTransportFoamSteady
-                or CfdSolverType.ScalarSimpleFoam or CfdSolverType.RhoSimpleFoam;
-            if (isSteady)
-                runner.RunSteadyAsync(scenario, config, job.SolverType);
-            else
-                runner.RunAsync(scenario, config, job.SolverType);
+            // After the OpenFOAM steady-state solver variants were retired,
+            // the only steady-state path left is FluidX3DDispersionSteady,
+            // which has its own dispatcher. Everything routed here is
+            // transient rhoReactingBuoyantFoam.
+            runner.RunAsync(scenario, config, job.SolverType);
 
             return tcs.Task;
         }
@@ -651,9 +643,7 @@ namespace DisperSim3D.UI.Avalonia.Core
         {
             string solverLabel = "[" + DisperSim3D.Core.SolverCode.Of(job.SolverType) + "] "
                 + DisperSim3D.Core.SolverCode.DisplayName(job.SolverType);
-            bool isSteady = job.SolverType is CfdSolverType.ScalarTransportFoamSteady
-                or CfdSolverType.ScalarSimpleFoam or CfdSolverType.RhoSimpleFoam
-                or CfdSolverType.FluidX3DDispersionSteady;
+            bool isSteady = job.SolverType == CfdSolverType.FluidX3DDispersionSteady;
             return new CfdSimulationEntry
             {
                 Name = job.Name,

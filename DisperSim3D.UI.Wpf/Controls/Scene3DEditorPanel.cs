@@ -313,13 +313,6 @@ namespace DisperSim3D.Controls
             _solverCombo.Items.AddRange(new object[] {
                 "Gaussian Puff (Transient)",
                 "Gaussian Plume (Steady-State)",
-                "CFD Transient (scalarTransportFoam)",
-                "CFD Steady (scalarTransportFoam)",
-                "CFD Steady (simpleFoam + scalar)",
-                "CFD Transient (pimpleFoam)",
-                "CFD Transient (buoyantPimpleFoam)",
-                "CFD Transient (reactingFoam)",
-                "CFD Steady (rhoSimpleFoam)",
                 "CFD Transient (rhoReactingBuoyantFoam) — universal"
             });
             _solverCombo.SelectedIndex = 0;
@@ -328,18 +321,13 @@ namespace DisperSim3D.Controls
                 var sc = _editor.Scene.DispersionScenario;
                 if (sc != null)
                 {
+                    // After dropping the 7 redundant OpenFOAM variants, the
+                    // toolbar dropdown only carries the active set.
                     switch (_solverCombo.SelectedIndex)
                     {
                         case 0: sc.SolverType = CfdSolverType.GaussianPuff; break;
                         case 1: sc.SolverType = CfdSolverType.GaussianPlume; break;
-                        case 2: sc.SolverType = CfdSolverType.ScalarTransportFoam; break;
-                        case 3: sc.SolverType = CfdSolverType.ScalarTransportFoamSteady; break;
-                        case 4: sc.SolverType = CfdSolverType.ScalarSimpleFoam; break;
-                        case 5: sc.SolverType = CfdSolverType.PimpleFoam; break;
-                        case 6: sc.SolverType = CfdSolverType.BuoyantPimpleFoam; break;
-                        case 7: sc.SolverType = CfdSolverType.ReactingFoam; break;
-                        case 8: sc.SolverType = CfdSolverType.RhoSimpleFoam; break;
-                        case 9: sc.SolverType = CfdSolverType.RhoReactingBuoyantFoam; break;
+                        case 2: sc.SolverType = CfdSolverType.RhoReactingBuoyantFoam; break;
                     }
                 }
             };
@@ -354,9 +342,7 @@ namespace DisperSim3D.Controls
                 {
                     case 0: sc.SolverType = CfdSolverType.GaussianPuff; break;
                     case 1: sc.SolverType = CfdSolverType.GaussianPlume; break;
-                    case 2: sc.SolverType = CfdSolverType.ScalarTransportFoam; break;
-                    case 3: sc.SolverType = CfdSolverType.ScalarTransportFoamSteady; break;
-                    case 4: sc.SolverType = CfdSolverType.ScalarSimpleFoam; break;
+                    case 2: sc.SolverType = CfdSolverType.RhoReactingBuoyantFoam; break;
                 }
 
                 if (sc.CfdConfig == null)
@@ -2295,18 +2281,15 @@ namespace DisperSim3D.Controls
         {
             var sc = _editor.Scene.DispersionScenario;
             if (sc == null) return;
+            // 3-row toolbar dropdown — Gaussian Puff, Gaussian Plume, then
+            // rhoReactingBuoyantFoam. FluidX3D solvers are launched from the
+            // Simulation Editor dialog rather than the toolbar.
             switch (sc.SolverType)
             {
-                case CfdSolverType.GaussianPuff: _solverCombo.SelectedIndex = 0; break;
-                case CfdSolverType.GaussianPlume: _solverCombo.SelectedIndex = 1; break;
-                case CfdSolverType.ScalarTransportFoam: _solverCombo.SelectedIndex = 2; break;
-                case CfdSolverType.ScalarTransportFoamSteady: _solverCombo.SelectedIndex = 3; break;
-                case CfdSolverType.ScalarSimpleFoam: _solverCombo.SelectedIndex = 4; break;
-                case CfdSolverType.PimpleFoam: _solverCombo.SelectedIndex = 5; break;
-                case CfdSolverType.BuoyantPimpleFoam: _solverCombo.SelectedIndex = 6; break;
-                case CfdSolverType.ReactingFoam: _solverCombo.SelectedIndex = 7; break;
-                case CfdSolverType.RhoSimpleFoam: _solverCombo.SelectedIndex = 8; break;
-                case CfdSolverType.RhoReactingBuoyantFoam: _solverCombo.SelectedIndex = 9; break;
+                case CfdSolverType.GaussianPuff:           _solverCombo.SelectedIndex = 0; break;
+                case CfdSolverType.GaussianPlume:          _solverCombo.SelectedIndex = 1; break;
+                case CfdSolverType.RhoReactingBuoyantFoam: _solverCombo.SelectedIndex = 2; break;
+                default:                                    _solverCombo.SelectedIndex = 2; break;
             }
         }
 

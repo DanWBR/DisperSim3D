@@ -129,8 +129,10 @@ namespace DisperSim3D.UI.Avalonia.Views
             SaveCurrent();
             var wf = new WindFieldScenario { Name = "Wind Field " + (Scenarios.Count + 1) };
             wf.CfdConfig ??= new CfdConfiguration();
+            // Defaults aligned with rhoReactingBuoyantFoam (the surviving
+            // OpenFOAM solver). ScalarSimpleFoam preset was retired.
             CfdConfigurationPresets.ApplyForSolver(
-                wf.CfdConfig, CfdSolverType.ScalarSimpleFoam, null, wf.Meteo);
+                wf.CfdConfig, CfdSolverType.RhoReactingBuoyantFoam, null, wf.Meteo);
             Scenarios.Add(wf);
             RefreshList();
             LstScenarios.SelectedIndex = Scenarios.Count - 1;
