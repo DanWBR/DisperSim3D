@@ -79,6 +79,142 @@
       <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
+
+    <!-- =================================================================
+         BUTTON CLASS STYLES (shared look with DWSIM Avalonia)
+         ================================================================= -->
+
+    <!-- ===== Toolbar: icon-style buttons in toolbars ===== -->
+    <Style Selector="Button.toolbar">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="6,4" />
+      <Setter Property="MinWidth" Value="32" />
+      <Setter Property="MinHeight" Value="32" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.toolbar:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background">
+        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+          <GradientStop Color="#EDF4FF" Offset="0" />
+          <GradientStop Color="#DCEAF9" Offset="1" />
+        </LinearGradientBrush>
+      </Setter>
+    </Style>
+    <Style Selector="Button.toolbar:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#D0E0F8" />
+    </Style>
+
+    <!-- ===== Dialog: OK / Cancel / Close buttons ===== -->
+    <Style Selector="Button.dialog">
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="12,6" />
+      <Setter Property="MinWidth" Value="80" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.dialog:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background">
+        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+          <GradientStop Color="#EDF4FF" Offset="0" />
+          <GradientStop Color="#DCEAF9" Offset="1" />
+        </LinearGradientBrush>
+      </Setter>
+      <Setter Property="BorderBrush" Value="#90C0F0" />
+    </Style>
+    <Style Selector="Button.dialog:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#D0E0F8" />
+    </Style>
+
+    <!-- ===== Action: Run / Execute / Start prominent buttons ===== -->
+    <Style Selector="Button.action">
+      <Setter Property="Background" Value="#E8F5E9" />
+      <Setter Property="BorderBrush" Value="#A5D6A7" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Padding" Value="12,6" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.action:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background">
+        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+          <GradientStop Color="#D8F0D9" Offset="0" />
+          <GradientStop Color="#B8DDB9" Offset="1" />
+        </LinearGradientBrush>
+      </Setter>
+      <Setter Property="BorderBrush" Value="#66BB6A" />
+    </Style>
+    <Style Selector="Button.action:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#A5D6A7" />
+    </Style>
+
+    <!-- ===== Panel: Add / Remove / general panel buttons ===== -->
+    <Style Selector="Button.panel">
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="10,5" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.panel:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background">
+        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+          <GradientStop Color="#F6F6F6" Offset="0" />
+          <GradientStop Color="#E8E8E8" Offset="1" />
+        </LinearGradientBrush>
+      </Setter>
+      <Setter Property="BorderBrush" Value="#C0C0C0" />
+    </Style>
+    <Style Selector="Button.panel:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#E0E0E0" />
+    </Style>
+
+    <!-- ===== Compact: small +/- icon buttons ===== -->
+    <Style Selector="Button.compact">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="#D0D0D0" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinWidth" Value="28" />
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.compact:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background">
+        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+          <GradientStop Color="#F6F6F6" Offset="0" />
+          <GradientStop Color="#E8E8E8" Offset="1" />
+        </LinearGradientBrush>
+      </Setter>
+      <Setter Property="BorderBrush" Value="#A0A0A0" />
+    </Style>
+    <Style Selector="Button.compact:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#E0E0E0" />
+    </Style>
+
+    <!-- ===== ToggleButton (toolbar) ===== -->
+    <Style Selector="ToggleButton.toolbar">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Padding" Value="6,4" />
+      <Setter Property="MinWidth" Value="32" />
+      <Setter Property="MinHeight" Value="32" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ToggleButton.toolbar:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background">
+        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+          <GradientStop Color="#EDF4FF" Offset="0" />
+          <GradientStop Color="#DCEAF9" Offset="1" />
+        </LinearGradientBrush>
+      </Setter>
+    </Style>
+    <Style Selector="ToggleButton.toolbar:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#D0E0F8" />
+    </Style>
+
   </Application.Styles>
 
 </Application>
