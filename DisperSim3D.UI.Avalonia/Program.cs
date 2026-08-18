@@ -28,10 +28,13 @@ namespace DisperSim3D.UI.Avalonia
             return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         }
 
+        // No embedded font is registered here: without a WithXxxFont() call the
+        // Avalonia font manager falls back to the platform default family
+        // (Segoe UI on Windows, the fontconfig default on Linux, San Francisco
+        // on macOS), so the UI matches whatever the OS uses for its own chrome.
         public static AppBuilder BuildAvaloniaApp()
             => AppBuilder.Configure<App>()
                 .UsePlatformDetect()
-                .WithInterFont()
                 .LogToTrace();
     }
 }

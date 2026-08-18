@@ -28,7 +28,6 @@
     <PackageReference Include="Avalonia" Version="11.3.15" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.15" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.15" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.15" />
     <!-- DataGrid is a separate package; pinned to the 11.3.x line. Used by
          GasLibraryItemDialog for the mixture component grid. -->
     <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.13" />
