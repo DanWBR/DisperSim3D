@@ -40,8 +40,8 @@ Linux-X11 Linux macOS Android: bin/FluidX3D
 disp-bridge-Linux:  bin/libFluidX3D.so
 disp-bridge-macOS:  bin/libFluidX3D.dylib
 
-DISP_OBJS = temp/disp_bridge.o temp/graphics.o temp/info.o temp/kernel.o \
-            temp/lbm.o temp/lodepng.o temp/setup.o temp/shapes.o
+DISP_OBJS = temp/disp_bridge.o temp/tracer_bridge.o temp/graphics.o temp/info.o \
+            temp/kernel.o temp/lbm.o temp/lodepng.o temp/setup.o temp/shapes.o
 
 bin/libFluidX3D.so: $(DISP_OBJS) make.sh
 	@mkdir -p bin
@@ -56,6 +56,14 @@ bin/libFluidX3D.dylib: $(DISP_OBJS) make.sh
 temp/disp_bridge.o: src/disp_bridge.cpp src/disp_bridge.h src/defines.hpp src/lbm.hpp src/units.hpp src/opencl.hpp src/utilities.hpp make.sh
 	@mkdir -p temp
 	$(CC) -c -fPIC src/disp_bridge.cpp -o temp/disp_bridge.o $(CFLAGS) $(LDFLAGS_OPENCL)
+
+# tracer_bridge.cpp holds the fx3d_tracer_* C ABI (GPU port of
+# BuoyantTracerEngine). The Windows vcxproj compiles it next to
+# disp_bridge.cpp; without it here the Unix .so/.dylib loads but every
+# fx3d_tracer_* P/Invoke throws EntryPointNotFoundException.
+temp/tracer_bridge.o: src/tracer_bridge.cpp src/disp_bridge.h src/defines.hpp src/lbm.hpp src/units.hpp src/opencl.hpp src/utilities.hpp make.sh
+	@mkdir -p temp
+	$(CC) -c -fPIC src/tracer_bridge.cpp -o temp/tracer_bridge.o $(CFLAGS) $(LDFLAGS_OPENCL)
 
 
 

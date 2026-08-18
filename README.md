@@ -254,6 +254,18 @@ dotnet DisperSim3D.CLI.dll --geometry-selftest   # 19/19 portable Point3D/Vector
 dotnet DisperSim3D.CLI.dll --iogp-selftest       # 27/27 IOGP 434-01 frequency checks
 ```
 
+### Installers
+
+Ready-to-install packages are built by the [`Installers`](.github/workflows/installers.yml)
+workflow and attached to every `v*` release: a Windows setup executable, a
+Debian/Ubuntu `.deb` and a macOS `.dmg`. All three bundle a self-contained
+.NET 10 runtime and the native FluidX3D bridge, so there is no prerequisite to
+install first. To build one locally, see [packaging/README.md](packaging/README.md):
+
+```bash
+packaging/linux/build-deb.sh --version 1.0.0
+```
+
 ### Requirements
 
 | Component | Notes |

@@ -1,0 +1,185 @@
+name: Installers
+
+# Builds the three desktop packages from a single source tree:
+#
+#   Windows  DisperSim3D-<version>-win-x64-setup.exe   WinForms shell + CLI (Inno Setup)
+#   Linux    dispersim3d_<version>_amd64.deb           Avalonia UI + CLI (dpkg)
+#   macOS    DisperSim3D-<version>-osx-arm64.dmg       Avalonia UI + CLI (.app in a dmg)
+#
+# Every job runs the same script a developer runs locally
+# (packaging/<os>/build-*), so a release can always be reproduced by hand.
+# Pushing a v* tag additionally publishes the three files as a GitHub release.
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.github/ISSUE_TEMPLATE/**'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to stamp (e.g. 1.0.0). Empty = csproj version + run number.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      is_release: ${{ steps.v.outputs.is_release }}
+    steps:
+      - uses: actions/checkout@v4
+      # The inputs go through the environment rather than being interpolated
+      # into the script body, so a crafted value cannot become shell code.
+      - id: v
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ -n "$INPUT_VERSION" ]; then
+            version="$INPUT_VERSION"
+            is_release=false
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
+            is_release=true
+          else
+            # Untagged build: csproj version plus the run number, marked as a
+            # pre-release so it sorts below the eventual tagged build.
+            base=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' \
+                   DisperSim3D.App/DisperSim3D.App.csproj | head -1)
+            version="${base:-0.0.0}-ci.${GITHUB_RUN_NUMBER}"
+            is_release=false
+          fi
+          echo "version=$version"       >> "$GITHUB_OUTPUT"
+          echo "is_release=$is_release" >> "$GITHUB_OUTPUT"
+          echo "Building version $version (release=$is_release)"
+
+  windows:
+    name: Windows installer
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # MSVC comes with the runner image; build-installer.ps1 finds it through
+      # vswhere, the same way it does on a developer machine.
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: ./packaging/windows/build-installer.ps1 -Version $env:VERSION
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/*-setup.exe
+          if-no-files-found: error
+
+  linux:
+    name: Linux .deb
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # build-essential compiles the FluidX3D bridge; imagemagick rescales the
+      # icon into the hicolor theme. No OpenCL dev package: the bridge links
+      # against the ICD stub bundled in FluidX3D/src/OpenCL/lib.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential imagemagick
+
+      - name: Build .deb
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: ./packaging/linux/build-deb.sh --version "$VERSION"
+
+      - name: Inspect the package
+        run: |
+          dpkg-deb --info dist/*.deb
+          # `|| true`: head closing the pipe early would otherwise surface as a
+          # SIGPIPE failure on runners that enable pipefail.
+          dpkg-deb --contents dist/*.deb | head -30 || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: dist/*.deb
+          if-no-files-found: error
+
+  macos:
+    name: macOS .dmg
+    needs: version
+    runs-on: macos-latest   # Apple Silicon; add a macos-*-intel runner here for an osx-x64 dmg
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build .dmg
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: ./packaging/macos/build-dmg.sh --version "$VERSION"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: [version, windows, linux, macos]
+    if: needs.version.outputs.is_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd artifacts
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" artifacts/* \
+            --title "DisperSim 3D $VERSION" \
+            --generate-notes \
+            --verify-tag

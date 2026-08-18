@@ -62,3 +62,8 @@ Desktop.ini
 # Reference PDFs kept locally for offline reading — not published to GitHub
 # Pages (linked via DOI / institutional repositories from docs/references.md).
 docs/*.pdf
+
+# Packaging output (packaging/<os>/build-*)
+/build/
+/dist/
+FluidX3D/temp/

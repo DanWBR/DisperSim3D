@@ -4,6 +4,14 @@
 * text=auto
 
 ###############################################################################
+# Shell scripts and desktop entries must keep LF endings: they run on
+# Linux/macOS (CI runners, the packaging builders, WSL) even when the checkout
+# lives on Windows, where text=auto would otherwise hand them CRLF.
+###############################################################################
+*.sh       text eol=lf
+*.desktop  text eol=lf
+
+###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by

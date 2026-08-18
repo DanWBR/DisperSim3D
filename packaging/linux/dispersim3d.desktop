@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=DisperSim 3D
+GenericName=Gas Dispersion Analysis
+Comment=3D gas dispersion analysis and detector placement for process safety
+Comment[pt_BR]=Análise 3D de dispersão de gases e alocação de detectores
+Exec=dispersim3d
+Icon=dispersim3d
+Terminal=false
+Categories=Science;Engineering;Physics;Education;
+Keywords=dispersion;gas;plume;CFD;OpenFOAM;LBM;safety;detector;
+StartupNotify=true
+StartupWMClass=DisperSim3D.UI.Avalonia

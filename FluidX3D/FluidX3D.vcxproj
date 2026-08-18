@@ -44,14 +44,14 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(SolutionDir)bin\</OutDir>
-    <IntDir>$(SolutionDir)temp\</IntDir>
-    <IncludePath>C:\Users\danie\source\repos\DanWBR\DisperSim 3D\FluidX3D\src;$(IncludePath)</IncludePath>
+    <OutDir>$(MSBuildThisFileDirectory)..\bin\</OutDir>
+    <IntDir>$(MSBuildThisFileDirectory)..\temp\</IntDir>
+    <IncludePath>$(MSBuildThisFileDirectory)src;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>$(SolutionDir)bin\</OutDir>
-    <IntDir>$(SolutionDir)temp\</IntDir>
-    <IncludePath>C:\Users\danie\source\repos\DanWBR\DisperSim 3D\FluidX3D\src;$(IncludePath)</IncludePath>
+    <OutDir>$(MSBuildThisFileDirectory)..\bin\</OutDir>
+    <IntDir>$(MSBuildThisFileDirectory)..\temp\</IntDir>
+    <IncludePath>$(MSBuildThisFileDirectory)src;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -61,7 +61,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)src\OpenCL\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)src\OpenCL\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
@@ -73,18 +73,18 @@
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>$(SolutionDir)src\OpenCL\lib;$(CUDA_PATH)\lib\x64</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(MSBuildThisFileDirectory)src\OpenCL\lib;$(CUDA_PATH)\lib\x64</AdditionalLibraryDirectories>
       <AdditionalDependencies>OpenCL.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>if exist "$(SolutionDir)DisperSim3D.App\bin\Release\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D.App\bin\Release\net10.0-windows\"
-if exist "$(SolutionDir)DisperSim3D.App\bin\Debug\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D.App\bin\Debug\net10.0-windows\"
-if exist "$(SolutionDir)DisperSim3D.CLI\bin\Release\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D.CLI\bin\Release\net10.0-windows\"
-if exist "$(SolutionDir)DisperSim3D.CLI\bin\Debug\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D.CLI\bin\Debug\net10.0-windows\"
-if exist "$(SolutionDir)DisperSim3D.CLI\bin\Release\net10.0" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D.CLI\bin\Release\net10.0\"
-if exist "$(SolutionDir)DisperSim3D.CLI\bin\Debug\net10.0" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D.CLI\bin\Debug\net10.0\"
-if exist "$(SolutionDir)DisperSim3D\bin\Release\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D\bin\Release\net10.0-windows\"
-if exist "$(SolutionDir)DisperSim3D\bin\Debug\net10.0-windows" copy /Y "$(TargetPath)" "$(SolutionDir)DisperSim3D\bin\Debug\net10.0-windows\"</Command>
+      <Command>if exist "$(MSBuildThisFileDirectory)..\DisperSim3D.App\bin\Release\net10.0-windows" copy /Y "$(TargetPath)" "$(MSBuildThisFileDirectory)..\DisperSim3D.App\bin\Release\net10.0-windows\"
+if exist "$(MSBuildThisFileDirectory)..\DisperSim3D.App\bin\Debug\net10.0-windows" copy /Y "$(TargetPath)" "$(MSBuildThisFileDirectory)..\DisperSim3D.App\bin\Debug\net10.0-windows\"
+if exist "$(MSBuildThisFileDirectory)..\DisperSim3D.CLI\bin\Release\net10.0-windows" copy /Y "$(TargetPath)" "$(MSBuildThisFileDirectory)..\DisperSim3D.CLI\bin\Release\net10.0-windows\"
+if exist "$(MSBuildThisFileDirectory)..\DisperSim3D.CLI\bin\Debug\net10.0-windows" copy /Y "$(TargetPath)" "$(MSBuildThisFileDirectory)..\DisperSim3D.CLI\bin\Debug\net10.0-windows\"
+if exist "$(MSBuildThisFileDirectory)..\DisperSim3D.CLI\bin\Release\net10.0" copy /Y "$(TargetPath)" "$(MSBuildThisFileDirectory)..\DisperSim3D.CLI\bin\Release\net10.0\"
+if exist "$(MSBuildThisFileDirectory)..\DisperSim3D.CLI\bin\Debug\net10.0" copy /Y "$(TargetPath)" "$(MSBuildThisFileDirectory)..\DisperSim3D.CLI\bin\Debug\net10.0\"
+if exist "$(MSBuildThisFileDirectory)..\DisperSim3D\bin\Release\net10.0-windows" copy /Y "$(TargetPath)" "$(MSBuildThisFileDirectory)..\DisperSim3D\bin\Release\net10.0-windows\"
+if exist "$(MSBuildThisFileDirectory)..\DisperSim3D\bin\Debug\net10.0-windows" copy /Y "$(TargetPath)" "$(MSBuildThisFileDirectory)..\DisperSim3D\bin\Debug\net10.0-windows\"</Command>
       <Message>Copying FluidX3D.dll to C# output directories</Message>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -96,7 +96,7 @@ if exist "$(SolutionDir)DisperSim3D\bin\Debug\net10.0-windows" copy /Y "$(Target
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)src\OpenCL\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(MSBuildThisFileDirectory)src\OpenCL\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
@@ -108,7 +108,7 @@ if exist "$(SolutionDir)DisperSim3D\bin\Debug\net10.0-windows" copy /Y "$(Target
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>$(SolutionDir)src\OpenCL\lib;$(CUDA_PATH)\lib\x64</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(MSBuildThisFileDirectory)src\OpenCL\lib;$(CUDA_PATH)\lib\x64</AdditionalLibraryDirectories>
       <AdditionalDependencies>OpenCL.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
