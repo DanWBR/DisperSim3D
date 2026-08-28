@@ -112,6 +112,8 @@ GPU selection (multi-GPU systems) and on-demand VRAM/RAM/disk sizing live under 
   capped by Mudan's soot correlation for pools and 350 kW/m² for jets, and both the
   flame diameter and the SEP can be overridden per source
 - **Point-source radiation** kept as the fast preview model, selectable per fire source
+- **Obstacle shading** — plant geometry casts radiation shadows: a flame panel a wall
+  hides contributes nothing, and a cell inside solid geometry is not exposed at all
 - Receiver orientation per scenario: worst case, horizontal, or vertical
 - 3D isosurfaces and contour planes of kW/m², plus radiation as a monitor and
   detector quantity

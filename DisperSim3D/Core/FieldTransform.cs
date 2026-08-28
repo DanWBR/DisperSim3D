@@ -123,6 +123,10 @@ namespace DisperSim3D.Core
             // the receiver, so they are resolved once here rather than per cell.
             var emitters = SolidFlameModel.PrepareAll(sources, meteo.WindVector);
 
+            // Plant geometry casts radiation shadows. Null when the scene has no
+            // decorations, which skips every occlusion test.
+            var occluder = RayBoxIntersector.Occluder.From(SceneObstacles.Collect(scene));
+
             // One solid-flame cell costs ~100 panel evaluations against ~1 for the point
             // source, so a 60³ grid goes from ~10⁵ to ~10⁷ operations. Splitting on k
             // keeps that in the tenths of a second and the writes stay disjoint.
@@ -136,11 +140,21 @@ namespace DisperSim3D.Core
                     {
                         double x = -halfM + (i + 0.5) * dx;
                         var receiver = new Geometry.Point3D(x, y, z);
+
+                        // A cell inside solid geometry is not exposed at all.
+                        if (occluder != null && occluder.Contains(x, y, z))
+                        {
+                            output[i, j, k] = 0;
+                            continue;
+                        }
+
                         double sumKwM2 = 0;
 
                         foreach (var src in sources)
                         {
                             if (src == null || src.RadiationModel != RadiationModel.PointSource) continue;
+                            // The point source has one ray to block, from the source itself.
+                            if (occluder != null && occluder.Blocks(receiver, src.Position)) continue;
                             double dxp = x - src.Position.X;
                             double dyp = y - src.Position.Y;
                             double dzp = z - src.Position.Z;
@@ -151,7 +165,7 @@ namespace DisperSim3D.Core
                         for (int e = 0; e < emitters.Count; e++)
                         {
                             sumKwM2 += SolidFlameModel.FluxKwM2(
-                                emitters[e], receiver, receiverMode, ambientT, humidity);
+                                emitters[e], receiver, receiverMode, ambientT, humidity, occluder);
                         }
 
                         output[i, j, k] = sumKwM2;
@@ -244,6 +258,9 @@ namespace DisperSim3D.Core
             var meteo = ResolveMeteo(scene);
             var receiver = new Geometry.Point3D(x, y, z);
             var receiverMode = scene.FireScenario.ReceiverMode;
+            var occluder = RayBoxIntersector.Occluder.From(SceneObstacles.Collect(scene));
+            if (occluder != null && occluder.Contains(x, y, z)) return 0;
+
             double sumKwM2 = 0;
 
             foreach (var src in scene.FireScenario.Sources)
@@ -256,10 +273,11 @@ namespace DisperSim3D.Core
                     // cheap next to the grid sweep in BuildRadiationField.
                     var emitter = SolidFlameModel.Prepare(src, meteo.WindVector);
                     sumKwM2 += SolidFlameModel.FluxKwM2(emitter, receiver, receiverMode,
-                        meteo.AmbientTemperature, meteo.RelativeHumidity);
+                        meteo.AmbientTemperature, meteo.RelativeHumidity, occluder);
                 }
                 else
                 {
+                    if (occluder != null && occluder.Blocks(receiver, src.Position)) continue;
                     double dx = x - src.Position.X;
                     double dy = y - src.Position.Y;
                     double dz = z - src.Position.Z;

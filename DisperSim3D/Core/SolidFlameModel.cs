@@ -251,8 +251,11 @@ namespace DisperSim3D.Core
         /// <c>|G|</c>, a horizontal (upward-facing) receiver gets <c>G_z</c>, and the
         /// best vertical orientation gets the magnitude of the horizontal part.</para>
         /// </summary>
+        /// <param name="occluder">Plant geometry that can hide part of the flame.
+        /// Null means an unobstructed scene, which skips the tests entirely.</param>
         public static double FluxKwM2(Emitter emitter, Point3D receiver, ReceiverMode mode,
-            double ambientTempK, double relativeHumidity)
+            double ambientTempK, double relativeHumidity,
+            RayBoxIntersector.Occluder occluder = null)
         {
             if (emitter?.Panels == null || emitter.Panels.Length == 0 || emitter.SepKwM2 <= 0)
                 return 0;
@@ -280,6 +283,11 @@ namespace DisperSim3D.Core
                 var n = panels[i].Normal;
                 double cosSource = -(n.X * ux + n.Y * uy + n.Z * uz);
                 if (cosSource <= 0) continue;
+
+                // A panel the geometry hides contributes nothing — this is the whole
+                // of the obstacle shading, and it works precisely because the view
+                // factor is integrated panel by panel.
+                if (occluder != null && occluder.Blocks(receiver, panels[i].Center)) continue;
 
                 double tau = Transmissivity(r, ambientTempK, relativeHumidity);
                 double w = tau * cosSource * panels[i].AreaM2 / (Math.PI * r * r);

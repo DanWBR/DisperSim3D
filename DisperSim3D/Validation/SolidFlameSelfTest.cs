@@ -212,6 +212,124 @@ namespace DisperSim3D.Validation
                     $"field={atPoint:E4} direct={direct:E4} kW/m²"));
             }
 
+            // ── Obstacle shading ────────────────────────────────────────────
+            {
+                var jet = MakeJet();
+                var emitter = SolidFlameModel.Prepare(jet, noWind);
+                var receiver = new Point3D(jet.Position.X, jet.Position.Y + 30, jet.Position.Z);
+
+                double clear = SolidFlameModel.FluxKwM2(emitter, receiver,
+                    ReceiverMode.MaxOriented, AmbientTempK, 0.5);
+
+                // Same call, empty obstacle set: the shading path must not perturb the
+                // unobstructed answer at all.
+                double emptyOccluder = SolidFlameModel.FluxKwM2(emitter, receiver,
+                    ReceiverMode.MaxOriented, AmbientTempK, 0.5,
+                    RayBoxIntersector.Occluder.From(new List<BoundingBox>()));
+                results.Add(new Result("an empty obstacle set changes nothing",
+                    emptyOccluder == clear,
+                    $"clear={clear:F4} empty={emptyOccluder:F4} kW/m²"));
+
+                // A wall spanning the whole line of sight, halfway to the receiver.
+                var wall = RayBoxIntersector.Occluder.From(new List<BoundingBox>
+                {
+                    new BoundingBox(new Point3D(-60, 14.5, -1), new Point3D(60, 15.5, 40))
+                });
+                double shaded = SolidFlameModel.FluxKwM2(emitter, receiver,
+                    ReceiverMode.MaxOriented, AmbientTempK, 0.5, wall);
+                results.Add(new Result("a wall across the line of sight blocks the flux",
+                    shaded == 0 && clear > 0,
+                    $"clear={clear:F4} atrás da parede={shaded:F4} kW/m²"));
+
+                // Just past the wall's edge the receiver sees the flame again.
+                var shortWall = RayBoxIntersector.Occluder.From(new List<BoundingBox>
+                {
+                    new BoundingBox(new Point3D(-60, 14.5, -1), new Point3D(-2, 15.5, 40))
+                });
+                double besideWall = SolidFlameModel.FluxKwM2(emitter, receiver,
+                    ReceiverMode.MaxOriented, AmbientTempK, 0.5, shortWall);
+                results.Add(new Result("beside the wall the flux comes back",
+                    Math.Abs(besideWall - clear) < 1e-9,
+                    $"ao lado={besideWall:F4} livre={clear:F4} kW/m²"));
+
+                // A narrow pillar close to the flame hides the panels behind it and
+                // leaves the rest of the flame in view. (A wall tall enough to span the
+                // flame's full height would block everything, partial in name only.)
+                var pillar = RayBoxIntersector.Occluder.From(new List<BoundingBox>
+                {
+                    new BoundingBox(new Point3D(8, 1.0, -4), new Point3D(12, 2.0, 4))
+                });
+                double partial = SolidFlameModel.FluxKwM2(emitter, receiver,
+                    ReceiverMode.MaxOriented, AmbientTempK, 0.5, pillar);
+                results.Add(new Result("a partial wall removes part of the flux",
+                    partial > 0 && partial < clear,
+                    $"parcial={partial:F4} livre={clear:F4} kW/m²"));
+            }
+
+            // ── Ray / box intersection ──────────────────────────────────────
+            {
+                var box = new BoundingBox(new Point3D(-1, -1, -1), new Point3D(1, 1, 1));
+
+                results.Add(new Result("a segment through the box hits it",
+                    RayBoxIntersector.SegmentHitsBox(
+                        new Point3D(-5, 0, 0), new Point3D(5, 0, 0), box)));
+                results.Add(new Result("a segment past the box misses it",
+                    !RayBoxIntersector.SegmentHitsBox(
+                        new Point3D(-5, 3, 0), new Point3D(5, 3, 0), box)));
+                results.Add(new Result("a segment stopping short of the box misses it",
+                    !RayBoxIntersector.SegmentHitsBox(
+                        new Point3D(-5, 0, 0), new Point3D(-2, 0, 0), box)));
+                results.Add(new Result("a segment starting inside the box hits it",
+                    RayBoxIntersector.SegmentHitsBox(
+                        new Point3D(0, 0, 0), new Point3D(9, 9, 9), box)));
+                // Parallel to an axis, offset just outside the slab: the degenerate
+                // branch has to reject it rather than divide by zero.
+                results.Add(new Result("a segment parallel to a face just outside misses",
+                    !RayBoxIntersector.SegmentHitsBox(
+                        new Point3D(-5, 1.001, 0), new Point3D(5, 1.001, 0), box)));
+            }
+
+            // ── Shading through the scene ───────────────────────────────────
+            {
+                var scene = new Scene3D();
+                var jet = MakeJet();
+                jet.Position = new Point3D(0, 0, 2);
+                scene.FireScenario.Sources.Add(jet);
+
+                double clear = FieldTransform.RadiationAtPoint(scene, 0, 40, 2);
+
+                scene.Decorations.Add(new Decoration3D
+                {
+                    Name = "wall",
+                    // Taller than the domain: the radiation grid's z runs to 2*half,
+                    // so a shorter wall would leave the upper cells seeing over it.
+                    BoundingBox = new BoundingBox(
+                        new Point3D(-60, 19.5, -1), new Point3D(60, 20.5, 500))
+                });
+                double shaded = FieldTransform.RadiationAtPoint(scene, 0, 40, 2);
+                results.Add(new Result("scene decorations shade the point sample",
+                    clear > 0 && shaded == 0,
+                    $"livre={clear:F4} sombreado={shaded:F4} kW/m²"));
+
+                double insideWall = FieldTransform.RadiationAtPoint(scene, 0, 20, 2);
+                results.Add(new Result("a receiver inside solid geometry gets nothing",
+                    insideWall == 0));
+
+                var field = FieldTransform.BuildRadiationField(scene, 24, 24, 12, 60);
+                double behindWall = 0, beforeWall = 0;
+                for (int i = 0; i < 24; i++)
+                    for (int j = 0; j < 24; j++)
+                        for (int k = 0; k < 12; k++)
+                        {
+                            double y = -60 + (j + 0.5) * (120.0 / 24);
+                            if (y > 25 && field[i, j, k] > behindWall) behindWall = field[i, j, k];
+                            if (y > 0 && y < 15 && field[i, j, k] > beforeWall) beforeWall = field[i, j, k];
+                        }
+                results.Add(new Result("the field is dark behind the wall and lit before it",
+                    behindWall == 0 && beforeWall > 0,
+                    $"antes={beforeWall:F3} atrás={behindWall:F3} kW/m²"));
+            }
+
             return results;
         }
 

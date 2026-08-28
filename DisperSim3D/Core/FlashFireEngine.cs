@@ -246,17 +246,10 @@ namespace DisperSim3D.Core
             return null;
         }
 
-        /// <summary>Obstacle boxes from the scene decorations. The portable path — the
-        /// WPF host can voxelise imported meshes per triangle, but every consumer here
-        /// only needs "does the flame get through".</summary>
+        /// <summary>Obstacle boxes from the scene. Kept as a forwarder so callers
+        /// that already reach for the engine keep working.</summary>
         public static List<BoundingBox> CollectObstacles(Scene3D scene)
-        {
-            var boxes = new List<BoundingBox>();
-            if (scene?.Decorations == null) return boxes;
-            foreach (var deco in scene.Decorations)
-                if (deco?.BoundingBox != null) boxes.Add(deco.BoundingBox);
-            return boxes;
-        }
+            => SceneObstacles.Collect(scene);
 
         // ── Helpers ─────────────────────────────────────────────────────────
 
