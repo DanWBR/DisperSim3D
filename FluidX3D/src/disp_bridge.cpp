@@ -111,7 +111,9 @@ FX3D_API uint64_t fx3d_create_on_device(uint32_t Nx, uint32_t Ny, uint32_t Nz,
             // Explicit single-device pick. We seed FluidX3D's main_arguments
             // (used by smart_device_selection) so the single-domain LBM constructor
             // picks the requested device ID without us touching its internals.
-            extern std::vector<std::string> main_arguments;
+            // The variable is declared in graphics.hpp, which lbm.hpp pulls in; do
+            // NOT re-declare it here, because this sits inside extern "C" and the
+            // re-declaration would take C linkage. Clang rejects that outright.
             main_arguments.clear();
             main_arguments.push_back(std::to_string((uint32_t)device_id));
             lbm = std::make_unique<LBM>(Nx, Ny, Nz, nu, gx, gy, gz, 0.0f, alpha, beta);
