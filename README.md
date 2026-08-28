@@ -120,6 +120,11 @@ GPU selection (multi-GPU systems) and on-demand VRAM/RAM/disk sizing live under 
   the envelope is drawn at half the LFL (turbulent-fluctuation allowance). Outputs
   the hazard envelope, the flame arrival time per cell, the burnt volume and mass,
   and the burn duration that a thermal-dose calculation needs
+- **Thermal dose and harm probability** — `V = t·I^(4/3)` with the Eisenberg
+  fatality probit and the TNO burn probits, rendered as isosurfaces of dose or of
+  fatality probability. Exposure is the scenario's escape time for jet and pool
+  fires, and the flame arrival time for a flash fire. Fire consequence for risk
+  work is the footprint above 1% lethality
 
 ---
 

@@ -64,6 +64,7 @@ namespace DisperSim3D.CLI
             bool fireRoundTripSelftest = false;
             bool solidFlameSelftest = false;
             bool flashFireSelftest = false;
+            bool thermalDoseSelftest = false;
             bool tracerGpuSelftest = false;
             string listIogpType = null;        // null = "no --list-iogp"; "" = all 24; otherwise the type name
             bool memoryEstimate = false;
@@ -141,6 +142,9 @@ namespace DisperSim3D.CLI
                     case "--flash-fire-selftest":
                         flashFireSelftest = true;
                         break;
+                    case "--thermal-dose-selftest":
+                        thermalDoseSelftest = true;
+                        break;
                     case "--list-iogp":
                         // Optional positional: equipment type name. We peek the
                         // next arg; if it starts with '-' it's the next flag.
@@ -187,6 +191,7 @@ namespace DisperSim3D.CLI
             if (fireRoundTripSelftest) return RunFireRoundTripSelfTest();
             if (solidFlameSelftest) return RunSolidFlameSelfTest();
             if (flashFireSelftest) return RunFlashFireSelfTest();
+            if (thermalDoseSelftest) return RunThermalDoseSelfTest();
             if (listIogpType != null) return RunListIogp(listIogpType);
             if (memoryEstimate) return RunMemoryEstimate(memSolverArg, memNxArg);
             if (twoPhaseTest) return RunTwoPhaseTest();
@@ -468,6 +473,23 @@ namespace DisperSim3D.CLI
             {
                 Console.Write(IogpTableTests.RunAll());
                 return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return 1;
+            }
+        }
+
+        /// <summary>Wrapper around <see cref="ThermalDoseSelfTest.RunAndPrint"/>.
+        /// Returns 0 when the dose, the probits and the error function match their
+        /// published anchors — 20 s at ~18 kW/m² for 1% lethality and ~36 kW/m² for
+        /// 50% — 1 otherwise.</summary>
+        static int RunThermalDoseSelfTest()
+        {
+            try
+            {
+                return ThermalDoseSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             }
             catch (Exception ex)
             {
@@ -1619,6 +1641,8 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             the point source and its limiting cases.");
             Console.WriteLine("  --flash-fire-selftest      Ignite synthetic clouds and check the burnt");
             Console.WriteLine("                             envelope, connectivity and burn-back timing.");
+            Console.WriteLine("  --thermal-dose-selftest    Check the thermal dose, the harm probits and");
+            Console.WriteLine("                             the error function against published anchors.");
             Console.WriteLine("  --list-iogp [type]         Dump IOGP leak-frequency table (one type or");
             Console.WriteLine("                             all 24). e.g. --list-iogp SteelProcessPipe");
             Console.WriteLine("  --memory-estimate <solver> <N>");

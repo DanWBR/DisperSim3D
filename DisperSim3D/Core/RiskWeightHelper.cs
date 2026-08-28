@@ -106,6 +106,31 @@ namespace DisperSim3D.Core
             return vol;
         }
 
+        /// <summary>
+        /// Fire analogue of <see cref="AutoConsequence"/>: the volume of the scene
+        /// where the fatality probability from the fire sources reaches
+        /// <paramref name="probabilityThreshold"/>.
+        ///
+        /// With no population model in the project, an exposed footprint is the
+        /// honest consequence measure — it says how much of the plant the fire can
+        /// harm, not how many people it kills. Pair it with the IOGP leak frequency
+        /// the same way the dispersion side does.
+        /// </summary>
+        public static double AutoConsequenceFire(Scene3D scene, int nx, int ny, int nz,
+            double domainHalfM, double probabilityThreshold = 0.01)
+        {
+            if (scene?.FireScenario?.Sources == null || scene.FireScenario.Sources.Count == 0)
+                return 0.0;
+
+            var fatality = FieldTransform.BuildAnalyticField(scene,
+                ViewFieldProperty.FatalityProbability, nx, ny, nz, domainHalfM);
+
+            double dx = 2.0 * domainHalfM / Math.Max(1, nx);
+            double dy = 2.0 * domainHalfM / Math.Max(1, ny);
+            double dz = 2.0 * domainHalfM / Math.Max(1, nz);
+            return ThermalDose.FootprintVolumeM3(fatality, dx * dy * dz, probabilityThreshold);
+        }
+
         /// <summary>Resolves the per-scenario risk product
         /// `R_s = freq_s × cons_s × P_d` for one cloud, honouring the auto/manual
         /// modes stored in <see cref="DispersionStudy.RiskWeights"/>. Used by the

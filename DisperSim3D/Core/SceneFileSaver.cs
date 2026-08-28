@@ -658,6 +658,7 @@ namespace DisperSim3D.Core
             return new XElement("FireScenario",
                 new XAttribute("Name", fs.Name ?? ""),
                 new XAttribute("ReceiverMode", fs.ReceiverMode.ToString()),
+                new XAttribute("ExposureTimeS", fs.ExposureTimeS.ToString(inv)),
                 new XElement("RadLevels",
                     string.Join(",", fs.RadiationContourLevels.Select(l => l.ToString(inv)))),
                 new XElement("FireSources",

@@ -106,6 +106,7 @@ namespace DisperSim3D.Validation
             scene.FireScenario.Name = "Cenário de teste";
             scene.FireScenario.RadiationContourLevels = new List<double> { 2500, 8000, 25000 };
             scene.FireScenario.ReceiverMode = ReceiverMode.Vertical;
+            scene.FireScenario.ExposureTimeS = 35.0;
 
             // Humidity feeds the solid-flame transmissivity, and it rides on the
             // project meteo, so the round trip has to carry it too.
@@ -209,6 +210,10 @@ namespace DisperSim3D.Validation
             results.Add(new Result(prefix + "receiver mode",
                 b.ReceiverMode == a.ReceiverMode,
                 $"expected={a.ReceiverMode} actual={b.ReceiverMode}"));
+
+            results.Add(new Result(prefix + "exposure time",
+                Near(a.ExposureTimeS, b.ExposureTimeS),
+                $"expected={a.ExposureTimeS} actual={b.ExposureTimeS}"));
 
             CompareIgnitions(original, reloaded, prefix, results);
 

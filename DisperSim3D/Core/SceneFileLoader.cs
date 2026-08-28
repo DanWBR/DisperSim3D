@@ -560,6 +560,8 @@ namespace DisperSim3D.Core
                 && Enum.TryParse(receiverMode, out ReceiverMode parsedReceiverMode))
                 scene.FireScenario.ReceiverMode = parsedReceiverMode;
 
+            scene.FireScenario.ExposureTimeS = AttrDouble(fireEl, inv, 20.0, "ExposureTimeS");
+
             var levelsEl = fireEl.Element("RadLevels");
             if (levelsEl != null && !string.IsNullOrWhiteSpace(levelsEl.Value))
             {

@@ -29,10 +29,12 @@ namespace DisperSim3D.Core
                 // The engine returns kg/m³ — we back-derive Y by dividing by ρ_air
                 // before feeding the transform helper.
                 double measured;
-                if (det.MeasuredQuantity == ViewFieldProperty.ThermalRadiationKwM2)
+                if (FieldTransform.IsAnalytic(det.MeasuredQuantity))
                 {
-                    measured = FieldTransform.RadiationAtPoint(sceneForRadiation,
-                        det.Position.X, det.Position.Y, det.Position.Z);
+                    // Radiation, thermal dose and fatality probability all come from
+                    // the scene's fire sources rather than the dispersion field.
+                    measured = FieldTransform.AnalyticAtPoint(sceneForRadiation,
+                        det.MeasuredQuantity, det.Position.X, det.Position.Y, det.Position.Z);
                 }
                 else if (det.MeasuredQuantity == ViewFieldProperty.ConcentrationKgM3
                       || det.MeasuredQuantity == ViewFieldProperty.Concentration

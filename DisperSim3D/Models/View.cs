@@ -60,7 +60,13 @@ namespace DisperSim3D.Models
         FlashFireArrivalS = 15,
         /// <summary>1 inside the flash-fire hazard envelope, 0 outside. Take the
         /// isosurface at 0.5 to draw the envelope.</summary>
-        FlashFireEnvelope = 16
+        FlashFireEnvelope = 16,
+        /// <summary>Thermal dose (W/m²)^(4/3)·s from the radiation field and the
+        /// scenario's exposure time.</summary>
+        ThermalDose = 17,
+        /// <summary>Probability of fatality (0–1) from the thermal dose, via the
+        /// Eisenberg probit.</summary>
+        FatalityProbability = 18
     }
 
     /// <summary>How the View collapses transient timesteps to a single field.</summary>

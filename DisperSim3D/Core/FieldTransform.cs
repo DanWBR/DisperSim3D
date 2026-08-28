@@ -47,7 +47,9 @@ namespace DisperSim3D.Core
         /// <summary>True when the property is computed analytically from the scene,
         /// not sampled from the CFD result (e.g. thermal radiation from FireSources).</summary>
         public static bool IsAnalytic(ViewFieldProperty p)
-            => p == ViewFieldProperty.ThermalRadiationKwM2;
+            => p == ViewFieldProperty.ThermalRadiationKwM2
+            || p == ViewFieldProperty.ThermalDose
+            || p == ViewFieldProperty.FatalityProbability;
 
         /// <summary>True when the property is derived from a simulation result AND
         /// the scene: the concentration snapshot is loaded and transformed as usual,
@@ -161,6 +163,38 @@ namespace DisperSim3D.Core
         }
 
         /// <summary>
+        /// Builds whichever analytic field the property asks for. Radiation is the
+        /// base; dose applies the scenario's exposure time to it, and the fatality
+        /// probability runs the dose through the Eisenberg probit.
+        /// </summary>
+        public static double[,,] BuildAnalyticField(Scene3D scene, ViewFieldProperty property,
+            int nx, int ny, int nz, double halfM)
+        {
+            var radiation = BuildRadiationField(scene, nx, ny, nz, halfM);
+            if (property == ViewFieldProperty.ThermalRadiationKwM2) return radiation;
+
+            double exposure = scene?.FireScenario?.ExposureTimeS ?? 20.0;
+            var dose = ThermalDose.BuildDoseField(radiation, exposure);
+            return property == ViewFieldProperty.ThermalDose
+                ? dose
+                : ThermalDose.BuildFatalityField(dose);
+        }
+
+        /// <summary>Point sample of an analytic field, for monitors and detectors.</summary>
+        public static double AnalyticAtPoint(Scene3D scene, ViewFieldProperty property,
+            double x, double y, double z)
+        {
+            double radiation = RadiationAtPoint(scene, x, y, z);
+            if (property == ViewFieldProperty.ThermalRadiationKwM2) return radiation;
+
+            double exposure = scene?.FireScenario?.ExposureTimeS ?? 20.0;
+            double dose = ThermalDose.Dose(radiation, exposure);
+            return property == ViewFieldProperty.ThermalDose
+                ? dose
+                : ThermalDose.ProbitToProbability(ThermalDose.FatalityProbit(dose));
+        }
+
+        /// <summary>
         /// Meteorology backing the analytic radiation field: wind sets the flame tilt,
         /// ambient temperature and humidity set the atmospheric transmissivity. Follows
         /// the precedence the UI already uses — the first wind-field scenario, then the
@@ -259,6 +293,8 @@ namespace DisperSim3D.Core
                 case ViewFieldProperty.ThermalRadiationKwM2: return "kW/m²";
                 case ViewFieldProperty.FlashFireArrivalS:    return "s";
                 case ViewFieldProperty.FlashFireEnvelope:    return "";
+                case ViewFieldProperty.ThermalDose:          return "(W/m²)^4/3·s";
+                case ViewFieldProperty.FatalityProbability:  return "";
                 default:                                     return "";
             }
         }

@@ -5185,8 +5185,9 @@ namespace DisperSim3D.Controls
         private double ApplyMonitorTransform(MonitorPoint3D mon, double concKgM3)
         {
             var q = mon.MeasuredQuantity;
-            if (q == DisperSim3D.Models.ViewFieldProperty.ThermalRadiationKwM2)
-                return Core.FieldTransform.RadiationAtPoint(_scene, mon.Position.X, mon.Position.Y, mon.Position.Z);
+            if (Core.FieldTransform.IsAnalytic(q))
+                return Core.FieldTransform.AnalyticAtPoint(_scene, q,
+                    mon.Position.X, mon.Position.Y, mon.Position.Z);
             if (q == DisperSim3D.Models.ViewFieldProperty.ConcentrationKgM3) return concKgM3;
             if (q == DisperSim3D.Models.ViewFieldProperty.Concentration
                 || q == DisperSim3D.Models.ViewFieldProperty.MassFraction)

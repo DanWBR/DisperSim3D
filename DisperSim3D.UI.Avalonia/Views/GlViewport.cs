@@ -2876,9 +2876,10 @@ void main() { }
             int nz = Math.Max(1, nx / 2);
             double half = sim.SnapshotDomainSizeM > 0 ? sim.SnapshotDomainSizeM : 200;
 
-            // Try analytic field first (thermal radiation)
+            // Try analytic fields first (thermal radiation, dose, fatality)
             if (FieldTransform.IsAnalytic(view.FieldProperty))
-                return FieldTransform.BuildRadiationField(scene, nx, ny, nz, half);
+                return FieldTransform.BuildAnalyticField(
+                    scene, view.FieldProperty, nx, ny, nz, half);
 
             // Resolve OpenFOAM field name from the view property
             string? fieldName = ResolveFieldName(view.FieldProperty, sim);

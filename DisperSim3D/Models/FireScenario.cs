@@ -161,5 +161,14 @@ namespace DisperSim3D.Models
         /// applies to the whole radiation field.
         /// </summary>
         public ReceiverMode ReceiverMode { get; set; } = ReceiverMode.MaxOriented;
+
+        /// <summary>
+        /// Exposure time (s) behind the thermal dose and the fatality probability.
+        /// For a jet or pool fire this is a property of the people, not of the fire:
+        /// how long before they are out of the flux. The default 20 s is the usual
+        /// escape-time assumption. A flash fire instead gets its exposure per cell
+        /// from the flame arrival time.
+        /// </summary>
+        public double ExposureTimeS { get; set; } = 20.0;
     }
 }
