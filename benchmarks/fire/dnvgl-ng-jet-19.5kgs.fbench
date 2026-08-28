@@ -1,0 +1,50 @@
+{
+  "$schema": "fbench/v1",
+  "name": "DNV GL 19.5 kg/s natural gas horizontal jet",
+  "citation": "Miller, D. (2017). New Model for Predicting Thermal Radiation from Flares and High Pressure Jet Fires for Hydrogen and Syngas. Process Safety Progress 36(3), 237-251. DOI 10.1002/prs.11867.",
+  "dataConfidence": "High",
+  "description": "Horizontal natural gas jet fire from the DNV GL (2008) programme, as tabulated in the full dataset at the end of Miller (2017). Pure methane (C1 = 1), 5 m/s wind at 10 m. Flame length only: the source tabulates the centreline length but no radiometer readings, so this bench checks the correlation and nothing downstream of it. These three sit inside the 0.1-32 kg/s release range this project targets.",
+  "fire": {
+    "kind": "jet",
+    "fuel": "natural gas",
+    "massFlowRateKgS": 19.5,
+    "orificeDiameterM": 0.0508,
+    "heatOfCombustionJKg": 50000000,
+    "radiativeFraction": 0.14,
+    "fuelMolarMassKgMol": 0.01604,
+    "isSootyFuel": true,
+    "position": [
+      0,
+      0,
+      0
+    ],
+    "direction": [
+      1,
+      0,
+      0
+    ]
+  },
+  "ambient": {
+    "windSpeed": 5.0,
+    "windDirectionDeg": 270,
+    "ambientTemperatureK": 290,
+    "ambientPressurePa": 101325,
+    "relativeHumidity": 0.5
+  },
+  "expectedFlame": {
+    "lengthM": 49.9,
+    "note": "Centreline flame length Lf from the full dataset table of Miller (2017); the flame diameter is not tabulated, so it is not checked."
+  },
+  "radiometers": [],
+  "acceptance": {
+    "flameLengthRatioMin": 0.5,
+    "flameLengthRatioMax": 2.0,
+    "flameDiameterRatioMin": 0.5,
+    "flameDiameterRatioMax": 2.0,
+    "sepRatioMin": 0.5,
+    "sepRatioMax": 2.0,
+    "fluxRatioMin": 0.5,
+    "fluxRatioMax": 2.0,
+    "minFluxFac2Fraction": 0.8
+  }
+}

@@ -47,10 +47,23 @@ namespace DisperSim3D.Validation
             {
                 var jet = MakeJet();
                 var emitter = SolidFlameModel.Prepare(jet, noWind);
-                double expectedArea = Math.PI * emitter.FlameDiameterM * emitter.FlameLengthM;
-                results.Add(new Result("panel areas sum to the lateral area πDL",
+                // Lateral surface plus the tip cap: πDL + πr². The cap is a few percent
+                // of the total, but it is what stops a receiver off the flame tip from
+                // seeing an exact zero.
+                double radius = 0.5 * emitter.FlameDiameterM;
+                double expectedArea = Math.PI * emitter.FlameDiameterM * emitter.FlameLengthM
+                                    + Math.PI * radius * radius;
+                results.Add(new Result("panel areas sum to πDL + the tip cap",
                     RelativeNear(expectedArea, emitter.FlameAreaM2, 1e-9),
                     $"expected={expectedArea:F3} m² actual={emitter.FlameAreaM2:F3} m²"));
+
+                // A receiver straight off the tip must see the cap, not nothing.
+                var offTip = new Point3D(jet.Position.X + emitter.FlameLengthM + 30,
+                                         jet.Position.Y, jet.Position.Z);
+                double tipFlux = SolidFlameModel.FluxKwM2(emitter, offTip,
+                    ReceiverMode.MaxOriented, AmbientTempK, 0.5);
+                results.Add(new Result("a receiver off the flame tip sees the cap",
+                    tipFlux > 0, $"{tipFlux:F3} kW/m² 30 m beyond the tip"));
 
                 bool normalsOutward = true;
                 double axialLength = emitter.FlameLengthM;

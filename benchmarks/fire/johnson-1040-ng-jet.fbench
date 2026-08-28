@@ -1,0 +1,117 @@
+{
+  "$schema": "fbench/v1",
+  "name": "Johnson Test 1040 — 2.8 kg/s natural gas horizontal jet",
+  "citation": "Johnson, A.D., Brightwell, H.M., Carsley, A.J. (1994). A model for predicting the thermal radiation hazards from large scale horizontal natural gas jet fires. Hazards XII, IChemE, Manchester. Conditions and radiometer readings as tabulated in Tables 2 and 3 of: Miller, D. (2017). New Model for Predicting Thermal Radiation from Flares and High Pressure Jet Fires for Hydrogen and Syngas. Process Safety Progress 36(3), 237-251. DOI 10.1002/prs.11867.",
+  "dataConfidence": "High",
+  "description": "Large-scale horizontal natural gas jet fire from the Johnson et al. (1994) series, with the radiometer readings Miller (2017) tabulates in Table 3. Miller's frame is x along the release, y vertical, z perpendicular; the positions here are remapped to the engine's Z-up frame. The radiant fraction is Miller's AP Flame value from Table 2, which is a model output rather than a measurement — it is used as the model input here and noted as such. The wind sits 23 degrees off the release direction here, which this model does not represent: it tilts the flame toward the wind but keeps a single axis. Expect the cross-wind radiometers to disagree more than in Test 1033.",
+  "fire": {
+    "kind": "jet",
+    "fuel": "natural gas",
+    "massFlowRateKgS": 2.8,
+    "orificeDiameterM": 0.152,
+    "heatOfCombustionJKg": 50000000,
+    "radiativeFraction": 0.22,
+    "fuelMolarMassKgMol": 0.01604,
+    "isSootyFuel": true,
+    "position": [
+      0,
+      0,
+      0
+    ],
+    "direction": [
+      1,
+      0,
+      0
+    ]
+  },
+  "ambient": {
+    "windSpeed": 1.7,
+    "windDirectionDeg": 270,
+    "ambientTemperatureK": 279,
+    "ambientPressurePa": 101325,
+    "relativeHumidity": 0.89
+  },
+  "radiometers": [
+    {
+      "name": "R1",
+      "position": [
+        15,
+        10.3,
+        -0.5
+      ],
+      "measuredKwM2": 8.6,
+      "receiverMode": "MaxOriented"
+    },
+    {
+      "name": "R2",
+      "position": [
+        15,
+        14.3,
+        -0.5
+      ],
+      "measuredKwM2": 6.7,
+      "receiverMode": "MaxOriented"
+    },
+    {
+      "name": "R4",
+      "position": [
+        15,
+        24.3,
+        -0.5
+      ],
+      "measuredKwM2": 3.3,
+      "receiverMode": "MaxOriented"
+    },
+    {
+      "name": "R5",
+      "position": [
+        15,
+        30.3,
+        -0.5
+      ],
+      "measuredKwM2": 2.2,
+      "receiverMode": "MaxOriented"
+    },
+    {
+      "name": "R10",
+      "position": [
+        10,
+        18.3,
+        -0.5
+      ],
+      "measuredKwM2": 5.5,
+      "receiverMode": "MaxOriented"
+    },
+    {
+      "name": "R12",
+      "position": [
+        15,
+        -14.3,
+        -0.5
+      ],
+      "measuredKwM2": 9.6,
+      "receiverMode": "MaxOriented"
+    },
+    {
+      "name": "R13",
+      "position": [
+        15,
+        -24.6,
+        -0.5
+      ],
+      "measuredKwM2": 3.9,
+      "receiverMode": "MaxOriented"
+    }
+  ],
+  "acceptance": {
+    "flameLengthRatioMin": 0.5,
+    "flameLengthRatioMax": 2.0,
+    "flameDiameterRatioMin": 0.5,
+    "flameDiameterRatioMax": 2.0,
+    "sepRatioMin": 0.5,
+    "sepRatioMax": 2.0,
+    "fluxRatioMin": 0.5,
+    "fluxRatioMax": 2.0,
+    "minFluxFac2Fraction": 0.8
+  }
+}

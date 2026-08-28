@@ -104,10 +104,15 @@ namespace DisperSim3D.Core
         /// <summary>
         /// Discretises the flame envelope into outward-facing panels. The axis runs from
         /// the source position to <see cref="JetFireModel.FlameTip"/>, so a jet flame
-        /// carries the wind tilt the renderer already draws. Only the lateral surface is
-        /// panelled — the end caps are a small fraction of πDL for the L/D ratios these
-        /// correlations produce, and leaving them out keeps the panel areas consistent
-        /// with the area used for the SEP.
+        /// carries the wind tilt the renderer already draws.
+        ///
+        /// <para>The lateral surface plus the tip cap. The cap contributes a few percent
+        /// of the area, but leaving it out is not a small error where it matters: a
+        /// receiver standing directly off the flame tip sees every lateral panel edge-on
+        /// or behind, so the flux comes out as exactly zero. The Johnson Test 1083
+        /// radiometers 50-60 m straight ahead of a horizontal jet measured 2-5 kW/m²
+        /// against that zero. The base cap stays out — it faces back into the orifice or
+        /// the pool surface.</para>
         /// </summary>
         public static FlamePanel[] BuildPanels(FireSource source, Vector3D windVector,
             int circumferentialPanels = DefaultCircumferentialPanels,
@@ -133,7 +138,7 @@ namespace DisperSim3D.Core
             var v = Vector3D.CrossProduct(axis, u);    v.Normalize();
 
             double panelArea = (2.0 * Math.PI * radius / nCirc) * (length / nAxial);
-            var panels = new FlamePanel[nCirc * nAxial];
+            var panels = new FlamePanel[nCirc * nAxial + nCirc];
             int p = 0;
 
             for (int a = 0; a < nAxial; a++)
@@ -158,6 +163,27 @@ namespace DisperSim3D.Core
                         centerline.Z + normal.Z * radius);
                     panels[p++] = new FlamePanel(center, normal, panelArea);
                 }
+            }
+
+            // Tip cap: nCirc wedges of the end disc, placed at the area centroid radius
+            // 2r/3 so the quadrature is not all bunched at the axis, each facing along
+            // the flame axis.
+            double capArea = Math.PI * radius * radius / nCirc;
+            double capRadius = 2.0 * radius / 3.0;
+            var tipCenter = new Point3D(
+                basePoint.X + axis.X * length,
+                basePoint.Y + axis.Y * length,
+                basePoint.Z + axis.Z * length);
+
+            for (int c = 0; c < nCirc; c++)
+            {
+                double phi = 2.0 * Math.PI * (c + 0.5) / nCirc;
+                double cos = Math.Cos(phi), sin = Math.Sin(phi);
+                var center = new Point3D(
+                    tipCenter.X + (u.X * cos + v.X * sin) * capRadius,
+                    tipCenter.Y + (u.Y * cos + v.Y * sin) * capRadius,
+                    tipCenter.Z + (u.Z * cos + v.Z * sin) * capRadius);
+                panels[p++] = new FlamePanel(center, axis, capArea);
             }
 
             return panels;

@@ -101,7 +101,66 @@ The 6.1 m AGA case is the outlier at 0.72, and it is also the smallest by far.
 Thomas's correlation is a large-fire correlation, so this is the expected place
 for it to lose accuracy.
 
+### Natural gas jet fire results
+
+Four large-scale horizontal natural gas jet fires from Johnson et al. (1994), with
+the radiometer readings tabulated by Miller (2017), plus three DNV GL flame-length
+cases. These are the first benchmarks that exercise the view factor and the
+atmospheric transmissivity rather than only the correlations.
+
+Flame length, natural gas, across the release range this project targets:
+
+| Release | measured | predicted | ratio |
+|---|--:|--:|--:|
+| DNV GL 2.9 kg/s | 19.8 m | 23.2 m | 1.17 |
+| DNV GL 9.6 kg/s | 37.8 m | 37.5 m | 0.99 |
+| DNV GL 19.5 kg/s | 49.9 m | 49.7 m | 1.00 |
+
+Incident flux, by test:
+
+| Test | release | wind vs release | radiometer ratios |
+|---|--:|--:|---|
+| 1033 | 7.9 kg/s, 75 mm | 1° | 0.96 – 1.18, eight of eight inside FAC2 |
+| 1089 | 3.8 kg/s, 20 mm, 66 barg | −1° | 1.28 – 1.43 |
+| 1040 | 2.8 kg/s, 152 mm | −23° | 0.99 – 1.86 |
+| 1083 | 8.4 kg/s, 152 mm | 56° | fails |
+
+**Test 1033 is the one whose geometry the model actually represents** — wind along
+the release — and it lands within 18% at every one of eight radiometers, most
+within 10%. That is the view factor, the transmissivity and the emissive power
+agreeing with measurement at the same time.
+
+The other three degrade in a way that says what the model is missing:
+
+- **1089** over-predicts by 30–40% throughout. It is the high-pressure release,
+  66 barg through a 20 mm hole, and Miller records that the AP Flame model
+  over-predicts the same test — so this is a known-hard case rather than a
+  peculiarity of this implementation.
+- **1040 and 1083** have the wind 23° and 56° off the release direction. The model
+  tilts a single-axis flame toward the wind and cannot bend it sideways, so the
+  cross-wind radiometers over-predict while the ones lying along the flame stay
+  accurate (1.02 and 0.99 for the two on-axis positions in 1040). **Test 1083 is
+  left failing on purpose**: it is a true statement about a limitation, and
+  relaxing its acceptance band to make the suite green would throw that away.
+
+### The tip cap
+
+Test 1083 also found a real defect. Its radiometers 12–14 sit 50–60 m straight
+ahead of the flame on the release axis and measured 4.6, 3.3 and 2.2 kW/m². The
+model returned **exactly zero** at all three.
+
+The flame was panelled as a lateral surface only. A receiver directly off the tip
+sees every lateral panel edge-on or from behind, so every contribution is culled
+and the sum is zero — not small, zero. The end cap had been dismissed as a few
+percent of πDL, which is true of its area and irrelevant to its effect.
+
+Adding a tip cap of `nCirc` wedges brings those three back to 2.6, 2.0 and 0.9
+kW/m² against 4.6, 3.3 and 2.2. Still low, but a model that under-predicts by half
+is a different object from one that says a person standing in front of a jet fire
+receives nothing.
+
 ### What the first benchmark found
+
 
 
 The seeded Montoir 35 m LNG bench immediately exposed a real defect. The model
