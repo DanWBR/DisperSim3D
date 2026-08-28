@@ -22,6 +22,7 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
         private const string SectionIconGeometry  = "mdi-cube-outline";
         private const string SectionIconSource    = "mdi-water";
         private const string SectionIconFire      = "mdi-fire";
+        private const string SectionIconIgnition  = "mdi-flare";
         private const string SectionIconWind      = "mdi-weather-windy";
         private const string SectionIconSim       = "mdi-play-circle-outline";
         private const string SectionIconStudy     = "mdi-chart-line";
@@ -132,6 +133,20 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
                         initialVisibility: f.IsVisible,
                         iconColor: ColLeaf));
             project.Children.Add(fires);
+
+            // ── Ignitions ──────────────────────────────────────────────────
+            // Each one burns a Simulation's cloud into a flash-fire envelope.
+            var ignitions = new ProjectTreeNode("ignitions", SectionIconIgnition,
+                "Ignitions", Count(scene.Ignitions?.Count), iconColor: ColFire);
+            if (scene.Ignitions != null)
+                foreach (var g in scene.Ignitions)
+                    ignitions.Children.Add(new ProjectTreeNode(
+                        "ignition:" + g.Id, LeafIcon,
+                        string.IsNullOrEmpty(g.Name) ? "(ignition)" : g.Name,
+                        tag: g, hasVisibilityToggle: true,
+                        initialVisibility: g.IsVisible,
+                        iconColor: ColLeaf));
+            project.Children.Add(ignitions);
 
             // ── Wind Fields ────────────────────────────────────────────────
             var winds = new ProjectTreeNode("winds", SectionIconWind,

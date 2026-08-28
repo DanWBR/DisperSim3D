@@ -841,6 +841,9 @@ namespace DisperSim3D.UI.Avalonia.Views
         private async void MenuToolsAddFire_Click(object? sender, RoutedEventArgs e)
             => await AddFireSourceAsync();
 
+        private async void MenuToolsAddIgnition_Click(object? sender, RoutedEventArgs e)
+            => await AddIgnitionAsync();
+
         private async void MenuToolsAddView_Click(object? sender, RoutedEventArgs e)
             => await AddViewAsync();
 
@@ -1184,6 +1187,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 case "gas":  _ = EditGasAsync(node); break;
                 case "mon":  _ = EditMonitorAsync(node); break;
                 case "fire": _ = EditFireSourceAsync(node); break;
+                case "ignition": _ = EditIgnitionAsync(node); break;
                 case "src":  _ = EditHighPressureAsync(node); break;
                 case "sim":  _ = EditSimulationAsync(node); break;
                 case "study":_ = EditDispersionStudyAsync(node); break;
@@ -1211,6 +1215,10 @@ namespace DisperSim3D.UI.Avalonia.Views
                 case "fires":
                     AddItem("Add Fire Source…", "mdi-fire",
                         (_, _) => _ = AddFireSourceAsync());
+                    return;
+                case "ignitions":
+                    AddItem("Ignite Cloud…", "mdi-flare",
+                        (_, _) => _ = AddIgnitionAsync());
                     return;
                 case "gases":
                     AddItem("Add Gas…", "mdi-gas-cylinder",
@@ -1319,6 +1327,12 @@ namespace DisperSim3D.UI.Avalonia.Views
                         (_, _) => _ = EditFireSourceAsync(node));
                     AddItem("Delete", "mdi-trash-can-outline",
                         (_, _) => DeleteFireSource(node));
+                    return;
+                case "ignition":
+                    AddItem("Edit Ignition…", "mdi-pencil-outline",
+                        (_, _) => _ = EditIgnitionAsync(node));
+                    AddItem("Delete", "mdi-trash-can-outline",
+                        (_, _) => DeleteFromList(_scene!.Ignitions, node));
                     return;
                 case "gas":
                     AddItem("Edit Gas…", "mdi-pencil-outline",
@@ -1561,6 +1575,34 @@ namespace DisperSim3D.UI.Avalonia.Views
         {
             if (_scene?.FireScenario?.Sources is null) return;
             DeleteFromList(_scene.FireScenario.Sources, node);
+        }
+
+        // ── Ignitions ────────────────────────────────────────────────────────
+        private async Task AddIgnitionAsync()
+        {
+            if (_scene is null) { StatusText.Text = "Open or create a project first."; return; }
+            _scene.Ignitions ??= new List<IgnitionEvent>();
+
+            var dlg = new IgnitionDialog(_scene, null);
+            if (!await dlg.ShowDialog<bool>(this)) return;
+            _scene.Ignitions.Add(dlg.Result);
+            MarkDirtyAndRefresh("Added ignition: " + dlg.Result.Name);
+        }
+
+        private async Task EditIgnitionAsync(ProjectTreeNode node)
+        {
+            if (_scene is null || node.Tag is not IgnitionEvent ignition) return;
+            var dlg = new IgnitionDialog(_scene, ignition);
+            if (!await dlg.ShowDialog<bool>(this)) return;
+            // The dialog returns a fresh event; copy the fields back so anything
+            // holding a reference (a View resolving its ignition) keeps working.
+            ignition.Name             = dlg.Result.Name;
+            ignition.SimulationId     = dlg.Result.SimulationId;
+            ignition.Position         = dlg.Result.Position;
+            ignition.TimeS            = dlg.Result.TimeS;
+            ignition.EnvelopeFraction = dlg.Result.EnvelopeFraction;
+            ignition.FlameSpeedMS     = dlg.Result.FlameSpeedMS;
+            MarkDirtyAndRefresh("Updated ignition: " + ignition.Name);
         }
 
         // ── Views ────────────────────────────────────────────────────────────

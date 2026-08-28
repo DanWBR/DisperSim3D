@@ -121,6 +121,7 @@ namespace DisperSim3D.Core
                     SerializeMonitorPoints(scene, inv),
                     SerializeWindRose(scene, inv),
                     SerializeFireScenario(scene, inv),
+                SerializeIgnitions(scene, inv),
                     SerializeGasDetectors(scene, inv),
                     SerializeCfdSimulations(scene, inv, filePath)
                 ));
@@ -628,6 +629,26 @@ namespace DisperSim3D.Core
                 new XAttribute("Pressure", meteo.AmbientPressure.ToString(inv)),
                 new XAttribute("Humidity", meteo.RelativeHumidity.ToString(inv)),
                 new XAttribute("Roughness", meteo.RoughnessLengthM.ToString(inv)));
+        }
+
+        /// <summary>Ignition events. Read back by
+        /// <c>SceneFileLoader.DeserializeIgnitions</c> — keep the two in step.</summary>
+        private static XElement? SerializeIgnitions(Scene3D scene, CultureInfo inv)
+        {
+            if (scene.Ignitions == null || scene.Ignitions.Count == 0) return null;
+            return new XElement("Ignitions",
+                scene.Ignitions.Select(g =>
+                    new XElement("Ignition",
+                        new XAttribute("Id", g.Id),
+                        new XAttribute("Name", g.Name ?? ""),
+                        new XAttribute("SimulationId", g.SimulationId ?? ""),
+                        new XAttribute("PosX", g.Position.X.ToString(inv)),
+                        new XAttribute("PosY", g.Position.Y.ToString(inv)),
+                        new XAttribute("PosZ", g.Position.Z.ToString(inv)),
+                        new XAttribute("TimeS", g.TimeS.ToString(inv)),
+                        new XAttribute("EnvelopeFraction", g.EnvelopeFraction.ToString(inv)),
+                        new XAttribute("FlameSpeed", g.FlameSpeedMS.ToString(inv)),
+                        new XAttribute("IsVisible", g.IsVisible))));
         }
 
         private static XElement? SerializeFireScenario(Scene3D scene, CultureInfo inv)

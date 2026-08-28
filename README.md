@@ -115,6 +115,11 @@ GPU selection (multi-GPU systems) and on-demand VRAM/RAM/disk sizing live under 
 - Receiver orientation per scenario: worst case, horizontal, or vertical
 - 3D isosurfaces and contour planes of kW/m², plus radiation as a monitor and
   detector quantity
+- **Flash fire** — ignite a dispersion result at a point and an instant. Only the
+  cloud connected to the ignition point burns, obstacles block the flood fill, and
+  the envelope is drawn at half the LFL (turbulent-fluctuation allowance). Outputs
+  the hazard envelope, the flame arrival time per cell, the burnt volume and mass,
+  and the burn duration that a thermal-dose calculation needs
 
 ---
 

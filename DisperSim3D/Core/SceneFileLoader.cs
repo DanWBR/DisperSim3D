@@ -88,6 +88,7 @@ namespace DisperSim3D.Core
             LegacyProjectMigrator.MigrateInPlace(scene);
             DeserializeMonitorPoints(root, inv, scene);
             DeserializeFireScenario(root, inv, scene);
+            DeserializeIgnitions(root, inv, scene);
             DeserializeGasDetectors(root, inv, scene);
             DeserializeDecorations(root, inv, scene);
             DeserializeEnvironment(root, inv, scene);
@@ -616,6 +617,35 @@ namespace DisperSim3D.Core
                 if (!string.IsNullOrEmpty(id)) fire.Id = id;
 
                 scene.FireScenario.Sources.Add(fire);
+            }
+        }
+
+        /// <summary>Reads the ignition events written by
+        /// <c>SceneFileSaver.SerializeIgnitions</c>.</summary>
+        private static void DeserializeIgnitions(XElement root, CultureInfo inv, Scene3D scene)
+        {
+            var el = root.Element("Ignitions");
+            if (el == null) return;
+            foreach (var ge in el.Elements("Ignition"))
+            {
+                var ignition = new IgnitionEvent
+                {
+                    Name = (string)ge.Attribute("Name") ?? "Ignition",
+                    SimulationId = (string)ge.Attribute("SimulationId") ?? "",
+                    Position = new Point3D(
+                        AttrDouble(ge, inv, 0, "PosX"),
+                        AttrDouble(ge, inv, 0, "PosY"),
+                        AttrDouble(ge, inv, 0, "PosZ")),
+                    TimeS = AttrDouble(ge, inv, 0, "TimeS"),
+                    EnvelopeFraction = AttrDouble(ge, inv, 0.5, "EnvelopeFraction"),
+                    FlameSpeedMS = AttrDouble(ge, inv, 10.0, "FlameSpeed"),
+                    IsVisible = AttrBool(ge, true, "IsVisible")
+                };
+
+                string id = (string)ge.Attribute("Id");
+                if (!string.IsNullOrEmpty(id)) ignition.Id = id;
+
+                scene.Ignitions.Add(ignition);
             }
         }
 

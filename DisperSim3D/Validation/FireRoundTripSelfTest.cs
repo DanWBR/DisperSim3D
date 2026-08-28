@@ -22,6 +22,9 @@ namespace DisperSim3D.Validation
     /// contract: a property added to <see cref="FireSource"/> and written by the
     /// saver but not read by the loader fails here.
     ///
+    /// Ignition events are checked the same way — they ride in their own element
+    /// but share the contract.
+    ///
     /// Run via <c>DisperSim3D.CLI --fire-roundtrip-selftest</c>.
     /// </summary>
     public static class FireRoundTripSelfTest
@@ -140,6 +143,17 @@ namespace DisperSim3D.Validation
                 IsVisible = false
             });
 
+            scene.Ignitions.Add(new IgnitionEvent
+            {
+                Name = "Ignição tardia",
+                SimulationId = "sim-42",
+                Position = new Point3D(-4.5, 22.0, 1.5),
+                TimeS = 47.5,
+                EnvelopeFraction = 0.4,
+                FlameSpeedMS = 7.5,
+                IsVisible = false
+            });
+
             return scene;
         }
 
@@ -195,6 +209,8 @@ namespace DisperSim3D.Validation
             results.Add(new Result(prefix + "receiver mode",
                 b.ReceiverMode == a.ReceiverMode,
                 $"expected={a.ReceiverMode} actual={b.ReceiverMode}"));
+
+            CompareIgnitions(original, reloaded, prefix, results);
 
             var meteoA = original.GeneralSettings?.DefaultMeteo;
             var meteoB = reloaded.GeneralSettings?.DefaultMeteo;
@@ -270,6 +286,51 @@ namespace DisperSim3D.Validation
                 results.Add(new Result(tag + "FuelMolarMassKgMol",
                     Near(src.FuelMolarMassKgMol, dst.FuelMolarMassKgMol),
                     $"expected={src.FuelMolarMassKgMol} actual={dst.FuelMolarMassKgMol}"));
+                results.Add(new Result(tag + "IsVisible",
+                    dst.IsVisible == src.IsVisible,
+                    $"expected={src.IsVisible} actual={dst.IsVisible}"));
+            }
+        }
+
+        /// <summary>Ignition events ride in their own &lt;Ignitions&gt; element; the
+        /// same saver/loader contract applies, so they are checked here too.</summary>
+        private static void CompareIgnitions(Scene3D original, Scene3D reloaded,
+            string prefix, List<Result> results)
+        {
+            var a = original.Ignitions;
+            var b = reloaded.Ignitions;
+
+            results.Add(new Result(prefix + "ignition count",
+                b != null && a.Count == b.Count,
+                $"expected={a.Count} actual={b?.Count}"));
+            if (b == null || a.Count != b.Count) return;
+
+            for (int i = 0; i < a.Count; i++)
+            {
+                var src = a[i];
+                var dst = b[i];
+                string tag = $"{prefix}ignition[{i}] ";
+
+                results.Add(new Result(tag + "Id", dst.Id == src.Id,
+                    $"expected={src.Id} actual={dst.Id}"));
+                results.Add(new Result(tag + "Name", dst.Name == src.Name,
+                    $"expected='{src.Name}' actual='{dst.Name}'"));
+                results.Add(new Result(tag + "SimulationId",
+                    dst.SimulationId == src.SimulationId,
+                    $"expected={src.SimulationId} actual={dst.SimulationId}"));
+                results.Add(new Result(tag + "Position",
+                    Near(src.Position.X, dst.Position.X)
+                    && Near(src.Position.Y, dst.Position.Y)
+                    && Near(src.Position.Z, dst.Position.Z),
+                    $"expected={Fmt(src.Position)} actual={Fmt(dst.Position)}"));
+                results.Add(new Result(tag + "TimeS", Near(src.TimeS, dst.TimeS),
+                    $"expected={src.TimeS} actual={dst.TimeS}"));
+                results.Add(new Result(tag + "EnvelopeFraction",
+                    Near(src.EnvelopeFraction, dst.EnvelopeFraction),
+                    $"expected={src.EnvelopeFraction} actual={dst.EnvelopeFraction}"));
+                results.Add(new Result(tag + "FlameSpeedMS",
+                    Near(src.FlameSpeedMS, dst.FlameSpeedMS),
+                    $"expected={src.FlameSpeedMS} actual={dst.FlameSpeedMS}"));
                 results.Add(new Result(tag + "IsVisible",
                     dst.IsVisible == src.IsVisible,
                     $"expected={src.IsVisible} actual={dst.IsVisible}"));

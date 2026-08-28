@@ -70,7 +70,14 @@ namespace DisperSim3D.Core
                     LogView($"[ViewRenderer] flat-bin loaded ({(wantTemperature ? "T" : "Y")}): {result.TimeSteps.Count} ts, nx={nx} ny={ny} nz={nz}");
                 }
 
-                field = SelectField(result, view.TimeMode, view.SpecificTimeS);
+                // A flash fire burns the cloud as it stood when it was lit, so the
+                // ignition instant overrides the view's own time mode.
+                var ignition = FieldTransform.IsIgnitionDerived(view.FieldProperty)
+                    ? FlashFireEngine.FindIgnitionFor(scene, view.SimulationId)
+                    : null;
+                field = ignition != null
+                    ? SelectField(result, ViewTimeMode.SpecificTime, ignition.TimeS)
+                    : SelectField(result, view.TimeMode, view.SpecificTimeS);
                 if (field == null)
                 { LogView("[ViewRenderer] SelectField returned null"); return null; }
 
@@ -82,6 +89,15 @@ namespace DisperSim3D.Core
                 {
                     var gas = ResolveGasForSimulation(sim, scene);
                     field = FieldTransform.FromMassFraction(field, view.FieldProperty, gas);
+
+                    // Flash fire: the concentration snapshot is the input, not the
+                    // output — burn it and render the envelope or the arrival time.
+                    if (FieldTransform.IsIgnitionDerived(view.FieldProperty))
+                    {
+                        field = FlashFireEngine.BuildViewField(scene, view, field, gas, half);
+                        if (field == null)
+                        { LogView("[ViewRenderer] no IgnitionEvent for this simulation"); return null; }
+                    }
                 }
                 LogView($"[ViewRenderer] field {field.GetLength(0)}x{field.GetLength(1)}x{field.GetLength(2)}, prop={view.FieldProperty}, building {view.Kind}");
             }

@@ -36,6 +36,8 @@ namespace DisperSim3D.Core
                 case ViewFieldProperty.ConcentrationPpb:
                 case ViewFieldProperty.PercentLFL:
                 case ViewFieldProperty.PercentUFL:
+                case ViewFieldProperty.FlashFireArrivalS:
+                case ViewFieldProperty.FlashFireEnvelope:
                     return true;
                 default:
                     return false;
@@ -46,6 +48,13 @@ namespace DisperSim3D.Core
         /// not sampled from the CFD result (e.g. thermal radiation from FireSources).</summary>
         public static bool IsAnalytic(ViewFieldProperty p)
             => p == ViewFieldProperty.ThermalRadiationKwM2;
+
+        /// <summary>True when the property is derived from a simulation result AND
+        /// the scene: the concentration snapshot is loaded and transformed as usual,
+        /// then burnt by <see cref="FlashFireEngine"/> using the scene's ignition.</summary>
+        public static bool IsIgnitionDerived(ViewFieldProperty p)
+            => p == ViewFieldProperty.FlashFireArrivalS
+            || p == ViewFieldProperty.FlashFireEnvelope;
 
         /// <summary>Per-cell transform from raw mass fraction Y_i to the requested
         /// quantity. <paramref name="gas"/> must carry MolarMass, LFL, UFL (when the
@@ -77,7 +86,9 @@ namespace DisperSim3D.Core
                         switch (target)
                         {
                             case ViewFieldProperty.MoleFraction:        v = y * molarRatio; break;
-                            case ViewFieldProperty.ConcentrationKgM3:   v = y * RhoAir; break;
+                            case ViewFieldProperty.ConcentrationKgM3:
+                            case ViewFieldProperty.FlashFireArrivalS:
+                            case ViewFieldProperty.FlashFireEnvelope:   v = y * RhoAir; break;
                             case ViewFieldProperty.ConcentrationPpm:    v = y * molarRatio * 1.0e6; break;
                             case ViewFieldProperty.ConcentrationPpb:    v = y * molarRatio * 1.0e9; break;
                             case ViewFieldProperty.PercentLFL:          v = (y * RhoAir / lfl) * 100.0; break;
@@ -246,6 +257,8 @@ namespace DisperSim3D.Core
                 case ViewFieldProperty.TurbulentEpsilon:    return "m²/s³";
                 case ViewFieldProperty.TurbulentViscosity:  return "m²/s";
                 case ViewFieldProperty.ThermalRadiationKwM2: return "kW/m²";
+                case ViewFieldProperty.FlashFireArrivalS:    return "s";
+                case ViewFieldProperty.FlashFireEnvelope:    return "";
                 default:                                     return "";
             }
         }

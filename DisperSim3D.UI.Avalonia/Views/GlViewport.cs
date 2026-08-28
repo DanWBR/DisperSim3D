@@ -2913,8 +2913,14 @@ void main() { }
             if (result == null || !result.IsLoaded || result.TimeSteps.Count == 0)
                 return null;
 
-            // Select time step
-            var field = SelectField(result, view.TimeMode, view.SpecificTimeS);
+            // Select time step. A flash fire burns the cloud as it stood when it
+            // was lit, so the ignition instant overrides the view's time mode.
+            var ignition = FieldTransform.IsIgnitionDerived(view.FieldProperty)
+                ? FlashFireEngine.FindIgnitionFor(scene, view.SimulationId)
+                : null;
+            var field = ignition != null
+                ? SelectField(result, ViewTimeMode.SpecificTime, ignition.TimeS)
+                : SelectField(result, view.TimeMode, view.SpecificTimeS);
             if (field == null) return null;
 
             // Apply unit transform if needed (mass fraction → ppm, %LFL, etc.)
@@ -2922,6 +2928,11 @@ void main() { }
             {
                 var gas = ResolveGasForSimulation(sim, scene);
                 field = FieldTransform.FromMassFraction(field, view.FieldProperty, gas);
+
+                // Flash fire: the concentration snapshot is the input, not the
+                // output — burn it and render the envelope or the arrival time.
+                if (FieldTransform.IsIgnitionDerived(view.FieldProperty))
+                    field = FlashFireEngine.BuildViewField(scene, view, field, gas, half);
             }
 
             return field;

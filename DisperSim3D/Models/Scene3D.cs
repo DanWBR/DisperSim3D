@@ -131,6 +131,13 @@ namespace DisperSim3D.Models
         public List<View> Views { get; set; }
 
         /// <summary>
+        /// Ignitions of dispersion results. Each one turns a Simulation's
+        /// concentration snapshot into a flash fire; a View with a FlashFire
+        /// field property renders the one attached to its own simulation.
+        /// </summary>
+        public List<IgnitionEvent> Ignitions { get; set; }
+
+        /// <summary>
         /// Curated collections of completed simulations whose final-snapshot cloud
         /// volumes are treated as detection targets for downstream
         /// <see cref="DetectorAllocation"/> blocks.
@@ -176,6 +183,7 @@ namespace DisperSim3D.Models
             TopLevelSources = new List<ReleaseSource3D>();
             Simulations = new List<Simulation>();
             Views = new List<View>();
+            Ignitions = new List<IgnitionEvent>();
             DispersionStudies = new List<DispersionStudy>();
             DetectorAllocations = new List<DetectorAllocation>();
             GridSpacing = 5.0;

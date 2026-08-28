@@ -1,0 +1,84 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="400"
+        x:Class="DisperSim3D.UI.Avalonia.Views.IgnitionDialog"
+        Title="Ignite Cloud"
+        Icon="/Assets/Air.ico"
+        Width="520" SizeToContent="Height"
+        MinHeight="380" MaxHeight="640"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.field">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#444" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Foreground" Value="#777" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,2,0,8" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="12">
+
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </StackPanel>
+    </Border>
+
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+          ColumnDefinitions="180,*" RowSpacing="6">
+
+      <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Name:" />
+      <TextBox    Grid.Row="0" Grid.Column="1" x:Name="TxtName" Text="Ignition" />
+
+      <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Simulation:" />
+      <ComboBox  Grid.Row="1" Grid.Column="1" x:Name="CmbSimulation"
+                 HorizontalAlignment="Stretch"
+                 ToolTip.Tip="The dispersion run whose cloud is ignited." />
+
+      <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Classes="hint"
+                 Text="The flash fire burns the cloud as it stood at the ignition time, starting from the ignition point. Only gas connected to that point burns." />
+
+      <TextBlock Grid.Row="3" Grid.Column="0" Classes="field" Text="Position X, Y, Z (m):" />
+      <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+        <NumericUpDown x:Name="NudX" Width="105" Minimum="-100000" Maximum="100000"
+                       Value="0" FormatString="0.0" Increment="1" />
+        <NumericUpDown x:Name="NudY" Width="105" Minimum="-100000" Maximum="100000"
+                       Value="0" FormatString="0.0" Increment="1" />
+        <NumericUpDown x:Name="NudZ" Width="105" Minimum="-100000" Maximum="100000"
+                       Value="0" FormatString="0.0" Increment="1" />
+      </StackPanel>
+
+      <TextBlock Grid.Row="4" Grid.Column="0" Classes="field" Text="Ignition Time (s):" />
+      <NumericUpDown Grid.Row="4" Grid.Column="1" x:Name="NudTime"
+                     Minimum="0" Maximum="100000" Value="0"
+                     FormatString="0.0" Increment="1"
+                     ToolTip.Tip="The written snapshot closest to this time is the one that burns.&#10;A cloud ignited at 30 s is not the cloud at 300 s." />
+
+      <TextBlock Grid.Row="5" Grid.Column="0" Classes="field" Text="Envelope (× LFL):" />
+      <NumericUpDown Grid.Row="5" Grid.Column="1" x:Name="NudEnvelope"
+                     Minimum="0.1" Maximum="1.0" Value="0.5"
+                     FormatString="0.00" Increment="0.05"
+                     ToolTip.Tip="Dispersion gives time-averaged concentrations, and turbulent&#10;fluctuation puts the momentary flammable cloud outside the&#10;averaged LFL contour. Consequence practice draws the flash-fire&#10;envelope at half the LFL." />
+
+      <TextBlock Grid.Row="6" Grid.Column="0" Classes="field" Text="Flame Speed (m/s):" />
+      <NumericUpDown Grid.Row="6" Grid.Column="1" x:Name="NudFlameSpeed"
+                     Minimum="0.5" Maximum="100" Value="10"
+                     FormatString="0.0" Increment="1"
+                     ToolTip.Tip="Burn-back speed through the cloud. Turns distance into arrival&#10;time, and the longest arrival is the exposure duration.&#10;5–15 m/s for an unconfined methane deflagration." />
+
+      <TextBlock Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2" Classes="hint"
+                 Text="To see the result, add a View on the same simulation and set its Field property to FlashFireEnvelope (isosurface at 0.5) or FlashFireArrivalS." />
+    </Grid>
+  </DockPanel>
+</Window>

@@ -197,6 +197,7 @@ namespace DisperSim3D.Controls
                 new ToolStripMenuItem("Monitor Point...", Img("icons8-location.png"), (s, e) => DoAddMonitor()),
                 new ToolStripSeparator(),
                 new ToolStripMenuItem("Fire Source...", Img("lightning.png"), (s, e) => DoAddFireSource()),
+                new ToolStripMenuItem("Ignite Cloud...", Img("lightning.png"), (s, e) => DoAddIgnition()),
                 new ToolStripMenuItem("Gas Detector", Img("icons8-pressure_gauge.png"), (s, e) => DoAddDetector()),
                 new ToolStripMenuItem("HP Leak...", Img("icons8-petrol.png"), (s, e) => DoConfigureHPLeak()),
                 new ToolStripSeparator(),
@@ -2414,6 +2415,33 @@ namespace DisperSim3D.Controls
             _editor.CurrentEditMode = EditMode.PlaceFireSource;
             UncheckAllModes();
             UpdateStatus("Click to place fire source");
+        }
+
+        /// <summary>Ignites a completed dispersion run: the cloud connected to the
+        /// chosen point burns into a flash-fire envelope. Unlike a fire source this
+        /// is not placed by clicking — the point is typed in, because it has to land
+        /// inside the cloud rather than on a surface.</summary>
+        private void DoAddIgnition()
+        {
+            var scene = _editor.Scene;
+            if (scene == null) return;
+            if (scene.Ignitions == null) scene.Ignitions = new System.Collections.Generic.List<Models.IgnitionEvent>();
+
+            using (var dlg = new IgnitionDialog(scene))
+            {
+                if (dlg.ShowDialog() != DialogResult.OK) return;
+                if (string.IsNullOrEmpty(dlg.Result.SimulationId))
+                {
+                    MessageBox.Show(this,
+                        "Run a dispersion simulation first — an ignition needs a completed "
+                        + "concentration field to burn.",
+                        "No simulation to ignite", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                scene.Ignitions.Add(dlg.Result);
+                _editor.RefreshViewport();
+                UpdateStatus("Ignition added: " + dlg.Result.Name);
+            }
         }
 
         private void DoAddDetector()
