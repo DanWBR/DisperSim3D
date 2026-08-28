@@ -1,0 +1,46 @@
+{
+  "$schema": "fbench/v1",
+  "name": "Maplin Sands 20 m LNG pool fire (1980)",
+  "citation": "Mizner, G.A. and Eyre, J.A. (1983), Shell Research Maplin Sands tests, reported in: Raj, P.K. (2005). Large LNG Fire Thermal Radiation - Modeling Issues & Hazard Criteria Revisited. Process Safety Progress 24(3), 192-202. Table 1, 'Summary of LNG Fire Experiments'.",
+  "dataConfidence": "Medium",
+  "description": "Shell Research diked LNG pool fire on land at Maplin Sands, 20 m diameter. Table 1 of Raj (2005): regression rate 2e-4 m/s, wide-angle radiometer mean emissive power 150-220 kW/m2. The radiated fraction is not reported.",
+  "fire": {
+    "kind": "pool",
+    "fuel": "LNG",
+    "poolDiameterM": 20.0,
+    "burnRateKgM2S": 0.0849,
+    "heatOfCombustionJKg": 50000000,
+    "radiativeFraction": 0.25,
+    "fuelMolarMassKgMol": 0.01604,
+    "isSootyFuel": false,
+    "position": [
+      0,
+      0,
+      0
+    ]
+  },
+  "ambient": {
+    "windSpeed": 1.6,
+    "windDirectionDeg": 270,
+    "ambientTemperatureK": 288.15,
+    "ambientPressurePa": 101325,
+    "relativeHumidity": 0.7
+  },
+  "expectedFlame": {
+    "diameterM": 20.0,
+    "surfaceEmissivePowerKwM2": 185.0,
+    "note": "Midpoint of the 150-220 kW/m2 range in Raj (2005) Table 1. Radiated fraction not reported; 0.25 assumed, so this check tests it jointly with the correlation."
+  },
+  "radiometers": [],
+  "acceptance": {
+    "flameLengthRatioMin": 0.5,
+    "flameLengthRatioMax": 2.0,
+    "flameDiameterRatioMin": 0.9,
+    "flameDiameterRatioMax": 1.1,
+    "sepRatioMin": 0.5,
+    "sepRatioMax": 2.0,
+    "fluxRatioMin": 0.5,
+    "fluxRatioMax": 2.0,
+    "minFluxFac2Fraction": 0.8
+  }
+}

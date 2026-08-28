@@ -1,0 +1,46 @@
+{
+  "$schema": "fbench/v1",
+  "name": "Esso Libya 18 m equivalent LNG trench fire (1969)",
+  "citation": "May, W.G. and McQueen, W. (1973), Esso tests in Libya, reported in: Raj, P.K. (2005). Large LNG Fire Thermal Radiation - Modeling Issues & Hazard Criteria Revisited. Process Safety Progress 24(3), 192-202. Table 1, 'Summary of LNG Fire Experiments'.",
+  "dataConfidence": "Medium",
+  "description": "Continuous LNG feed into a 70 m x 25 m land dike (trench), 18 m equivalent diameter. Table 1 of Raj (2005): regression 1.6e-4 m/s, wide-angle mean emissive power 92 kW/m2, radiated fraction 12-16%. The lowest emissive power in the LNG series and a useful outlier: the geometry is a long trench, not a circular pool, so a cylindrical solid-flame model is being pushed outside its shape assumption.",
+  "fire": {
+    "kind": "pool",
+    "fuel": "LNG",
+    "poolDiameterM": 18.0,
+    "burnRateKgM2S": 0.0679,
+    "heatOfCombustionJKg": 50000000,
+    "radiativeFraction": 0.14,
+    "fuelMolarMassKgMol": 0.01604,
+    "isSootyFuel": false,
+    "position": [
+      0,
+      0,
+      0
+    ]
+  },
+  "ambient": {
+    "windSpeed": 1.6,
+    "windDirectionDeg": 270,
+    "ambientTemperatureK": 288.15,
+    "ambientPressurePa": 101325,
+    "relativeHumidity": 0.7
+  },
+  "expectedFlame": {
+    "diameterM": 18.0,
+    "surfaceEmissivePowerKwM2": 92.0,
+    "note": "92 kW/m2 with a 12-16% radiated fraction, both from Raj (2005) Table 1; 0.14 is the midpoint of the fraction. Note the trench geometry: the equivalent circular diameter is an approximation the source itself makes."
+  },
+  "radiometers": [],
+  "acceptance": {
+    "flameLengthRatioMin": 0.5,
+    "flameLengthRatioMax": 2.0,
+    "flameDiameterRatioMin": 0.9,
+    "flameDiameterRatioMax": 1.1,
+    "sepRatioMin": 0.5,
+    "sepRatioMax": 2.0,
+    "fluxRatioMin": 0.5,
+    "fluxRatioMax": 2.0,
+    "minFluxFac2Fraction": 0.8
+  }
+}

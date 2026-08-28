@@ -1,42 +1,38 @@
 {
   "$schema": "fbench/v1",
-  "name": "Montoir 35 m LNG pool fire",
-
-  "citation": "Nedelka, D., Moorhouse, J., Tucker, R.F. (1989). The Montoir 35 m diameter LNG pool fire experiments. 9th International Conference on LNG, Nice. Gaz de France / British Gas / Shell, 1987 trials.",
-
-  "dataConfidence": "Unverified",
-
-  "description": "Three 35 m diameter LNG pool fires on land at Montoir-de-Bretagne, the largest instrumented LNG pool fires ever run, and the reference case for LNG pool fire radiation. The numbers below are the values commonly reproduced in secondary literature and have NOT been read from the primary source — the flame length, the emissive power and the burn rate all need checking against Nedelka et al. before this bench counts for anything. Radiometer data is deliberately absent: the trials recorded incident flux at several stand-off distances, and those tables belong here, but transcribing them from memory would be worse than leaving them out. See docs/validation.md for what to fill in.",
-
+  "name": "Montoir 35.7 m LNG pool fire (1987)",
+  "citation": "Nedelka, D., Moorhouse, J., Tucker, R.F. (1989), reported in: Raj, P.K. (2005). Large LNG Fire Thermal Radiation - Modeling Issues & Hazard Criteria Revisited. Process Safety Progress 24(3), 192-202. Table 1, 'Summary of LNG Fire Experiments'. Flame length read off Figure 4 of: Wang, C.J., Wen, J.X., Chen, Z.B. (2014). Simulation of Large-Scale LNG Pool Fires Using FireFOAM. Combustion Science and Technology 186(10-11), 1632-1649. DOI 10.1080/00102202.2014.935615.",
+  "dataConfidence": "Medium",
+  "description": "Three LNG fires on a 1000 m2 insulated concrete dike (35.7 m equivalent diameter) at Montoir-de-Bretagne, the largest land LNG spill fire tests to date. Raj (2005) p.5 summarises Nedelka et al.: average burning rate 0.14 kg/m2s (regression 3.3e-4 m/s, 7.1 MW/m2); narrow-angle spot emissive powers 290-320 kW/m2; and the equivalent surface emissive power computed over the ENTIRE VISIBLE FIRE AREA of 257-273 kW/m2. That last definition is the one this model uses, which makes the comparison direct. Cross wind 9.6 m/s per Table 2 of Wang et al. (2014).",
   "fire": {
     "kind": "pool",
     "fuel": "LNG",
-    "poolDiameterM": 35.0,
+    "poolDiameterM": 35.7,
     "burnRateKgM2S": 0.14,
     "heatOfCombustionJKg": 50000000,
-    "radiativeFraction": 0.23,
+    "radiativeFraction": 0.25,
     "fuelMolarMassKgMol": 0.01604,
     "isSootyFuel": false,
-    "position": [0, 0, 0]
+    "position": [
+      0,
+      0,
+      0
+    ]
   },
-
   "ambient": {
-    "windSpeed": 2.0,
+    "windSpeed": 9.6,
     "windDirectionDeg": 270,
     "ambientTemperatureK": 288.15,
     "ambientPressurePa": 101325,
     "relativeHumidity": 0.7
   },
-
   "expectedFlame": {
-    "lengthM": 70.0,
-    "diameterM": 35.0,
-    "surfaceEmissivePowerKwM2": 165.0,
-    "note": "Flame length is usually quoted as H/D ~ 2 for these trials. The emissive power is reported as a mean over the visible flame, with higher values near the base and lower ones higher up where soot obscures; the literature range spans roughly 165-265 kW/m2. VERIFY ALL THREE against the primary source."
+    "lengthM": 78.0,
+    "diameterM": 35.7,
+    "surfaceEmissivePowerKwM2": 265.0,
+    "note": "SEP is the midpoint of the 257-273 kW/m2 range Raj (2005) reports over the entire visible fire area. The radiative fraction is NOT reported for these tests; 0.25 sits inside the 0.12-0.32 span Raj's Table 1 shows across the LNG series. Since the model derives SEP as chi*Q/(pi*D*L), this check tests the flame-length correlation and that assumed fraction jointly. Flame length read off Figure 4 of Wang et al. (2014), which plots the measured value at D=35 m; not a tabulated number."
   },
-
   "radiometers": [],
-
   "acceptance": {
     "flameLengthRatioMin": 0.5,
     "flameLengthRatioMax": 2.0,

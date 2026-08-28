@@ -1,0 +1,46 @@
+{
+  "$schema": "fbench/v1",
+  "name": "China Lake 15 m LNG pool fire on water (1974-76)",
+  "citation": "Raj, P.K. et al. (1979), USCG China Lake tests, reported in: Raj, P.K. (2005). Large LNG Fire Thermal Radiation - Modeling Issues & Hazard Criteria Revisited. Process Safety Progress 24(3), 192-202. Table 1, 'Summary of LNG Fire Experiments'.",
+  "dataConfidence": "Medium",
+  "description": "USCG-sponsored unconfined LNG pool fires on water at China Lake. Steady-state fire base diameters 8.5-16.8 m; this bench takes the 15 m case shown in Plate 1 of Raj (2005). Mean regression rate 5.7e-4 m/s, quoted as 0.242 kg/m2s. Narrow-angle radiometers, corrected for atmospheric absorption, gave 220 +/- 30 kW/m2.",
+  "fire": {
+    "kind": "pool",
+    "fuel": "LNG",
+    "poolDiameterM": 15.0,
+    "burnRateKgM2S": 0.242,
+    "heatOfCombustionJKg": 50000000,
+    "radiativeFraction": 0.22,
+    "fuelMolarMassKgMol": 0.01604,
+    "isSootyFuel": false,
+    "position": [
+      0,
+      0,
+      0
+    ]
+  },
+  "ambient": {
+    "windSpeed": 1.6,
+    "windDirectionDeg": 270,
+    "ambientTemperatureK": 288.15,
+    "ambientPressurePa": 101325,
+    "relativeHumidity": 0.7
+  },
+  "expectedFlame": {
+    "diameterM": 15.0,
+    "surfaceEmissivePowerKwM2": 220.0,
+    "note": "220 +/- 30 kW/m2 from the narrow-angle radiometers (Raj 2005 p.2). Raj's Table 1 gives the radiated fraction for this series as 12-32% depending on spill rate; 0.22 is the midpoint."
+  },
+  "radiometers": [],
+  "acceptance": {
+    "flameLengthRatioMin": 0.5,
+    "flameLengthRatioMax": 2.0,
+    "flameDiameterRatioMin": 0.9,
+    "flameDiameterRatioMax": 1.1,
+    "sepRatioMin": 0.5,
+    "sepRatioMax": 2.0,
+    "fluxRatioMin": 0.5,
+    "fluxRatioMax": 2.0,
+    "minFluxFac2Fraction": 0.8
+  }
+}

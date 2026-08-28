@@ -66,7 +66,43 @@ An `Unverified` bench is evaluated and printed, but reported as **NOT COUNTED**
 rather than as a pass. A green tick against a number nobody confirmed is worse
 than having no test.
 
+### LNG pool fire results
+
+Five LNG pool fire tests, spanning pool diameters from 6 to 36 m and measured
+emissive powers from 92 to 265 kW/m², all sourced from Raj (2005) Table 1 and
+the summary text on its page 5:
+
+| Test | D (m) | SEP measured | SEP predicted | ratio |
+|---|--:|--:|--:|--:|
+| AGA San Clemente (1973) | 6.1 | 143–178 → 160 | 115 | 0.72 |
+| China Lake on water (1974–76) | 15 | 220 ± 30 | 193 | 0.88 |
+| Esso Libya trench (1969) | 18 | 92 | 79 | 0.86 |
+| Maplin Sands (1980) | 20 | 150–220 → 185 | 159 | 0.86 |
+| Montoir (1987) | 35.7 | 257–273 → 265 | 231 | 0.87 |
+
+Every case is inside the factor-of-two band, and the flame length for Montoir —
+the only test here with a published length — comes out at 68 m against 78 m
+measured, a ratio of 0.87.
+
+**The interesting result is the bias, not the pass.** Four of the five ratios sit
+between 0.86 and 0.88: the model tracks how emissive power scales with pool
+diameter across a factor of six in size, and then under-predicts the level by a
+consistent 13%. That is not scatter, and it is worth naming rather than
+celebrating five green ticks.
+
+The most likely home for it is the radiative fraction. The model derives
+`SEP = χ·Q/(π·D·L)`, and χ is not reported for Montoir or Maplin Sands; 0.25 was
+assumed for both. A χ nearer 0.29 would put those two on the nose. Deliberately
+not tuned: fitting a constant to five points is not validation, and the
+remaining evidence needed to separate χ from the flame-length correlation is the
+radiometer data none of these benches have yet.
+
+The 6.1 m AGA case is the outlier at 0.72, and it is also the smallest by far.
+Thomas's correlation is a large-fire correlation, so this is the expected place
+for it to lose accuracy.
+
 ### What the first benchmark found
+
 
 The seeded Montoir 35 m LNG bench immediately exposed a real defect. The model
 was applying Mudan's soot-blend cap to every pool fire, and Mudan is calibrated

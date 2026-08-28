@@ -1,0 +1,46 @@
+{
+  "$schema": "fbench/v1",
+  "name": "AGA San Clemente 6.1 m LNG pool fire (1973)",
+  "citation": "Raj, P.K. and Atallah, S. (1974), AGA tests, reported in: Raj, P.K. (2005). Large LNG Fire Thermal Radiation - Modeling Issues & Hazard Criteria Revisited. Process Safety Progress 24(3), 192-202. Table 1, 'Summary of LNG Fire Experiments'.",
+  "dataConfidence": "Medium",
+  "description": "American Gas Association diked LNG pool fires on land at San Clemente. Table 1 of Raj (2005) gives the 6.1 m case: regression rate 2.2e-4 m/s, wide-angle radiometer mean emissive power 143-178 kW/m2 (max), radiated fraction 25%. The small diameter makes this the counterweight to Montoir at the other end of the scale.",
+  "fire": {
+    "kind": "pool",
+    "fuel": "LNG",
+    "poolDiameterM": 6.1,
+    "burnRateKgM2S": 0.0934,
+    "heatOfCombustionJKg": 50000000,
+    "radiativeFraction": 0.25,
+    "fuelMolarMassKgMol": 0.01604,
+    "isSootyFuel": false,
+    "position": [
+      0,
+      0,
+      0
+    ]
+  },
+  "ambient": {
+    "windSpeed": 1.6,
+    "windDirectionDeg": 270,
+    "ambientTemperatureK": 288.15,
+    "ambientPressurePa": 101325,
+    "relativeHumidity": 0.7
+  },
+  "expectedFlame": {
+    "diameterM": 6.1,
+    "surfaceEmissivePowerKwM2": 160.0,
+    "note": "Midpoint of the 143-178 kW/m2 Raj (2005) Table 1 reports as the maximum wide-angle value. The 25% radiated fraction IS reported for this test, so this check isolates the correlation better than Montoir does."
+  },
+  "radiometers": [],
+  "acceptance": {
+    "flameLengthRatioMin": 0.5,
+    "flameLengthRatioMax": 2.0,
+    "flameDiameterRatioMin": 0.9,
+    "flameDiameterRatioMax": 1.1,
+    "sepRatioMin": 0.5,
+    "sepRatioMax": 2.0,
+    "fluxRatioMin": 0.5,
+    "fluxRatioMax": 2.0,
+    "minFluxFac2Fraction": 0.8
+  }
+}
