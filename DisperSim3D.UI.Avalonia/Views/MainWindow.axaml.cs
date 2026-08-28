@@ -1188,6 +1188,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 case "mon":  _ = EditMonitorAsync(node); break;
                 case "fire": _ = EditFireSourceAsync(node); break;
                 case "ignition": _ = EditIgnitionAsync(node); break;
+                case "firestudy": _ = EditFireStudyAsync(node); break;
                 case "src":  _ = EditHighPressureAsync(node); break;
                 case "sim":  _ = EditSimulationAsync(node); break;
                 case "study":_ = EditDispersionStudyAsync(node); break;
@@ -1219,6 +1220,10 @@ namespace DisperSim3D.UI.Avalonia.Views
                 case "ignitions":
                     AddItem("Ignite Cloud…", "mdi-flare",
                         (_, _) => _ = AddIgnitionAsync());
+                    return;
+                case "firestudies":
+                    AddItem("Add Fire Study…", "mdi-fire",
+                        (_, _) => _ = AddFireStudyAsync());
                     return;
                 case "gases":
                     AddItem("Add Gas…", "mdi-gas-cylinder",
@@ -1333,6 +1338,12 @@ namespace DisperSim3D.UI.Avalonia.Views
                         (_, _) => _ = EditIgnitionAsync(node));
                     AddItem("Delete", "mdi-trash-can-outline",
                         (_, _) => DeleteFromList(_scene!.Ignitions, node));
+                    return;
+                case "firestudy":
+                    AddItem("Edit Fire Study…", "mdi-pencil-outline",
+                        (_, _) => _ = EditFireStudyAsync(node));
+                    AddItem("Delete", "mdi-trash-can-outline",
+                        (_, _) => DeleteFromList(_scene!.FireStudies, node));
                     return;
                 case "gas":
                     AddItem("Edit Gas…", "mdi-pencil-outline",
@@ -1603,6 +1614,27 @@ namespace DisperSim3D.UI.Avalonia.Views
             ignition.EnvelopeFraction = dlg.Result.EnvelopeFraction;
             ignition.FlameSpeedMS     = dlg.Result.FlameSpeedMS;
             MarkDirtyAndRefresh("Updated ignition: " + ignition.Name);
+        }
+
+        // ── Fire studies ─────────────────────────────────────────────────────
+        private async Task AddFireStudyAsync()
+        {
+            if (_scene is null) { StatusText.Text = "Open or create a project first."; return; }
+            _scene.FireStudies ??= new List<FireStudy>();
+
+            var dlg = new FireStudyDialog(_scene, null);
+            if (!await dlg.ShowDialog<bool>(this)) return;
+            _scene.FireStudies.Add(dlg.Result);
+            MarkDirtyAndRefresh("Added fire study: " + dlg.Result.Name);
+        }
+
+        private async Task EditFireStudyAsync(ProjectTreeNode node)
+        {
+            if (_scene is null || node.Tag is not FireStudy study) return;
+            // The dialog edits the instance in place, so nothing to copy back.
+            var dlg = new FireStudyDialog(_scene, study);
+            if (!await dlg.ShowDialog<bool>(this)) return;
+            MarkDirtyAndRefresh("Updated fire study: " + study.Name);
         }
 
         // ── Views ────────────────────────────────────────────────────────────

@@ -89,6 +89,7 @@ namespace DisperSim3D.Core
             DeserializeMonitorPoints(root, inv, scene);
             DeserializeFireScenario(root, inv, scene);
             DeserializeIgnitions(root, inv, scene);
+            DeserializeFireStudies(root, inv, scene);
             DeserializeGasDetectors(root, inv, scene);
             DeserializeDecorations(root, inv, scene);
             DeserializeEnvironment(root, inv, scene);
@@ -619,6 +620,64 @@ namespace DisperSim3D.Core
                 if (!string.IsNullOrEmpty(id)) fire.Id = id;
 
                 scene.FireScenario.Sources.Add(fire);
+            }
+        }
+
+        /// <summary>Reads the fire studies written by
+        /// <c>SceneFileSaver.SerializeFireStudies</c>.</summary>
+        private static void DeserializeFireStudies(XElement root, CultureInfo inv, Scene3D scene)
+        {
+            var el = root.Element("FireStudies");
+            if (el == null) return;
+            foreach (var se in el.Elements("FireStudy"))
+            {
+                var study = new FireStudy
+                {
+                    Name = (string)se.Attribute("Name") ?? "Fire Study",
+                    Description = (string)se.Attribute("Description") ?? "",
+                    HarmThreshold = AttrDouble(se, inv, 0.01, "HarmThreshold"),
+                    DomainHalfM = AttrDouble(se, inv, 100.0, "DomainHalfM"),
+                    GridResolution = (int)AttrDouble(se, inv, 40, "GridRes"),
+                    IgnitionProbability = AttrDouble(se, inv, 0.1, "IgnitionProbability"),
+                    IsVisible = AttrBool(se, true, "IsVisible")
+                };
+
+                string id = (string)se.Attribute("Id");
+                if (!string.IsNullOrEmpty(id)) study.Id = id;
+
+                string harm = (string)se.Attribute("HarmQuantity");
+                if (!string.IsNullOrEmpty(harm)
+                    && Enum.TryParse(harm, out ViewFieldProperty parsedHarm))
+                    study.HarmQuantity = parsedHarm;
+
+                var sources = se.Element("FireSourceIds");
+                if (sources != null)
+                    foreach (var r in sources.Elements("Ref"))
+                        if (!string.IsNullOrEmpty(r.Value)) study.FireSourceIds.Add(r.Value);
+
+                var ignitions = se.Element("IgnitionIds");
+                if (ignitions != null)
+                    foreach (var r in ignitions.Elements("Ref"))
+                        if (!string.IsNullOrEmpty(r.Value)) study.IgnitionIds.Add(r.Value);
+
+                var risks = se.Element("RiskWeights");
+                if (risks != null)
+                {
+                    foreach (var re in risks.Elements("Risk"))
+                    {
+                        string scenarioId = (string)re.Attribute("ScenarioId");
+                        if (string.IsNullOrEmpty(scenarioId)) continue;
+                        var risk = study.EnsureRiskFor(scenarioId);
+                        if (Enum.TryParse((string)re.Attribute("FreqMode") ?? "Auto",
+                                out RiskValueMode freqMode)) risk.FreqMode = freqMode;
+                        if (Enum.TryParse((string)re.Attribute("ConsMode") ?? "Auto",
+                                out RiskValueMode consMode)) risk.ConsMode = consMode;
+                        risk.FreqPerYear = AttrDouble(re, inv, 1.0, "FreqPerYear");
+                        risk.Consequence = AttrDouble(re, inv, 1.0, "Consequence");
+                    }
+                }
+
+                scene.FireStudies.Add(study);
             }
         }
 

@@ -122,6 +122,7 @@ namespace DisperSim3D.Core
                     SerializeWindRose(scene, inv),
                     SerializeFireScenario(scene, inv),
                 SerializeIgnitions(scene, inv),
+                SerializeFireStudies(scene, inv),
                     SerializeGasDetectors(scene, inv),
                     SerializeCfdSimulations(scene, inv, filePath)
                 ));
@@ -629,6 +630,37 @@ namespace DisperSim3D.Core
                 new XAttribute("Pressure", meteo.AmbientPressure.ToString(inv)),
                 new XAttribute("Humidity", meteo.RelativeHumidity.ToString(inv)),
                 new XAttribute("Roughness", meteo.RoughnessLengthM.ToString(inv)));
+        }
+
+        /// <summary>Fire studies. Read back by
+        /// <c>SceneFileLoader.DeserializeFireStudies</c> — keep the two in step.</summary>
+        private static XElement? SerializeFireStudies(Scene3D scene, CultureInfo inv)
+        {
+            if (scene.FireStudies == null || scene.FireStudies.Count == 0) return null;
+            return new XElement("FireStudies",
+                scene.FireStudies.Select(st =>
+                    new XElement("FireStudy",
+                        new XAttribute("Id", st.Id),
+                        new XAttribute("Name", st.Name ?? ""),
+                        new XAttribute("Description", st.Description ?? ""),
+                        new XAttribute("HarmQuantity", st.HarmQuantity.ToString()),
+                        new XAttribute("HarmThreshold", st.HarmThreshold.ToString(inv)),
+                        new XAttribute("DomainHalfM", st.DomainHalfM.ToString(inv)),
+                        new XAttribute("GridRes", st.GridResolution.ToString(inv)),
+                        new XAttribute("IgnitionProbability", st.IgnitionProbability.ToString(inv)),
+                        new XAttribute("IsVisible", st.IsVisible),
+                        new XElement("FireSourceIds",
+                            st.FireSourceIds.Select(id => new XElement("Ref", id))),
+                        new XElement("IgnitionIds",
+                            st.IgnitionIds.Select(id => new XElement("Ref", id))),
+                        new XElement("RiskWeights",
+                            st.RiskWeights.Select(kv =>
+                                new XElement("Risk",
+                                    new XAttribute("ScenarioId", kv.Key),
+                                    new XAttribute("FreqMode", kv.Value.FreqMode.ToString()),
+                                    new XAttribute("FreqPerYear", kv.Value.FreqPerYear.ToString(inv)),
+                                    new XAttribute("ConsMode", kv.Value.ConsMode.ToString()),
+                                    new XAttribute("Consequence", kv.Value.Consequence.ToString(inv))))))));
         }
 
         /// <summary>Ignition events. Read back by

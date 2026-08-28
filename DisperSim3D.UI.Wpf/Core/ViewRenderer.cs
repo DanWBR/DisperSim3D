@@ -63,7 +63,7 @@ namespace DisperSim3D.Core
                     // additionally writes <time>_T.bin for temperature; pick the right
                     // suffix based on which field the View is requesting.
                     bool wantTemperature = view.FieldProperty == ViewFieldProperty.Temperature;
-                    result = TryLoadFlatBinCase(sim.CasePath, ref nx, ref ny, ref nz, half,
+                    result = OpenFoamResultReader.TryLoadFlatBinCase(sim.CasePath, ref nx, ref ny, ref nz, half,
                         temperatureChannel: wantTemperature);
                     if (result == null || !result.IsLoaded || result.TimeSteps.Count == 0)
                     { LogView($"[ViewRenderer] no results at '{sim.CasePath}' (nx={nx})"); return null; }
@@ -121,70 +121,6 @@ namespace DisperSim3D.Core
         /// (smoke / concentration). The grid resolution is inferred from the byte size
         /// of the first matching file so a reload doesn't depend on a stale
         /// <c>SnapshotGridResolution</c>.</summary>
-        private static Models.OpenFoamResult TryLoadFlatBinCase(string caseDir,
-            ref int nx, ref int ny, ref int nz, double half,
-            bool temperatureChannel = false)
-        {
-            if (string.IsNullOrEmpty(caseDir) || !Directory.Exists(caseDir)) return null;
-            string controlDict = Path.Combine(caseDir, "system", "controlDict");
-            if (File.Exists(controlDict)) return null;
-
-            var allBin = Directory.GetFiles(caseDir, "*.bin", SearchOption.TopDirectoryOnly);
-            if (allBin.Length == 0) return null;
-
-            // Filter to the requested channel. _T.bin = temperature, plain .bin = species.
-            var binFiles = allBin.Where(p =>
-            {
-                bool isT = Path.GetFileNameWithoutExtension(p).EndsWith("_T",
-                    StringComparison.OrdinalIgnoreCase);
-                return temperatureChannel ? isT : !isT;
-            }).ToArray();
-            if (binFiles.Length == 0) return null;
-
-            // Infer grid from file size — FluidX3D writers use ny=nx, nz=max(8, nx/2).
-            try
-            {
-                long bytes = new FileInfo(binFiles[0]).Length;
-                long doubles = bytes / sizeof(double);
-                int bestNx = 0;
-                for (int candidate = 8; candidate <= 1024; candidate++)
-                {
-                    int cnz = Math.Max(8, candidate / 2);
-                    if ((long)candidate * candidate * cnz == doubles) { bestNx = candidate; break; }
-                }
-                if (bestNx > 0)
-                {
-                    nx = bestNx; ny = bestNx; nz = Math.Max(8, bestNx / 2);
-                }
-            }
-            catch { /* fall back to caller's nx/ny/nz */ }
-
-            var result = new Models.OpenFoamResult
-            {
-                GridNx = nx, GridNy = ny, GridNz = nz,
-                DomainSizeM = half,
-                DomainXMin = -half, DomainXMax = half,
-                DomainYMin = -half, DomainYMax = half,
-                DomainZMax = half,
-                CaseDir = caseDir
-            };
-            foreach (var f in binFiles)
-            {
-                string name = Path.GetFileNameWithoutExtension(f);
-                if (temperatureChannel && name.EndsWith("_T", StringComparison.OrdinalIgnoreCase))
-                    name = name.Substring(0, name.Length - 2);
-                if (double.TryParse(name, System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out double t))
-                {
-                    result.TimeSteps.Add(t);
-                    result.TimeStepPaths[t] = f;
-                }
-            }
-            result.TimeSteps.Sort();
-            result.IsLoaded = result.TimeSteps.Count > 0;
-            return result;
-        }
-
         // ── field resolution ──
 
         /// <summary>

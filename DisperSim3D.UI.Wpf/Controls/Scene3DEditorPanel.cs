@@ -198,6 +198,7 @@ namespace DisperSim3D.Controls
                 new ToolStripSeparator(),
                 new ToolStripMenuItem("Fire Source...", Img("lightning.png"), (s, e) => DoAddFireSource()),
                 new ToolStripMenuItem("Ignite Cloud...", Img("lightning.png"), (s, e) => DoAddIgnition()),
+                new ToolStripMenuItem("Fire Study...", Img("lightning.png"), (s, e) => DoFireStudy()),
                 new ToolStripMenuItem("Gas Detector", Img("icons8-pressure_gauge.png"), (s, e) => DoAddDetector()),
                 new ToolStripMenuItem("HP Leak...", Img("icons8-petrol.png"), (s, e) => DoConfigureHPLeak()),
                 new ToolStripSeparator(),
@@ -2441,6 +2442,24 @@ namespace DisperSim3D.Controls
                 scene.Ignitions.Add(dlg.Result);
                 _editor.RefreshViewport();
                 UpdateStatus("Ignition added: " + dlg.Result.Name);
+            }
+        }
+
+        /// <summary>Opens the fire study editor. The dialog both edits the study and
+        /// scores it, so the harm criterion can be tuned against the numbers it
+        /// produces without closing and reopening.</summary>
+        private void DoFireStudy()
+        {
+            var scene = _editor.Scene;
+            if (scene == null) return;
+            if (scene.FireStudies == null) scene.FireStudies = new System.Collections.Generic.List<Models.FireStudy>();
+
+            var existing = scene.FireStudies.Count > 0 ? scene.FireStudies[0] : null;
+            using (var dlg = new FireStudyDialog(scene, existing))
+            {
+                if (dlg.ShowDialog() != DialogResult.OK) return;
+                if (existing == null) scene.FireStudies.Add(dlg.Result);
+                UpdateStatus("Fire study saved: " + dlg.Result.Name);
             }
         }
 

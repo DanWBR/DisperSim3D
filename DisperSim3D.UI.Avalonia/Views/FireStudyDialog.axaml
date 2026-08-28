@@ -1,0 +1,103 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="760" d:DesignHeight="620"
+        x:Class="DisperSim3D.UI.Avalonia.Views.FireStudyDialog"
+        Title="Fire Study"
+        Icon="/Assets/Air.ico"
+        Width="760" Height="640"
+        MinWidth="640" MinHeight="520"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.field">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#444" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,10,0,4" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="12">
+
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+        <Button Grid.Column="0" x:Name="BtnEvaluate" Content="Evaluate"
+                MinWidth="100" Click="BtnEvaluate_Click"
+                ToolTip.Tip="Score the selected scenarios and rank them by risk." />
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+          <Button x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+          <Button x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                  IsDefault="True" Background="#0078D4" Foreground="White" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto,*" ColumnDefinitions="*">
+
+      <Grid Grid.Row="0" RowDefinitions="Auto,Auto" ColumnDefinitions="150,*,150,*" RowSpacing="6">
+        <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Name:" />
+        <TextBox    Grid.Row="0" Grid.Column="1" x:Name="TxtName" Text="Fire Study" />
+
+        <TextBlock Grid.Row="0" Grid.Column="2" Classes="field" Text="Description:" />
+        <TextBox    Grid.Row="0" Grid.Column="3" x:Name="TxtDescription" />
+      </Grid>
+
+      <Grid Grid.Row="1" RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="150,*,150,*"
+            RowSpacing="6" Margin="0,8,0,0">
+        <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Harm quantity:" />
+        <ComboBox  Grid.Row="0" Grid.Column="1" x:Name="CmbHarm"
+                   HorizontalAlignment="Stretch" SelectedIndex="0"
+                   ToolTip.Tip="What defines the harm footprint of a jet or pool fire.">
+          <ComboBoxItem Content="Fatality probability" />
+          <ComboBoxItem Content="Thermal dose" />
+          <ComboBoxItem Content="Thermal radiation (kW/m²)" />
+        </ComboBox>
+
+        <TextBlock Grid.Row="0" Grid.Column="2" Classes="field" Text="Threshold:" />
+        <NumericUpDown Grid.Row="0" Grid.Column="3" x:Name="NudThreshold"
+                       Minimum="0" Maximum="1000000" Value="0.01"
+                       FormatString="0.####" Increment="0.01"
+                       ToolTip.Tip="0.01 = 1% lethality. With the radiation quantity use&#10;4, 12.5 or 37.5 kW/m²." />
+
+        <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Domain half-width (m):" />
+        <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="NudHalf"
+                       Minimum="10" Maximum="10000" Value="100"
+                       FormatString="0" Increment="10" />
+
+        <TextBlock Grid.Row="1" Grid.Column="2" Classes="field" Text="Grid resolution:" />
+        <NumericUpDown Grid.Row="1" Grid.Column="3" x:Name="NudGrid"
+                       Minimum="8" Maximum="200" Value="40"
+                       FormatString="0" Increment="8"
+                       ToolTip.Tip="The footprint is a cell count times a cell volume,&#10;so a coarse grid quantises it." />
+
+        <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="Ignition probability:" />
+        <NumericUpDown Grid.Row="2" Grid.Column="1" x:Name="NudIgnitionProbability"
+                       Minimum="0.0001" Maximum="1" Value="0.1"
+                       FormatString="0.0###" Increment="0.05"
+                       ToolTip.Tip="Applied to the leak frequency of the release behind&#10;each flash-fire scenario." />
+      </Grid>
+
+      <Grid Grid.Row="2" ColumnDefinitions="*,12,*" Margin="0,10,0,0">
+        <DockPanel Grid.Column="0">
+          <TextBlock DockPanel.Dock="Top" Classes="section" Text="Fire sources" />
+          <ListBox x:Name="LstFireSources" SelectionMode="Multiple" />
+        </DockPanel>
+        <DockPanel Grid.Column="2">
+          <TextBlock DockPanel.Dock="Top" Classes="section" Text="Ignitions (flash fires)" />
+          <ListBox x:Name="LstIgnitions" SelectionMode="Multiple" />
+        </DockPanel>
+      </Grid>
+
+      <TextBlock Grid.Row="3" Classes="section" Text="Result" />
+      <TextBox Grid.Row="4" x:Name="TxtReport" IsReadOnly="True" AcceptsReturn="True"
+               TextWrapping="NoWrap" FontFamily="Consolas,Menlo,monospace" FontSize="11"
+               Text="Select the scenarios and press Evaluate." />
+    </Grid>
+  </DockPanel>
+</Window>

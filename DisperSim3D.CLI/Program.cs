@@ -65,6 +65,7 @@ namespace DisperSim3D.CLI
             bool solidFlameSelftest = false;
             bool flashFireSelftest = false;
             bool thermalDoseSelftest = false;
+            bool fireStudySelftest = false;
             bool tracerGpuSelftest = false;
             string listIogpType = null;        // null = "no --list-iogp"; "" = all 24; otherwise the type name
             bool memoryEstimate = false;
@@ -145,6 +146,9 @@ namespace DisperSim3D.CLI
                     case "--thermal-dose-selftest":
                         thermalDoseSelftest = true;
                         break;
+                    case "--fire-study-selftest":
+                        fireStudySelftest = true;
+                        break;
                     case "--list-iogp":
                         // Optional positional: equipment type name. We peek the
                         // next arg; if it starts with '-' it's the next flag.
@@ -192,6 +196,7 @@ namespace DisperSim3D.CLI
             if (solidFlameSelftest) return RunSolidFlameSelfTest();
             if (flashFireSelftest) return RunFlashFireSelfTest();
             if (thermalDoseSelftest) return RunThermalDoseSelfTest();
+            if (fireStudySelftest) return RunFireStudySelfTest();
             if (listIogpType != null) return RunListIogp(listIogpType);
             if (memoryEstimate) return RunMemoryEstimate(memSolverArg, memNxArg);
             if (twoPhaseTest) return RunTwoPhaseTest();
@@ -473,6 +478,22 @@ namespace DisperSim3D.CLI
             {
                 Console.Write(IogpTableTests.RunAll());
                 return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return 1;
+            }
+        }
+
+        /// <summary>Wrapper around <see cref="FireStudySelfTest.RunAndPrint"/>.
+        /// Returns 0 when the fire study scores and ranks its scenarios correctly and
+        /// survives a save/load cycle, 1 otherwise.</summary>
+        static int RunFireStudySelfTest()
+        {
+            try
+            {
+                return FireStudySelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             }
             catch (Exception ex)
             {
@@ -1643,6 +1664,8 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             envelope, connectivity and burn-back timing.");
             Console.WriteLine("  --thermal-dose-selftest    Check the thermal dose, the harm probits and");
             Console.WriteLine("                             the error function against published anchors.");
+            Console.WriteLine("  --fire-study-selftest      Score and rank a synthetic fire study, and check");
+            Console.WriteLine("                             it survives a save/load cycle.");
             Console.WriteLine("  --list-iogp [type]         Dump IOGP leak-frequency table (one type or");
             Console.WriteLine("                             all 24). e.g. --list-iogp SteelProcessPipe");
             Console.WriteLine("  --memory-estimate <solver> <N>");

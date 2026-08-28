@@ -125,8 +125,13 @@ GPU selection (multi-GPU systems) and on-demand VRAM/RAM/disk sizing live under 
 - **Thermal dose and harm probability** — `V = t·I^(4/3)` with the Eisenberg
   fatality probit and the TNO burn probits, rendered as isosurfaces of dose or of
   fatality probability. Exposure is the scenario's escape time for jet and pool
-  fires, and the flame arrival time for a flash fire. Fire consequence for risk
-  work is the footprint above 1% lethality
+  fires, and the flame arrival time for a flash fire
+- **Fire studies** — a separate study object that ranks fire scenarios by
+  frequency × consequence. Consequence is the footprint above the study's harm
+  threshold (1% lethality by default); frequency for a flash fire chains back to
+  the IOGP leak frequency of the release that made the cloud, times an ignition
+  probability. A jet or pool fire placed by hand has no such chain and says so
+  instead of defaulting
 
 ---
 

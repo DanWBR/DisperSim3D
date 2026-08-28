@@ -148,6 +148,19 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
                         iconColor: ColLeaf));
             project.Children.Add(ignitions);
 
+            // ── Fire Studies ───────────────────────────────────────────────
+            var fireStudies = new ProjectTreeNode("firestudies", SectionIconFire,
+                "Fire Studies", Count(scene.FireStudies?.Count), iconColor: ColFire);
+            if (scene.FireStudies != null)
+                foreach (var st in scene.FireStudies)
+                    fireStudies.Children.Add(new ProjectTreeNode(
+                        "firestudy:" + st.Id, LeafIcon,
+                        string.IsNullOrEmpty(st.Name) ? "(fire study)" : st.Name,
+                        tag: st, hasVisibilityToggle: true,
+                        initialVisibility: st.IsVisible,
+                        iconColor: ColLeaf));
+            project.Children.Add(fireStudies);
+
             // ── Wind Fields ────────────────────────────────────────────────
             var winds = new ProjectTreeNode("winds", SectionIconWind,
                 "Wind Fields", Count(scene.WindFieldScenarios?.Count), iconColor: ColWind);

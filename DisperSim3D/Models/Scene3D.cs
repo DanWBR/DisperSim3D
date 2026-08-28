@@ -145,6 +145,13 @@ namespace DisperSim3D.Models
         public List<DispersionStudy> DispersionStudies { get; set; }
 
         /// <summary>
+        /// Fire studies: fire sources and ignitions ranked by frequency × consequence.
+        /// Separate from <see cref="DispersionStudies"/> because the two score
+        /// different things from different inputs.
+        /// </summary>
+        public List<FireStudy> FireStudies { get; set; }
+
+        /// <summary>
         /// Detector-placement results, each linked to one <see cref="DispersionStudy"/>.
         /// Stores the allocated positions, achieved coverage, and per-cloud detection flags.
         /// </summary>
@@ -185,6 +192,7 @@ namespace DisperSim3D.Models
             Views = new List<View>();
             Ignitions = new List<IgnitionEvent>();
             DispersionStudies = new List<DispersionStudy>();
+            FireStudies = new List<FireStudy>();
             DetectorAllocations = new List<DetectorAllocation>();
             GridSpacing = 5.0;
             SnapToGrid = true;

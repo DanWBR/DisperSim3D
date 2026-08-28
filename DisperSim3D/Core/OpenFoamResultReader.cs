@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using DisperSim3D.Models;
 
@@ -99,6 +100,82 @@ namespace DisperSim3D.Core
         /// <param name="ny">Number of grid cells in the Y direction.</param>
         /// <param name="nz">Number of grid cells in the Z direction.</param>
         /// <returns>A 3D array of scalar values indexed as [x, y, z], or <c>null</c> if parsing fails.</returns>
+        /// <summary>
+        /// Reads a flat-bin case directory — the layout the FluidX3D dispersion and fire
+        /// runners write, with <c>{time}.bin</c> at the case root instead of OpenFOAM's
+        /// time subdirectories. When <paramref name="temperatureChannel"/> is true it
+        /// picks the <c>{time}_T.bin</c> files the fire runner writes alongside.
+        ///
+        /// The grid is inferred from the byte size of the first matching file, so a
+        /// reload does not depend on a stale SnapshotGridResolution.
+        ///
+        /// This lived as a private copy in each UI's view renderer; it is here because
+        /// the fire study needs the same concentration snapshots the renderers do.
+        /// </summary>
+        public static OpenFoamResult TryLoadFlatBinCase(string caseDir,
+            ref int nx, ref int ny, ref int nz, double half,
+            bool temperatureChannel = false)
+        {
+            if (string.IsNullOrEmpty(caseDir) || !Directory.Exists(caseDir)) return null;
+            string controlDict = Path.Combine(caseDir, "system", "controlDict");
+            if (File.Exists(controlDict)) return null;
+
+            var allBin = Directory.GetFiles(caseDir, "*.bin", SearchOption.TopDirectoryOnly);
+            if (allBin.Length == 0) return null;
+
+            // Filter to the requested channel. _T.bin = temperature, plain .bin = species.
+            var binFiles = allBin.Where(p =>
+            {
+                bool isT = Path.GetFileNameWithoutExtension(p).EndsWith("_T",
+                    StringComparison.OrdinalIgnoreCase);
+                return temperatureChannel ? isT : !isT;
+            }).ToArray();
+            if (binFiles.Length == 0) return null;
+
+            // Infer grid from file size — FluidX3D writers use ny=nx, nz=max(8, nx/2).
+            try
+            {
+                long bytes = new FileInfo(binFiles[0]).Length;
+                long doubles = bytes / sizeof(double);
+                int bestNx = 0;
+                for (int candidate = 8; candidate <= 1024; candidate++)
+                {
+                    int cnz = Math.Max(8, candidate / 2);
+                    if ((long)candidate * candidate * cnz == doubles) { bestNx = candidate; break; }
+                }
+                if (bestNx > 0)
+                {
+                    nx = bestNx; ny = bestNx; nz = Math.Max(8, bestNx / 2);
+                }
+            }
+            catch { /* fall back to caller's nx/ny/nz */ }
+
+            var result = new OpenFoamResult
+            {
+                GridNx = nx, GridNy = ny, GridNz = nz,
+                DomainSizeM = half,
+                DomainXMin = -half, DomainXMax = half,
+                DomainYMin = -half, DomainYMax = half,
+                DomainZMax = half,
+                CaseDir = caseDir
+            };
+            foreach (var f in binFiles)
+            {
+                string name = Path.GetFileNameWithoutExtension(f);
+                if (temperatureChannel && name.EndsWith("_T", StringComparison.OrdinalIgnoreCase))
+                    name = name.Substring(0, name.Length - 2);
+                if (double.TryParse(name, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double t))
+                {
+                    result.TimeSteps.Add(t);
+                    result.TimeStepPaths[t] = f;
+                }
+            }
+            result.TimeSteps.Sort();
+            result.IsLoaded = result.TimeSteps.Count > 0;
+            return result;
+        }
+
         public static double[,,] LoadSingleTimestep(string filePath, int nx, int ny, int nz)
         {
             int expectedCount = nx * ny * nz;

@@ -3112,66 +3112,10 @@ void main() { }
             => TryLoadFlatBinCase(caseDir, ref nx, ref ny, ref nz, half, temperatureChannel);
 
         private static OpenFoamResult? TryLoadFlatBinCase(
-            string caseDir, ref int nx, ref int ny, ref int nz,
-            double half, bool temperatureChannel = false)
-        {
-            if (string.IsNullOrEmpty(caseDir) || !Directory.Exists(caseDir)) return null;
-            // Skip if this looks like an OpenFOAM case (has system/controlDict)
-            string controlDict = Path.Combine(caseDir, "system", "controlDict");
-            if (File.Exists(controlDict)) return null;
-
-            var allBin = Directory.GetFiles(caseDir, "*.bin", SearchOption.TopDirectoryOnly);
-            if (allBin.Length == 0) return null;
-
-            var binFiles = allBin.Where(p =>
-            {
-                bool isT = Path.GetFileNameWithoutExtension(p)
-                    .EndsWith("_T", StringComparison.OrdinalIgnoreCase);
-                return temperatureChannel ? isT : !isT;
-            }).ToArray();
-            if (binFiles.Length == 0) return null;
-
-            // Infer grid resolution from first file size
-            try
-            {
-                long bytes = new FileInfo(binFiles[0]).Length;
-                long doubles = bytes / sizeof(double);
-                for (int c = 8; c <= 1024; c++)
-                {
-                    int cnz = Math.Max(8, c / 2);
-                    if ((long)c * c * cnz == doubles)
-                    { nx = c; ny = c; nz = cnz; break; }
-                }
-            }
-            catch { /* fall back to caller's nx/ny/nz */ }
-
-            var result = new OpenFoamResult
-            {
-                GridNx = nx, GridNy = ny, GridNz = nz,
-                DomainSizeM = half,
-                DomainXMin = -half, DomainXMax = half,
-                DomainYMin = -half, DomainYMax = half,
-                DomainZMax = half,
-                CaseDir = caseDir
-            };
-
-            foreach (var f in binFiles)
-            {
-                string name = Path.GetFileNameWithoutExtension(f);
-                if (temperatureChannel && name.EndsWith("_T", StringComparison.OrdinalIgnoreCase))
-                    name = name.Substring(0, name.Length - 2);
-                if (double.TryParse(name,
-                    System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out double t))
-                {
-                    result.TimeSteps.Add(t);
-                    result.TimeStepPaths[t] = f;
-                }
-            }
-            result.TimeSteps.Sort();
-            result.IsLoaded = result.TimeSteps.Count > 0;
-            return result;
-        }
+            string caseDir, ref int nx, ref int ny, ref int nz, double half,
+            bool temperatureChannel = false)
+            => OpenFoamResultReader.TryLoadFlatBinCase(
+                caseDir, ref nx, ref ny, ref nz, half, temperatureChannel);
 
         // ── Dispersion playback ─────────────────────────────────────────
 
