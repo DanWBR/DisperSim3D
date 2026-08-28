@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Windows.Forms;
 using DisperSim3D.Core;
@@ -12,6 +12,14 @@ namespace DisperSim3D.Dialogs
     /// </summary>
     public class ViewEditorDialog : Form
     {
+        /// <summary>Combo entry that displays the field label and carries the enum.</summary>
+        private sealed class FieldChoice
+        {
+            public ViewFieldProperty Value { get; }
+            public FieldChoice(ViewFieldProperty value) { Value = value; }
+            public override string ToString() => FieldTransform.DisplayName(Value);
+        }
+
         private readonly Scene3D _scene;
         private TextBox txtName;
         private ComboBox cmbSimulation;
@@ -78,19 +86,18 @@ namespace DisperSim3D.Dialogs
             DialogHelpers.AddRowWithHelp(table, ref row, "Simulation:", cmbSimulation,
                 "Completed simulation whose results this view samples.");
 
+            // Built from the enum, not a hardcoded list: the list used to stop at
+            // the seventh of nineteen values, so %LFL, ppm, thermal radiation, the
+            // flash-fire fields and the dose fields were unreachable here and had
+            // to be set through the property grid.
             cmbField = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
-            cmbField.Items.AddRange(new object[] {
-                "Concentration (auto-resolves to source species)",
-                "Temperature (T)",
-                "Wind Speed (|U|)",
-                "Pressure (p_rgh)",
-                "Turbulent K (k)",
-                "Turbulent Epsilon (epsilon)",
-                "Turbulent Viscosity (nut)"
-            });
+            foreach (ViewFieldProperty p in Enum.GetValues(typeof(ViewFieldProperty)))
+                cmbField.Items.Add(new FieldChoice(p));
             cmbField.SelectedIndex = 0;
             DialogHelpers.AddRowWithHelp(table, ref row, "Field:", cmbField,
-                "Which OpenFOAM scalar field to sample.");
+                "What the view renders. Most entries sample the simulation result; "
+                + "thermal radiation, dose and fatality come from the scene's fire sources, "
+                + "and the flash-fire entries burn the cloud from the scene's ignition.");
 
             cmbTimeMode = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
             cmbTimeMode.Items.AddRange(new object[] {
@@ -168,7 +175,7 @@ namespace DisperSim3D.Dialogs
                 case 3: kind = ViewKind.ContourYZ; break;
                 default: kind = ViewKind.Isosurface; break;
             }
-            ViewFieldProperty field = (ViewFieldProperty)cmbField.SelectedIndex;
+            var field = (cmbField.SelectedItem as FieldChoice)?.Value ?? ViewFieldProperty.Concentration;
             ViewTimeMode timeMode = (ViewTimeMode)cmbTimeMode.SelectedIndex;
 
             Result = new DisperSim3D.Models.View

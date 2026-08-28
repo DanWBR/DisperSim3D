@@ -288,6 +288,38 @@ namespace DisperSim3D.Core
             return sumKwM2;
         }
 
+        /// <summary>
+        /// Human-readable label for a field property. One list, so the two View editors
+        /// stay in step with the enum instead of each carrying its own hardcoded set —
+        /// which is how they came to offer only the first seven of nineteen values.
+        /// </summary>
+        public static string DisplayName(ViewFieldProperty p)
+        {
+            switch (p)
+            {
+                case ViewFieldProperty.Concentration:        return "Concentration (auto-resolves to source species)";
+                case ViewFieldProperty.Temperature:          return "Temperature (T)";
+                case ViewFieldProperty.WindSpeed:            return "Wind speed (|U|)";
+                case ViewFieldProperty.Pressure:             return "Pressure (p_rgh)";
+                case ViewFieldProperty.TurbulentK:           return "Turbulent k";
+                case ViewFieldProperty.TurbulentEpsilon:     return "Turbulent epsilon";
+                case ViewFieldProperty.TurbulentViscosity:   return "Turbulent viscosity (nut)";
+                case ViewFieldProperty.MassFraction:         return "Mass fraction (kg/kg)";
+                case ViewFieldProperty.MoleFraction:         return "Mole fraction (mol/mol)";
+                case ViewFieldProperty.ConcentrationKgM3:    return "Concentration (kg/m³)";
+                case ViewFieldProperty.ConcentrationPpm:     return "Concentration (ppm)";
+                case ViewFieldProperty.ConcentrationPpb:     return "Concentration (ppb)";
+                case ViewFieldProperty.PercentLFL:           return "% LFL";
+                case ViewFieldProperty.PercentUFL:           return "% UFL";
+                case ViewFieldProperty.ThermalRadiationKwM2: return "Thermal radiation (kW/m²) — fire sources";
+                case ViewFieldProperty.FlashFireArrivalS:    return "Flash fire — flame arrival time (s)";
+                case ViewFieldProperty.FlashFireEnvelope:    return "Flash fire — hazard envelope (iso 0.5)";
+                case ViewFieldProperty.ThermalDose:          return "Thermal dose — fire sources";
+                case ViewFieldProperty.FatalityProbability:  return "Fatality probability — fire sources";
+                default:                                     return p.ToString();
+            }
+        }
+
         /// <summary>Units suffix shown in legends / detector readouts. Matches the
         /// numeric value returned by <see cref="FromMassFraction"/>.</summary>
         public static string UnitFor(ViewFieldProperty p)

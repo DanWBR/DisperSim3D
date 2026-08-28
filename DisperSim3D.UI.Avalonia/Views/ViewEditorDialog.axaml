@@ -54,16 +54,10 @@
                 HorizontalAlignment="Stretch" />
 
       <TextBlock Grid.Row="3" Grid.Column="0" Classes="field" Text="Field:" />
+      <!-- Items are filled from ViewFieldProperty in the code-behind so the list
+           cannot fall behind the enum, as the hardcoded one did. -->
       <ComboBox Grid.Row="3" Grid.Column="1" x:Name="CmbField"
-                HorizontalAlignment="Stretch">
-        <ComboBoxItem Content="Concentration (auto-resolves to source species)" />
-        <ComboBoxItem Content="Temperature (T)" />
-        <ComboBoxItem Content="Wind Speed (|U|)" />
-        <ComboBoxItem Content="Pressure (p_rgh)" />
-        <ComboBoxItem Content="Turbulent K (k)" />
-        <ComboBoxItem Content="Turbulent Epsilon (epsilon)" />
-        <ComboBoxItem Content="Turbulent Viscosity (nut)" />
-      </ComboBox>
+                HorizontalAlignment="Stretch" />
 
       <TextBlock Grid.Row="4" Grid.Column="0" Classes="field" Text="Time Mode:" />
       <ComboBox Grid.Row="4" Grid.Column="1" x:Name="CmbTimeMode"

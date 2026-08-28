@@ -2339,6 +2339,7 @@ void main() { }
         private static readonly Vector4 FireColor     = new(0.95f, 0.30f, 0.15f, 0.9f); // red-orange
         private static readonly Vector4 MonitorColor  = new(0.25f, 0.55f, 0.95f, 0.9f); // blue
         private static readonly Vector4 DetectorColor = new(0.20f, 0.80f, 0.35f, 0.9f); // green
+        private static readonly Vector4 IgnitionColor = new(1.00f, 0.84f, 0.32f, 0.95f); // amber
 
         /// <summary>
         /// Rebuild only environment geometry (sky dome, textures, ground, grass)
@@ -2607,6 +2608,28 @@ void main() { }
                     mesh.Upload(gl, verts, idx);
                     _sceneObjects.Add(new SceneObject(
                         mesh, Matrix4x4.Identity, "fire:" + i));
+                }
+            }
+
+            // ── Ignitions → amber sparks ───────────────────────────────
+            // A diamond, not a flame: an ignition is an event on a dispersion
+            // result, and it has to read differently from a FireSource at a glance.
+            if (scene.Ignitions != null)
+            {
+                for (int i = 0; i < scene.Ignitions.Count; i++)
+                {
+                    var ignition = scene.Ignitions[i];
+                    if (!ignition.IsVisible) continue;
+                    var pos = ignition.Position;
+
+                    var (verts, idx) = GlMeshBuffer.GenerateDiamond(
+                        new Vector3((float)pos.X, (float)pos.Y, (float)pos.Z),
+                        1.0f, 3.0f, IgnitionColor);
+
+                    var mesh = new GlMeshBuffer();
+                    mesh.Upload(gl, verts, idx);
+                    _sceneObjects.Add(new SceneObject(
+                        mesh, Matrix4x4.Identity, "ignition:" + i));
                 }
             }
 

@@ -19,6 +19,7 @@ namespace DisperSim3D.UI.Avalonia.Views
     {
         private readonly Scene3D _scene;
         private readonly List<Simulation> _completed;
+        private readonly List<ViewFieldProperty> _fields = new();
 
         public View? Result { get; private set; }
 
@@ -30,6 +31,19 @@ namespace DisperSim3D.UI.Avalonia.Views
             InitializeComponent();
 
             TxtName.Text = "View " + (_scene.Views.Count + 1);
+
+            // Fill the field list from the enum rather than from XAML: the
+            // hardcoded list stopped at the seventh of nineteen values, leaving
+            // %LFL, ppm, thermal radiation, the flash-fire fields and the dose
+            // fields reachable only through the property grid.
+            foreach (ViewFieldProperty p in Enum.GetValues<ViewFieldProperty>())
+            {
+                _fields.Add(p);
+                CmbField.Items.Add(new ComboBoxItem
+                {
+                    Content = DisperSim3D.Core.FieldTransform.DisplayName(p)
+                });
+            }
 
             // Default selections — match the WinForms behaviour.
             CmbKind.SelectedIndex = 0;
@@ -80,7 +94,10 @@ namespace DisperSim3D.UI.Avalonia.Views
                 3 => ViewKind.ContourYZ,
                 _ => ViewKind.Isosurface
             };
-            ViewFieldProperty field = (ViewFieldProperty)Math.Max(0, CmbField.SelectedIndex);
+            int fieldIndex = Math.Max(0, CmbField.SelectedIndex);
+            ViewFieldProperty field = fieldIndex < _fields.Count
+                ? _fields[fieldIndex]
+                : ViewFieldProperty.Concentration;
             ViewTimeMode timeMode = (ViewTimeMode)Math.Max(0, CmbTimeMode.SelectedIndex);
 
             Result = new View

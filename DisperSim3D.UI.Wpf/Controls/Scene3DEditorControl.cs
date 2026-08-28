@@ -5167,6 +5167,23 @@ namespace DisperSim3D.Controls
             return group;
         }
 
+        /// <summary>One octahedral arm of the ignition spark marker, sized per axis.
+        /// Three of them crossed keep the marker readable from any camera angle.</summary>
+        private static void AddSparkArm(System.Windows.Media.Media3D.MeshGeometry3D mesh,
+            double sx, double sy, double sz)
+        {
+            int b = mesh.Positions.Count;
+            mesh.Positions.Add(new Point3D(0, 0, sz));
+            mesh.Positions.Add(new Point3D(sx, 0, 0));
+            mesh.Positions.Add(new Point3D(0, sy, 0));
+            mesh.Positions.Add(new Point3D(-sx, 0, 0));
+            mesh.Positions.Add(new Point3D(0, -sy, 0));
+            mesh.Positions.Add(new Point3D(0, 0, -sz));
+
+            int[] tris = { 0,1,2, 0,2,3, 0,3,4, 0,4,1, 5,2,1, 5,3,2, 5,4,3, 5,1,4 };
+            foreach (int idx in tris) mesh.TriangleIndices.Add(b + idx);
+        }
+
         public void RefreshViewport()
         {
             UpdateViewport();
@@ -5931,6 +5948,48 @@ namespace DisperSim3D.Controls
                     fVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
                         new Visual3DTag("FireSource", fire.Id));
                     _viewport.Children.Add(fVisual);
+                }
+            }
+
+            // Ignitions (spark markers). Drawn as a star burst rather than a flame:
+            // an ignition is an event on a dispersion result, not a burning source,
+            // and it has to read differently from a FireSource at a glance.
+            var existingIgnitions = _viewport.Children.OfType<System.Windows.Media.Media3D.ModelVisual3D>()
+                .Where(m => m.GetValue(System.Windows.FrameworkElement.TagProperty) is Visual3DTag tag &&
+                           tag.Category == "Ignition")
+                .ToList();
+            foreach (var g in existingIgnitions) _viewport.Children.Remove(g);
+
+            if (_scene.Ignitions != null)
+            {
+                foreach (var ignition in _scene.Ignitions)
+                {
+                    if (!ignition.IsVisible) continue;
+
+                    // Three crossed diamonds: one per axis, so the marker keeps its
+                    // shape from any camera angle.
+                    var sparkMesh = new System.Windows.Media.Media3D.MeshGeometry3D();
+                    double armLong = 1.8, armShort = 0.35;
+                    AddSparkArm(sparkMesh, armLong, armShort, armShort);
+                    AddSparkArm(sparkMesh, armShort, armLong, armShort);
+                    AddSparkArm(sparkMesh, armShort, armShort, armLong);
+
+                    var sparkBrush = new System.Windows.Media.SolidColorBrush(
+                        System.Windows.Media.Color.FromArgb(235, 255, 214, 82));
+                    sparkBrush.Freeze();
+                    var sparkMat = new System.Windows.Media.Media3D.DiffuseMaterial(sparkBrush);
+
+                    var sparkGeom = new System.Windows.Media.Media3D.GeometryModel3D
+                    {
+                        Geometry = sparkMesh, Material = sparkMat, BackMaterial = sparkMat,
+                        Transform = new System.Windows.Media.Media3D.TranslateTransform3D(
+                            ignition.Position.X, ignition.Position.Y, ignition.Position.Z)
+                    };
+
+                    var gVisual = new System.Windows.Media.Media3D.ModelVisual3D { Content = sparkGeom };
+                    gVisual.SetValue(System.Windows.FrameworkElement.TagProperty,
+                        new Visual3DTag("Ignition", ignition.Id));
+                    _viewport.Children.Add(gVisual);
                 }
             }
 
