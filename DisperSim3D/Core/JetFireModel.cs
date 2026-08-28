@@ -16,11 +16,16 @@ namespace DisperSim3D.Core
         /// <returns>Flame length in meters.</returns>
         public static double FlameLength(FireSource source)
         {
-            double dj = source.OrificeDiameterM;
             double mdot = source.MassFlowRateKgS;
             double deltaHc = source.HeatOfCombustionJKg;
-            double Q = mdot * deltaHc;
-            return 0.2 * Math.Pow(Q, 0.4);
+
+            // L = 0.2·Q^0.4 takes the heat release in kW, not W. Feeding it watts
+            // inflated every jet flame by 10^1.2 ≈ 16×: a 2 kg/s methane jet (100 MW)
+            // came out 317 m long instead of 20 m, which is what the correlation gives
+            // and what the literature reports for that duty.
+            double qKw = mdot * deltaHc / 1000.0;
+            if (qKw <= 0) return 0;
+            return 0.2 * Math.Pow(qKw, 0.4);
         }
 
         /// <summary>
@@ -42,12 +47,26 @@ namespace DisperSim3D.Core
         /// Calculates the gas exit velocity at the orifice from mass flow rate and orifice area.
         /// </summary>
         /// <param name="source">Fire source parameters.</param>
+        /// <param name="ambientTempK">Ambient temperature (K) for the gas density.</param>
+        /// <param name="ambientPressurePa">Ambient pressure (Pa) for the gas density.</param>
         /// <returns>Exit velocity in m/s.</returns>
-        public static double FlameExitVelocity(FireSource source)
+        public static double FlameExitVelocity(FireSource source,
+            double ambientTempK = 293.15, double ambientPressurePa = 101325.0)
         {
             double area = Math.PI * 0.25 * source.OrificeDiameterM * source.OrificeDiameterM;
-            double rhoGas = 0.7;
-            return area > 1e-10 ? source.MassFlowRateKgS / (rhoGas * area) : 50.0;
+            if (area <= 1e-10) return 50.0;
+
+            // Ideal gas at ambient conditions with the fuel's molar mass, instead of the
+            // 0.7 kg/m³ this used to hard-code — that value is methane-specific and only
+            // right near 280 K. A real choked jet expands to a lower density still, so
+            // this remains a lower bound on the exit velocity.
+            double molarMass = source.FuelMolarMassKgMol > 0 ? source.FuelMolarMassKgMol : 0.016;
+            double t = ambientTempK > 1 ? ambientTempK : 293.15;
+            double p = ambientPressurePa > 1 ? ambientPressurePa : 101325.0;
+            double rhoGas = p * molarMass / (8.31446 * t);
+            if (rhoGas < 1e-6) rhoGas = 0.7;
+
+            return source.MassFlowRateKgS / (rhoGas * area);
         }
 
         /// <summary>
@@ -102,7 +121,11 @@ namespace DisperSim3D.Core
         public static Point3D FlameTip(FireSource source, Vector3D windVector)
         {
             double L = source.IsPoolFire ? PoolFlameLength(source) : FlameLength(source);
-            var dir = source.Direction;
+
+            // A pool fire rises: its flame axis is vertical regardless of the Direction
+            // property, which only means something for a jet. Without this a pool fire
+            // left at the default Direction of +X would lay its flame on the ground.
+            var dir = source.IsPoolFire ? new Vector3D(0, 0, 1) : source.Direction;
             if (dir.Length < 0.01) dir = new Vector3D(0, 0, 1);
             dir.Normalize();
 

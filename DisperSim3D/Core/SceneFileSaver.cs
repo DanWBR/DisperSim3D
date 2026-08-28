@@ -191,13 +191,7 @@ namespace DisperSim3D.Core
                 new XAttribute("CreatedAt", s.CreatedAt.ToString("o", inv)),
                 new XAttribute("DefaultDomainSize", s.DefaultDomainSizeM.ToString(inv)),
                 new XAttribute("DefaultGridRes", s.DefaultGridResolution.ToString(inv)),
-                s.DefaultMeteo != null ? new XElement("DefaultMeteo",
-                    new XAttribute("WindSpeed", s.DefaultMeteo.WindSpeed.ToString(inv)),
-                    new XAttribute("WindDir", s.DefaultMeteo.WindDirectionDeg.ToString(inv)),
-                    new XAttribute("Stability", s.DefaultMeteo.StabilityClass.ToString()),
-                    new XAttribute("Temp", s.DefaultMeteo.AmbientTemperature.ToString(inv)),
-                    new XAttribute("Pressure", s.DefaultMeteo.AmbientPressure.ToString(inv)),
-                    new XAttribute("Roughness", s.DefaultMeteo.RoughnessLengthM.ToString(inv))) : null);
+                SerializeMeteo("DefaultMeteo", s.DefaultMeteo, inv));
         }
 
         private static XElement? SerializeGasLibrary(Scene3D scene, CultureInfo inv)
@@ -316,13 +310,7 @@ namespace DisperSim3D.Core
                             SerializeSourceCommon(s.SnapshotSource, inv).Attributes(),
                             SerializeSourceCommon(s.SnapshotSource, inv).Elements())
                         : null,
-                    s.SnapshotMeteo != null ? new XElement("SnapshotMeteo",
-                        new XAttribute("WindSpeed", s.SnapshotMeteo.WindSpeed.ToString(inv)),
-                        new XAttribute("WindDir", s.SnapshotMeteo.WindDirectionDeg.ToString(inv)),
-                        new XAttribute("Stability", s.SnapshotMeteo.StabilityClass.ToString()),
-                        new XAttribute("Temp", s.SnapshotMeteo.AmbientTemperature.ToString(inv)),
-                        new XAttribute("Pressure", s.SnapshotMeteo.AmbientPressure.ToString(inv)),
-                        new XAttribute("Roughness", s.SnapshotMeteo.RoughnessLengthM.ToString(inv))) : null,
+                    SerializeMeteo("SnapshotMeteo", s.SnapshotMeteo, inv),
                     SerializeAtmosphericCfd(s.SnapshotCfdConfig, inv))));
         }
 
@@ -452,13 +440,7 @@ namespace DisperSim3D.Core
                         new XAttribute("FluidX3DQuality", wf.FluidX3DQuality.ToString()),
                         new XAttribute("FluidX3DGroundBC", wf.FluidX3DGroundBC.ToString()),
                         new XAttribute("IsVisible", wf.IsVisible.ToString()),
-                        new XElement("Meteo",
-                            new XAttribute("WindSpeed", wf.Meteo.WindSpeed.ToString(inv)),
-                            new XAttribute("WindDir", wf.Meteo.WindDirectionDeg.ToString(inv)),
-                            new XAttribute("Stability", wf.Meteo.StabilityClass.ToString()),
-                            new XAttribute("Temp", wf.Meteo.AmbientTemperature.ToString(inv)),
-                            new XAttribute("Pressure", wf.Meteo.AmbientPressure.ToString(inv)),
-                            new XAttribute("Roughness", wf.Meteo.RoughnessLengthM.ToString(inv))),
+                        SerializeMeteo("Meteo", wf.Meteo, inv),
                         SerializeAtmosphericCfd(wf.CfdConfig, inv))));
         }
 
@@ -520,13 +502,7 @@ namespace DisperSim3D.Core
                 new XAttribute("SolverType", sc.SolverType.ToString()),
                 new XAttribute("WindFieldId", sc.WindFieldScenarioId ?? ""),
 
-                new XElement("Meteo",
-                    new XAttribute("WindSpeed", sc.Meteo.WindSpeed.ToString(inv)),
-                    new XAttribute("WindDir", sc.Meteo.WindDirectionDeg.ToString(inv)),
-                    new XAttribute("Stability", sc.Meteo.StabilityClass.ToString()),
-                    new XAttribute("Temp", sc.Meteo.AmbientTemperature.ToString(inv)),
-                    new XAttribute("Pressure", sc.Meteo.AmbientPressure.ToString(inv)),
-                    new XAttribute("Roughness", sc.Meteo.RoughnessLengthM.ToString(inv))),
+                SerializeMeteo("Meteo", sc.Meteo, inv),
 
                 new XElement("Sources",
                     sc.Sources.Select(src =>
@@ -635,12 +611,32 @@ namespace DisperSim3D.Core
                         new XAttribute("Stability", b.StabilityClass.ToString()))));
         }
 
+        /// <summary>
+        /// One writer for every MeteorologicalConditions element in the file —
+        /// DefaultMeteo, SnapshotMeteo and the two &lt;Meteo&gt; elements — so a field
+        /// added here reaches all four instead of three. Returns null for a null
+        /// meteo, which XElement drops from the tree.
+        /// </summary>
+        private static XElement? SerializeMeteo(string elementName, MeteorologicalConditions? meteo, CultureInfo inv)
+        {
+            if (meteo == null) return null;
+            return new XElement(elementName,
+                new XAttribute("WindSpeed", meteo.WindSpeed.ToString(inv)),
+                new XAttribute("WindDir", meteo.WindDirectionDeg.ToString(inv)),
+                new XAttribute("Stability", meteo.StabilityClass.ToString()),
+                new XAttribute("Temp", meteo.AmbientTemperature.ToString(inv)),
+                new XAttribute("Pressure", meteo.AmbientPressure.ToString(inv)),
+                new XAttribute("Humidity", meteo.RelativeHumidity.ToString(inv)),
+                new XAttribute("Roughness", meteo.RoughnessLengthM.ToString(inv)));
+        }
+
         private static XElement? SerializeFireScenario(Scene3D scene, CultureInfo inv)
         {
             var fs = scene.FireScenario;
             if (fs == null || fs.Sources.Count == 0) return null;
             return new XElement("FireScenario",
                 new XAttribute("Name", fs.Name ?? ""),
+                new XAttribute("ReceiverMode", fs.ReceiverMode.ToString()),
                 new XElement("RadLevels",
                     string.Join(",", fs.RadiationContourLevels.Select(l => l.ToString(inv)))),
                 new XElement("FireSources",
@@ -661,6 +657,10 @@ namespace DisperSim3D.Core
                             new XAttribute("IsPool", f.IsPoolFire),
                             new XAttribute("PoolDia", f.PoolDiameterM.ToString(inv)),
                             new XAttribute("BurnRate", f.PoolBurnRateKgM2S.ToString(inv)),
+                            new XAttribute("RadModel", f.RadiationModel.ToString()),
+                            new XAttribute("FlameDia", f.FlameDiameterM.ToString(inv)),
+                            new XAttribute("Sep", f.SepKwM2.ToString(inv)),
+                            new XAttribute("FuelMolar", f.FuelMolarMassKgMol.ToString(inv)),
                             new XAttribute("IsVisible", f.IsVisible)))));
         }
 

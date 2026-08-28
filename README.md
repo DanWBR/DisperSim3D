@@ -105,7 +105,16 @@ GPU selection (multi-GPU systems) and on-demand VRAM/RAM/disk sizing live under 
 ### Fire Modeling
 
 - **Jet fire** model (Chamberlain) with Brzustowski tilt
-- Point-source thermal radiation contours
+- **Pool fire** flame length (Thomas), vertical flame axis
+- **Solid-flame thermal radiation** — the flame is a tilted cylinder radiating at a
+  surface emissive power, with a numerically integrated view factor and Pietersen
+  atmospheric transmissivity: `I = τ · SEP · F`. SEP comes from the energy balance,
+  capped by Mudan's soot correlation for pools and 350 kW/m² for jets, and both the
+  flame diameter and the SEP can be overridden per source
+- **Point-source radiation** kept as the fast preview model, selectable per fire source
+- Receiver orientation per scenario: worst case, horizontal, or vertical
+- 3D isosurfaces and contour planes of kW/m², plus radiation as a monitor and
+  detector quantity
 
 ---
 

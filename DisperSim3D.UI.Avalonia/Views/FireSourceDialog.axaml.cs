@@ -11,7 +11,9 @@ namespace DisperSim3D.UI.Avalonia.Views
     /// Edits a <see cref="FireSource"/>: jet/pool fire with flame length
     /// drivers (mass flow, orifice, heat of combustion, radiative fraction)
     /// and optional pool-fire-only fields (diameter, burn rate). The pool
-    /// fields are gated by the "Pool fire" checkbox.
+    /// fields are gated by the "Pool fire" checkbox. The second group picks the
+    /// radiation model and its optional overrides — flame diameter and surface
+    /// emissive power, both 0 meaning "derive from the correlations".
     /// </summary>
     public partial class FireSourceDialog : Window
     {
@@ -33,6 +35,11 @@ namespace DisperSim3D.UI.Avalonia.Views
                 ChkPoolFire.IsChecked    = existing.IsPoolFire;
                 NudPoolDiameter.Value    = (decimal)existing.PoolDiameterM;
                 NudBurnRate.Value        = (decimal)existing.PoolBurnRateKgM2S;
+                CmbRadiationModel.SelectedIndex =
+                    existing.RadiationModel == RadiationModel.PointSource ? 1 : 0;
+                NudFlameDiameter.Value   = (decimal)existing.FlameDiameterM;
+                NudSep.Value             = (decimal)existing.SepKwM2;
+                NudFuelMolar.Value       = (decimal)existing.FuelMolarMassKgMol;
                 UpdatePoolFieldsEnabled();
             }
         }
@@ -63,6 +70,12 @@ namespace DisperSim3D.UI.Avalonia.Views
                 IsPoolFire           = ChkPoolFire.IsChecked == true,
                 PoolDiameterM        = (double)(NudPoolDiameter.Value ?? 5m),
                 PoolBurnRateKgM2S    = (double)(NudBurnRate.Value ?? 0.05m),
+                RadiationModel       = CmbRadiationModel.SelectedIndex == 1
+                                       ? RadiationModel.PointSource
+                                       : RadiationModel.SolidFlame,
+                FlameDiameterM       = (double)(NudFlameDiameter.Value ?? 0m),
+                SepKwM2              = (double)(NudSep.Value ?? 0m),
+                FuelMolarMassKgMol   = (double)(NudFuelMolar.Value ?? 0.016m),
                 Direction            = new Vector3D(0, 0, 1)
             };
             Close(true);

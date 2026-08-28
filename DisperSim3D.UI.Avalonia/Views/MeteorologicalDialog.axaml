@@ -35,7 +35,7 @@
       <TextBlock x:Name="ErrorText" Foreground="#A40000" />
     </Border>
 
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
           ColumnDefinitions="200,*" RowSpacing="6">
       <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Wind Speed (m/s):" />
       <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="NudWindSpeed"
@@ -67,6 +67,12 @@
       <NumericUpDown Grid.Row="4" Grid.Column="1" x:Name="NudPressure"
                      Minimum="80000" Maximum="120000" Value="101325"
                      FormatString="0" Increment="100" />
+
+      <TextBlock Grid.Row="5" Grid.Column="0" Classes="field" Text="Relative Humidity (%):" />
+      <NumericUpDown Grid.Row="5" Grid.Column="1" x:Name="NudHumidity"
+                     Minimum="0" Maximum="100" Value="50"
+                     FormatString="0" Increment="5"
+                     ToolTip.Tip="Water vapour absorbs thermal radiation: this sets the&#10;atmospheric transmissivity of the solid-flame fire model.&#10;It does not affect dispersion." />
     </Grid>
   </DockPanel>
 </Window>

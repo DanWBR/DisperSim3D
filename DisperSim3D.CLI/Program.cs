@@ -62,6 +62,7 @@ namespace DisperSim3D.CLI
             bool iogpSelftest = false;
             bool geometrySelftest = false;
             bool fireRoundTripSelftest = false;
+            bool solidFlameSelftest = false;
             bool tracerGpuSelftest = false;
             string listIogpType = null;        // null = "no --list-iogp"; "" = all 24; otherwise the type name
             bool memoryEstimate = false;
@@ -133,6 +134,9 @@ namespace DisperSim3D.CLI
                     case "--fire-roundtrip-selftest":
                         fireRoundTripSelftest = true;
                         break;
+                    case "--solid-flame-selftest":
+                        solidFlameSelftest = true;
+                        break;
                     case "--list-iogp":
                         // Optional positional: equipment type name. We peek the
                         // next arg; if it starts with '-' it's the next flag.
@@ -177,6 +181,7 @@ namespace DisperSim3D.CLI
             if (tracerGpuSelftest) return RunTracerGpuSelfTest();
             if (geometrySelftest) return RunGeometrySelfTest();
             if (fireRoundTripSelftest) return RunFireRoundTripSelfTest();
+            if (solidFlameSelftest) return RunSolidFlameSelfTest();
             if (listIogpType != null) return RunListIogp(listIogpType);
             if (memoryEstimate) return RunMemoryEstimate(memSolverArg, memNxArg);
             if (twoPhaseTest) return RunTwoPhaseTest();
@@ -458,6 +463,23 @@ namespace DisperSim3D.CLI
             {
                 Console.Write(IogpTableTests.RunAll());
                 return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return 1;
+            }
+        }
+
+        /// <summary>Wrapper around <see cref="SolidFlameSelfTest.RunAndPrint"/>.
+        /// Returns 0 when the solid-flame radiation model passes its physics checks
+        /// — panel areas, emissive power, far-field agreement with the point source,
+        /// monotonic falloff and the transmissivity curve — 1 otherwise.</summary>
+        static int RunSolidFlameSelfTest()
+        {
+            try
+            {
+                return SolidFlameSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             }
             catch (Exception ex)
             {
@@ -1571,6 +1593,8 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             the published values; exit 0 on full pass.");
             Console.WriteLine("  --fire-roundtrip-selftest  Save and reload a FireScenario and compare");
             Console.WriteLine("                             every field; exit 0 on full pass.");
+            Console.WriteLine("  --solid-flame-selftest     Check the solid-flame radiation model against");
+            Console.WriteLine("                             the point source and its limiting cases.");
             Console.WriteLine("  --list-iogp [type]         Dump IOGP leak-frequency table (one type or");
             Console.WriteLine("                             all 24). e.g. --list-iogp SteelProcessPipe");
             Console.WriteLine("  --memory-estimate <solver> <N>");

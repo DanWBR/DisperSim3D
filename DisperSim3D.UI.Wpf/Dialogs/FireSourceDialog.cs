@@ -15,6 +15,10 @@ namespace DisperSim3D.Dialogs
         private CheckBox chkPoolFire;
         private NumericUpDown nudPoolDiameter;
         private NumericUpDown nudBurnRate;
+        private ComboBox cmbRadiationModel;
+        private NumericUpDown nudFlameDiameter;
+        private NumericUpDown nudSep;
+        private NumericUpDown nudFuelMolar;
 
         public FireSource Result { get; private set; }
 
@@ -50,7 +54,7 @@ namespace DisperSim3D.Dialogs
             var table = new TableLayoutPanel
             {
                 AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                ColumnCount = 2, RowCount = 9, Margin = new Padding(0, 0, 0, 8)
+                ColumnCount = 2, RowCount = 13, Margin = new Padding(0, 0, 0, 8)
             };
             table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(200 * dpi)));
@@ -95,6 +99,32 @@ namespace DisperSim3D.Dialogs
             DialogHelpers.AddRowWithHelp(table, ref row, "Burn Rate (kg/m²/s):", nudBurnRate,
                 "Mass burned per unit pool area. Hydrocarbons typically 0.04-0.10 kg/m²/s.");
 
+            cmbRadiationModel = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Dock = DockStyle.Fill
+            };
+            cmbRadiationModel.Items.AddRange(new object[] { RadiationModel.SolidFlame, RadiationModel.PointSource });
+            cmbRadiationModel.SelectedIndex = 0;
+            DialogHelpers.AddRowWithHelp(table, ref row, "Radiation Model:", cmbRadiationModel,
+                "SolidFlame: tilted cylinder with view factors and atmospheric transmissivity. "
+                + "PointSource: all power from one point, fast but wrong within a few flame lengths.");
+
+            nudFlameDiameter = MakeNud(0m, 200m, 0m, 2);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Flame Diameter (m):", nudFlameDiameter,
+                "Solid-flame width. 0 = derive it: the pool diameter for a pool fire, "
+                + "Chamberlain's frustum width (0.13 x flame length) for a jet.");
+
+            nudSep = MakeNud(0m, 400m, 0m, 0);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Emissive Power (kW/m²):", nudSep,
+                "Surface emissive power. 0 = derive it from the energy balance, capped by "
+                + "Mudan's soot correlation for pools and 350 kW/m² for jets.");
+
+            nudFuelMolar = MakeNud(0.002m, 0.5m, 0.016m, 4);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Fuel Molar Mass (kg/mol):", nudFuelMolar,
+                "Sets the gas density at the orifice, and through it the exit velocity that "
+                + "determines how far the wind tilts the flame. Methane 0.016, propane 0.044.");
+
             var buttons = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill, AutoSize = true,
@@ -118,6 +148,10 @@ namespace DisperSim3D.Dialogs
                     IsPoolFire = chkPoolFire.Checked,
                     PoolDiameterM = (double)nudPoolDiameter.Value,
                     PoolBurnRateKgM2S = (double)nudBurnRate.Value,
+                    RadiationModel = (RadiationModel)cmbRadiationModel.SelectedItem,
+                    FlameDiameterM = (double)nudFlameDiameter.Value,
+                    SepKwM2 = (double)nudSep.Value,
+                    FuelMolarMassKgMol = (double)nudFuelMolar.Value,
                     Direction = new System.Windows.Media.Media3D.Vector3D(0, 0, 1)
                 };
             };

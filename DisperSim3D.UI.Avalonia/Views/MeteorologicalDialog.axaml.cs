@@ -29,6 +29,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 CmbStability.SelectedIndex = (int)existing.StabilityClass;
                 NudTemperature.Value = (decimal)existing.AmbientTemperature;
                 NudPressure.Value = (decimal)existing.AmbientPressure;
+                NudHumidity.Value = (decimal)(existing.RelativeHumidity * 100.0);
             }
             else
             {
@@ -53,7 +54,8 @@ namespace DisperSim3D.UI.Avalonia.Views
                 WindDirectionDeg = (double)(NudWindDir.Value ?? 270m),
                 StabilityClass = (PasquillStabilityClass)CmbStability.SelectedIndex,
                 AmbientTemperature = (double)(NudTemperature.Value ?? 293.15m),
-                AmbientPressure = (double)(NudPressure.Value ?? 101325m)
+                AmbientPressure = (double)(NudPressure.Value ?? 101325m),
+                RelativeHumidity = (double)(NudHumidity.Value ?? 50m) / 100.0
             };
             Close(true);
         }

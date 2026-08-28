@@ -31,6 +31,14 @@ namespace DisperSim3D.Models
         [Description("Ambient atmospheric pressure (Pa). 101325 Pa = sea level standard.")]
         public double AmbientPressure { get; set; }
 
+        /// <summary>
+        /// Relative humidity as a fraction (0–1). Feeds the water-vapour partial
+        /// pressure in the atmospheric transmissivity of the solid-flame radiation
+        /// model — humid air absorbs a measurable share of the flux beyond a few tens
+        /// of metres. Default is 0.5.
+        /// </summary>
+        public double RelativeHumidity { get; set; }
+
         [Category("Wind")]
         [Description("Atmospheric mixing height — vertical extent above which dispersion is bounded (m).")]
         public double MixingHeightM { get; set; }
@@ -130,6 +138,7 @@ namespace DisperSim3D.Models
             StabilityClass = PasquillStabilityClass.D;
             AmbientTemperature = 293.15;
             AmbientPressure = 101325.0;
+            RelativeHumidity = 0.5;
             MixingHeightM = 1000.0;
             WindMeasurementHeightM = 10.0;
             WindShearExponent = -1;

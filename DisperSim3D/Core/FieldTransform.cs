@@ -100,7 +100,20 @@ namespace DisperSim3D.Core
             double dx = 2 * halfM / nx, dy = 2 * halfM / ny;
             double dz = halfM > 0 ? halfM / nz * 2.0 : 1.0; // matches BuildVisual's z scaling
             var sources = scene.FireScenario.Sources;
-            for (int k = 0; k < nz; k++)
+
+            var meteo = ResolveMeteo(scene);
+            double ambientT = meteo.AmbientTemperature;
+            double humidity = meteo.RelativeHumidity;
+            var receiverMode = scene.FireScenario.ReceiverMode;
+
+            // Flame panels and emissive powers depend on the source and the wind, not on
+            // the receiver, so they are resolved once here rather than per cell.
+            var emitters = SolidFlameModel.PrepareAll(sources, meteo.WindVector);
+
+            // One solid-flame cell costs ~100 panel evaluations against ~1 for the point
+            // source, so a 60³ grid goes from ~10⁵ to ~10⁷ operations. Splitting on k
+            // keeps that in the tenths of a second and the writes stay disjoint.
+            System.Threading.Tasks.Parallel.For(0, nz, k =>
             {
                 double z = (k + 0.5) * dz;
                 for (int j = 0; j < ny; j++)
@@ -109,21 +122,47 @@ namespace DisperSim3D.Core
                     for (int i = 0; i < nx; i++)
                     {
                         double x = -halfM + (i + 0.5) * dx;
-                        double sumWm2 = 0;
+                        var receiver = new Geometry.Point3D(x, y, z);
+                        double sumKwM2 = 0;
+
                         foreach (var src in sources)
                         {
-                            if (src == null) continue;
+                            if (src == null || src.RadiationModel != RadiationModel.PointSource) continue;
                             double dxp = x - src.Position.X;
                             double dyp = y - src.Position.Y;
                             double dzp = z - src.Position.Z;
                             double r = Math.Sqrt(dxp * dxp + dyp * dyp + dzp * dzp);
-                            sumWm2 += JetFireModel.RadiationAtDistance(src, r);
+                            sumKwM2 += JetFireModel.RadiationAtDistance(src, r) / 1000.0;
                         }
-                        output[i, j, k] = sumWm2 / 1000.0; // W/m² → kW/m²
+
+                        for (int e = 0; e < emitters.Count; e++)
+                        {
+                            sumKwM2 += SolidFlameModel.FluxKwM2(
+                                emitters[e], receiver, receiverMode, ambientT, humidity);
+                        }
+
+                        output[i, j, k] = sumKwM2;
                     }
                 }
-            }
+            });
+
             return output;
+        }
+
+        /// <summary>
+        /// Meteorology backing the analytic radiation field: wind sets the flame tilt,
+        /// ambient temperature and humidity set the atmospheric transmissivity. Follows
+        /// the precedence the UI already uses — the first wind-field scenario, then the
+        /// project defaults, then a standard atmosphere.
+        /// </summary>
+        public static MeteorologicalConditions ResolveMeteo(Scene3D scene)
+        {
+            if (scene?.WindFieldScenarios != null && scene.WindFieldScenarios.Count > 0
+                && scene.WindFieldScenarios[0].Meteo != null)
+                return scene.WindFieldScenarios[0].Meteo;
+            if (scene?.GeneralSettings?.DefaultMeteo != null)
+                return scene.GeneralSettings.DefaultMeteo;
+            return new MeteorologicalConditions();
         }
 
         /// <summary>Scalar point-sample transform used by detectors and monitors.
@@ -156,17 +195,34 @@ namespace DisperSim3D.Core
         {
             if (scene?.FireScenario?.Sources == null || scene.FireScenario.Sources.Count == 0)
                 return 0;
-            double sumWm2 = 0;
+
+            var meteo = ResolveMeteo(scene);
+            var receiver = new Geometry.Point3D(x, y, z);
+            var receiverMode = scene.FireScenario.ReceiverMode;
+            double sumKwM2 = 0;
+
             foreach (var src in scene.FireScenario.Sources)
             {
                 if (src == null) continue;
-                double dx = x - src.Position.X;
-                double dy = y - src.Position.Y;
-                double dz = z - src.Position.Z;
-                double r = Math.Sqrt(dx * dx + dy * dy + dz * dz);
-                sumWm2 += JetFireModel.RadiationAtDistance(src, r);
+
+                if (src.RadiationModel == RadiationModel.SolidFlame)
+                {
+                    // One monitor or detector at a time: preparing the panels per call is
+                    // cheap next to the grid sweep in BuildRadiationField.
+                    var emitter = SolidFlameModel.Prepare(src, meteo.WindVector);
+                    sumKwM2 += SolidFlameModel.FluxKwM2(emitter, receiver, receiverMode,
+                        meteo.AmbientTemperature, meteo.RelativeHumidity);
+                }
+                else
+                {
+                    double dx = x - src.Position.X;
+                    double dy = y - src.Position.Y;
+                    double dz = z - src.Position.Z;
+                    double r = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                    sumKwM2 += JetFireModel.RadiationAtDistance(src, r) / 1000.0;
+                }
             }
-            return sumWm2 / 1000.0;
+            return sumKwM2;
         }
 
         /// <summary>Units suffix shown in legends / detector readouts. Matches the

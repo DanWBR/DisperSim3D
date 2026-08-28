@@ -12,6 +12,7 @@ namespace DisperSim3D.Dialogs
         private ComboBox cmbStability;
         private NumericUpDown nudTemperature;
         private NumericUpDown nudPressure;
+        private NumericUpDown nudHumidity;
 
         public MeteorologicalConditions Result { get; private set; }
 
@@ -25,6 +26,7 @@ namespace DisperSim3D.Dialogs
                 cmbStability.SelectedIndex = (int)existing.StabilityClass;
                 nudTemperature.Value = (decimal)existing.AmbientTemperature;
                 nudPressure.Value = (decimal)existing.AmbientPressure;
+                nudHumidity.Value = (decimal)(existing.RelativeHumidity * 100.0);
             }
         }
 
@@ -59,7 +61,7 @@ namespace DisperSim3D.Dialogs
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 ColumnCount = 2,
-                RowCount = 5,
+                RowCount = 6,
                 Margin = new Padding(0, 0, 0, 8)
             };
             table.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -90,6 +92,11 @@ namespace DisperSim3D.Dialogs
             nudPressure = MakeNud(80000m, 120000m, 101325m, 0);
             DialogHelpers.AddRowWithHelp(table, ref row, "Pressure (Pa):", nudPressure,
                 "Ambient atmospheric pressure (101325 Pa = sea level standard).");
+
+            nudHumidity = MakeNud(0m, 100m, 50m, 0);
+            DialogHelpers.AddRowWithHelp(table, ref row, "Relative Humidity (%):", nudHumidity,
+                "Water vapour in the air absorbs thermal radiation: this sets the atmospheric "
+                + "transmissivity of the solid-flame fire model. It does not affect dispersion.");
 
             var buttons = new TableLayoutPanel
             {
@@ -124,7 +131,8 @@ namespace DisperSim3D.Dialogs
                 WindDirectionDeg = (double)nudWindDirection.Value,
                 StabilityClass = (PasquillStabilityClass)cmbStability.SelectedIndex,
                 AmbientTemperature = (double)nudTemperature.Value,
-                AmbientPressure = (double)nudPressure.Value
+                AmbientPressure = (double)nudPressure.Value,
+                RelativeHumidity = (double)nudHumidity.Value / 100.0
             };
         }
 

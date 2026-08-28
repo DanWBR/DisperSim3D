@@ -223,6 +223,7 @@ namespace DisperSim3D.Core
                     (string)mEl.Attribute("Stability") ?? "D"),
                 AmbientTemperature = double.Parse((string)mEl.Attribute("Temp") ?? "293.15", inv),
                 AmbientPressure = double.Parse((string)mEl.Attribute("Pressure") ?? "101325", inv),
+                RelativeHumidity = AttrDouble(mEl, inv, 0.5, "Humidity"),
                 RoughnessLengthM = double.Parse((string)mEl.Attribute("Roughness") ?? "0.03", inv)
             };
         }
@@ -393,18 +394,7 @@ namespace DisperSim3D.Core
             sc.WindFieldScenarioId = string.IsNullOrEmpty(wfId) ? null : wfId;
 
             var meteoEl = dEl.Element("Meteo");
-            if (meteoEl != null)
-            {
-                sc.Meteo = new MeteorologicalConditions
-                {
-                    WindSpeed = double.Parse((string)meteoEl.Attribute("WindSpeed") ?? "5", inv),
-                    WindDirectionDeg = double.Parse((string)meteoEl.Attribute("WindDir") ?? "270", inv),
-                    StabilityClass = (PasquillStabilityClass)Enum.Parse(typeof(PasquillStabilityClass),
-                        (string)meteoEl.Attribute("Stability") ?? "D"),
-                    AmbientTemperature = double.Parse((string)meteoEl.Attribute("Temp") ?? "293.15", inv),
-                    AmbientPressure = double.Parse((string)meteoEl.Attribute("Pressure") ?? "101325", inv)
-                };
-            }
+            if (meteoEl != null) sc.Meteo = ParseMeteo(meteoEl, inv);
 
             var srcEl = dEl.Element("Sources");
             if (srcEl != null)
@@ -564,6 +554,11 @@ namespace DisperSim3D.Core
             string scenarioName = (string)fireEl.Attribute("Name");
             if (!string.IsNullOrEmpty(scenarioName)) scene.FireScenario.Name = scenarioName;
 
+            string receiverMode = (string)fireEl.Attribute("ReceiverMode");
+            if (!string.IsNullOrEmpty(receiverMode)
+                && Enum.TryParse(receiverMode, out ReceiverMode parsedReceiverMode))
+                scene.FireScenario.ReceiverMode = parsedReceiverMode;
+
             var levelsEl = fireEl.Element("RadLevels");
             if (levelsEl != null && !string.IsNullOrWhiteSpace(levelsEl.Value))
             {
@@ -601,8 +596,19 @@ namespace DisperSim3D.Core
                     IsPoolFire = AttrBool(fe, false, "IsPool", "IsPoolFire"),
                     PoolDiameterM = AttrDouble(fe, inv, 5.0, "PoolDia"),
                     PoolBurnRateKgM2S = AttrDouble(fe, inv, 0.05, "BurnRate"),
+                    FlameDiameterM = AttrDouble(fe, inv, 0, "FlameDia"),
+                    SepKwM2 = AttrDouble(fe, inv, 0, "Sep"),
+                    FuelMolarMassKgMol = AttrDouble(fe, inv, 0.016, "FuelMolar"),
                     IsVisible = AttrBool(fe, true, "IsVisible")
                 };
+
+                // Files written before the solid-flame model carry no RadModel;
+                // they were computed as point sources, so that is what they reload as.
+                string radModel = (string)fe.Attribute("RadModel");
+                fire.RadiationModel = !string.IsNullOrEmpty(radModel)
+                    && Enum.TryParse(radModel, out RadiationModel parsedRadModel)
+                    ? parsedRadModel
+                    : RadiationModel.PointSource;
 
                 // Keep the saved Id: Views, detectors and studies reference sources
                 // by Id, and a fresh Guid on every load would break those links.

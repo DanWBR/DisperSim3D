@@ -7,7 +7,7 @@
         Title="Add Fire Source"
         Icon="/Assets/Air.ico"
         Width="500" SizeToContent="Height"
-        MinHeight="380" MaxHeight="600"
+        MinHeight="380" MaxHeight="760"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
 
@@ -30,7 +30,7 @@
       </StackPanel>
     </Border>
 
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
           ColumnDefinitions="180,*" RowSpacing="6">
       <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Name:" />
       <TextBox    Grid.Row="0" Grid.Column="1" x:Name="TxtName" Text="JetFire1" />
@@ -69,6 +69,34 @@
       <NumericUpDown Grid.Row="7" Grid.Column="1" x:Name="NudBurnRate"
                      Minimum="0.001" Maximum="1.0" Value="0.05"
                      FormatString="0.000" Increment="0.005" IsEnabled="False" />
+
+      <Separator Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,8,0,4" />
+
+      <TextBlock Grid.Row="9" Grid.Column="0" Classes="field" Text="Radiation Model:" />
+      <ComboBox Grid.Row="9" Grid.Column="1" x:Name="CmbRadiationModel"
+                HorizontalAlignment="Stretch" SelectedIndex="0"
+                ToolTip.Tip="SolidFlame: tilted cylinder with view factors and atmospheric&#10;transmissivity. PointSource: all power from one point — fast, but&#10;wrong within a few flame lengths.">
+        <ComboBoxItem Content="Solid flame" />
+        <ComboBoxItem Content="Point source" />
+      </ComboBox>
+
+      <TextBlock Grid.Row="10" Grid.Column="0" Classes="field" Text="Flame Diameter (m):" />
+      <NumericUpDown Grid.Row="10" Grid.Column="1" x:Name="NudFlameDiameter"
+                     Minimum="0" Maximum="200" Value="0"
+                     FormatString="0.00" Increment="0.25"
+                     ToolTip.Tip="0 = derive it: the pool diameter for a pool fire, Chamberlain's&#10;frustum width (0.13 × flame length) for a jet." />
+
+      <TextBlock Grid.Row="11" Grid.Column="0" Classes="field" Text="Emissive Power (kW/m²):" />
+      <NumericUpDown Grid.Row="11" Grid.Column="1" x:Name="NudSep"
+                     Minimum="0" Maximum="400" Value="0"
+                     FormatString="0" Increment="10"
+                     ToolTip.Tip="0 = derive it from the energy balance, capped by Mudan's soot&#10;correlation for pools and 350 kW/m² for jets." />
+
+      <TextBlock Grid.Row="12" Grid.Column="0" Classes="field" Text="Fuel Molar Mass (kg/mol):" />
+      <NumericUpDown Grid.Row="12" Grid.Column="1" x:Name="NudFuelMolar"
+                     Minimum="0.002" Maximum="0.5" Value="0.016"
+                     FormatString="0.0000" Increment="0.002"
+                     ToolTip.Tip="Sets the gas density at the orifice, and through it the exit&#10;velocity that decides how far the wind tilts the flame.&#10;Methane 0.016, propane 0.044." />
     </Grid>
   </DockPanel>
 </Window>

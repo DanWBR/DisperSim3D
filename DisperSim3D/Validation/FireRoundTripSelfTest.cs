@@ -102,6 +102,12 @@ namespace DisperSim3D.Validation
             var scene = new Scene3D();
             scene.FireScenario.Name = "Cenário de teste";
             scene.FireScenario.RadiationContourLevels = new List<double> { 2500, 8000, 25000 };
+            scene.FireScenario.ReceiverMode = ReceiverMode.Vertical;
+
+            // Humidity feeds the solid-flame transmissivity, and it rides on the
+            // project meteo, so the round trip has to carry it too.
+            scene.GeneralSettings.DefaultMeteo.RelativeHumidity = 0.72;
+            scene.GeneralSettings.DefaultMeteo.AmbientTemperature = 305.15;
 
             scene.FireScenario.Sources.Add(new FireSource
             {
@@ -113,6 +119,10 @@ namespace DisperSim3D.Validation
                 HeatOfCombustionJKg = 46_400_000,
                 RadiativeFraction = 0.27,
                 IsPoolFire = false,
+                RadiationModel = RadiationModel.SolidFlame,
+                FlameDiameterM = 1.4,
+                SepKwM2 = 220.0,
+                FuelMolarMassKgMol = 0.0441,
                 IsVisible = true
             });
 
@@ -126,6 +136,7 @@ namespace DisperSim3D.Validation
                 PoolDiameterM = 12.5,
                 PoolBurnRateKgM2S = 0.055,
                 RadiativeFraction = 0.35,
+                RadiationModel = RadiationModel.PointSource,
                 IsVisible = false
             });
 
@@ -180,6 +191,16 @@ namespace DisperSim3D.Validation
 
             results.Add(new Result(prefix + "scenario name",
                 b.Name == a.Name, $"expected='{a.Name}' actual='{b.Name}'"));
+
+            results.Add(new Result(prefix + "receiver mode",
+                b.ReceiverMode == a.ReceiverMode,
+                $"expected={a.ReceiverMode} actual={b.ReceiverMode}"));
+
+            var meteoA = original.GeneralSettings?.DefaultMeteo;
+            var meteoB = reloaded.GeneralSettings?.DefaultMeteo;
+            results.Add(new Result(prefix + "meteo relative humidity",
+                meteoA != null && meteoB != null && Near(meteoA.RelativeHumidity, meteoB.RelativeHumidity),
+                $"expected={meteoA?.RelativeHumidity} actual={meteoB?.RelativeHumidity}"));
 
             bool levelsMatch = b.RadiationContourLevels.Count == a.RadiationContourLevels.Count;
             if (levelsMatch)
@@ -237,6 +258,18 @@ namespace DisperSim3D.Validation
                 results.Add(new Result(tag + "PoolBurnRateKgM2S",
                     Near(src.PoolBurnRateKgM2S, dst.PoolBurnRateKgM2S),
                     $"expected={src.PoolBurnRateKgM2S} actual={dst.PoolBurnRateKgM2S}"));
+                results.Add(new Result(tag + "RadiationModel",
+                    dst.RadiationModel == src.RadiationModel,
+                    $"expected={src.RadiationModel} actual={dst.RadiationModel}"));
+                results.Add(new Result(tag + "FlameDiameterM",
+                    Near(src.FlameDiameterM, dst.FlameDiameterM),
+                    $"expected={src.FlameDiameterM} actual={dst.FlameDiameterM}"));
+                results.Add(new Result(tag + "SepKwM2",
+                    Near(src.SepKwM2, dst.SepKwM2),
+                    $"expected={src.SepKwM2} actual={dst.SepKwM2}"));
+                results.Add(new Result(tag + "FuelMolarMassKgMol",
+                    Near(src.FuelMolarMassKgMol, dst.FuelMolarMassKgMol),
+                    $"expected={src.FuelMolarMassKgMol} actual={dst.FuelMolarMassKgMol}"));
                 results.Add(new Result(tag + "IsVisible",
                     dst.IsVisible == src.IsVisible,
                     $"expected={src.IsVisible} actual={dst.IsVisible}"));
