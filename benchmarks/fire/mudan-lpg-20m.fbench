@@ -1,0 +1,46 @@
+{
+  "$schema": "fbench/v1",
+  "name": "LPG 20 m pool fire on land",
+  "citation": "Mudan, K.S. (1984). Thermal radiation hazards from hydrocarbon pool fires. Progress in Energy and Combustion Science 10(1), 59-80. Table 4, 'Measured emissive powers and radiation temperatures for various liquid hydrocarbon pool fires'.",
+  "dataConfidence": "Medium",
+  "description": "LPG pool fire on land from Mizner and Eyre, tabulated by Mudan (1984) Table 4 at 48 kW/m2, with the comment that LPG fires appear to be very smoky. Mudan's Table 2 gives the radiative fraction for this same test as 7%, the lowest in the series, so the energy balance here is anchored on a measured number rather than an assumed one - which makes this the sharpest of the sooty benches.",
+  "fire": {
+    "kind": "pool",
+    "fuel": "LPG",
+    "poolDiameterM": 20.0,
+    "burnRateKgM2S": 0.12,
+    "heatOfCombustionJKg": 46000000,
+    "radiativeFraction": 0.07,
+    "fuelMolarMassKgMol": 0.044,
+    "isSootyFuel": true,
+    "position": [
+      0,
+      0,
+      0
+    ]
+  },
+  "ambient": {
+    "windSpeed": 1.6,
+    "windDirectionDeg": 270,
+    "ambientTemperatureK": 288.15,
+    "ambientPressurePa": 101325,
+    "relativeHumidity": 0.5
+  },
+  "expectedFlame": {
+    "diameterM": 20.0,
+    "surfaceEmissivePowerKwM2": 48.0,
+    "note": "48 kW/m2 from Mudan (1984) Table 4; radiative fraction 7% from Table 2 of the same paper. The burn rate is converted from the 2.4e-4 m/s regression rate in Table 1 at an assumed LPG density of 500 kg/m3."
+  },
+  "radiometers": [],
+  "acceptance": {
+    "flameLengthRatioMin": 0.5,
+    "flameLengthRatioMax": 2.0,
+    "flameDiameterRatioMin": 0.9,
+    "flameDiameterRatioMax": 1.1,
+    "sepRatioMin": 0.5,
+    "sepRatioMax": 2.0,
+    "fluxRatioMin": 0.5,
+    "fluxRatioMax": 2.0,
+    "minFluxFac2Fraction": 0.8
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "fbench/v1",
+  "name": "Kerosene 30 m pool fire",
+  "citation": "Mudan, K.S. (1984). Thermal radiation hazards from hydrocarbon pool fires. Progress in Energy and Combustion Science 10(1), 59-80. Table 4, 'Measured emissive powers and radiation temperatures for various liquid hydrocarbon pool fires'.",
+  "dataConfidence": "Medium",
+  "description": "Large kerosene pool fires measured with wide-angle radiometers by the Japan Institute for Safety Engineering, tabulated by Mudan (1984) Table 4 as 30-80 m pools with average emissive powers of 10-25 kW/m2 and a radiation temperature of 1600 K. Mudan notes the larger fires radiate less than the smaller ones - the smoke obscuration this model's soot blend exists to represent. This is the first benchmark to exercise that branch at all. In this size range the soot-blend cap governs the prediction: the energy balance chi*Q/(pi*D*L) comes out well above the blend, so the min() picks the blend and the burn rate and radiative fraction barely enter. That makes this bench a direct test of the Mudan correlation rather than of the inputs below it, which is why the assumed burn rate is acceptable here.",
+  "fire": {
+    "kind": "pool",
+    "fuel": "kerosene",
+    "poolDiameterM": 30.0,
+    "burnRateKgM2S": 0.065,
+    "heatOfCombustionJKg": 43000000,
+    "radiativeFraction": 0.2,
+    "fuelMolarMassKgMol": 0.17,
+    "isSootyFuel": true,
+    "position": [
+      0,
+      0,
+      0
+    ]
+  },
+  "ambient": {
+    "windSpeed": 1.6,
+    "windDirectionDeg": 270,
+    "ambientTemperatureK": 288.15,
+    "ambientPressurePa": 101325,
+    "relativeHumidity": 0.5
+  },
+  "expectedFlame": {
+    "diameterM": 30.0,
+    "surfaceEmissivePowerKwM2": 17.5,
+    "note": "Midpoint of the 10-25 kW/m2 average range Mudan (1984) Table 4 reports for 30-80 m kerosene pools. The burn rate 0.065 kg/m2s is a standard kerosene value, not a number from this source."
+  },
+  "radiometers": [],
+  "acceptance": {
+    "flameLengthRatioMin": 0.5,
+    "flameLengthRatioMax": 2.0,
+    "flameDiameterRatioMin": 0.9,
+    "flameDiameterRatioMax": 1.1,
+    "sepRatioMin": 0.5,
+    "sepRatioMax": 2.0,
+    "fluxRatioMin": 0.5,
+    "fluxRatioMax": 2.0,
+    "minFluxFac2Fraction": 0.8
+  }
+}

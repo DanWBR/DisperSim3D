@@ -143,6 +143,28 @@ The other three degrade in a way that says what the model is missing:
   left failing on purpose**: it is a true statement about a limitation, and
   relaxing its acceptance band to make the suite green would throw that away.
 
+### Sooty pool fires
+
+The soot-blend branch had no test case at all until Mudan (1984) Table 4 supplied
+measured emissive powers for the fuels the blend was calibrated on:
+
+| Test | D (m) | SEP measured | SEP predicted | ratio |
+|---|--:|--:|--:|--:|
+| Gasoline (Fu) | 10 | 60–130 max → 60 | 56 | 0.94 |
+| LPG on land (Mizner & Eyre) | 20 | 48 | 31 | 0.64 |
+| Kerosene (JISE) | 30 | 10–25 ave → 17.5 | 23 | 1.33 |
+| Kerosene (JISE) | 80 | 10–25 ave → 17.5 | 20 | 1.14 |
+
+The two kerosene cases are the point of the exercise: the blend flattens with
+diameter the way the measurements do, 1.33 at 30 m easing to 1.14 at 80 m, which
+is the smoke obscuration it exists to represent.
+
+LPG at 0.64 is the interesting miss. Mudan's Table 2 gives a measured radiative
+fraction of 7% for that same test, and the plain energy balance with it lands at
+47 kW/m² against 48 measured — the cap is what drags the prediction down to 31.
+So for LPG at 20 m the soot blend is the wrong part, not the energy balance.
+Left alone: three points is not a calibration set.
+
 ### The tip cap
 
 Test 1083 also found a real defect. Its radiometers 12–14 sit 50–60 m straight
@@ -154,10 +176,21 @@ sees every lateral panel edge-on or from behind, so every contribution is culled
 and the sum is zero — not small, zero. The end cap had been dismissed as a few
 percent of πDL, which is true of its area and irrelevant to its effect.
 
-Adding a tip cap of `nCirc` wedges brings those three back to 2.6, 2.0 and 0.9
+Adding a tip cap of `nCirc` wedges brings those three back to 2.7, 2.0 and 0.9
 kW/m² against 4.6, 3.3 and 2.2. Still low, but a model that under-predicts by half
 is a different object from one that says a person standing in front of a jet fire
 receives nothing.
+
+The cap came with a second-order trap. Emissive power is radiated power over area,
+so folding the cap into that area dropped every pool-fire SEP by 13% and the LNG
+ratios fell from 0.87 to 0.77 — an apparent regression caused purely by the
+denominator. Published emissive powers are normalised over the cylinder's lateral
+surface; Montoir's 257–273 kW/m² is explicitly "calculated using the entire
+visible fire area" of such a cylinder. The model now normalises SEP over πDL to
+match, and keeps the cap in the geometry for the view factor. The panels then emit
+slightly more than χ·Q — 3% at a jet's L/D near 8, 13% at a pool's near 2 — which
+is the conservative direction and the cost of quoting the same quantity the
+measurements quote.
 
 ### What the first benchmark found
 

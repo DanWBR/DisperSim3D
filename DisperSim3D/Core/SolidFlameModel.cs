@@ -81,8 +81,14 @@ namespace DisperSim3D.Core
             public double SepKwM2 { get; internal set; }
             public double FlameLengthM { get; internal set; }
             public double FlameDiameterM { get; internal set; }
-            /// <summary>Total radiating area (m²) — the sum of the panel areas.</summary>
+            /// <summary>Total radiating area (m²) — the sum of the panel areas,
+            /// lateral surface plus tip cap.</summary>
             public double FlameAreaM2 { get; internal set; }
+
+            /// <summary>Lateral area πDL alone (m²). This is what the emissive power is
+            /// normalised over, because it is what the solid-flame literature and the
+            /// published SEP measurements are normalised over.</summary>
+            public double LateralAreaM2 { get; internal set; }
         }
 
         // ── Geometry ────────────────────────────────────────────────────────────
@@ -264,14 +270,27 @@ namespace DisperSim3D.Core
             double area = 0;
             for (int i = 0; i < panels.Length; i++) area += panels[i].AreaM2;
 
+            double diameter = FlameDiameter(source, length);
+            double lateral = Math.PI * diameter * length;
+
+            // SEP is normalised over the lateral area, not over lateral + cap. Every
+            // published emissive power for a pool or jet fire is quoted over the
+            // cylinder's side — Montoir's 257-273 kW/m² is explicitly "calculated using
+            // the entire visible fire area" of a cylinder — so dividing by a larger area
+            // than the experimenters used would report a systematically lower SEP for the
+            // same fire. The price is that the panels emit slightly more than χ·Q: 3% for
+            // a jet's L/D near 8, about 13% for a pool's L/D near 2. That error is in the
+            // conservative direction and is the cost of speaking the same units as the
+            // measurements.
             return new Emitter
             {
                 Source = source,
                 Panels = panels,
                 FlameLengthM = length,
-                FlameDiameterM = FlameDiameter(source, length),
+                FlameDiameterM = diameter,
                 FlameAreaM2 = area,
-                SepKwM2 = SurfaceEmissivePowerKwM2(source, area)
+                LateralAreaM2 = lateral,
+                SepKwM2 = SurfaceEmissivePowerKwM2(source, lateral)
             };
         }
 

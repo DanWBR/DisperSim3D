@@ -1,0 +1,46 @@
+{
+  "$schema": "fbench/v1",
+  "name": "Gasoline 10 m pool fire",
+  "citation": "Mudan, K.S. (1984). Thermal radiation hazards from hydrocarbon pool fires. Progress in Energy and Combustion Science 10(1), 59-80. Table 4, 'Measured emissive powers and radiation temperatures for various liquid hydrocarbon pool fires'.",
+  "dataConfidence": "Medium",
+  "description": "Gasoline pool fires from Fu, tabulated by Mudan (1984) Table 4 over 1-10 m with maximum emissive powers of 60-130 kW/m2 and the note that the larger fires radiate less than the smaller ones. This bench takes the 10 m end, so the low end of that range is the value to compare against.",
+  "fire": {
+    "kind": "pool",
+    "fuel": "gasoline",
+    "poolDiameterM": 10.0,
+    "burnRateKgM2S": 0.061,
+    "heatOfCombustionJKg": 44000000,
+    "radiativeFraction": 0.2,
+    "fuelMolarMassKgMol": 0.1,
+    "isSootyFuel": true,
+    "position": [
+      0,
+      0,
+      0
+    ]
+  },
+  "ambient": {
+    "windSpeed": 1.6,
+    "windDirectionDeg": 270,
+    "ambientTemperatureK": 288.15,
+    "ambientPressurePa": 101325,
+    "relativeHumidity": 0.5
+  },
+  "expectedFlame": {
+    "diameterM": 10.0,
+    "surfaceEmissivePowerKwM2": 60.0,
+    "note": "60 kW/m2, the low end of the 60-130 kW/m2 maximum range in Mudan (1984) Table 4, chosen because this bench is the 10 m end of a 1-10 m series in which the source states emissive power falls with diameter. Treat the value as the bottom of a band, not a point measurement."
+  },
+  "radiometers": [],
+  "acceptance": {
+    "flameLengthRatioMin": 0.5,
+    "flameLengthRatioMax": 2.0,
+    "flameDiameterRatioMin": 0.9,
+    "flameDiameterRatioMax": 1.1,
+    "sepRatioMin": 0.5,
+    "sepRatioMax": 2.0,
+    "fluxRatioMin": 0.5,
+    "fluxRatioMax": 2.0,
+    "minFluxFac2Fraction": 0.8
+  }
+}
