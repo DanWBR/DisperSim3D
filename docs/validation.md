@@ -165,6 +165,59 @@ fraction of 7% for that same test, and the plain energy balance with it lands at
 So for LPG at 20 m the soot blend is the wrong part, not the energy balance.
 Left alone: three points is not a calibration set.
 
+### Buoyant arcing of horizontal jets
+
+Test 1083 originally failed on three radiometers 50-60 m straight ahead of the
+jet. The tip cap took them from zero to about half the measured flux; the rest of
+the gap was geometry. A horizontal jet fire does not stay on its release axis. It
+runs straight while its own momentum dominates, and past that buoyancy turns the
+remainder upward.
+
+The model now builds the flame as two sections, after Miller (2017) equations
+(19)-(22):
+
+```
+bl/L = 1.25 − 0.125·ξ      momentum section, clamped to [0,1]
+Ly/L = 0.125·ξ − 0.25      vertical lift,    clamped to [0,1]
+δ    = asin(Ly / (L − bl)) lift angle of the buoyant section
+```
+
+`ξ` is the Richardson number at the **expanded** source, not at the hole — a 20 mm
+orifice at 66 barg and a 152 mm one at 0.3 barg can pass the same mass and produce
+completely different flames. `JetExpandedSource` resolves that condition: for a
+subsonic release the orifice is its own expanded source, and for a choked one the
+throat is taken at the isentropic sonic condition and expanded to atmospheric
+pressure through Miller's equations (1)-(3). `FireSource` gained the upstream
+stagnation pressure and temperature that this needs; left at zero, the release is
+treated as subsonic and the flame stays straight, which is what every project
+saved before this change gets.
+
+Effect on the four Johnson tests:
+
+| Test | before | after |
+|---|---|---|
+| 1033, 11.1 barg | 0.96 – 1.18 | 1.09 – 1.31 |
+| 1040, 0.3 barg | 0.99 – 1.86 | 0.96 – 1.66 |
+| 1083, 2.1 barg | **fails**, 0.43 – 0.45 downrange | **passes**, 0.63 – 0.70 downrange |
+| 1089, 66 barg | 1.28 – 1.43 | 1.39 – 1.46 |
+
+All sixteen fire benchmarks now pass. The arcing fixed the case it was aimed at
+and improved 1040; it cost a little on 1033 and 1089, whose flames were nearly
+straight to begin with and which the correlation now bends slightly more than the
+data wants.
+
+One radiometer is still outside the band: 1083's R10, 44 m to the side of the
+flame, over-predicted by 3.7×. That position is the one most exposed to the
+remaining limitation — the wind sits 56° off the release and the model bends the
+flame only in the vertical plane containing its own axis, never sideways.
+
+The implementation had a trap worth recording. The second section needs its own
+cross-axis basis; reusing the one built for the release axis leaves the panel
+normals no longer perpendicular to the tube they wrap, and at a steep lift angle
+the tube degenerates. The symptom was the downrange radiometers going from
+under-predicted to nearly dark — a change that looked like physics and was
+arithmetic.
+
 ### The tip cap
 
 Test 1083 also found a real defect. Its radiometers 12–14 sit 50–60 m straight

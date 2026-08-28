@@ -604,6 +604,9 @@ namespace DisperSim3D.Core
                     SepKwM2 = AttrDouble(fe, inv, 0, "Sep"),
                     FuelMolarMassKgMol = AttrDouble(fe, inv, 0.016, "FuelMolar"),
                     IsSootyFuel = AttrBool(fe, true, "Sooty"),
+                    StagnationPressurePa = AttrDouble(fe, inv, 0, "StagPressure"),
+                    StagnationTemperatureK = AttrDouble(fe, inv, 288.15, "StagTemp"),
+                    GasGamma = AttrDouble(fe, inv, 1.31, "Gamma"),
                     IsVisible = AttrBool(fe, true, "IsVisible")
                 };
 

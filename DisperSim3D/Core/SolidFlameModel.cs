@@ -91,6 +91,64 @@ namespace DisperSim3D.Core
             public double LateralAreaM2 { get; internal set; }
         }
 
+        /// <summary>Rotates the release axis upward by the lift angle, in the vertical
+        /// plane containing it. An already-vertical axis comes back unchanged.</summary>
+        private static Vector3D LiftAxis(Vector3D axis, double liftAngleRad)
+        {
+            if (liftAngleRad <= 1e-9) return axis;
+
+            // Direction the flame travels over the ground. With none, it is vertical.
+            var horizontal = new Vector3D(axis.X, axis.Y, 0);
+            if (horizontal.Length < 1e-9) return axis;
+            horizontal.Normalize();
+
+            double cos = Math.Cos(liftAngleRad), sin = Math.Sin(liftAngleRad);
+            double alongGround = axis.X * horizontal.X + axis.Y * horizontal.Y;
+            double alongVertical = axis.Z;
+
+            double newGround = alongGround * cos - alongVertical * sin;
+            double newVertical = alongGround * sin + alongVertical * cos;
+
+            var lifted = new Vector3D(
+                horizontal.X * newGround,
+                horizontal.Y * newGround,
+                newVertical);
+            if (lifted.Length < 1e-9) return axis;
+            lifted.Normalize();
+            return lifted;
+        }
+
+        /// <summary>Panels one straight cylindrical section onto the array.</summary>
+        private static void AddSection(FlamePanel[] panels, ref int p,
+            Point3D start, Vector3D axis, Vector3D u, Vector3D v,
+            double length, int rings, int nCirc, double radius, double panelArea)
+        {
+            if (rings <= 0 || length <= 0) return;
+            for (int a = 0; a < rings; a++)
+            {
+                double s = (a + 0.5) / rings * length;
+                var centerline = new Point3D(
+                    start.X + axis.X * s,
+                    start.Y + axis.Y * s,
+                    start.Z + axis.Z * s);
+
+                for (int c = 0; c < nCirc; c++)
+                {
+                    double phi = 2.0 * Math.PI * (c + 0.5) / nCirc;
+                    double cos = Math.Cos(phi), sin = Math.Sin(phi);
+                    var normal = new Vector3D(
+                        u.X * cos + v.X * sin,
+                        u.Y * cos + v.Y * sin,
+                        u.Z * cos + v.Z * sin);
+                    var center = new Point3D(
+                        centerline.X + normal.X * radius,
+                        centerline.Y + normal.Y * radius,
+                        centerline.Z + normal.Z * radius);
+                    panels[p++] = new FlamePanel(center, normal, panelArea);
+                }
+            }
+        }
+
         // ── Geometry ────────────────────────────────────────────────────────────
 
         /// <summary>Flame length: Thomas for a pool, Chamberlain's Q^0.4 for a jet.</summary>
@@ -143,33 +201,52 @@ namespace DisperSim3D.Core
             var u = Vector3D.CrossProduct(axis, seed); u.Normalize();
             var v = Vector3D.CrossProduct(axis, u);    v.Normalize();
 
+            // A horizontal jet flame does not stay on its release axis: it runs straight
+            // while momentum dominates, then arcs upward. Splitting the axial rings
+            // between the two sections puts the lifted half where the flame actually is.
+            var shape = source.IsPoolFire
+                ? new HorizontalShape(length, 0, 0)
+                : HorizontalFlameShape(source, length);
+
+            var buoyantAxis = LiftAxis(axis, shape.LiftAngleRad);
+            double momentumLength = Math.Min(shape.MomentumLengthM, length);
+            double buoyantLength = length - momentumLength;
+
+            int momentumRings = (int)Math.Round(nAxial * momentumLength / length);
+            if (momentumRings < 0) momentumRings = 0;
+            if (momentumRings > nAxial) momentumRings = nAxial;
+            int buoyantRings = nAxial - momentumRings;
+
             double panelArea = (2.0 * Math.PI * radius / nCirc) * (length / nAxial);
             var panels = new FlamePanel[nCirc * nAxial + nCirc];
             int p = 0;
 
-            for (int a = 0; a < nAxial; a++)
-            {
-                double s = (a + 0.5) / nAxial * length;
-                var centerline = new Point3D(
-                    basePoint.X + axis.X * s,
-                    basePoint.Y + axis.Y * s,
-                    basePoint.Z + axis.Z * s);
+            var jointPoint = new Point3D(
+                basePoint.X + axis.X * momentumLength,
+                basePoint.Y + axis.Y * momentumLength,
+                basePoint.Z + axis.Z * momentumLength);
 
-                for (int c = 0; c < nCirc; c++)
-                {
-                    double phi = 2.0 * Math.PI * (c + 0.5) / nCirc;
-                    double cos = Math.Cos(phi), sin = Math.Sin(phi);
-                    var normal = new Vector3D(
-                        u.X * cos + v.X * sin,
-                        u.Y * cos + v.Y * sin,
-                        u.Z * cos + v.Z * sin);
-                    var center = new Point3D(
-                        centerline.X + normal.X * radius,
-                        centerline.Y + normal.Y * radius,
-                        centerline.Z + normal.Z * radius);
-                    panels[p++] = new FlamePanel(center, normal, panelArea);
-                }
-            }
+            AddSection(panels, ref p, basePoint, axis, u, v,
+                momentumLength, momentumRings, nCirc, radius, panelArea);
+            // The buoyant section needs its own cross-axis basis. Reusing the one built
+            // for the release axis leaves the panel normals no longer perpendicular to
+            // the section they wrap, and at a steep lift angle the tube degenerates
+            // entirely — which is what turned Test 1083's downrange radiometers from
+            // under-predicted into nearly dark.
+            var seed2 = Math.Abs(buoyantAxis.Z) < 0.9 ? new Vector3D(0, 0, 1) : new Vector3D(1, 0, 0);
+            var u2 = Vector3D.CrossProduct(buoyantAxis, seed2); u2.Normalize();
+            var v2 = Vector3D.CrossProduct(buoyantAxis, u2);    v2.Normalize();
+
+            AddSection(panels, ref p, jointPoint, buoyantAxis, u2, v2,
+                buoyantLength, buoyantRings, nCirc, radius, panelArea);
+
+            // The tip cap below sits at the end of the buoyant section, not on the
+            // original axis.
+            axis = buoyantAxis;
+            basePoint = jointPoint;
+            length = buoyantLength;
+            u = u2;
+            v = v2;
 
             // Tip cap: nCirc wedges of the end disc, placed at the area centroid radius
             // 2r/3 so the quadrature is not all bunched at the axis, each facing along
@@ -194,6 +271,70 @@ namespace DisperSim3D.Core
 
             return panels;
         }
+
+        /// <summary>Momentum section length and lift angle of a horizontal jet flame.</summary>
+        public readonly struct HorizontalShape
+        {
+            /// <summary>Length of the straight, momentum-dominated section (m).</summary>
+            public readonly double MomentumLengthM;
+            /// <summary>Angle the buoyancy section rises above the release axis (rad).</summary>
+            public readonly double LiftAngleRad;
+            /// <summary>Richardson number the shape came from.</summary>
+            public readonly double RichardsonNumber;
+
+            public HorizontalShape(double momentumLength, double liftAngle, double richardson)
+            {
+                MomentumLengthM = momentumLength;
+                LiftAngleRad = liftAngle;
+                RichardsonNumber = richardson;
+            }
+        }
+
+        /// <summary>
+        /// Shape of a horizontal jet flame, after Miller (2017) equations (20)-(22).
+        ///
+        /// <para>A horizontal jet leaves the orifice on its own momentum and travels
+        /// straight for a while; past that, buoyancy wins and the rest of the flame arcs
+        /// upward. The split is set by the Richardson number at the expanded source:</para>
+        /// <code>
+        ///   bl/L = 1.25 - 0.125*xi        (momentum section, clamped to [0,1])
+        ///   Ly/L = 0.125*xi - 0.25        (vertical lift,    clamped to [0,1])
+        ///   delta = asin(Ly / (L - bl))   (lift angle, capped at vertical)
+        /// </code>
+        ///
+        /// <para>Modelling the flame as one straight cylinder is the same as asserting
+        /// xi &lt;= 2, which is true of a fast jet and false of a slow one. The Johnson
+        /// Test 1083 radiometers sitting 50-60 m ahead of an 8.4 kg/s release through a
+        /// 152 mm hole are what exposed it: the real flame had climbed away from the axis
+        /// those instruments were on.</para>
+        /// </summary>
+        public static HorizontalShape HorizontalFlameShape(FireSource source, double flameLengthM)
+        {
+            if (source == null || flameLengthM <= 0)
+                return new HorizontalShape(flameLengthM, 0, 0);
+
+            var expanded = JetExpandedSource.Compute(
+                source.MassFlowRateKgS, source.OrificeDiameterM,
+                source.StagnationPressurePa, source.StagnationTemperatureK,
+                source.FuelMolarMassKgMol, source.GasGamma);
+
+            double richardson = JetExpandedSource.RichardsonNumber(expanded, flameLengthM);
+
+            double momentumFraction = Clamp01(1.25 - 0.125 * richardson);
+            double liftFraction = Clamp01(0.125 * richardson - 0.25);
+
+            double momentumLength = momentumFraction * flameLengthM;
+            double buoyantLength = flameLengthM - momentumLength;
+            double lift = liftFraction * flameLengthM;
+
+            double liftAngle = 0;
+            if (buoyantLength > 1e-9)
+                liftAngle = Math.Asin(Math.Min(1.0, lift / buoyantLength));
+
+            return new HorizontalShape(momentumLength, liftAngle, richardson);
+        }
+
+        private static double Clamp01(double v) => v < 0 ? 0 : (v > 1 ? 1 : v);
 
         // ── Emissive power ──────────────────────────────────────────────────────
 

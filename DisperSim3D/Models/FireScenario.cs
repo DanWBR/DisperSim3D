@@ -137,6 +137,24 @@ namespace DisperSim3D.Models
         /// LPG and hydrogen.
         /// </summary>
         public bool IsSootyFuel { get; set; } = true;
+
+        /// <summary>
+        /// Absolute stagnation pressure upstream of the orifice (Pa), for a jet fire.
+        /// Zero means unknown, and the release is then treated as subsonic with the
+        /// orifice as its own expanded source.
+        ///
+        /// This is what decides whether a horizontal flame stays straight or arcs
+        /// upward: the buoyancy-to-momentum ratio has to be evaluated where the jet
+        /// has finished expanding, and a 20 mm hole at 66 barg behaves nothing like a
+        /// 152 mm hole at 0.3 barg passing the same mass.
+        /// </summary>
+        public double StagnationPressurePa { get; set; }
+
+        /// <summary>Stagnation temperature upstream of the orifice (K). Default 288.15.</summary>
+        public double StagnationTemperatureK { get; set; } = 288.15;
+
+        /// <summary>Ratio of specific heats for the fuel. 1.31 for methane.</summary>
+        public double GasGamma { get; set; } = 1.31;
     }
 
     /// <summary>

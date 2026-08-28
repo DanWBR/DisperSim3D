@@ -94,6 +94,13 @@ namespace DisperSim3D.Validation
         /// <summary>Whether the fuel burns sooty. False for LNG, LPG and hydrogen.</summary>
         public bool IsSootyFuel { get; set; } = true;
 
+        /// <summary>Absolute stagnation pressure upstream of the orifice (Pa). Zero
+        /// treats the release as subsonic.</summary>
+        public double StagnationPressurePa { get; set; }
+
+        /// <summary>Stagnation temperature upstream of the orifice (K).</summary>
+        public double StagnationTemperatureK { get; set; } = 288.15;
+
         /// <summary>Base of the flame in scene coordinates. Radiometer positions are in
         /// the same frame.</summary>
         public double[] Position { get; set; } = { 0, 0, 0 };

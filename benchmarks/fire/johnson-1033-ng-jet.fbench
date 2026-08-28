@@ -3,7 +3,7 @@
   "name": "Johnson Test 1033 — 7.9 kg/s natural gas horizontal jet",
   "citation": "Johnson, A.D., Brightwell, H.M., Carsley, A.J. (1994). A model for predicting the thermal radiation hazards from large scale horizontal natural gas jet fires. Hazards XII, IChemE, Manchester. Conditions and radiometer readings as tabulated in Tables 2 and 3 of: Miller, D. (2017). New Model for Predicting Thermal Radiation from Flares and High Pressure Jet Fires for Hydrogen and Syngas. Process Safety Progress 36(3), 237-251. DOI 10.1002/prs.11867.",
   "dataConfidence": "High",
-  "description": "Large-scale horizontal natural gas jet fire from the Johnson et al. (1994) series, with the radiometer readings Miller (2017) tabulates in Table 3. Miller's frame is x along the release, y vertical, z perpendicular; the positions here are remapped to the engine's Z-up frame. The radiant fraction is Miller's AP Flame value from Table 2, which is a model output rather than a measurement — it is used as the model input here and noted as such. Wind is essentially along the release for this test (wind-to-release angle 1 degree per Miller's Table 2), which is the geometry this model represents best.",
+  "description": "Large-scale horizontal natural gas jet fire from the Johnson et al. (1994) series, with the radiometer readings Miller (2017) tabulates in Table 3. Miller's frame is x along the release, y vertical, z perpendicular; the positions here are remapped to the engine's Z-up frame. The radiant fraction is Miller's AP Flame value from Table 2, which is a model output rather than a measurement — it is used as the model input here and noted as such. Wind is essentially along the release for this test (wind-to-release angle 1 degree per Miller's Table 2), which is the geometry this model represents best. Stagnation pressure 11.1 barg and temperature 279 K from Miller's Table 2; the expanded-source condition they imply is what sets the Richardson number and so how far the flame arcs.",
   "fire": {
     "kind": "jet",
     "fuel": "natural gas",
@@ -22,7 +22,9 @@
       1,
       0,
       0
-    ]
+    ],
+    "stagnationPressurePa": 1211325.0,
+    "stagnationTemperatureK": 279
   },
   "ambient": {
     "windSpeed": 3.9,

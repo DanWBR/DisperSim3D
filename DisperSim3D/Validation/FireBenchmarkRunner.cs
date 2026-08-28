@@ -272,6 +272,8 @@ namespace DisperSim3D.Validation
                 RadiativeFraction = fire.RadiativeFraction,
                 FuelMolarMassKgMol = fire.FuelMolarMassKgMol,
                 IsSootyFuel = fire.IsSootyFuel,
+                StagnationPressurePa = fire.StagnationPressurePa,
+                StagnationTemperatureK = fire.StagnationTemperatureK,
                 RadiationModel = RadiationModel.SolidFlame
             };
         }

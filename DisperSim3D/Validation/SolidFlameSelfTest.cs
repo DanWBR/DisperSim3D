@@ -236,6 +236,55 @@ namespace DisperSim3D.Validation
                     $"field={atPoint:E4} direct={direct:E4} kW/m²"));
             }
 
+            // ── Buoyant arcing of a horizontal jet ──────────────────────────
+            {
+                // Same release twice: once at high pressure, once barely above ambient.
+                // The fast jet is momentum-dominated and stays straight; the slow one
+                // arcs. Nothing but the upstream pressure differs.
+                var fast = MakeJet();
+                fast.StagnationPressurePa = 70e5;
+                fast.OrificeDiameterM = 0.02;
+                var slow = MakeJet();
+                slow.StagnationPressurePa = 1.3e5;
+                slow.OrificeDiameterM = 0.15;
+
+                var fastShape = SolidFlameModel.HorizontalFlameShape(
+                    fast, SolidFlameModel.FlameLength(fast));
+                var slowShape = SolidFlameModel.HorizontalFlameShape(
+                    slow, SolidFlameModel.FlameLength(slow));
+
+                results.Add(new Result("a fast jet has the higher momentum fraction",
+                    fastShape.MomentumLengthM > slowShape.MomentumLengthM,
+                    $"fast={fastShape.MomentumLengthM:F1} m slow={slowShape.MomentumLengthM:F1} m"));
+                results.Add(new Result("a slow jet has the higher Richardson number",
+                    slowShape.RichardsonNumber > fastShape.RichardsonNumber,
+                    $"fast={fastShape.RichardsonNumber:F2} slow={slowShape.RichardsonNumber:F2}"));
+                results.Add(new Result("a slow jet lifts at least as much as a fast one",
+                    slowShape.LiftAngleRad >= fastShape.LiftAngleRad,
+                    $"fast={fastShape.LiftAngleRad * 180 / Math.PI:F0} deg "
+                    + $"slow={slowShape.LiftAngleRad * 180 / Math.PI:F0} deg"));
+
+                // The arced flame must put mass above the release axis.
+                var arced = SolidFlameModel.Prepare(slow, noWind);
+                double highest = double.MinValue;
+                foreach (var panel in arced.Panels)
+                    if (panel.Center.Z > highest) highest = panel.Center.Z;
+                results.Add(new Result("the arced flame rises above the release axis",
+                    highest > slow.Position.Z + 1.0,
+                    $"top panel at z={highest:F1} m"));
+
+                // A pool fire has no release axis to arc away from.
+                var pool = MakePool(diameterM: 10.0);
+                var poolShape = SolidFlameModel.HorizontalFlameShape(pool,
+                    SolidFlameModel.FlameLength(pool));
+                var poolEmitter = SolidFlameModel.Prepare(pool, noWind);
+                bool vertical = true;
+                foreach (var panel in poolEmitter.Panels)
+                    if (Math.Abs(panel.Center.X) > 5.1 || Math.Abs(panel.Center.Y) > 5.1)
+                        vertical = false;
+                results.Add(new Result("a pool flame does not arc", vertical));
+            }
+
             // ── Obstacle shading ────────────────────────────────────────────
             {
                 var jet = MakeJet();

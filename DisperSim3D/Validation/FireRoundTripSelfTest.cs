@@ -128,6 +128,9 @@ namespace DisperSim3D.Validation
                 SepKwM2 = 220.0,
                 FuelMolarMassKgMol = 0.0441,
                 IsSootyFuel = false,
+                StagnationPressurePa = 3_500_000,
+                StagnationTemperatureK = 268.5,
+                GasGamma = 1.29,
                 IsVisible = true
             });
 
@@ -295,6 +298,15 @@ namespace DisperSim3D.Validation
                 results.Add(new Result(tag + "IsSootyFuel",
                     dst.IsSootyFuel == src.IsSootyFuel,
                     $"expected={src.IsSootyFuel} actual={dst.IsSootyFuel}"));
+                results.Add(new Result(tag + "StagnationPressurePa",
+                    Near(src.StagnationPressurePa, dst.StagnationPressurePa),
+                    $"expected={src.StagnationPressurePa} actual={dst.StagnationPressurePa}"));
+                results.Add(new Result(tag + "StagnationTemperatureK",
+                    Near(src.StagnationTemperatureK, dst.StagnationTemperatureK),
+                    $"expected={src.StagnationTemperatureK} actual={dst.StagnationTemperatureK}"));
+                results.Add(new Result(tag + "GasGamma",
+                    Near(src.GasGamma, dst.GasGamma),
+                    $"expected={src.GasGamma} actual={dst.GasGamma}"));
                 results.Add(new Result(tag + "IsVisible",
                     dst.IsVisible == src.IsVisible,
                     $"expected={src.IsVisible} actual={dst.IsVisible}"));
