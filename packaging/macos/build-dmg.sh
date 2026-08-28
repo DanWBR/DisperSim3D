@@ -122,13 +122,27 @@ EOF
 
 # ---------------------------------------------------------------- codesign ---
 step "Ad-hoc signing the bundle"
-# Sign inner Mach-O files first, then the bundle: nested code must already be
-# signed when the outer signature is computed.
-find "$APP/Contents/MacOS" \( -name '*.dylib' -o -name '*.so' \) -print0 \
-    | xargs -0 -r codesign --force --timestamp=none --sign - 2>/dev/null || true
-codesign --force --sign - "$APP/Contents/MacOS/DisperSim3D.CLI" 2>/dev/null || true
-codesign --force --sign - "$APP"
-codesign --verify --deep --strict "$APP" && echo "    signature OK"
+# Sign the inner Mach-O binaries first: nested code must already carry a
+# signature when the bundle's own signature seals it. Apple Silicon refuses to
+# load an unsigned dylib, so an unsigned libFluidX3D.dylib would mean an app that
+# starts and then cannot reach the GPU bridge — never silence these.
+#
+# -exec ... + rather than xargs: BSD xargs has no --no-run-if-empty, so the GNU
+# spelling would either fail or run codesign with no arguments on a bundle that
+# happens to carry no dylibs.
+find "$APP/Contents/MacOS" \
+    \( -name '*.dylib' -o -name '*.so' -o -name 'createdump' \) \
+    -exec codesign --force --timestamp=none --sign - {} +
+codesign --force --timestamp=none --sign - "$APP/Contents/MacOS/DisperSim3D.CLI"
+codesign --force --timestamp=none --sign - "$APP"
+
+# Verify WITHOUT --deep. The managed assemblies next to the app host are PE
+# files that dyld never loads and codesign cannot sign, but --deep walks them
+# and reports each one as an unsigned code object. Apple deprecated --deep for
+# exactly this class of false positive; verifying the bundle seal is the check
+# that means something here.
+codesign --verify --strict "$APP"
+echo "    signature OK"
 
 # --------------------------------------------------------------------- dmg ---
 step "Creating the disk image"
