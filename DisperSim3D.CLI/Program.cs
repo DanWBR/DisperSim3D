@@ -61,6 +61,7 @@ namespace DisperSim3D.CLI
             bool listGpus = false;
             bool iogpSelftest = false;
             bool geometrySelftest = false;
+            bool fireRoundTripSelftest = false;
             bool tracerGpuSelftest = false;
             string listIogpType = null;        // null = "no --list-iogp"; "" = all 24; otherwise the type name
             bool memoryEstimate = false;
@@ -129,6 +130,9 @@ namespace DisperSim3D.CLI
                     case "--geometry-selftest":
                         geometrySelftest = true;
                         break;
+                    case "--fire-roundtrip-selftest":
+                        fireRoundTripSelftest = true;
+                        break;
                     case "--list-iogp":
                         // Optional positional: equipment type name. We peek the
                         // next arg; if it starts with '-' it's the next flag.
@@ -172,6 +176,7 @@ namespace DisperSim3D.CLI
             if (iogpSelftest) return RunIogpSelfTest();
             if (tracerGpuSelftest) return RunTracerGpuSelfTest();
             if (geometrySelftest) return RunGeometrySelfTest();
+            if (fireRoundTripSelftest) return RunFireRoundTripSelfTest();
             if (listIogpType != null) return RunListIogp(listIogpType);
             if (memoryEstimate) return RunMemoryEstimate(memSolverArg, memNxArg);
             if (twoPhaseTest) return RunTwoPhaseTest();
@@ -453,6 +458,24 @@ namespace DisperSim3D.CLI
             {
                 Console.Write(IogpTableTests.RunAll());
                 return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return 1;
+            }
+        }
+
+        /// <summary>Wrapper around <see cref="FireRoundTripSelfTest.RunAndPrint"/>.
+        /// Returns 0 when a FireScenario survives a save/load cycle unchanged,
+        /// 1 otherwise. Guards the SceneFileSaver/SceneFileLoader contract: a
+        /// FireSource property written by one side and not read by the other
+        /// fails here instead of silently resetting to its default.</summary>
+        static int RunFireRoundTripSelfTest()
+        {
+            try
+            {
+                return FireRoundTripSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             }
             catch (Exception ex)
             {
@@ -1546,6 +1569,8 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             can see (use --gpu-device to pin one).");
             Console.WriteLine("  --iogp-selftest            Verify the embedded IOGP 434-01 table against");
             Console.WriteLine("                             the published values; exit 0 on full pass.");
+            Console.WriteLine("  --fire-roundtrip-selftest  Save and reload a FireScenario and compare");
+            Console.WriteLine("                             every field; exit 0 on full pass.");
             Console.WriteLine("  --list-iogp [type]         Dump IOGP leak-frequency table (one type or");
             Console.WriteLine("                             all 24). e.g. --list-iogp SteelProcessPipe");
             Console.WriteLine("  --memory-estimate <solver> <N>");

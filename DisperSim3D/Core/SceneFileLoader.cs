@@ -545,29 +545,98 @@ namespace DisperSim3D.Core
             }
         }
 
+        /// <summary>
+        /// Reads the fire scenario: contour levels plus every fire source.
+        ///
+        /// Two element shapes are accepted. <see cref="SceneFileSaver"/> nests the
+        /// sources as <c>&lt;FireSources&gt;&lt;Fire/&gt;</c> — as does the legacy
+        /// Scene3D writer in the WPF editor control — while hand-written files may
+        /// carry <c>&lt;FireSource/&gt;</c> straight under <c>&lt;FireScenario&gt;</c>.
+        /// Each numeric attribute likewise accepts the saver's short name and the
+        /// older long form, so a project written by any past version comes back with
+        /// its fire sources intact.
+        /// </summary>
         private static void DeserializeFireScenario(XElement root, CultureInfo inv, Scene3D scene)
         {
             var fireEl = root.Element("FireScenario");
             if (fireEl == null) return;
-            foreach (var fe in fireEl.Elements("FireSource"))
+
+            string scenarioName = (string)fireEl.Attribute("Name");
+            if (!string.IsNullOrEmpty(scenarioName)) scene.FireScenario.Name = scenarioName;
+
+            var levelsEl = fireEl.Element("RadLevels");
+            if (levelsEl != null && !string.IsNullOrWhiteSpace(levelsEl.Value))
             {
-                scene.FireScenario.Sources.Add(new FireSource
+                var levels = new List<double>();
+                foreach (var part in levelsEl.Value.Split(','))
+                {
+                    if (double.TryParse(part.Trim(), NumberStyles.Float, inv, out double level))
+                        levels.Add(level);
+                }
+                if (levels.Count > 0) scene.FireScenario.RadiationContourLevels = levels;
+            }
+
+            var sourceElements = new List<XElement>();
+            var nested = fireEl.Element("FireSources");
+            if (nested != null) sourceElements.AddRange(nested.Elements("Fire"));
+            sourceElements.AddRange(fireEl.Elements("FireSource"));
+
+            foreach (var fe in sourceElements)
+            {
+                var fire = new FireSource
                 {
                     Name = (string)fe.Attribute("Name") ?? "",
                     Position = new Point3D(
-                        double.Parse((string)fe.Attribute("PosX") ?? "0", inv),
-                        double.Parse((string)fe.Attribute("PosY") ?? "0", inv),
-                        double.Parse((string)fe.Attribute("PosZ") ?? "0", inv)),
-                    MassFlowRateKgS = double.Parse((string)fe.Attribute("MassFlow") ?? "1", inv),
-                    OrificeDiameterM = double.Parse((string)fe.Attribute("Orifice") ?? "0.025", inv),
-                    HeatOfCombustionJKg = double.Parse((string)fe.Attribute("HeatCombustion") ?? "50000000", inv),
-                    RadiativeFraction = double.Parse((string)fe.Attribute("RadFraction") ?? "0.2", inv),
-                    IsPoolFire = bool.Parse((string)fe.Attribute("IsPoolFire") ?? "False"),
-                    PoolDiameterM = double.Parse((string)fe.Attribute("PoolDia") ?? "5", inv),
-                    PoolBurnRateKgM2S = double.Parse((string)fe.Attribute("BurnRate") ?? "0.05", inv),
-                    IsVisible = bool.Parse((string)fe.Attribute("IsVisible") ?? "True")
-                });
+                        AttrDouble(fe, inv, 0, "PosX"),
+                        AttrDouble(fe, inv, 0, "PosY"),
+                        AttrDouble(fe, inv, 0, "PosZ")),
+                    Direction = new Vector3D(
+                        AttrDouble(fe, inv, 1, "DirX"),
+                        AttrDouble(fe, inv, 0, "DirY"),
+                        AttrDouble(fe, inv, 0, "DirZ")),
+                    MassFlowRateKgS = AttrDouble(fe, inv, 1.0, "MassFlow"),
+                    OrificeDiameterM = AttrDouble(fe, inv, 0.025, "Orifice"),
+                    HeatOfCombustionJKg = AttrDouble(fe, inv, 50000000, "HeatComb", "HeatCombustion"),
+                    RadiativeFraction = AttrDouble(fe, inv, 0.2, "RadFrac", "RadFraction"),
+                    IsPoolFire = AttrBool(fe, false, "IsPool", "IsPoolFire"),
+                    PoolDiameterM = AttrDouble(fe, inv, 5.0, "PoolDia"),
+                    PoolBurnRateKgM2S = AttrDouble(fe, inv, 0.05, "BurnRate"),
+                    IsVisible = AttrBool(fe, true, "IsVisible")
+                };
+
+                // Keep the saved Id: Views, detectors and studies reference sources
+                // by Id, and a fresh Guid on every load would break those links.
+                string id = (string)fe.Attribute("Id");
+                if (!string.IsNullOrEmpty(id)) fire.Id = id;
+
+                scene.FireScenario.Sources.Add(fire);
             }
+        }
+
+        /// <summary>Value of the first attribute present among <paramref name="names"/>,
+        /// parsed as an invariant double. Falls back to <paramref name="fallback"/> when
+        /// none is present or the value doesn't parse.</summary>
+        private static double AttrDouble(XElement e, CultureInfo inv, double fallback, params string[] names)
+        {
+            foreach (var name in names)
+            {
+                var attr = e.Attribute(name);
+                if (attr != null && double.TryParse(attr.Value, NumberStyles.Float, inv, out double value))
+                    return value;
+            }
+            return fallback;
+        }
+
+        /// <summary>Boolean counterpart of <see cref="AttrDouble"/>.</summary>
+        private static bool AttrBool(XElement e, bool fallback, params string[] names)
+        {
+            foreach (var name in names)
+            {
+                var attr = e.Attribute(name);
+                if (attr != null && bool.TryParse(attr.Value, out bool value))
+                    return value;
+            }
+            return fallback;
         }
 
         private static void DeserializeGasDetectors(XElement root, CultureInfo inv, Scene3D scene)
