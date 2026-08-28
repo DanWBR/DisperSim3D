@@ -9,10 +9,10 @@
 #   3. .icns from the shared PNG master, Info.plist, ad-hoc codesign
 #   4. hdiutil create                   -> dist/DisperSim3D-<version>-osx-<arch>.dmg
 #
-# The bundle is ad-hoc signed (`codesign -s -`), which is the minimum Apple
-# Silicon accepts for a locally built app. It is NOT notarised: on first launch
-# macOS shows the unidentified-developer prompt and the user has to allow it
-# from System Settings > Privacy & Security. Notarising needs a paid Developer
+# Every native binary is ad-hoc signed (`codesign -s -`), which is the minimum
+# Apple Silicon accepts for a locally built app. It is NOT notarised: on first
+# launch macOS shows the unidentified-developer prompt and the user has to allow
+# it from System Settings > Privacy & Security. Notarising needs a paid Developer
 # ID — wire the certificate into this script when one exists.
 set -euo pipefail
 
@@ -136,13 +136,21 @@ find "$APP/Contents/MacOS" \
 codesign --force --timestamp=none --sign - "$APP/Contents/MacOS/DisperSim3D.CLI"
 codesign --force --timestamp=none --sign - "$APP"
 
-# Verify WITHOUT --deep. The managed assemblies next to the app host are PE
-# files that dyld never loads and codesign cannot sign, but --deep walks them
-# and reports each one as an unsigned code object. Apple deprecated --deep for
-# exactly this class of false positive; verifying the bundle seal is the check
-# that means something here.
-codesign --verify --strict "$APP"
-echo "    signature OK"
+# A full `codesign --verify` on the bundle cannot pass here, with or without
+# --deep: since macOS 10.11 verification implies a deep walk, and that walk finds
+# the managed assemblies sitting next to the app host and calls each one an
+# unsigned code object. They are PE files — dyld never loads them, codesign
+# cannot sign them — and putting them beside the host is how .NET lays a
+# self-contained macOS app out, so this is not something to fix, only to know.
+#
+# What does matter is that every native binary carries a signature, because
+# Apple Silicon refuses to load an unsigned Mach-O. That is what gets verified.
+codesign --display --verbose=2 "$APP" 2>&1 | sed 's/^/    /'
+find "$APP/Contents/MacOS" \
+    \( -name '*.dylib' -o -name '*.so' -o -name 'createdump' \) \
+    -exec codesign --verify --strict {} +
+codesign --verify --strict "$APP/Contents/MacOS/DisperSim3D.CLI"
+echo "    native code signed"
 
 # --------------------------------------------------------------------- dmg ---
 step "Creating the disk image"
