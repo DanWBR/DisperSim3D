@@ -134,17 +134,21 @@ find "$APP/Contents/MacOS" \
     \( -name '*.dylib' -o -name '*.so' -o -name 'createdump' \) \
     -exec codesign --force --timestamp=none --sign - {} +
 codesign --force --timestamp=none --sign - "$APP/Contents/MacOS/DisperSim3D.CLI"
-codesign --force --timestamp=none --sign - "$APP"
 
-# A full `codesign --verify` on the bundle cannot pass here, with or without
-# --deep: since macOS 10.11 verification implies a deep walk, and that walk finds
-# the managed assemblies sitting next to the app host and calls each one an
-# unsigned code object. They are PE files — dyld never loads them, codesign
-# cannot sign them — and putting them beside the host is how .NET lays a
-# self-contained macOS app out, so this is not something to fix, only to know.
-#
-# What does matter is that every native binary carries a signature, because
-# Apple Silicon refuses to load an unsigned Mach-O. That is what gets verified.
+# --deep on the bundle. Sealing a bundle makes codesign walk what it considers
+# nested code, and it counts the managed assemblies beside the app host —
+# "code object is not signed at all / In subcomponent: …/System.Diagnostics.Contracts.dll".
+# Without --deep it refuses to seal; with it, it signs those subcomponents on the
+# way through. Apple discourages --deep for distribution signing, where each
+# component wants its own identity and entitlements, but for an ad-hoc signature
+# over a self-contained .NET layout it is the flag that makes the bundle signable
+# at all.
+codesign --force --deep --timestamp=none --sign - "$APP"
+
+# Only the native binaries get verified. A `codesign --verify` on the bundle
+# implies a deep walk of its own and trips over the same managed assemblies, and
+# what actually gates the app is Mach-O: Apple Silicon refuses to load an
+# unsigned one.
 codesign --display --verbose=2 "$APP" 2>&1 | sed 's/^/    /'
 find "$APP/Contents/MacOS" \
     \( -name '*.dylib' -o -name '*.so' -o -name 'createdump' \) \
