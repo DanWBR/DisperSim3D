@@ -29,6 +29,57 @@ The two kinds of test live side by side. A passing self-consistency test
 proves the code did not change; a passing experimental test proves the
 physics is right within the documented tolerances.
 
+## Fire radiation benchmarks
+
+Radiation benchmarks live in `benchmarks/fire/*.fbench` and run with:
+
+```bash
+DisperSim3D.CLI --validate-fire benchmarks/fire
+```
+
+A `.fbench` file describes a published fire test in two independent halves, and
+the runner scores them separately:
+
+1. **Flame geometry and emissive power** — flame length, flame diameter, SEP.
+   These exercise the correlations and the energy balance.
+2. **Incident flux at radiometers** — measured kW/m² at known positions. These
+   exercise the view factor and the atmospheric transmissivity on top of the
+   first half.
+
+The split matters diagnostically: a model can reproduce the flame and still get
+the flux wrong, and knowing which half failed is most of the fix.
+
+Acceptance is a predicted/observed ratio band, defaulting to the same factor-of-two
+convention (FAC2) the dispersion benches use.
+
+### Unverified data is never a pass
+
+Every `.fbench` declares `dataConfidence`:
+
+| Value | Meaning |
+|---|---|
+| `High` | read from a table in the cited source |
+| `Medium` | read off a figure, or from a secondary citation |
+| `Unverified` | not checked against the source at all |
+
+An `Unverified` bench is evaluated and printed, but reported as **NOT COUNTED**
+rather than as a pass. A green tick against a number nobody confirmed is worse
+than having no test.
+
+### What the first benchmark found
+
+The seeded Montoir 35 m LNG bench immediately exposed a real defect. The model
+was applying Mudan's soot-blend cap to every pool fire, and Mudan is calibrated
+on sooty hydrocarbons — kerosene, gasoline, crude. For a 35 m pool it caps the
+emissive power at about 22 kW/m². LNG burns clean and stays radiant at that
+diameter; the trials report 165–265 kW/m².
+
+The energy balance on its own gave 211 kW/m², right inside the reported range.
+The fix was `FireSource.IsSootyFuel`, which routes clean fuels past the soot
+blend. No self-consistency test could have caught this: the model was
+internally coherent and physically wrong, which is exactly the failure mode
+experimental validation exists for.
+
 ## Reference experiments
 
 ### Gaussian plume against Prairie Grass

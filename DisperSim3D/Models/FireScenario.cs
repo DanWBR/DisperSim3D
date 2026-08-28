@@ -126,6 +126,17 @@ namespace DisperSim3D.Models
         /// Default is 0.016 (methane).
         /// </summary>
         public double FuelMolarMassKgMol { get; set; } = 0.016;
+
+        /// <summary>
+        /// Whether the fuel burns sooty. Mudan's emissive-power correlation blends a
+        /// clear flame with a soot layer that grows with pool diameter, and it is
+        /// calibrated on sooty hydrocarbons — kerosene, gasoline, crude. LNG and other
+        /// light hydrocarbons burn clean and stay radiant at large diameter: the Montoir
+        /// 35 m LNG trials measured 165-265 kW/m², where Mudan would predict about 22.
+        /// Default true, because most process pool fires are sooty; clear it for LNG,
+        /// LPG and hydrogen.
+        /// </summary>
+        public bool IsSootyFuel { get; set; } = true;
     }
 
     /// <summary>

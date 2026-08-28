@@ -46,6 +46,12 @@ namespace DisperSim3D.Core
         private const double PoolSepSootKwM2 = 20.0;
         private const double PoolSootExtinction = 0.12;
 
+        /// <summary>Cap for a clean-burning pool fire. Mudan's soot blend does not apply
+        /// to LNG and other light hydrocarbons, which stay radiant at large diameter —
+        /// Montoir's 35 m LNG pools measured 165-265 kW/m² where the blend gives 22. The
+        /// cap sits just above the measured range so the energy balance normally decides.</summary>
+        private const double CleanPoolSepCapKwM2 = 280.0;
+
         /// <summary>Chamberlain's jet-flame frustum is roughly an eighth of the flame
         /// length across; used when the source doesn't override the diameter.</summary>
         private const double JetWidthToLengthRatio = 0.13;
@@ -176,6 +182,8 @@ namespace DisperSim3D.Core
 
             if (source.IsPoolFire)
             {
+                if (!source.IsSootyFuel) return Math.Min(sep, CleanPoolSepCapKwM2);
+
                 double d = Math.Max(source.PoolDiameterM, 0.1);
                 double mudan = PoolSepClearKwM2 * Math.Exp(-PoolSootExtinction * d)
                              + PoolSepSootKwM2 * (1.0 - Math.Exp(-PoolSootExtinction * d));

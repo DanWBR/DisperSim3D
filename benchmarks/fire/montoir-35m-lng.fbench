@@ -1,0 +1,51 @@
+{
+  "$schema": "fbench/v1",
+  "name": "Montoir 35 m LNG pool fire",
+
+  "citation": "Nedelka, D., Moorhouse, J., Tucker, R.F. (1989). The Montoir 35 m diameter LNG pool fire experiments. 9th International Conference on LNG, Nice. Gaz de France / British Gas / Shell, 1987 trials.",
+
+  "dataConfidence": "Unverified",
+
+  "description": "Three 35 m diameter LNG pool fires on land at Montoir-de-Bretagne, the largest instrumented LNG pool fires ever run, and the reference case for LNG pool fire radiation. The numbers below are the values commonly reproduced in secondary literature and have NOT been read from the primary source — the flame length, the emissive power and the burn rate all need checking against Nedelka et al. before this bench counts for anything. Radiometer data is deliberately absent: the trials recorded incident flux at several stand-off distances, and those tables belong here, but transcribing them from memory would be worse than leaving them out. See docs/validation.md for what to fill in.",
+
+  "fire": {
+    "kind": "pool",
+    "fuel": "LNG",
+    "poolDiameterM": 35.0,
+    "burnRateKgM2S": 0.14,
+    "heatOfCombustionJKg": 50000000,
+    "radiativeFraction": 0.23,
+    "fuelMolarMassKgMol": 0.01604,
+    "isSootyFuel": false,
+    "position": [0, 0, 0]
+  },
+
+  "ambient": {
+    "windSpeed": 2.0,
+    "windDirectionDeg": 270,
+    "ambientTemperatureK": 288.15,
+    "ambientPressurePa": 101325,
+    "relativeHumidity": 0.7
+  },
+
+  "expectedFlame": {
+    "lengthM": 70.0,
+    "diameterM": 35.0,
+    "surfaceEmissivePowerKwM2": 165.0,
+    "note": "Flame length is usually quoted as H/D ~ 2 for these trials. The emissive power is reported as a mean over the visible flame, with higher values near the base and lower ones higher up where soot obscures; the literature range spans roughly 165-265 kW/m2. VERIFY ALL THREE against the primary source."
+  },
+
+  "radiometers": [],
+
+  "acceptance": {
+    "flameLengthRatioMin": 0.5,
+    "flameLengthRatioMax": 2.0,
+    "flameDiameterRatioMin": 0.9,
+    "flameDiameterRatioMax": 1.1,
+    "sepRatioMin": 0.5,
+    "sepRatioMax": 2.0,
+    "fluxRatioMin": 0.5,
+    "fluxRatioMax": 2.0,
+    "minFluxFac2Fraction": 0.8
+  }
+}

@@ -58,6 +58,7 @@ namespace DisperSim3D.CLI
             string simulationSelector = null;
             bool listOnly = false;
             string validatePath = null;
+            string validateFirePath = null;
             bool listGpus = false;
             bool iogpSelftest = false;
             bool geometrySelftest = false;
@@ -112,6 +113,9 @@ namespace DisperSim3D.CLI
                         break;
                     case "--validate":
                         if (i + 1 < args.Length) validatePath = args[++i];
+                        break;
+                    case "--validate-fire":
+                        if (i + 1 < args.Length) validateFirePath = args[++i];
                         break;
                     case "--grid":
                         if (i + 1 < args.Length) gridRes = int.Parse(args[++i]);
@@ -197,6 +201,9 @@ namespace DisperSim3D.CLI
             if (flashFireSelftest) return RunFlashFireSelfTest();
             if (thermalDoseSelftest) return RunThermalDoseSelfTest();
             if (fireStudySelftest) return RunFireStudySelfTest();
+            if (!string.IsNullOrEmpty(validateFirePath))
+                return DisperSim3D.Validation.FireBenchmarkRunner.RunAndPrint(
+                    validateFirePath, Console.Out) ? 0 : 1;
             if (listIogpType != null) return RunListIogp(listIogpType);
             if (memoryEstimate) return RunMemoryEstimate(memSolverArg, memNxArg);
             if (twoPhaseTest) return RunTwoPhaseTest();
@@ -1666,6 +1673,8 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             the error function against published anchors.");
             Console.WriteLine("  --fire-study-selftest      Score and rank a synthetic fire study, and check");
             Console.WriteLine("                             it survives a save/load cycle.");
+            Console.WriteLine("  --validate-fire <file|dir> Run .fbench fire radiation benchmarks against the");
+            Console.WriteLine("                             published flame geometry, emissive power and flux.");
             Console.WriteLine("  --list-iogp [type]         Dump IOGP leak-frequency table (one type or");
             Console.WriteLine("                             all 24). e.g. --list-iogp SteelProcessPipe");
             Console.WriteLine("  --memory-estimate <solver> <N>");

@@ -715,6 +715,7 @@ namespace DisperSim3D.Core
                             new XAttribute("FlameDia", f.FlameDiameterM.ToString(inv)),
                             new XAttribute("Sep", f.SepKwM2.ToString(inv)),
                             new XAttribute("FuelMolar", f.FuelMolarMassKgMol.ToString(inv)),
+                            new XAttribute("Sooty", f.IsSootyFuel),
                             new XAttribute("IsVisible", f.IsVisible)))));
         }
 

@@ -127,6 +127,7 @@ namespace DisperSim3D.Validation
                 FlameDiameterM = 1.4,
                 SepKwM2 = 220.0,
                 FuelMolarMassKgMol = 0.0441,
+                IsSootyFuel = false,
                 IsVisible = true
             });
 
@@ -291,6 +292,9 @@ namespace DisperSim3D.Validation
                 results.Add(new Result(tag + "FuelMolarMassKgMol",
                     Near(src.FuelMolarMassKgMol, dst.FuelMolarMassKgMol),
                     $"expected={src.FuelMolarMassKgMol} actual={dst.FuelMolarMassKgMol}"));
+                results.Add(new Result(tag + "IsSootyFuel",
+                    dst.IsSootyFuel == src.IsSootyFuel,
+                    $"expected={src.IsSootyFuel} actual={dst.IsSootyFuel}"));
                 results.Add(new Result(tag + "IsVisible",
                     dst.IsVisible == src.IsVisible,
                     $"expected={src.IsVisible} actual={dst.IsVisible}"));

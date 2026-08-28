@@ -603,6 +603,7 @@ namespace DisperSim3D.Core
                     FlameDiameterM = AttrDouble(fe, inv, 0, "FlameDia"),
                     SepKwM2 = AttrDouble(fe, inv, 0, "Sep"),
                     FuelMolarMassKgMol = AttrDouble(fe, inv, 0.016, "FuelMolar"),
+                    IsSootyFuel = AttrBool(fe, true, "Sooty"),
                     IsVisible = AttrBool(fe, true, "IsVisible")
                 };
 
