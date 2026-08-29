@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -67,6 +67,7 @@ namespace DisperSim3D.CLI
             bool flashFireSelftest = false;
             bool thermalDoseSelftest = false;
             bool fireStudySelftest = false;
+            bool gridAutoFitSelftest = false;
             bool tracerGpuSelftest = false;
             string listIogpType = null;        // null = "no --list-iogp"; "" = all 24; otherwise the type name
             bool memoryEstimate = false;
@@ -153,6 +154,9 @@ namespace DisperSim3D.CLI
                     case "--fire-study-selftest":
                         fireStudySelftest = true;
                         break;
+                    case "--grid-autofit-selftest":
+                        gridAutoFitSelftest = true;
+                        break;
                     case "--list-iogp":
                         // Optional positional: equipment type name. We peek the
                         // next arg; if it starts with '-' it's the next flag.
@@ -201,6 +205,7 @@ namespace DisperSim3D.CLI
             if (flashFireSelftest) return RunFlashFireSelfTest();
             if (thermalDoseSelftest) return RunThermalDoseSelfTest();
             if (fireStudySelftest) return RunFireStudySelfTest();
+            if (gridAutoFitSelftest) return RunGridAutoFitSelfTest();
             if (!string.IsNullOrEmpty(validateFirePath))
                 return DisperSim3D.Validation.FireBenchmarkRunner.RunAndPrint(
                     validateFirePath, Console.Out) ? 0 : 1;
@@ -496,6 +501,19 @@ namespace DisperSim3D.CLI
         /// <summary>Wrapper around <see cref="FireStudySelfTest.RunAndPrint"/>.
         /// Returns 0 when the fire study scores and ranks its scenarios correctly and
         /// survives a save/load cycle, 1 otherwise.</summary>
+        static int RunGridAutoFitSelfTest()
+        {
+            try
+            {
+                return GridAutoFitSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Grid auto-fit self-test failed: " + ex.Message);
+                return 1;
+            }
+        }
+
         static int RunFireStudySelfTest()
         {
             try
@@ -1673,6 +1691,8 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             the error function against published anchors.");
             Console.WriteLine("  --fire-study-selftest      Score and rank a synthetic fire study, and check");
             Console.WriteLine("                             it survives a save/load cycle.");
+            Console.WriteLine("  --grid-autofit-selftest    Check that the ground grid grows to fit an added");
+            Console.WriteLine("                             object and never shrinks back.");
             Console.WriteLine("  --validate-fire <file|dir> Run .fbench fire radiation benchmarks against the");
             Console.WriteLine("                             published flame geometry, emissive power and flux.");
             Console.WriteLine("  --list-iogp [type]         Dump IOGP leak-frequency table (one type or");

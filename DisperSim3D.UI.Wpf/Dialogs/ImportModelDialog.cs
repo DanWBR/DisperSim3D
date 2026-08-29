@@ -14,7 +14,9 @@ namespace DisperSim3D.Dialogs
         private NumericUpDown nudRotX, nudRotY, nudRotZ;
         private NumericUpDown nudScale;
         private TrackBar trackScale;
+        private ComboBox cboUnit;
         private Label lblInfo;
+        private bool _suppressUnitSync;
         private ElementHost _previewHost;
         private HelixViewport3D _previewViewport;
         private Model3DGroup _model;
@@ -53,10 +55,13 @@ namespace DisperSim3D.Dialogs
 
             var bounds = _model.Bounds;
             double maxExt = Math.Max(bounds.SizeX, Math.Max(bounds.SizeY, bounds.SizeZ));
-            // Default to filling ~40 % of the editor grid — typical sweet spot for an
-            // imported plant/refinery layout. User can dial up or down with the slider.
-            double targetSize = _groundSize * 0.4;
-            double defaultScale = maxExt > 0.001 ? targetSize / maxExt : 1.0;
+
+            // The model arrives at whatever size its file says, and the scene works in
+            // metres. STL and OBJ carry no unit, so the number in the file could be
+            // millimetres, metres or anything else — and authors get it wrong often
+            // enough that guessing silently is worse than asking. The dialog picks the
+            // likeliest unit and the user confirms it.
+            double defaultScale = ModelUnits.FactorFor(ModelUnits.Guess(maxExt));
 
             var splitContainer = new SplitContainer
             {
@@ -88,8 +93,7 @@ namespace DisperSim3D.Dialogs
 
             lblInfo = new Label
             {
-                Text = string.Format("Triangles: {0}\nSize: {1:F1} x {2:F1} x {3:F1}\nAuto scale: {4:F4}",
-                    CountTriangles(_model), bounds.SizeX, bounds.SizeY, bounds.SizeZ, defaultScale),
+                Text = BuildInfoText(defaultScale),
                 AutoSize = true,
                 Margin = new Padding(0, 0, 0, 8)
             };
@@ -151,9 +155,27 @@ namespace DisperSim3D.Dialogs
             table.SetColumnSpan(lblScl, 2);
             table.Controls.Add(lblScl, 0, row++);
 
-            nudScale = MakeNud(0.001m, 100m, (decimal)defaultScale, 4);
+            cboUnit = new ComboBox
+            {
+                Dock = DockStyle.Fill,
+                DropDownStyle = ComboBoxStyle.DropDownList
+            };
+            cboUnit.Items.AddRange(ModelUnits.Labels);
+            cboUnit.SelectedIndex = (int)ModelUnits.Guess(maxExt);
+            AddRow(table, row++, "Model unit:", cboUnit);
+
+            nudScale = MakeNud(0.000001m, 100000m, (decimal)defaultScale, 6);
             nudScale.Increment = 0.01m;
             AddRow(table, row++, "Value:", nudScale);
+
+            cboUnit.SelectedIndexChanged += (s, e) =>
+            {
+                var picked = (ModelUnit)cboUnit.SelectedIndex;
+                if (picked == ModelUnit.Custom) return;  // the user drives the value directly
+                _suppressUnitSync = true;
+                nudScale.Value = (decimal)ModelUnits.FactorFor(picked);
+                _suppressUnitSync = false;
+            };
 
             trackScale = new TrackBar
             {
@@ -181,6 +203,11 @@ namespace DisperSim3D.Dialogs
             {
                 int tv = ScaleToTrack((double)nudScale.Value);
                 if (trackScale.Value != tv) trackScale.Value = tv;
+                // Dialling the value away from a named unit means the user is no longer
+                // asserting that unit, so the combo drops to Custom rather than lying.
+                if (!_suppressUnitSync)
+                    cboUnit.SelectedIndex = (int)ModelUnits.Match((double)nudScale.Value);
+                lblInfo.Text = BuildInfoText((double)nudScale.Value);
                 UpdatePreview();
             };
 
@@ -300,16 +327,32 @@ namespace DisperSim3D.Dialogs
             _modelVisual.Transform = group;
         }
 
+        /// <summary>
+        /// Triangle count plus the size the model will actually have in the scene, so
+        /// the user can sanity-check the unit against something they recognise.
+        /// </summary>
+        private string BuildInfoText(double scale)
+        {
+            var b = _model.Bounds;
+            return string.Format(
+                "Triangles: {0}\nFile size: {1:F1} x {2:F1} x {3:F1} units\nIn the scene: {4:F1} x {5:F1} x {6:F1} m",
+                CountTriangles(_model), b.SizeX, b.SizeY, b.SizeZ,
+                b.SizeX * scale, b.SizeY * scale, b.SizeZ * scale);
+        }
+
+        // The slider spans 1e-4 to 1e4 metres per unit, wide enough to reach kilometres
+        // at one end and to rescue a model authored in thousandths at the other.
         private int ScaleToTrack(double scale)
         {
+            if (scale <= 0) return 1;
             double log = Math.Log10(scale);
-            int val = (int)((log + 3) * 40);
+            int val = (int)((log + 4) * 25);
             return Math.Max(1, Math.Min(200, val));
         }
 
         private double TrackToScale(int track)
         {
-            double log = track / 40.0 - 3.0;
+            double log = track / 25.0 - 4.0;
             return Math.Pow(10, log);
         }
 

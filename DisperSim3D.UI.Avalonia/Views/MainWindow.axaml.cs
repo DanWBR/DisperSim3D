@@ -1739,7 +1739,9 @@ namespace DisperSim3D.UI.Avalonia.Views
                 Scale = preset.DefaultScale
             };
             _scene.Decorations.Add(deco);
-            MarkDirtyAndRefresh("Added decoration: " + preset.Label);
+            bool grew = Views.DecorationBounds.FitGrid(_scene, deco);
+            MarkDirtyAndRefresh("Added decoration: " + preset.Label
+                + (grew ? $" — grid grown to {_scene.Environment.GridHalfSize:0.#} m" : ""));
         }
 
         /// <summary>
@@ -1864,13 +1866,32 @@ namespace DisperSim3D.UI.Avalonia.Views
             if (files.Count == 0) return;
             var path = files[0].Path.LocalPath;
             var name = System.IO.Path.GetFileNameWithoutExtension(path);
+
+            // Measure the mesh before asking, so the dialog can guess the unit and
+            // show what the model will actually be once it lands in the scene.
+            var info = Views.DecorationBounds.MeasureFile(path);
+            if (info is null)
+            {
+                StatusText.Text = "Could not read the model: " + name;
+                return;
+            }
+
+            var dlg = new Views.ImportModelDialog(path, info.Value,
+                _scene.Environment.GridHalfSize);
+            if (!await dlg.ShowDialog<bool>(this)) return;
+
             var deco = new DisperSim3D.Models.Decoration3D
             {
                 Name = name,
-                FilePath = path
+                FilePath = path,
+                Position = new DisperSim3D.Geometry.Point3D(dlg.PosX, dlg.PosY, dlg.PosZ),
+                Rotation = new DisperSim3D.Geometry.Vector3D(dlg.RotX, dlg.RotY, dlg.RotZ),
+                Scale = dlg.ModelScale
             };
             _scene.Decorations.Add(deco);
-            MarkDirtyAndRefresh("Added decoration: " + name);
+            bool grew = Views.DecorationBounds.FitGrid(_scene, deco);
+            MarkDirtyAndRefresh("Added decoration: " + name
+                + (grew ? $" — grid grown to {_scene.Environment.GridHalfSize:0.#} m" : ""));
         }
 
         // ── Simulation execution ─────────────────────────────────────────────

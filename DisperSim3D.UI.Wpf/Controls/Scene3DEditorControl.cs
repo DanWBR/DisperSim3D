@@ -2492,35 +2492,32 @@ namespace DisperSim3D.Controls
 
             var bounds = model.Bounds;
             double maxExtent = Math.Max(bounds.SizeX, Math.Max(bounds.SizeY, bounds.SizeZ));
-            double autoScale = 1.0;
-            if (maxExtent > 0.001)
-            {
-                double targetSize = 5.0;
-                autoScale = targetSize / maxExtent;
-            }
 
             var centerX = bounds.X + bounds.SizeX * 0.5;
             var centerY = bounds.Y + bounds.SizeY * 0.5;
             var centerZ = bounds.Z;
 
             System.Diagnostics.Debug.WriteLine(string.Format(
-                "Import decoration: maxExtent={0:F2}, autoScale={1:F4}, center=({2:F2},{3:F2},{4:F2})",
-                maxExtent, autoScale, centerX, centerY, centerZ));
+                "Import decoration: maxExtent={0:F2}, center=({1:F2},{2:F2},{3:F2})",
+                maxExtent, centerX, centerY, centerZ));
 
             var recentered = RecenterModel(model, centerX, centerY, centerZ);
 
+            // The model comes in at the size its file says. A tank that measures
+            // 40 m in the STL arrives 40 m across, and the grid grows to take it.
             var decoration = new Decoration3D
             {
                 Name = System.IO.Path.GetFileNameWithoutExtension(filePath),
                 FilePath = filePath,
                 Position = pos,
-                Scale = autoScale,
+                Scale = 1.0,
                 OriginalModel3D = recentered,
                 Model3D = recentered
             };
             decoration.UpdateBoundingBox();
 
             _scene.Decorations.Add(decoration);
+            DisperSim3D.Core.GridAutoFit.Fit(_scene, decoration.BoundingBox);
             UpdateViewport();
             SelectedDecoration = decoration;
             return decoration;
@@ -2551,6 +2548,7 @@ namespace DisperSim3D.Controls
             decoration.UpdateBoundingBox();
 
             _scene.Decorations.Add(decoration);
+            DisperSim3D.Core.GridAutoFit.Fit(_scene, decoration.BoundingBox);
             UpdateViewport();
             SelectedDecoration = decoration;
             return decoration;

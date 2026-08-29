@@ -94,15 +94,21 @@
 
       <!-- Scale -->
       <TextBlock Classes="section" Text="Scale" />
-      <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="80,*" RowSpacing="4">
-        <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Value:" />
-        <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="NudScale"
-                       Minimum="0.001" Maximum="100" Value="1" Increment="0.01"
-                       FormatString="F4" />
-        <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Slider:" />
-        <Slider Grid.Row="1" Grid.Column="1" x:Name="ScaleSlider"
-                Minimum="1" Maximum="200" Value="120"
-                TickFrequency="20" TickPlacement="BottomRight"
+      <TextBlock Classes="hint"
+                 Text="STL and OBJ files carry no unit. Check the size below against something you recognise — authors often export in the wrong one." />
+      <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="80,*" RowSpacing="4">
+        <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Model unit:" />
+        <ComboBox Grid.Row="0" Grid.Column="1" x:Name="CboUnit"
+                  HorizontalAlignment="Stretch"
+                  SelectionChanged="CboUnit_SelectionChanged" />
+        <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Value:" />
+        <NumericUpDown Grid.Row="1" Grid.Column="1" x:Name="NudScale"
+                       Minimum="0.000001" Maximum="100000" Value="1" Increment="0.01"
+                       FormatString="F6" />
+        <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="Slider:" />
+        <Slider Grid.Row="2" Grid.Column="1" x:Name="ScaleSlider"
+                Minimum="1" Maximum="200" Value="100"
+                TickFrequency="25" TickPlacement="BottomRight"
                 ValueChanged="ScaleSlider_ValueChanged" />
       </Grid>
 
