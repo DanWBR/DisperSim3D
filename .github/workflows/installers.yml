@@ -8,17 +8,15 @@ name: Installers
 #
 # Every job runs the same script a developer runs locally
 # (packaging/<os>/build-*), so a release can always be reproduced by hand.
-# Pushing a v* tag additionally publishes the three files as a GitHub release.
+#
+# Packaging three desktop targets takes long enough that running it on every
+# push to master is mostly waste. It runs when a v* tag is created, which
+# also publishes the three files as a GitHub release, and on demand from the
+# Actions tab for a dry run against any branch.
 
 on:
   push:
-    branches: [master]
     tags: ['v*']
-  pull_request:
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
-      - '.github/ISSUE_TEMPLATE/**'
   workflow_dispatch:
     inputs:
       version:
