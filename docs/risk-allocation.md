@@ -1,7 +1,7 @@
 ---
 layout: default
 title: Risk-Reduction Allocation
-nav_order: 8
+nav_order: 9
 ---
 
 # Risk-Reduction Detector Allocation

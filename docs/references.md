@@ -1,7 +1,7 @@
 ---
 layout: default
 title: References
-nav_order: 12
+nav_order: 15
 ---
 
 # References
@@ -260,6 +260,114 @@ validation work:
   Obstacles*. Beuth Verlag, Berlin.
 - **British Petroleum** (n.d.). *Fire and Gas Detection Engineering
   Technical Practice*. GP 30-85.
+
+## Fire and thermal radiation  -  models
+
+Sources for the flame, emissive-power and harm models described in
+[theory.md](theory.md) §6.
+
+- **Chamberlain, G. A.** (1987). *Developments in design methods for
+  predicting thermal radiation from flares*. Chemical Engineering Research
+  and Design, 65, 299–309.  -  jet flame length `L = 0.2·Q^0.4` and the
+  Richardson-number formulation.
+- **Thomas, P. H.** (1963). *The size of flames from natural fires*. 9th
+  Symposium (International) on Combustion, 844–859.  -  pool flame length.
+- **Miller, D.** (2017). *New model for predicting thermal radiation from
+  flares and high pressure jet fires for hydrogen and syngas*. Process
+  Safety Progress, 36 (3), 237–251.
+  [doi:10.1002/prs.11867](https://doi.org/10.1002/prs.11867)  -  expanded
+  source eq. (1)–(3) and horizontal flame shape eq. (19)–(22).
+- **Mudan, K. S.** (1984). *Thermal radiation hazards from hydrocarbon pool
+  fires*. Progress in Energy and Combustion Science, 10 (1), 59–80.  - 
+  soot-blend emissive power; Table 4 measured values, Table 2 radiative
+  fractions.
+- **Raj, P. K.** (2005). *Large LNG fire thermal radiation  -  modeling
+  issues and hazard criteria revisited*. Process Safety Progress, 24 (3),
+  192–202.  -  Table 1 compilation behind the five LNG pool benchmarks.
+- **Pietersen, C. M., Huerta, S. C.** (1985). *Analysis of the LPG incident
+  in San Juan Ixhuatepec, Mexico City*. TNO Report 85-0222.  -  atmospheric
+  transmissivity correlation.
+- **Buck, A. L.** (1981). *New equations for computing vapor pressure and
+  enhancement factor*. Journal of Applied Meteorology, 20, 1527–1532.  - 
+  saturation vapour pressure feeding the transmissivity.
+- **Eisenberg, N. A., Lynch, C. J., Breeding, R. J.** (1975).
+  *Vulnerability Model: A Simulation System for Assessing Damage Resulting
+  from Marine Spills*. US Coast Guard CG-D-136-75.  -  thermal dose
+  fatality probit.
+- **Abramowitz, M., Stegun, I. A.** (1964). *Handbook of Mathematical
+  Functions*, eq. 7.1.26.  -  error function used by the probit-to-
+  probability conversion.
+
+## Fire and thermal radiation  -  experiments
+
+The tests encoded as `.fbench` benchmarks. Per-test citations, including the
+`dataConfidence` level for each, are in the benchmark files themselves and
+tabulated in [validation.md](validation.md).
+
+- **Johnson, A. D., Brightwell, H. M., Carsley, A. J.** (1994). *A model for
+  predicting the thermal radiation hazards from large scale horizontal
+  natural gas jet fires*. Hazards XII, IChemE, Manchester.  -  tests 1033,
+  1040, 1083 and 1089; conditions and radiometer readings as tabulated in
+  Miller (2017) Tables 2 and 3.
+- **Nedelka, D., Moorhouse, J., Tucker, R. F.** (1989). *The Montoir 35 m
+  diameter LNG pool fire experiments*.
+- **Raj, P. K., Atallah, S.** (1974). AGA San Clemente LNG fire tests.
+- **Raj, P. K. et al.** (1979). USCG China Lake LNG spill and fire tests.
+- **Mizner, G. A., Eyre, J. A.** (1983). *Large-scale LNG and LPG pool
+  fires*.  -  Maplin Sands 20 m LNG and the 20 m LPG land fire.
+- **May, W. G., McQueen, W.** (1973). Esso LNG trench fire tests, Libya.
+- **Wang, C. J., Wen, J. X., Chen, Z. B.** (2014). *Simulation of
+  large-scale LNG pool fires using FireFOAM*. Combustion Science and
+  Technology, 186 (10–11), 1632–1649.
+  [doi:10.1080/00102202.2014.935615](https://doi.org/10.1080/00102202.2014.935615)
+   -  Montoir flame length read from Figure 4.
+
+## Turbulence and numerical methods
+
+- **Launder, B. E., Spalding, D. B.** (1974). *The numerical computation of
+  turbulent flows*. Computer Methods in Applied Mechanics and Engineering,
+  3 (2), 269–289.  -  the standard k-ε model used by the OpenFOAM path.
+- **Smagorinsky, J.** (1963). *General circulation experiments with the
+  primitive equations*. Monthly Weather Review, 91 (3), 99–164.  -  subgrid
+  viscosity in FluidX3D and the subgrid diffusivity of the tracer engines.
+- **Richards, P. J., Hoxey, R. P.** (1993). *Appropriate boundary conditions
+  for computational wind engineering models using the k-ε turbulence
+  model*. Journal of Wind Engineering and Industrial Aerodynamics, 46–47,
+  145–153.  -  the logarithmic ABL inlet profiles OpenFOAM's
+  `atmBoundaryLayerInlet*` conditions impose.
+- **Vu, T. L.** (2019). *On numerical modelling of atmospheric gas
+  dispersion using CFD approach*. PhD thesis, Nanyang Technological
+  University, Singapore.
+  [dr.ntu.edu.sg/handle/10356/103659](https://dr.ntu.edu.sg/handle/10356/103659)
+   -  the `Sc_t = 0.15` solver, mesh refinement and ABL precursor recipe
+  reproduced and measured in
+  [benchmark-results.md](benchmark-results.md#vu-2019-reproduction-attempts).
+- **Kim, B., Liu, Y., Llamas, I., Rossignac, J.** (2005). *FlowFixer:
+  Using BFECC for fluid simulation*. Eurographics Workshop on Natural
+  Phenomena.  -  the error-compensation scheme in the buoyant tracer.
+
+## Leak frequency and detector siting
+
+- **IOGP Report 434-01** (2019, rev 1.1 May 2021). *Risk Assessment Data
+  Directory  -  Process Release Frequencies.* International Association of
+  Oil &amp; Gas Producers.
+  [iogp.org](https://www.iogp.org/bookstore/product/risk-assessment-data-directory-process-release-frequencies/)
+   -  the embedded 2006–2015 dataset behind the risk-weighted detector
+  allocation, verified assertion-by-assertion by `--iogp-selftest`.
+- **Rad, A., Rashtchian, D. &amp; Badri, N.** (2017). *A risk-based methodology
+  for optimum placement of flammable gas detectors.* Process Safety and
+  Environmental Protection, 105, 175–183.  -  the minimum-residual-risk
+  greedy allocator.
+- **Rad, A. &amp; Rashtchian, D.** (2016). *A new approach for optimal placement
+  of gas detectors.* Chemical Engineering Transactions, 53, 145–150.  -  the
+  distance-weighted refinement.
+- **Nemhauser, G., Wolsey, L. &amp; Fisher, M.** (1978). *An analysis of
+  approximations for maximizing submodular set functions.* Mathematical
+  Programming, 14 (1), 265–294.  -  origin of the `(1 − 1/e)` greedy bound.
+
+See [risk-allocation.md](risk-allocation.md) for the formulation as
+implemented and [studies-detectors.md](studies-detectors.md) for the
+set-covering variant.
 
 ## OpenFOAM
 

@@ -1,7 +1,7 @@
 ---
 layout: default
 title: FluidX3D solvers
-nav_order: 5
+nav_order: 6
 ---
 
 # FluidX3D solvers

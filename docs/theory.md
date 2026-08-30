@@ -809,5 +809,5 @@ equations above, in order of appearance:
     Model.* US Coast Guard CG-D-136-75. — §6.8
 18. Abramowitz, M., Stegun, I.A. (1964). *Handbook of Mathematical
     Functions*, eq. 7.1.26. — §6.8
-19. IOGP (2018). *Risk Assessment Data Directory — Process Release
-    Frequencies.* Report 434-01. — §7.2
+19. IOGP Report 434-01 (2019, rev 1.1 May 2021). *Risk Assessment Data
+    Directory — Process Release Frequencies.* — §7.2

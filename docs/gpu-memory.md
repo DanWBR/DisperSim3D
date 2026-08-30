@@ -1,7 +1,7 @@
 ---
 layout: default
 title: GPU & Memory
-nav_order: 9
+nav_order: 10
 ---
 
 # GPU &amp; Memory
