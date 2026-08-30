@@ -18,6 +18,8 @@ The solution splits cleanly into a **portable engine** (`DisperSim3D.csproj` mul
 
 Full project documentation is published on **[GitHub Pages](https://danwbr.github.io/DisperSim3D/)**. For a detailed description of physical models, file format, OpenFOAM case structure, and validation, see [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md).
 
+**Theory manual** — [docs/theory.md](docs/theory.md) states every model the program evaluates as the code implements it: the Gaussian correlations, the source terms, the LBM scalar transport, the equations `rhoReactingBuoyantFoam` solves, the fire and radiation models, and a section on what is deliberately not modelled.
+
 **Validation dossier** — [`docs/DisperSim3D-Validacao.pptx`](docs/DisperSim3D-Validacao.pptx) (Portuguese, 22 slides) presents every benchmark the project runs, the defects the literature found, the stated limits of the model and the 38 sources behind them. Rebuild it with `python docs/build_deck.py`. The underlying numbers are in [docs/validation.md](docs/validation.md) and [docs/benchmark-results.md](docs/benchmark-results.md).
 
 ---

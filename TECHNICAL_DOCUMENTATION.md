@@ -122,6 +122,13 @@ Solvers (Core/)                          External pipeline
 
 ## 3. Physical models
 
+> This section covers how each model is wired into the program: which file
+> owns it, what it reads from the scenario, and how the pipeline runs. The
+> equations themselves — including the fire and radiation models, the LBM
+> scalar transport and what `rhoReactingBuoyantFoam` solves — are in
+> [docs/theory.md](docs/theory.md), together with the assumptions and the
+> list of what is deliberately not modelled.
+
 ### 3.1 Gaussian Puff (transient)
 
 **File**: [`Core/GaussianPuffEngine.cs`](DisperSim3D/Core/GaussianPuffEngine.cs)
