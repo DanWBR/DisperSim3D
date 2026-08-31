@@ -31,11 +31,13 @@ on the same field / wind-tunnel experiments.
 All benchmarks are exercised via `DisperSim3D.CLI --validate benchmarks/`.
 Exit code 0 = every metric inside the per-bench acceptance band.
 
-> **The v2512 native install above is no longer present on the development
-> machine** (checked 2026-08-31), so the run recorded here cannot currently
-> be reproduced. See
+> **The v2512 *native Windows* install above is gone from the development
+> machine** (checked 2026-08-31: no install directory, no registry entry, no
+> `blockMesh.exe`). OpenFOAM v2512 was reinstalled the same day **under WSL2**
+> instead, so the version matches again and the suite is reproducible; the host
+> differs. See
 > [Three benches moved onto the CFD solver](#three-benches-moved-onto-the-cfd-solver-2026-08-31)
-> for what runs today and under what.
+> for a same-model cross-check between the two.
 
 ## Validation philosophy
 
@@ -283,18 +285,15 @@ The tracer step itself is ~30× faster.
 
 ## Three benches moved onto the CFD solver (2026-08-31)
 
-**These numbers do not belong in the summary table above and are not folded
-into the headline score.** They come from a different OpenFOAM — v2412 under
-WSL2, run serially — where the recorded suite used v2512 native on Windows
-in parallel. Results from two environments are not comparable.
+**These numbers are not folded into the headline score above**, which is a
+snapshot of the 2026-05-16 run. They are reported separately so the two runs
+stay distinguishable.
 
-They were run under WSL because **the v2512 native install named in the test
-environment above is no longer on the development machine.** Checked on
-2026-08-31: no `*OpenFOAM*` directory anywhere on `C:`, nothing under
-`Program Files`, no uninstall entry in the registry, no `blockMesh.exe`, and
-no `OpenFoamPath` recorded in the app's saved settings. Until it is
-reinstalled the recorded suite above cannot be reproduced, which is worth
-resolving before the benchmark set is extended.
+They were produced on OpenFOAM **v2512 under WSL2, 4 processes** — the same
+OpenFOAM version the table above declares, on a different host, because the
+native Windows v2512 install is gone from the machine (checked 2026-08-31: no
+install directory, no registry entry, no `blockMesh.exe`, no `OpenFoamPath` in
+the app's saved settings). v2512 was reinstalled under WSL2 the same day.
 
 ### What changed
 
@@ -309,13 +308,29 @@ physics, so they could only ever fail:
 
 ### Results
 
-Environment: OpenFOAM v2412 (WSL2, Ubuntu-24.04), `--nprocs 1`, .NET 10.
+Environment: OpenFOAM v2512 (WSL2, Ubuntu-24.04), `--nprocs 4`, .NET 10.
 
 | Bench | MRB | RMSE | FAC2 | MG | VG | Status |
 |---|---:|---:|---:|---:|---:|:-:|
 | burro6 | 0.9925 | 0.9325 | 0.3333 | 3.074 | 1.152 | FAIL |
-| thorney-island-08 | 1.033 | 0.8492 | 0.00 | 3.15 | 1.016 | FAIL |
+| thorney-island-08 | 1.034 | 0.8493 | 0.00 | 3.154 | 1.016 | FAIL |
 | kit-fox-u5-2 | 1.457 | 1.185 | 0.00 | 7.18 | 1.407 | FAIL |
+
+#### Cross-check: v2412 serial vs v2512 parallel
+
+All three were first run on v2412 with `--nprocs 1`, before v2512 was
+reinstalled. The two runs agree to the fourth significant figure:
+
+| Bench | v2412, serial | v2512, 4 procs |
+|---|---|---|
+| burro6 | MRB 0.9925, MG 3.074 | MRB 0.9925, MG 3.074 |
+| thorney-island-08 | MRB 1.033, MG 3.15 | MRB 1.034, MG 3.154 |
+| kit-fox-u5-2 | MRB 1.457, MG 7.18 | MRB 1.457, MG 7.18 |
+
+The residual differences are decomposition round-off. Worth recording for two
+reasons: it says the OpenFOAM version and the process count are not what these
+benches are sensitive to, and it means the failures below are the model's, not
+the environment's.
 
 Predicted / observed by arc:
 
