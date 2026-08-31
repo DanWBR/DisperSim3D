@@ -55,18 +55,27 @@ Two exceptions:
   pipeline. These guard against silent drift while a peer-reviewed
   reference SPM set is being assembled.
 
-## Headline score: 18 PASS / 31 (58 %)
+## Headline score: 17 PASS / 31 (55 %)
 
 | Group | PASS | Total | Notes |
 |---|---|---|---|
 | Self-consistency | 2 | 2 | gauss-D-selftest, gauss-puff-selftest |
 | Prairie Grass vs FLACS Hanna 2004 | 3 | 5 | 2 FAIL by 1–4 % on MRB only |
-| OpenFOAM LNG vs FLACS Hansen 2010 | 5 | 8 | Burro 3/5/7/Coyote 5 PASS; Burro 8 PASS (config); Burro 9 / Coyote 3 / Maplin 27 FAIL by Sct limitation |
+| OpenFOAM LNG vs FLACS Hansen 2010 | 5 | 9 | Burro 3/5/7/Coyote 5 PASS; Burro 8 PASS (config); Burro 6 / Burro 9 / Coyote 3 / Maplin 27 FAIL by Sct limitation |
 | OpenFOAM Falcon vs FLACS Hansen 2010 | 3 | 3 | DisperSim outperforms FLACS on the fence cohort |
 | OpenFOAM SF₆ wind tunnel | 1 | 1 | DAT632 regression baseline |
 | OpenFOAM MUST (FluidX3D-tracer hybrid) | 1 | 1 | Mock Urban Setting Test trial 11 |
-| FluidX3D regression baselines | 3 | 5 | Gant-Ivings / Spadeadam / hydrogen jet; CO2PipeHaz / hydrogen FAIL by physics scope |
-| Heavy-gas / pressurized Gaussian | 0 | 6 | Out-of-scope: dense-gas slumping, rainout, urban arrays not in Gaussian engine |
+| FluidX3D regression baselines | 2 | 4 | Gant-Ivings / Spadeadam PASS; CO2PipeHaz / hydrogen FAIL by physics scope |
+| OpenFOAM dense gas vs FLACS | 0 | 2 | Thorney Island 8 by Sct limitation; Kit Fox U5-2 by its missing billboard array |
+| Heavy-gas / pressurized Gaussian | 0 | 4 | Out-of-scope: rainout, depression terrain, urban arrays not in Gaussian engine |
+| **Total** | **17** | **31** | |
+
+> The score read 18 / 31 until 2026-08-31. `must-trial-11` was counted
+> twice, once under its own group and again under the FluidX3D baselines,
+> which inflated both columns by one; the placeholder row the summary table
+> used to carry existed to pad its length to the inflated total. Counting
+> the table rows directly gives 17 PASS and 14 FAIL over 31 benches. No
+> bench changed its result — only the arithmetic did.
 
 ## Summary table
 
@@ -81,30 +90,33 @@ Two exceptions:
 | 7 | prairie-grass-35-E | GaussianPlume | SO₂ | **PASS** | 0.52 | 0.60 | 1.75 | 1.27 | within tolerance |
 | 8 | burro3 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.43 | 0.67 | 1.57 | 1.14 | within FLACS unobstructed cohort |
 | 9 | burro5 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.37 | 0.67 | 1.47 | 1.13 | within tolerance |
-| 10 | burro7 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.15 | 0.67 | 1.17 | 1.26 | within tolerance |
-| 11 | burro8 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | -0.18 | 1.00 | 0.84 | 1.04 | stability F, low wind |
-| 12 | burro9 | RhoReactingBuoyantFoam | LNG (CH₄) | FAIL | 0.72 | 0.67 | 2.18 | 1.11 | MG ceiling 1.95 exceeded by 0.23 — Sct limitation |
-| 13 | coyote-03 | RhoReactingBuoyantFoam | LNG (CH₄) | FAIL | 0.76 | 0.60 | 2.30 | 1.14 | FAC2 floor 0.64 missed by 0.04 — Sct limitation |
-| 14 | coyote-05 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.52 | 0.67 | 1.73 | 1.10 | within tolerance |
-| 15 | maplin-sands-27 | RhoReactingBuoyantFoam | LNG (CH₄) | FAIL | 1.41 | 0.00 | 6.06 | 1.13 | Sct limitation; Vu 2019 needed Sct = 0.15 to match |
-| 16 | falcon-01 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 1.04 | 0.00 | 3.28 | 1.13 | matches FLACS Falcon-cohort tolerance |
-| 17 | falcon-03 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.33 | 1.00 | 1.40 | 1.00 | beats FLACS (FAC2 = 0 in their cohort) |
-| 18 | falcon-04 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.23 | 1.00 | 1.26 | 1.02 | beats FLACS |
-| 19 | DAT632 | RhoReactingBuoyantFoam | SF₆ | **PASS** | 0.013 | 1.00 | 1.01 | 1.00 | regression baseline |
-| 20 | must-trial-11 | FluidX3DDispersion | propylene | **PASS** | 7e-4 | 1.00 | 1.001 | 1.00 | MUST cohort regression baseline |
-| 21 | gant-ivings-2005 | FluidX3DDispersion | CH₄ jet | **PASS** | -1.7e-5 | 1.00 | 1.00 | 1.00 | regression baseline; cloud volume 1.169 m³ |
-| 22 | spadeadam-co2 | FluidX3DDispersion | CO₂ | **PASS** | 0.005 | 1.00 | 1.003 | 1.21 | Witlox 2014 digitised |
-| 23 | co2pipehaz-6mm | FluidX3DDispersion | CO₂ | FAIL | — | — | — | — | no two-phase / solid CO₂ sublimation |
-| 24 | hydrogen-jet-schefer | FluidX3DDispersion | H₂ | FAIL | — | — | — | — | sensor estimates in dsbench were order-of-magnitude guesses; engine runs cleanly, cloud is plausible |
-| 25 | kit-fox-u5-2 | GaussianPlume | CO₂ | FAIL | 0.76 | 0.50 | 2.27 | 1.11 | Gaussian on dense gas + obstacles is out of scope |
-| 26 | desert-tortoise-04 | GaussianPlume | NH₃ | FAIL | 0.19 | 0.33 | 1.22 | 7.63 | no aerosol / rainout modelling |
-| 27 | thorney-island-08 | GaussianPuff | Freon-12 | FAIL | -1.07 | 0.25 | 0.19 | 6.86 | dense gas slumping not modelled |
-| 28 | jack-rabbit-i-t07 | GaussianPuff | Cl₂ | FAIL | 1.91 | 0.00 | 1.2e7 | 3.9e41 | depression detrainment not modelled |
-| 29 | jack-rabbit-ii-t01 | GaussianPuff | Cl₂ | FAIL | -0.85 | 0.17 | 2.82 | 2.0e23 | urban array not modelled |
-| 30 | jack-rabbit-ii-t07 | GaussianPuff | Cl₂ | FAIL | -0.77 | 0.33 | 0.41 | 1.50 | abs(log MG) 0.89 above tolerance 0.86 |
-| 31 | gauss-puff-selftest (counted in row 2) | — | — | — | — | — | — | — | — |
+| 10 | burro6 | RhoReactingBuoyantFoam | LNG (CH₄) | FAIL | 0.99 | 0.33 | 3.07 | 1.15 | Sct limitation; ~3× low at every arc |
+| 11 | burro7 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.15 | 0.67 | 1.17 | 1.26 | within tolerance |
+| 12 | burro8 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | -0.18 | 1.00 | 0.84 | 1.04 | stability F, low wind |
+| 13 | burro9 | RhoReactingBuoyantFoam | LNG (CH₄) | FAIL | 0.72 | 0.67 | 2.18 | 1.11 | MG ceiling 1.95 exceeded by 0.23 — Sct limitation |
+| 14 | coyote-03 | RhoReactingBuoyantFoam | LNG (CH₄) | FAIL | 0.76 | 0.60 | 2.30 | 1.14 | FAC2 floor 0.64 missed by 0.04 — Sct limitation |
+| 15 | coyote-05 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.52 | 0.67 | 1.73 | 1.10 | within tolerance |
+| 16 | maplin-sands-27 | RhoReactingBuoyantFoam | LNG (CH₄) | FAIL | 1.41 | 0.00 | 6.06 | 1.13 | Sct limitation; Vu 2019 needed Sct = 0.15 to match |
+| 17 | falcon-01 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 1.04 | 0.00 | 3.28 | 1.13 | matches FLACS Falcon-cohort tolerance |
+| 18 | falcon-03 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.33 | 1.00 | 1.40 | 1.00 | beats FLACS (FAC2 = 0 in their cohort) |
+| 19 | falcon-04 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.23 | 1.00 | 1.26 | 1.02 | beats FLACS |
+| 20 | DAT632 | RhoReactingBuoyantFoam | SF₆ | **PASS** | 0.013 | 1.00 | 1.01 | 1.00 | regression baseline |
+| 21 | must-trial-11 | FluidX3DDispersion | propylene | **PASS** | 7e-4 | 1.00 | 1.001 | 1.00 | MUST cohort regression baseline |
+| 22 | gant-ivings-2005 | FluidX3DDispersion | CH₄ jet | **PASS** | -1.7e-5 | 1.00 | 1.00 | 1.00 | regression baseline; cloud volume 1.169 m³ |
+| 23 | spadeadam-co2 | FluidX3DDispersion | CO₂ | **PASS** | 0.005 | 1.00 | 1.003 | 1.21 | Witlox 2014 digitised |
+| 24 | co2pipehaz-6mm | FluidX3DDispersion | CO₂ | FAIL | — | — | — | — | no two-phase / solid CO₂ sublimation |
+| 25 | hydrogen-jet-schefer | FluidX3DDispersion | H₂ | FAIL | — | — | — | — | sensor estimates in dsbench were order-of-magnitude guesses; engine runs cleanly, cloud is plausible |
+| 26 | kit-fox-u5-2 | RhoReactingBuoyantFoam | CO₂ | FAIL | 1.46 | 0.00 | 7.18 | 1.41 | billboard roughness array not encoded; near field 16× low, recovering downwind |
+| 27 | desert-tortoise-04 | GaussianPlume | NH₃ | FAIL | 0.19 | 0.33 | 1.22 | 7.63 | no aerosol / rainout modelling |
+| 28 | thorney-island-08 | RhoReactingBuoyantFoam | Freon-12 | FAIL | 1.03 | 0.00 | 3.15 | 1.02 | Sct limitation; ~3× low at every arc |
+| 29 | jack-rabbit-i-t07 | GaussianPuff | Cl₂ | FAIL | 1.91 | 0.00 | 1.2e7 | 3.9e41 | depression detrainment not modelled |
+| 30 | jack-rabbit-ii-t01 | GaussianPuff | Cl₂ | FAIL | -0.85 | 0.17 | 2.82 | 2.0e23 | urban array not modelled |
+| 31 | jack-rabbit-ii-t07 | GaussianPuff | Cl₂ | FAIL | -0.77 | 0.33 | 0.41 | 1.50 | abs(log MG) 0.89 above tolerance 0.86 |
 
-(Row 31 placeholder kept so the table has a stable last index — total = 30 unique benches plus 1 puff self-test row.)
+All 31 benches are now listed; the placeholder row the table used to carry is gone, since burro6 took the missing slot.
+
+Rows 10, 26 and 28 were rerun on 2026-08-31 under OpenFOAM v2512 (WSL2, 4 procs) rather than in the 2026-05-16 batch — see
+[Three benches moved onto the CFD solver](#three-benches-moved-onto-the-cfd-solver-2026-08-31).
 
 ## Detailed sections
 
@@ -173,18 +185,21 @@ a 240³ tracer grid) and the buoyant tracer obstacle handling.
 | co2pipehaz-6mm | FAIL | Supercritical CO₂ release through 6 mm orifice (INERIS CO2PipeHaz Test 2). Engine has no two-phase / solid CO₂ sublimation model. |
 | hydrogen-jet-schefer | FAIL | 207 bar H₂ release through 1.91 mm (Schefer 2008). Tests positive-buoyancy handling — engine runs cleanly and cloud is plausible, but sensor estimates in the dsbench were order-of-magnitude guesses (no published per-sensor H₂ data), so the SPM comparison is not authoritative. |
 
-### Heavy gas / pressurized Gaussian (out of scope, 0/6)
+### Heavy gas / pressurized Gaussian (out of scope, 0/4)
 
 These benches exercise physics outside the Gaussian engine's design
-envelope — dense-gas slumping, two-phase rainout, depression-terrain
-accumulation, urban arrays. They are documented FAILs that pin the
-engine's applicability boundary. The correct solver for these cases is
-`RhoReactingBuoyantFoam` (Kit Fox, Thorney Island) or `FluidX3DDispersion`
-with the obstacle pipeline (Jack Rabbit II).
+envelope — two-phase rainout, depression-terrain accumulation, urban
+arrays. They are documented FAILs that pin the engine's applicability
+boundary. The correct solver is `FluidX3DDispersion` with the obstacle
+pipeline (Jack Rabbit II).
+
+Kit Fox and Thorney Island used to sit here. Both were moved onto
+`RhoReactingBuoyantFoam` on 2026-08-31 and now fail for reasons that are
+about the model rather than about running dense gas through a Gaussian
+engine.
 
 | Bench | Issue |
 |---|---|
-| kit-fox-u5-2 | dense gas in obstacle array |
 | desert-tortoise-04 | aerosol / rainout |
 | thorney-island-08 | dense-gas slumping |
 | jack-rabbit-i-t07 | depression detrainment |
