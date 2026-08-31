@@ -2702,9 +2702,11 @@ void main() { }
                     var texturedSubs = MeshFileLoader.LoadTextured(deco.FilePath);
                     if (texturedSubs != null)
                     {
-                        // Compute AABB from all submesh vertices for grass exclusion
+                        // Measure the mesh once and hand it to DecorationBounds,
+                        // which stores the world-space box the solvers read.
                         if (deco.BoundingBox == null)
-                            deco.BoundingBox = ComputeBoundingBoxFromTextured(texturedSubs);
+                            DecorationBounds.SetLocalBox(deco,
+                                ComputeBoundingBoxFromTextured(texturedSubs));
 
                         // Standalone TexturePath overrides all MTL textures
                         string? overrideTex = !string.IsNullOrEmpty(deco.TexturePath)
@@ -2750,7 +2752,8 @@ void main() { }
                     if (loaded == null) continue;
 
                     if (deco.BoundingBox == null)
-                        deco.BoundingBox = ComputeBoundingBoxFromSolid(loaded.Value.verts);
+                        DecorationBounds.SetLocalBox(deco,
+                            ComputeBoundingBoxFromSolid(loaded.Value.verts));
 
                     var solidMesh = new GlMeshBuffer();
                     solidMesh.Upload(gl, loaded.Value.verts, loaded.Value.indices,

@@ -113,6 +113,16 @@ namespace DisperSim3D.UI.Avalonia.Views
                 }
                 else
                 {
+                    // Position, rotation and scale all move the decoration's
+                    // world-space box, and that box is what the flash fire, the
+                    // radiation shading and the detector allocators read as solid
+                    // geometry. Rebuild it here or they keep obstructing the spot
+                    // the object used to occupy.
+                    if (Inspector.Target is DisperSim3D.Models.Decoration3D editedDeco)
+                    {
+                        Views.DecorationBounds.UpdateBoundingBox(editedDeco);
+                        Views.DecorationBounds.FitGrid(_scene, editedDeco);
+                    }
                     RebuildTree();
                     Viewport3D.PopulateScene(_scene);
                 }
@@ -563,6 +573,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 }
             }
 
+            Views.DecorationBounds.Clear();
             _scene = new Scene3D();
             _projectPath = null;
             _isDirty = false;
@@ -615,6 +626,7 @@ namespace DisperSim3D.UI.Avalonia.Views
             try
             {
                 Scene3D loaded = await Task.Run(() => SceneFileLoader.Load(path));
+                Views.DecorationBounds.Clear();
                 _scene = loaded;
                 _projectPath = path;
                 _isDirty = false;
