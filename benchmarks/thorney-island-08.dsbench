@@ -2,8 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Thorney-Island-Trial08",
   "citation": "Roebuck, B. (1983). Thorney Island Trials Spill 008 9 September 1982 - Data Report. HSE Health and Safety Executive HGDT, Sheffield. Primary source: ADMLC/HSE Thorney Island Heavy Gas Dispersion Trials archive (admlc.com/thorney-island/).",
-  "description": "Thorney Island Spill 008 (9 Sep 1982) - instantaneous release of 2000 m^3 Freon-12/N2 mixture, relative density 1.72 (~23.5 mol% Freon-12 / 76.5 mol% N2), released from collapsible cylinder. Wind 2.4 m/s at 10 m height, stability D, ambient T 290 K, RH 87.6%. Release point at grid (400, 200); sensors on masts in regular array around the source. Sensor values estimated from typical Trial 008 peak-cloud arc-max concentrations in the validation literature (~12, ~6, ~1.5, ~0.5 percent v/v of mixture at 50, 100, 200, 400 m). Authoritative numerical tables are in plotted figures in the HSE data report PDF and require digitization.",
-
+  "description": "Thorney Island Spill 008 (9 Sep 1982) - instantaneous release of 2000 m^3 Freon-12/N2 mixture, relative density 1.72 (~23.5 mol% Freon-12 / 76.5 mol% N2), released from collapsible cylinder. Wind 2.4 m/s at 10 m height, stability D, ambient T 290 K, RH 87.6%. Release point at grid (400, 200); sensors on masts in regular array around the source. Sensor values estimated from typical Trial 008 peak-cloud arc-max concentrations in the validation literature (~12, ~6, ~1.5, ~0.5 percent v/v of mixture at 50, 100, 200, 400 m). Authoritative numerical tables are in plotted figures in the HSE data report PDF and require digitization. SOLVER: moved off the Gaussian puff engine, which has no dense-gas slumping and could only ever fail here. Thorney Island is named in the Hansen 2010 unobstructed cohort this bench already scores against, so the comparison is now against the reference the paper actually offers.",
   "source": {
     "name": "Thorney Island 008 instantaneous source",
     "gas": {
@@ -13,14 +12,17 @@
       "ufl": 0,
       "isCryogenic": false
     },
-    "position": [0, 0, 6.5],
+    "position": [
+      0,
+      0,
+      6.5
+    ],
     "releaseRateKgPerS": 641,
     "releaseDurationS": 5,
     "stackDiameterM": 14,
     "exitTemperatureK": 290,
     "exitVelocityMPerS": 0
   },
-
   "meteo": {
     "windSpeed": 2.4,
     "windDirectionDeg": 270,
@@ -30,25 +32,53 @@
     "windMeasurementHeightM": 10,
     "roughnessLengthM": 0.005
   },
-
   "domain": {
     "sizeM": 600,
     "gridResolution": 100,
     "durationS": 400,
     "timeStepS": 1.0
   },
-
-  "solver": "GaussianPuff",
+  "solver": "RhoReactingBuoyantFoam",
   "concentrationKind": "PeakOverTime",
   "unit": "KgPerM3",
-
   "sensors": [
-    { "name": "arc-50m",  "position": [50,  0, 0.4], "measuredKgM3": 0.144 },
-    { "name": "arc-100m", "position": [100, 0, 0.4], "measuredKgM3": 0.072 },
-    { "name": "arc-200m", "position": [200, 0, 0.4], "measuredKgM3": 0.018 },
-    { "name": "arc-400m", "position": [400, 0, 0.4], "measuredKgM3": 0.006 }
+    {
+      "name": "arc-50m",
+      "position": [
+        50,
+        0,
+        0.4
+      ],
+      "measuredKgM3": 0.144
+    },
+    {
+      "name": "arc-100m",
+      "position": [
+        100,
+        0,
+        0.4
+      ],
+      "measuredKgM3": 0.072
+    },
+    {
+      "name": "arc-200m",
+      "position": [
+        200,
+        0,
+        0.4
+      ],
+      "measuredKgM3": 0.018
+    },
+    {
+      "name": "arc-400m",
+      "position": [
+        400,
+        0,
+        0.4
+      ],
+      "measuredKgM3": 0.006
+    }
   ],
-
   "referenceModelSpms": {
     "model": "FLACS v9",
     "citation": "Hansen, Gavelli, Ichard, Davis 2010 (J. Loss Prev. Process Ind. 23, 857-877) - unobstructed-group aggregate (Burro, Coyote, Maplin Sands, Thorney Island).",
@@ -57,13 +87,12 @@
     "MG": 1.18,
     "VG": 1.14
   },
-
   "acceptance": {
     "ReferenceMatchTolerance": {
-      "MRB":  0.5,
+      "MRB": 0.5,
       "FAC2": 0.3,
-      "MG":   0.5,
-      "VG":   1.5
+      "MG": 0.5,
+      "VG": 1.5
     }
   }
 }
