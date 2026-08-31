@@ -384,17 +384,80 @@ namespace DisperSim3D.Core
             return null;
         }
 
+        /// <summary>
+        /// The configured install as a path inside WSL, or empty when none is set.
+        /// A WSL environment is normally given a Linux path outright; a Windows
+        /// path is translated so a share on /mnt/c still works.
+        /// </summary>
+        public string WslOpenFoamRoot()
+        {
+            if (string.IsNullOrWhiteSpace(OpenFoamPath)) return "";
+            string p = OpenFoamPath.Trim();
+            if (p.StartsWith("/")) return p.TrimEnd('/');
+            try { return WindowsToWslPath(p).TrimEnd('/'); }
+            catch { return ""; }
+        }
+
+        /// <summary>
+        /// Shell prelude that puts the configured OpenFOAM on PATH before the
+        /// command runs.
+        ///
+        /// <para>This used to glob for any OpenFOAM the distribution happened to
+        /// ship and ignore <see cref="OpenFoamPath"/> altogether. On a machine
+        /// carrying two installs that silently ran the wrong one, and a case
+        /// written for a recent OpenFOAM then fails inside an older binary with
+        /// an error that reads like a malformed case rather than the wrong
+        /// version — <c>nut.boundaryField.ground</c> rejecting a wall function
+        /// that simply did not exist yet.</para>
+        ///
+        /// <para>So when a path is configured it is authoritative, and a missing
+        /// or mismatched install stops the run instead of falling back.</para>
+        /// </summary>
+        private string BuildWslPrelude()
+        {
+            string root = WslOpenFoamRoot();
+
+            if (string.IsNullOrEmpty(root))
+            {
+                // Nothing configured: best-effort discovery, as before. The ESI
+                // layout under /usr/lib/openfoam is searched first because it is
+                // usually the newer of the two when a distro package is also present.
+                return "for f in /usr/lib/openfoam/*/etc/bashrc /opt/openfoam*/etc/bashrc " +
+                       "/usr/share/openfoam/etc/bashrc; do " +
+                       "[ -f \"$f\" ] && . \"$f\" 2>/dev/null && break; done; " +
+                       "export FOAM_ETC=${FOAM_ETC:-/usr/share/openfoam/etc}; " +
+                       "export WM_PROJECT_DIR=${WM_PROJECT_DIR:-/usr/share/openfoam}; ";
+            }
+
+            // Single quotes only. The whole prelude is handed to `bash -c` inside a
+            // double-quoted Windows argument, so a double quote here terminates that
+            // argument early and bash receives a truncated script.
+            return "if [ ! -f '" + root + "/etc/bashrc' ]; then " +
+                   "echo DisperSim: configured OpenFOAM has no etc/bashrc under " +
+                   "'" + root + "' >&2; exit 127; fi; " +
+                   ". '" + root + "/etc/bashrc'; " +
+                   "if [ x$WM_PROJECT_DIR != x'" + root + "' ]; then " +
+                   "echo DisperSim: sourced '" + root + "' but WM_PROJECT_DIR came back " +
+                   "as $WM_PROJECT_DIR - refusing to run a different OpenFOAM " +
+                   ">&2; exit 127; fi; ";
+        }
+
         private Process StartWSL2Command(string casePath, string command)
         {
             string linuxPath = WindowsToWslPath(casePath);
-            string bashCmd = "for f in /opt/openfoam*/etc/bashrc /usr/share/openfoam/etc/bashrc; do [ -f \"$f\" ] && . \"$f\" 2>/dev/null && break; done; " +
-                "export FOAM_ETC=${FOAM_ETC:-/usr/share/openfoam/etc}; " +
-                "export WM_PROJECT_DIR=${WM_PROJECT_DIR:-/usr/share/openfoam}; " +
+            string bashCmd = BuildWslPrelude() +
                 "cd '" + linuxPath + "' && " + command;
             var psi = new ProcessStartInfo
             {
                 FileName = "wsl",
-                Arguments = "-d " + WslDistroName + " -- bash -c \"" + bashCmd + "\"",
+                // -e, not --. Plain `wsl -- cmd` hands the line to the default login
+                // shell first, and that outer shell expands $VAR against its own
+                // (empty) environment before bash -c ever runs. That is what silently
+                // broke the bashrc discovery loop below for years: its `$f` arrived
+                // already blanked, `[ -f "" ]` never matched, no OpenFOAM environment
+                // was ever sourced, and the run fell through to whatever binaries
+                // happened to sit on PATH.
+                Arguments = "-d " + WslDistroName + " -e bash -c \"" + bashCmd + "\"",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,

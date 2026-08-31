@@ -845,8 +845,18 @@ namespace DisperSim3D.Core
             string linuxCase = OpenFoamEnvironment.WindowsToWslPath(_casePath);
             string distro = string.IsNullOrEmpty(config.PatchedSctSolverWslDistro)
                 ? "Ubuntu" : config.PatchedSctSolverWslDistro;
-            string bashrc = string.IsNullOrEmpty(config.PatchedSctSolverBashrc)
-                ? "/usr/lib/openfoam/openfoam2412/etc/bashrc" : config.PatchedSctSolverBashrc;
+            // Explicit setting wins; otherwise take the install the environment was
+            // configured with, so both dispatch paths agree on which OpenFOAM runs.
+            // The literal is the last resort, for a project saved before the
+            // environment carried a path.
+            string bashrc = config.PatchedSctSolverBashrc;
+            if (string.IsNullOrEmpty(bashrc))
+            {
+                string envRoot = _env != null ? _env.WslOpenFoamRoot() : "";
+                bashrc = string.IsNullOrEmpty(envRoot)
+                    ? "/usr/lib/openfoam/openfoam2412/etc/bashrc"
+                    : envRoot + "/etc/bashrc";
+            }
 
             // mpirun lives under $WM_PROJECT_DIR/.../bin after sourcing bashrc.
             string runCmd = nProcs > 1
@@ -859,7 +869,9 @@ namespace DisperSim3D.Core
             var psi = new ProcessStartInfo
             {
                 FileName = "wsl",
-                Arguments = "-d " + distro + " -- bash -c \"" + bashCmd.Replace("\"", "\\\"") + "\"",
+                // -e for the same reason as StartWSL2Command: no outer login shell to
+                // expand variables out of the script before bash sees it.
+                Arguments = "-d " + distro + " -e bash -c \"" + bashCmd.Replace("\"", "\\\"") + "\"",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
