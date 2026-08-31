@@ -31,6 +31,12 @@ on the same field / wind-tunnel experiments.
 All benchmarks are exercised via `DisperSim3D.CLI --validate benchmarks/`.
 Exit code 0 = every metric inside the per-bench acceptance band.
 
+> **The v2512 native install above is no longer present on the development
+> machine** (checked 2026-08-31), so the run recorded here cannot currently
+> be reproduced. See
+> [Three benches moved onto the CFD solver](#three-benches-moved-onto-the-cfd-solver-2026-08-31)
+> for what runs today and under what.
+
 ## Validation philosophy
 
 Each bench compares DisperSim 3D's SPMs against the SPMs that a published
@@ -274,6 +280,87 @@ with Y-gradients from 1.0 → 0.0 across 2–3 cells × 120 timesteps).
 The 8-10× aggregate is bounded by LBM wind-field setup time which
 doesn't change between CPU and GPU tracer (the LBM was already GPU).
 The tracer step itself is ~30× faster.
+
+## Three benches moved onto the CFD solver (2026-08-31)
+
+**These numbers do not belong in the summary table above and are not folded
+into the headline score.** They come from a different OpenFOAM — v2412 under
+WSL2, run serially — where the recorded suite used v2512 native on Windows
+in parallel. Results from two environments are not comparable.
+
+They were run under WSL because **the v2512 native install named in the test
+environment above is no longer on the development machine.** Checked on
+2026-08-31: no `*OpenFOAM*` directory anywhere on `C:`, nothing under
+`Program Files`, no uninstall entry in the registry, no `blockMesh.exe`, and
+no `OpenFoamPath` recorded in the app's saved settings. Until it is
+reinstalled the recorded suite above cannot be reproduced, which is worth
+resolving before the benchmark set is extended.
+
+### What changed
+
+Three benches were declared against an engine that could not represent their
+physics, so they could only ever fail:
+
+| Bench | Was | Now | Why the reference was already valid |
+|---|---|---|---|
+| `burro6` | absolute thresholds | Hansen 2010 cohort | Same series, paper and solver as burro3/5/7/8/9; it was the one bench never migrated off the older acceptance scheme, which is why the LNG cohort listed eight benches and not nine |
+| `thorney-island-08` | `GaussianPuff` | `RhoReactingBuoyantFoam` | Thorney Island is named in the Hansen 2010 unobstructed cohort this bench already scored against |
+| `kit-fox-u5-2` | `GaussianPlume` | `RhoReactingBuoyantFoam` | Hanna 2004 Table 2, aggregate over 52 Kit Fox trials |
+
+### Results
+
+Environment: OpenFOAM v2412 (WSL2, Ubuntu-24.04), `--nprocs 1`, .NET 10.
+
+| Bench | MRB | RMSE | FAC2 | MG | VG | Status |
+|---|---:|---:|---:|---:|---:|:-:|
+| burro6 | 0.9925 | 0.9325 | 0.3333 | 3.074 | 1.152 | FAIL |
+| thorney-island-08 | 1.033 | 0.8492 | 0.00 | 3.15 | 1.016 | FAIL |
+| kit-fox-u5-2 | 1.457 | 1.185 | 0.00 | 7.18 | 1.407 | FAIL |
+
+Predicted / observed by arc:
+
+| Bench | Arcs | Ratios |
+|---|---|---|
+| burro6 | 57, 140, 400 m | 0.224, 0.283, 0.544 |
+| thorney-island-08 | 50, 100, 200, 400 m | 0.392, 0.299, 0.306, 0.283 |
+| kit-fox-u5-2 | 25, 50, 100, 225 m | 0.062, 0.107, 0.199, 0.286 |
+
+### Reading them
+
+All three fail, but they now fail with a shape that says something, which
+the Gaussian runs could not.
+
+**burro6 and thorney-island-08 carry the same signature**: a roughly uniform
+3× under-prediction across every arc, `MG` 3.07 and 3.15. That is the
+documented consequence of stock `rhoReactingBuoyantFoam` pinning
+`Sc_t = 1.0` — see [Vu (2019) reproduction attempts](#vu-2019-reproduction-attempts),
+where the same ~3× gap appears on the LNG arcs. Two more cases pointing at a
+limitation already on the record, and Thorney Island is a Freon-12 dense gas
+rather than LNG, so the signature is not confined to cryogenic methane.
+
+**kit-fox-u5-2 fails differently and worse**: 16× low at 25 m, recovering
+monotonically to 3.5× low at 225 m. That is not the flat `Sc_t` bias. It is a
+collapsed near field that recovers downwind, which is what a missing obstacle
+array produces — the billboard roughness array that Kit Fox exists to test is
+still absent from the bench, because `BenchmarkObstacleArray` only knows the
+MUST container grid. The bench description says so. Until that array is
+encoded, Kit Fox measures the dense-gas path and not the thing the experiment
+was run to measure.
+
+### One environment finding that these runs depended on
+
+None of the three could run at all until `wsl -d <distro> -- bash -c` was
+replaced with `wsl -e`. The outer login shell that `--` invokes expanded
+`$VAR` against its own empty environment before `bash -c` saw the script, so
+the bashrc discovery loop tested `[ -f "" ]`, never matched, and **no WSL run
+had ever sourced an OpenFOAM environment** — every one silently used whatever
+binaries sat on `PATH`. On a machine carrying both an Ubuntu `openfoam`
+package (v1912) and an ESI v2412 install, that meant v1912, which rejects the
+generated case on a wall function it does not have.
+
+This matters for anything above that was produced through WSL2: the install
+that actually ran was whatever `PATH` resolved to, not necessarily the one
+configured.
 
 ## Methodology notes
 
