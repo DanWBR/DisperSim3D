@@ -167,18 +167,27 @@ namespace DisperSim3D.Core
         /// </summary>
         private static float ChooseTolerance(List<RvmPrimitive> primitives)
         {
-            float min = float.MaxValue, max = float.MinValue;
+            // Per axis, not pooled across all three. A plant model sits at its
+            // survey coordinates rather than at the origin, so pooling the axes
+            // measures the distance to that origin instead of the model, and a
+            // 22 m module 250 m out reads as 280 m across.
+            float minX = float.MaxValue, minY = float.MaxValue, minZ = float.MaxValue;
+            float maxX = float.MinValue, maxY = float.MinValue, maxZ = float.MinValue;
             foreach (var p in primitives)
             {
                 RvmBoundingBox box;
                 try { box = p.CalculateAxisAlignedBoundingBox(); }
                 catch (Exception) { continue; }
                 if (box == null) continue;
-                min = Math.Min(min, Math.Min(box.Min.X, Math.Min(box.Min.Y, box.Min.Z)));
-                max = Math.Max(max, Math.Max(box.Max.X, Math.Max(box.Max.Y, box.Max.Z)));
+                minX = Math.Min(minX, box.Min.X);
+                minY = Math.Min(minY, box.Min.Y);
+                minZ = Math.Min(minZ, box.Min.Z);
+                maxX = Math.Max(maxX, box.Max.X);
+                maxY = Math.Max(maxY, box.Max.Y);
+                maxZ = Math.Max(maxZ, box.Max.Z);
             }
 
-            float extent = max - min;
+            float extent = Math.Max(maxX - minX, Math.Max(maxY - minY, maxZ - minZ));
             if (extent <= 0 || float.IsNaN(extent) || float.IsInfinity(extent))
                 return 1.0f;
 
