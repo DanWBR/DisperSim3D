@@ -33,7 +33,11 @@ namespace DisperSim3D.Core
 
             try
             {
-                var model = _importer.Load(filePath);
+                // HelixToolkit's importer has no RVM reader; the engine does, and
+                // it is the same one the Avalonia viewport uses.
+                var model = DisperSim3D.Core.RvmMeshLoader.IsRvmPath(filePath)
+                    ? LoadRvm(filePath)
+                    : _importer.Load(filePath);
                 if (model != null)
                 {
                     var b = model.Bounds;
@@ -70,16 +74,59 @@ namespace DisperSim3D.Core
         }
 
         /// <summary>
+        /// Builds a <see cref="Model3DGroup"/> from an AVEVA PDMS / E3D
+        /// <c>.rvm</c> file. The parsing and tessellation are the engine's
+        /// (<see cref="DisperSim3D.Core.RvmMeshLoader"/>); this converts the
+        /// resulting triangle soup into WPF geometry.
+        /// </summary>
+        private static Model3DGroup LoadRvm(string filePath)
+        {
+            var rvm = DisperSim3D.Core.RvmMeshLoader.Load(filePath);
+            if (rvm == null) return null;
+
+            var mesh = new MeshGeometry3D();
+            var positions = new Point3DCollection(rvm.Vertices.Length);
+            var normals = new Vector3DCollection(rvm.Normals.Length);
+            foreach (var v in rvm.Vertices)
+                positions.Add(new Point3D(v.X, v.Y, v.Z));
+            foreach (var n in rvm.Normals)
+                normals.Add(new Vector3D(n.X, n.Y, n.Z));
+
+            var indices = new Int32Collection(rvm.Indices.Length);
+            foreach (uint i in rvm.Indices)
+                indices.Add((int)i);
+
+            mesh.Positions = positions;
+            mesh.Normals = normals;
+            mesh.TriangleIndices = indices;
+            mesh.Freeze();
+
+            var geometry = new GeometryModel3D(mesh, new DiffuseMaterial(Brushes.LightGray));
+            geometry.BackMaterial = new DiffuseMaterial(Brushes.LightGray);
+
+            var group = new Model3DGroup();
+            group.Children.Add(geometry);
+
+            System.Diagnostics.Debug.WriteLine(string.Format(
+                "Loaded RVM {0}: {1} primitives, {2} triangles, tolerance {3}",
+                Path.GetFileName(filePath), rvm.PrimitiveCount, rvm.TriangleCount,
+                rvm.ToleranceUsed));
+
+            return group;
+        }
+
+        /// <summary>
         /// Returns the file filter string for use in an <see cref="Microsoft.Win32.OpenFileDialog"/>,
-        /// listing all supported 3D model formats (OBJ, STL, 3DS).
+        /// listing all supported 3D model formats (OBJ, STL, 3DS, RVM).
         /// </summary>
         /// <returns>A pipe-delimited filter string compatible with WPF file dialogs.</returns>
         public static string GetSupportedFormatsFilter()
         {
-            return "3D Models (*.obj;*.stl;*.3ds)|*.obj;*.stl;*.3ds|" +
+            return "3D Models (*.obj;*.stl;*.3ds;*.rvm)|*.obj;*.stl;*.3ds;*.rvm|" +
                    "Wavefront OBJ (*.obj)|*.obj|" +
                    "STL (*.stl)|*.stl|" +
                    "3D Studio (*.3ds)|*.3ds|" +
+                   "AVEVA PDMS / E3D (*.rvm)|*.rvm|" +
                    "All files (*.*)|*.*";
         }
 

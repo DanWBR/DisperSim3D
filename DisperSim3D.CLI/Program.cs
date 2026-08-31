@@ -68,6 +68,7 @@ namespace DisperSim3D.CLI
             bool thermalDoseSelftest = false;
             bool fireStudySelftest = false;
             bool gridAutoFitSelftest = false;
+            string inspectModelPath = null;
             bool tracerGpuSelftest = false;
             string listIogpType = null;        // null = "no --list-iogp"; "" = all 24; otherwise the type name
             bool memoryEstimate = false;
@@ -157,6 +158,9 @@ namespace DisperSim3D.CLI
                     case "--grid-autofit-selftest":
                         gridAutoFitSelftest = true;
                         break;
+                    case "--inspect-model":
+                        if (i + 1 < args.Length) inspectModelPath = args[++i];
+                        break;
                     case "--list-iogp":
                         // Optional positional: equipment type name. We peek the
                         // next arg; if it starts with '-' it's the next flag.
@@ -206,6 +210,7 @@ namespace DisperSim3D.CLI
             if (thermalDoseSelftest) return RunThermalDoseSelfTest();
             if (fireStudySelftest) return RunFireStudySelfTest();
             if (gridAutoFitSelftest) return RunGridAutoFitSelfTest();
+            if (inspectModelPath != null) return RunInspectModel(inspectModelPath);
             if (!string.IsNullOrEmpty(validateFirePath))
                 return DisperSim3D.Validation.FireBenchmarkRunner.RunAndPrint(
                     validateFirePath, Console.Out) ? 0 : 1;
@@ -501,6 +506,83 @@ namespace DisperSim3D.CLI
         /// <summary>Wrapper around <see cref="FireStudySelfTest.RunAndPrint"/>.
         /// Returns 0 when the fire study scores and ranks its scenarios correctly and
         /// survives a save/load cycle, 1 otherwise.</summary>
+        static int RunInspectModel(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                Console.Error.WriteLine("--inspect-model needs a file path.");
+                return 1;
+            }
+            if (!System.IO.File.Exists(path))
+            {
+                Console.Error.WriteLine("No such file: " + path);
+                return 1;
+            }
+
+            if (!RvmMeshLoader.IsRvmPath(path))
+            {
+                Console.Error.WriteLine(
+                    "Only .rvm is readable without a UI. OBJ and STL are parsed by the\n" +
+                    "viewport code in the UI projects, which needs a graphics stack.");
+                return 1;
+            }
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            RvmMeshLoader.Result rvm;
+            try
+            {
+                rvm = RvmMeshLoader.Load(path);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Failed to read the model: " + ex.Message);
+                return 1;
+            }
+            sw.Stop();
+
+            if (rvm == null)
+            {
+                Console.Error.WriteLine("The file parsed but produced no geometry.");
+                return 1;
+            }
+
+            double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
+            double maxX = double.MinValue, maxY = double.MinValue, maxZ = double.MinValue;
+            foreach (var v in rvm.Vertices)
+            {
+                if (v.X < minX) minX = v.X;
+                if (v.Y < minY) minY = v.Y;
+                if (v.Z < minZ) minZ = v.Z;
+                if (v.X > maxX) maxX = v.X;
+                if (v.Y > maxY) maxY = v.Y;
+                if (v.Z > maxZ) maxZ = v.Z;
+            }
+            double sx = maxX - minX, sy = maxY - minY, sz = maxZ - minZ;
+            double maxExtent = Math.Max(sx, Math.Max(sy, sz));
+
+            var unit = ModelUnits.Guess(maxExtent);
+            double factor = ModelUnits.FactorFor(unit);
+
+            Console.WriteLine("File          " + System.IO.Path.GetFileName(path));
+            Console.WriteLine("Primitives    " + rvm.PrimitiveCount);
+            Console.WriteLine("Triangles     " + rvm.TriangleCount);
+            Console.WriteLine("Vertices      " + rvm.Vertices.Length);
+            Console.WriteLine("Tolerance     " + rvm.ToleranceUsed.ToString("G4") + " file units");
+            Console.WriteLine("Read in       " + sw.ElapsedMilliseconds + " ms");
+            Console.WriteLine();
+            Console.WriteLine("File size     " +
+                sx.ToString("F1") + " x " + sy.ToString("F1") + " x " + sz.ToString("F1") + " units");
+            Console.WriteLine("Guessed unit  " + ModelUnits.Labels[(int)unit]);
+            Console.WriteLine("In the scene  " +
+                (sx * factor).ToString("F1") + " x " +
+                (sy * factor).ToString("F1") + " x " +
+                (sz * factor).ToString("F1") + " m");
+            Console.WriteLine();
+            Console.WriteLine("The unit is a guess the import dialog asks you to confirm.");
+            Console.WriteLine("If the scene size above looks wrong, override it there.");
+            return 0;
+        }
+
         static int RunGridAutoFitSelfTest()
         {
             try
@@ -1693,6 +1775,8 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             it survives a save/load cycle.");
             Console.WriteLine("  --grid-autofit-selftest    Check that the ground grid grows to fit an added");
             Console.WriteLine("                             object and never shrinks back.");
+            Console.WriteLine("  --inspect-model <file.rvm> Read an AVEVA PDMS/E3D model and report its triangle");
+            Console.WriteLine("                             count, extent and the unit the importer would guess.");
             Console.WriteLine("  --validate-fire <file|dir> Run .fbench fire radiation benchmarks against the");
             Console.WriteLine("                             published flame geometry, emissive power and flux.");
             Console.WriteLine("  --list-iogp [type]         Dump IOGP leak-frequency table (one type or");

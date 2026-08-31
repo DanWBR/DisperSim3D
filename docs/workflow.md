@@ -23,7 +23,7 @@ The left-side tree shows these as discrete sections:
 [Project Name]
 ├── General Settings           defaults: meteo, domain size, grid, CFD config
 ├── Gases (n)                  pure gases and mixtures, referenced by sources
-├── Geometry (n)               imported obstacles (.obj/.stl/.glb/.3ds)
+├── Geometry (n)               imported obstacles (.obj/.stl/.rvm, .3ds on Windows)
 ├── Sources (n)                top-level release sources
 ├── Wind Fields (n)            meteo + obstacles → 3D velocity fields
 ├── Simulations (n)            Source × WindField × Solver immutable runs

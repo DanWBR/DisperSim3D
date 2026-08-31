@@ -47,6 +47,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 {
                     ".stl" => LoadStl(filePath, color),
                     ".obj" => LoadObjSolid(filePath, color),
+                    ".rvm" => LoadRvm(filePath, color),
                     _ => null
                 };
             }
@@ -81,6 +82,24 @@ namespace DisperSim3D.UI.Avalonia.Views
         }
 
         // ── STL loader ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// AVEVA PDMS / E3D model. Parsing and tessellation live in the engine
+        /// (<see cref="DisperSim3D.Core.RvmMeshLoader"/>) so the WinForms importer
+        /// gets the same geometry; this only re-packs it into the GL vertex layout.
+        /// </summary>
+        private static (SolidVertex[] verts, uint[] indices)? LoadRvm(
+            string filePath, Vector4 color)
+        {
+            var rvm = DisperSim3D.Core.RvmMeshLoader.Load(filePath);
+            if (rvm == null) return null;
+
+            var verts = new SolidVertex[rvm.Vertices.Length];
+            for (int i = 0; i < verts.Length; i++)
+                verts[i] = new SolidVertex(rvm.Vertices[i], rvm.Normals[i], color);
+
+            return (verts, rvm.Indices);
+        }
 
         private static (SolidVertex[] verts, uint[] indices)? LoadStl(
             string filePath, Vector4 color)

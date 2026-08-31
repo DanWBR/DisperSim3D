@@ -32,7 +32,7 @@ DisperSim 3D organizes work around a **Project** with discrete sections shown in
 
 - **General Settings** — defaults for meteo, domain size, grid, CFD config
 - **Gases** — central library of pure gases and mixtures, referenced by sources
-- **Geometry** — imported obstacles and decorations (`.obj`, `.stl`, `.glb`, `.3ds`)
+- **Geometry** — imported obstacles and decorations (`.obj`, `.stl`, `.rvm`; `.3ds` on Windows)
 - **Sources** — top-level release sources with gas-library references
 - **Wind Fields** — meteo + obstacle scenarios resolved to 3D velocity fields (uniform or CFD)
 - **Simulations** — frozen snapshot of source × wind field × CFD config; immutable history
@@ -210,7 +210,7 @@ DisperSim3D.UI.Wpf/                # WPF + WinForms UI library — net10.0-windo
 │   ├── FireRenderer.cs / WindRoseRenderer.cs / StudyAllocationRenderer.cs
 │   ├── MarchingCubes.cs           # Returns MeshGeometry3D (UI-only)
 │   ├── MeshClipper.cs             # WPF mesh clipping for decorations
-│   ├── ModelLoader.cs             # HelixToolkit importer (.obj/.stl/.glb/.3ds)
+│   ├── ModelLoader.cs             # HelixToolkit importer (.obj/.stl/.3ds) + engine RVM
 │   ├── MaterialHelper.cs / DecorationTextureRenderer.cs
 │   ├── SimulationManager.cs       # Job queue + WPF-typed SteadyStateResultData
 │   ├── SimulationRunner.cs        # Bridges Simulation snapshots to the Scene3DEditorControl

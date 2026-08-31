@@ -52,5 +52,8 @@
       <Private>true</Private>
     </Reference>
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Equinor.RvmSharp" Version="1.0.3" />
+  </ItemGroup>
 
 </Project>

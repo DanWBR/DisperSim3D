@@ -211,7 +211,7 @@ possible:
    The runtime visual is a WPF object, but the engine never inspects it;
    the UI layer casts on read (`deco.Model3D as Model3DGroup`).
    Serialization is unaffected because the visual is loaded from the
-   `.obj`/`.stl`/`.glb` file path at runtime  -  it never serializes.
+   `.obj`/`.stl`/`.rvm` file path at runtime  -  it never serializes.
 5. **WPF-specific methods on engine types live as extension methods** in
    `DisperSim3D.UI.Wpf.Models`. Call-site syntax is unchanged
    (`deco.ApplyClip()`, `deco.GetWorldTransform()`,

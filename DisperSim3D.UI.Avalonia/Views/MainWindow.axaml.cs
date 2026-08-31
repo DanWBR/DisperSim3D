@@ -1859,7 +1859,10 @@ namespace DisperSim3D.UI.Avalonia.Views
                 AllowMultiple = false,
                 FileTypeFilter = new[]
                 {
-                    new FilePickerFileType("3D Models") { Patterns = new[] { "*.obj", "*.stl", "*.3ds" } },
+                    new FilePickerFileType("3D Models") { Patterns = new[] { "*.obj", "*.stl", "*.rvm" } },
+                    new FilePickerFileType("Wavefront OBJ") { Patterns = new[] { "*.obj" } },
+                    new FilePickerFileType("STL") { Patterns = new[] { "*.stl" } },
+                    new FilePickerFileType("AVEVA PDMS / E3D") { Patterns = new[] { "*.rvm" } },
                     new FilePickerFileType("All Files") { Patterns = new[] { "*.*" } }
                 }
             });
