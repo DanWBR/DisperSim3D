@@ -24,13 +24,19 @@ on the same field / wind-tunnel experiments.
 | OS | Windows 11 Pro 10.0.26200 |
 | Runtime | .NET 10.0.300 |
 | OpenFOAM | ESI-OpenCFD v2512 (native Windows) + v2412 (WSL2 Ubuntu, for the patched `rhoReactingBuoyantFoamSct`) |
-| FluidX3D | Native DLL (CUDA, RTX 5070) |
+| FluidX3D | Native DLL (OpenCL, RTX 5070) |
 | DWSIMCore | Single-DLL bundled (PR78 default) |
 | Date | 2026-05-16 |
 
 All benchmarks are exercised via `DisperSim3D.CLI --validate benchmarks/`.
 Exit code 0 = every metric inside the per-bench acceptance band.
 
+> **The GPU changed after this run.** The RTX 5070 and RTX 3060 above were
+> both sold and replaced with a single RTX 5070 Ti (16 GB), so the table
+> describes hardware the machine no longer has. Everything dated 2026-05-16 and
+> 2026-05-17 was produced on the two-card setup; anything dated 2026-08-31 ran
+> on the 5070 Ti.
+>
 > **The v2512 *native Windows* install above is gone from the development
 > machine** (checked 2026-08-31: no install directory, no registry entry, no
 > `blockMesh.exe`). OpenFOAM v2512 was reinstalled the same day **under WSL2**
@@ -323,7 +329,9 @@ physics, so they could only ever fail:
 
 ### Results
 
-Environment: OpenFOAM v2512 (WSL2, Ubuntu-24.04), `--nprocs 4`, .NET 10.
+Environment: OpenFOAM v2512 (WSL2, Ubuntu-24.04), `--nprocs 4`, .NET 10,
+NVIDIA RTX 5070 Ti 16 GB (driver 596.36). The two cards listed in the test
+environment above were sold before these runs.
 
 | Bench | MRB | RMSE | FAC2 | MG | VG | Status |
 |---|---:|---:|---:|---:|---:|:-:|
