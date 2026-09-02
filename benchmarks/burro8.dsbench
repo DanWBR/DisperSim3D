@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Burro8",
   "citation": "Koopman et al. 1982; Vu 2019 §5.4.4 Figure 5.17. Observed values are CALIBRATED REGRESSION BASELINES from rhoReactingBuoyantFoam (stock, Sct=1.0) at grid 100, NOT raw experimental data — see burro9 for the same caveat.",
+  "dataConfidence": "RegressionBaseline",
   "description": "Burro 8: most stable ABL of the series (Pasquill F, U=1.8 m/s). Confirms the buoyantKEpsilon model survives stable stratification + low wind. Same Sct=1.0 limitation as Burro9 means stock-OpenFOAM under-predicts ~3-4x vs experiment.",
 
   "source": {

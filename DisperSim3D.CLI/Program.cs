@@ -1055,7 +1055,11 @@ namespace DisperSim3D.CLI
                 return 1;
             }
 
-            int passed = 0, failed = 0, errored = 0;
+            int passed = 0, failed = 0, errored = 0, notCounted = 0;
+            // Evidence class -> (benches counted, of those how many passed). Kept
+            // separately because adding a field trial to a self-consistency check
+            // produces a number that means less than either of them alone.
+            var byClass = new Dictionary<string, (int Counted, int Passed)>();
             var rows = new System.Collections.Generic.List<string[]>();
             foreach (var f in files)
             {
@@ -1088,15 +1092,33 @@ namespace DisperSim3D.CLI
                     continue;
                 }
                 bool pass = report.Pass;
-                if (pass) passed++; else failed++;
+                // An unverified bench is run and printed but never counted. Its
+                // observed values were never checked against a source, so a pass
+                // would be a green tick on nobody's data and a failure would blame
+                // the model for the benchmark's own gap.
+                if (report.IsUnverified) notCounted++;
+                else if (pass) passed++;
+                else failed++;
+                // Unverified benches are tallied by their own line below, not here,
+                // or they show up twice with an empty 0 / 0 row.
+                if (!report.IsUnverified)
+                {
+                    byClass.TryGetValue(report.EvidenceClass, out var tally);
+                    byClass[report.EvidenceClass] =
+                        (tally.Counted + 1, tally.Passed + (pass ? 1 : 0));
+                }
                 rows.Add(new[]
                 {
                     report.Benchmark?.Name ?? "(?)",
                     Fmt(report.Spm.MRB), Fmt(report.Spm.RMSE),
                     Fmt(report.Spm.FAC2), Fmt(report.Spm.MG), Fmt(report.Spm.VG),
-                    pass ? "PASS" : "FAIL"
+                    report.IsUnverified ? "NOT COUNTED" : (pass ? "PASS" : "FAIL")
                 });
-                Console.WriteLine("  Result: " + (pass ? "PASS" : "FAIL")
+                Console.WriteLine("  Evidence: " + report.EvidenceClass);
+                Console.WriteLine("  Result: "
+                    + (report.IsUnverified
+                        ? "NOT COUNTED (data never checked against a source)"
+                        : (pass ? "PASS" : "FAIL"))
                     + string.Format(CultureInfo.InvariantCulture,
                         "   MRB={0:G4}  RMSE={1:G4}  FAC2={2:G4}  MG={3:G4}  VG={4:G4}",
                         report.Spm.MRB, report.Spm.RMSE, report.Spm.FAC2,
@@ -1110,13 +1132,55 @@ namespace DisperSim3D.CLI
             foreach (var r in rows)
                 Console.WriteLine(string.Format(sFmt, r[0], r[1], r[2], r[3], r[4], r[5], r[6]));
             Console.WriteLine();
-            Console.WriteLine(string.Format("Passed: {0}  Failed: {1}  Errored: {2}  Total: {3}",
-                passed, failed, errored, files.Count));
+            Console.WriteLine(string.Format(
+                "Passed: {0}  Failed: {1}  Errored: {2}  Not counted: {3}  Total: {4}",
+                passed, failed, errored, notCounted, files.Count));
+
+            if (byClass.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine("By evidence class — what a pass in each is worth:");
+                foreach (var kv in byClass.OrderBy(k => Rank(k.Key)))
+                    Console.WriteLine(string.Format("  {0,-20} {1,2} / {2,-2}   {3}",
+                        kv.Key, kv.Value.Passed, kv.Value.Counted, Meaning(kv.Key)));
+                if (notCounted > 0)
+                    Console.WriteLine(string.Format("  {0,-20} {1,2}        {2}",
+                        "unverified", notCounted,
+                        "run and printed, never counted"));
+            }
             return (failed == 0 && errored == 0) ? 0 : 2;
         }
 
         static string Fmt(double v) =>
             double.IsNaN(v) ? "NaN" : v.ToString("G4", CultureInfo.InvariantCulture);
+
+        /// <summary>Orders the evidence classes strongest first.</summary>
+        static int Rank(string evidenceClass)
+        {
+            switch (evidenceClass)
+            {
+                case "field trial": return 0;
+                case "regression baseline": return 1;
+                case "self-consistency": return 2;
+                default: return 3;
+            }
+        }
+
+        /// <summary>One line on how far each class of evidence actually reaches.</summary>
+        static string Meaning(string evidenceClass)
+        {
+            switch (evidenceClass)
+            {
+                case "field trial":
+                    return "measured against a published experiment";
+                case "regression baseline":
+                    return "against this engine's own previous output; catches drift only";
+                case "self-consistency":
+                    return "against its own analytical solution; says nothing about physics";
+                default:
+                    return "";
+            }
+        }
 
         /// <summary>
         /// Loads the project and prints every section: gases, sources +

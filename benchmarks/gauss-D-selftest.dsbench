@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Gauss-D-smoketest",
   "citation": "Pasquill-Gifford-Turner sigma table (used by DisperSim's GaussianPlumeEngine via PasquillGiffordCoefficients.ComputeSigma); ground-level continuous release.",
+  "dataConfidence": "SelfConsistency",
   "description": "Self-consistency regression test of GaussianPlumeEngine. Observed values were CAPTURED from the engine's own output on a known reference build, so the test catches future changes in the engine. Run it after touching anything in Core/GaussianPlumeEngine.cs or Core/PasquillGiffordCoefficients.cs.",
 
   "source": {

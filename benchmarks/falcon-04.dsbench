@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Falcon-Trial04",
   "citation": "Brown, T.C., Cederwall, R.T., Chan, S.T., Ermak, D.L., Koopman, R.P., Lamson, K.C., McClure, J.W., Morris, L.K. (1990). Falcon series data report - 1987 LNG vapor barrier verification field trials. GRI-89/0138 / UCRL-CR-104316. Sensor concentrations extracted from Chan, S.T. (1990) FEM3A simulations of Falcon tests, UCRL-CR-105184, Table 3.8.",
+  "dataConfidence": "Medium",
   "description": "Falcon Trial 4 - LNG spill in a fenced impoundment. 44.9 m^3 LNG released at 61.3 kg/s for 301 s into a 60 m x 40 m basin inside 88 m x 44 m vapour fence (8.7 m tall). Frenchman Flat, 1987. Tests vapour-fence performance for LNG terminal siting. Sensors at fence (50 m), 150 m and 250 m downwind, 1 m height. NOTE: fence geometry not captured by Gaussian or stock CFD without 3D obstacles. Sensor values primary (Chan 1990 Table 3.8).",
 
   "source": {

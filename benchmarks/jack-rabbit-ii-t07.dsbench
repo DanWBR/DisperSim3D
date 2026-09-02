@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Jack-Rabbit-II-Trial07",
   "citation": "Mazzola, T., Hanna, S., Chang, J. et al. (2021). Results of comparisons of the predictions of 17 dense gas models to the Jack Rabbit II data sets for concentration and cloud dimensions. Atmospheric Environment 244, 117887. Trial 7 arc-max values from Table 5 (primary tabulation).",
+  "dataConfidence": "High",
   "description": "Jack Rabbit II Trial 7 (August 2016) - largest pressurized liquefied Cl2 release of the JR II series. ~9100 kg Cl2 from 0.152 m diameter pipe directed downward, 1 m above ground. Dugway Proving Ground. Arc-max ppm v/v measured at 0.2, 0.5, 1, 2, 5, 11 km downwind. NOTE: 200 m and 5000 m sensors saturated during T7 - true peak values higher than reported. Pressurized two-phase release + mock urban array (Conex containers) - geometry not captured by Gaussian model. Sensor values are primary observations from Mazzola 2021 Table 5.",
 
   "source": {

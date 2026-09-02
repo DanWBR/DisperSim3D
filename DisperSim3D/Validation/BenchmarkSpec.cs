@@ -22,6 +22,30 @@ namespace DisperSim3D.Validation
         public string Citation { get; set; }
         public string Description { get; set; }
 
+        /// <summary>
+        /// Where the observed values in this file came from, which decides what a pass
+        /// is worth. Mirrors the contract the fire suite has used since it was written.
+        ///
+        /// <list type="bullet">
+        ///   <item><c>High</c> — read from a table in the cited source.</item>
+        ///   <item><c>Medium</c> — read off a figure, or from a secondary citation.</item>
+        ///   <item><c>RegressionBaseline</c> — captured from this engine's own
+        ///     last-known-good output, because the primary data is restricted or not
+        ///     yet digitised. Guards against silent drift; says nothing about whether
+        ///     the model matches the world.</item>
+        ///   <item><c>SelfConsistency</c> — the engine against its own analytical
+        ///     solution. Catches numerical regression; not evidence about physics.</item>
+        ///   <item><c>Unverified</c> — not checked against any source.</item>
+        /// </list>
+        ///
+        /// <para>An <c>Unverified</c> bench is evaluated and printed but never counted
+        /// as a pass. A green tick against numbers nobody confirmed is worse than
+        /// having no test. The other levels all count, but they do not mean the same
+        /// thing, and a headline that adds them together says less than it appears
+        /// to — which is why the runner reports the split.</para>
+        /// </summary>
+        public string DataConfidence { get; set; } = "Unverified";
+
         public BenchmarkSource Source { get; set; }
         public BenchmarkMeteo Meteo { get; set; }
         public BenchmarkDomain Domain { get; set; }

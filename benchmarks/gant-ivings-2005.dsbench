@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "GantIvings2005",
   "citation": "Gant & Ivings 2005 — methane sonic jet from 10.5 mm orifice at 5.0 bar abs / 250 K. Observed values here are CALIBRATED REGRESSION BASELINES captured from FluidX3DDispersion (buoyant tracer, 3x grid 180x180x90, BFECC), NOT published CFD results. The FluidX3D tracer injects mass into a cell-scale blob (no jet resolution) so the near-field structure is approximate; the far-field cloud volume (1.169 m³) is the primary validation target.",
+  "dataConfidence": "RegressionBaseline",
   "description": "Gant & Ivings 2005: high-pressure CH4 jet. Choked flow through 10.5 mm orifice at 5.0 bar abs, 250 K vessel temperature. Mass flow ~0.054 kg/s (Cd=0.65). Birch expanded source: ~32 mm diameter at 100 m/s, ambient T. Validation metric: flammable cloud volume (LFL-UFL envelope). Wind 2 m/s, neutral stability.",
 
   "source": {

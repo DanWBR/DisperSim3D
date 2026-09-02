@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Maplin-Sands-Trial27",
   "citation": "Puttock, J.S., Blackmore, D.R., Colenbrander, G.W. (1982). Field experiments on dense gas dispersion. J. Hazardous Materials 6, 13-41. Maplin Sands Trial 27. Arc-max concentrations digitised from Gant et al. (2016) Harmo17 Fig. 3.",
+  "dataConfidence": "Medium",
   "description": "Maplin Sands Trial 27 - LNG spill on water from spill pipe. 23.2 kg/s for 160 s onto seawater (no impoundment). Sensors on floating pontoons at ~1 m above water on arcs at 90, 180, 325, 400, 525, 650 m. PHMSA MVD Rev B 2024 Table 2-35 base case. Sensor values digitised from Gant et al. 2016 Fig. 3 (Harmo17 paper) - confidence medium. Refine against original Puttock 1982 tables (PHMSA MVD spreadsheet) when available.",
 
   "source": {

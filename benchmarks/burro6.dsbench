@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Burro6",
   "citation": "Koopman, R.P. et al. (1982). LLNL/NWC 1980 LNG spill tests. LLNL UCID-19075. Burro Trial 6. Parameters from PHMSA MVD Rev B 2024 Table 2-8. Sensor values approximated from Hansen et al. 2010 J. Loss Prev. Process Ind. 23 figures.",
+  "dataConfidence": "Medium",
   "description": "Burro Trial 6 - LNG spill on water from 0.61 m pipe. 27.5 m^3 LNG over ~148 s (~80 kg/s effective). Frenchman Flat 1980. Highest wind of the Burro series (9.0 m/s, stability C). Sensors on arcs at 57, 140, 400 m, ~1 m height.",
   "source": {
     "name": "Burro6 LNG pool",

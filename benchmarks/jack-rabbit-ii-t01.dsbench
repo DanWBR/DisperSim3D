@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Jack-Rabbit-II-Trial01",
   "citation": "Hanna, S. et al. (2021). Results of comparisons of the predictions of 17 dense gas models to the Jack Rabbit II data sets. Atmospheric Environment 244, 117887. Sensor values derived from Trial 7 observations (Table 5) using the paper's stated T1/T7 ratio = 0.20 on the x^(-5/3) best-fit line.",
+  "dataConfidence": "High",
   "description": "Jack Rabbit II Trial 1 (August 2015) - pressurized liquefied Cl2 release from 0.152 m diameter pipe directed downward, into a mock urban array of Conex shipping containers. Dugway Proving Ground. 4509 kg Cl2 released in ~20 s, effective Q ≈ 224 kg/s. Sensors on arcs at 200, 500, 1000, 2000, 5000, 11000 m. NOTE: T1 values are SCALED from Trial 7 measurements using the paper's stated ratio (0.20); authoritative T1 tables are in Chang & Mazzola (2020) AE 246 QC database (paywalled). 200 m and 5000 m sensors were saturated during T1 - true peak values are higher than reported here. Pressurized two-phase + urban geometry require FluidX3D/CFD with obstacles.",
 
   "source": {

@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Gauss-Puff-smoketest",
   "citation": "Slade (1968) instantaneous puff coefficients (used by DisperSim's GaussianPuffEngine via PasquillGiffordCoefficients.GetPuffCoefficients); ground-level continuous release stepped to t=300s.",
+  "dataConfidence": "SelfConsistency",
   "description": "Self-consistency regression test of GaussianPuffEngine. Observed values were CAPTURED from the engine's PeakOverTime output on a known reference build, so the test catches future changes in the puff engine (puff schedule, advection, Slade dispersion) and the StepTo loop. Same source/meteo as gauss-D-smoketest but with the transient puff solver.",
 
   "source": {

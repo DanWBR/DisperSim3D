@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Coyote-Trial03",
   "citation": "Goldwire, H.C. et al. (1983). Coyote series data report - LLNL/NWC 1981 LNG spill tests dispersion, vapor burn, and rapid-phase-transition. LLNL UCID-19953. Trial 3 dispersion phase. Parameters from PHMSA MVD Rev B 2024 Table 2-14 (base case). Sensor values approximated from Hansen et al. 2010 validation figures.",
+  "dataConfidence": "Medium",
   "description": "Coyote Trial 3 - LNG spill on water from 0.61 m pipe. 100.7 kg/s for 65 s. Frenchman Flat, same site as Burro. Pre-ignition dispersion phase. Sensors on arcs at 140, 200, 300, 400, 500 m, ~1 m height. NOTE: stability class C (not D as in many secondary sources). Stream composition CH4 79.4% / C2H6 16.4% / C3H8 4.2% - model treats as CH4 surrogate. Sensor values confidence medium-low (Hansen 2010 figures); authoritative tables in Goldwire 1983 UCID-19953 Vol. 2 (OSTI 5289356).",
 
   "source": {

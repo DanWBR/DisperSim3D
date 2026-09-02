@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "CO2PipeHaz-INERIS-6mm",
   "citation": "Gant, S.E., Kelsey, A., McNally, K., Witlox, H.W.M., Bilio, M. (2014). Evaluation of multi-phase atmospheric dispersion models for application to carbon capture and storage. J. Loss Prev. Process Ind. 32, 286-298. Sensor values digitised from Woolley et al. (2014) Energy Procedia GHGT-12 Fig. 8, CO2PipeHaz WP2.1 Test 2.",
+  "dataConfidence": "Medium",
   "description": "CO2PipeHaz INERIS WP2.1 Test 2 - supercritical CO2 release through 6 mm orifice from 2 m^3 insulated vessel (~85 bar / 290 K). Two-phase jet with sublimating solid CO2 particles. Sensors at 5, 10, 15, 20 m on jet centerline. NOTE: this is directly in DisperSim's target range (6 mm orifice, pressurized supercritical CO2 < 1 kg/s). Sensor values low confidence (figure digitization); authoritative numerical dataset is INERIS CO2PipeHaz deliverable D5.x (request from INERIS).",
 
   "source": {

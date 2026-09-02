@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Jack-Rabbit-I-Trial07",
   "citation": "Hanna, S.R., Britter, R., Argenta, E., Chang, J. (2012). The Jack Rabbit chlorine release experiments: implications of dense gas removal from a depression and a channel. J. Hazardous Materials 213-214, 406-412. Sensor values from Hanna, Chang & Huq (2016) Atmospheric Environment 125, 252-256, Table 1 (primary tabulation).",
+  "dataConfidence": "High",
   "description": "Jack Rabbit I Trial 7 - pressurized liquefied chlorine release into a 2 m x 50 m x 1.5 m deep depression. Dugway Proving Ground, May 2010. 2000 kg Cl2 released; depression detrainment extends effective duration to ~660 s (effective Q ≈ 3.03 kg/s). Sensors on arcs at 25, 50, 100, 300, 500 m. NOTE: pressurized two-phase + depression accumulation requires CFD with terrain and aerosol modelling. Wind 1.4 m/s @ 2m (very low), stable atmosphere. T7 500m sensor had no usable value. Sensor values primary (Hanna et al. 2016 Table 1).",
 
   "source": {

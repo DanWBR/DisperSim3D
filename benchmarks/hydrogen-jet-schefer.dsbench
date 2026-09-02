@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Hydrogen-Jet-Schefer",
   "citation": "Schefer, R.W., Houf, W.G., Williams, T.C. (2008). Investigation of small-scale unintended releases of hydrogen: momentum-dominated regime. Int. J. Hydrogen Energy 33(21), 6373-6384. Representative case: 207 bar storage, 1.91 mm orifice, choked flow.",
+  "dataConfidence": "Unverified",
   "description": "Sandia hydrogen jet experiment - high-pressure release representative of vehicle fuel cell tank leakage. Storage at 207 bar absolute / 295 K through 1.91 mm orifice gives choked mass flow ~0.024 kg/s. Birch & Schefer expanded pseudo-source ~6 cm diameter at 100 m/s. Validation goals: (1) buoyant tracer handles POSITIVE buoyancy correctly (H2 lighter than air → rises, opposite of LNG slumping); (2) flammable cloud volume in LFL-UFL envelope (4-75 percent v/v). Sensor values estimated from Schefer 2008 LFL contour figures (confidence low - initial regression baseline). The H2 jet curves upward; sensor heights account for buoyant rise.",
 
   "source": {

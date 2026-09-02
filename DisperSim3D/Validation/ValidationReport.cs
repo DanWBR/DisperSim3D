@@ -42,6 +42,41 @@ namespace DisperSim3D.Validation
             }
         }
 
+        /// <summary>
+        /// True when the observed values in the bench were never checked against a
+        /// source, so neither a pass nor a failure here says anything about the model.
+        /// </summary>
+        public bool IsUnverified =>
+            string.Equals(Benchmark?.DataConfidence, "Unverified",
+                StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Whether this bench counts towards the headline score. An unverified bench
+        /// is run and printed but never counted: a green tick against numbers nobody
+        /// confirmed is worse than having no test, and a red one blames the model for
+        /// the benchmark's own missing data.
+        /// </summary>
+        public bool Counted => Success && !IsUnverified;
+
+        /// <summary>
+        /// One word for how far this bench's evidence reaches: measurement, the
+        /// engine's own previous output, or its own analytical solution.
+        /// </summary>
+        public string EvidenceClass
+        {
+            get
+            {
+                string c = Benchmark?.DataConfidence ?? "";
+                if (string.Equals(c, "RegressionBaseline", StringComparison.OrdinalIgnoreCase))
+                    return "regression baseline";
+                if (string.Equals(c, "SelfConsistency", StringComparison.OrdinalIgnoreCase))
+                    return "self-consistency";
+                if (string.Equals(c, "Unverified", StringComparison.OrdinalIgnoreCase))
+                    return "unverified";
+                return "field trial";
+            }
+        }
+
         /// <summary>The reason (failing metric) when <see cref="Pass"/> is false
         /// due to reference-match. Empty when not applicable.</summary>
         public string FailureReason

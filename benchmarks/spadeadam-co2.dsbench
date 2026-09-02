@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Spadeadam-DF1-Test5",
   "citation": "Witlox, H.W.M., Harper, M., Oke, A. (2012). Phast validation against BP DF1 CO2 experiments. IChemE Hazards XXIII Symp. Series 158. Extended in Witlox et al. (2014) J. Loss Prev. Process Ind. 30, 243-255. BP CO2PIPETRANS JIP at Spadeadam UK, Test 5.",
+  "dataConfidence": "Medium",
   "description": "Spadeadam BP DF1 Test 5 - high-pressure cold liquid CO2 release through 25.62 mm orifice. 157.7 barg / 5 C storage, 41.17 kg/s discharge for 40 s. Sensor array (43 cells) on arcs at 5, 10, 20, 40 m at heights 0.3 / 1 / 3 m. NOTE: in DisperSim's target range (25 mm orifice, pressurized supercritical-to-liquid). Sensor values approximated from Witlox 2012 Fig. 6 (11-s-avg centerline mol% CO2) - confidence medium for params (primary Table 1), low for per-arc values (figure digitization). Full per-sensor dataset in DNV CO2PIPETRANS JIP WP1 report (proprietary).",
 
   "source": {

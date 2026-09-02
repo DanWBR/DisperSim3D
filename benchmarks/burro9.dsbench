@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Burro9",
   "citation": "Koopman et al. 1982; Vu 2019 §5.4 Figs 5.14, 5.18. Observed values here are CALIBRATED REGRESSION BASELINES captured from rhoReactingBuoyantFoam at grid 100, NOT raw experimental data. The stock OpenFOAM solver does not expose Sct (uses turbulence->muEff() directly, equivalent to Sct=1.0); Vu used a custom gasDispersionBuoyantFoam with Sct=0.15 to match experiment FAC2=1.0. Until that custom solver is integrated, this bench locks the current predictions as the regression target — any solver/case-generator change should not silently alter these values.",
+  "dataConfidence": "RegressionBaseline",
   "description": "Burro 9: 24.2 m^3 LNG spill on water, neutrally stratified ABL. Sensors are gas analyzers on arcs at 140/400/800 m downwind, 1 m above ground. The stock-OpenFOAM prediction is ~3x lower than experiment due to over-mixing (Sct=1.0 implicit), but the relative ratios across arcs are correctly captured.",
 
   "source": {

@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Falcon-Trial01",
   "citation": "Brown, T.C. et al. (1990). Falcon series data report - 1987 LNG vapor barrier verification field trials. GRI-89/0138 / UCRL-CR-104316. Trial 1 (largest Falcon spill). Parameters from PHMSA MVD Rev B 2024 Table 2-20.",
+  "dataConfidence": "Medium",
   "description": "Falcon Trial 1 - largest Falcon series LNG spill. ~66.4 m^3 LNG, 81.0 kg/s for ~138 s, into 60 m x 40 m basin inside 88 m x 44 m vapour fence (8.7 m). Wind 1.7 m/s @ 2 m, stable F atmosphere - the low-wind, stable case in Falcon. Sensors at fence (50 m), 150 m, 250 m downwind. NOTE: stable low-wind enhances vapour retention behind fence and near-field concentrations vs Falcon 4. Sensor values approximated from Chan 1990 UCRL-CR-105184 figures (Trial 1 not in Chan T3.8 which is Trial 4 specific). Confidence medium-low.",
 
   "source": {

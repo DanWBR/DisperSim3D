@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Desert-Tortoise-Trial04",
   "citation": "Goldwire, H.C. et al. (1985). Desert Tortoise series data report - 1983 pressurized ammonia spills. LLNL UCID-20562. Trial 4. Sensor values from EPA (1999) Technical Background Document for Anhydrous Ammonia, Table 2-1 (primary tabulation of Goldwire 1985 data).",
+  "dataConfidence": "High",
   "description": "Desert Tortoise Trial 4 - pressurized liquefied ammonia release, Frenchman Flat 1983. Total mass released ~40,820 kg over ~360 s (≈ 113 kg/s avg). Sensors on arcs at 100, 800, 2800 m centerline; 1400 m and 5500 m sensors were NOT deployed for DT4 (omitted here). NOTE: stability class E (not D); pressurized two-phase source requires aerosol/rainout modelling for accuracy. Sensor values primary (EPA 1999 Table 2-1 from Goldwire 1985 UCID-20562).",
 
   "source": {

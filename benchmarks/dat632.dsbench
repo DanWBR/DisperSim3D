@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "DAT632",
   "citation": "Mack & Spruijt 2013; observed values are REGRESSION BASELINES from rhoReactingBuoyantFoam (stock) at grid 120, NOT raw REDIPHEM data. The wind-tunnel scale (4 m domain) plus stock Sct=1.0 produce predictions ~25x lower than the published mole fractions; the bench locks current numerics so future solver changes are caught.",
+  "dataConfidence": "RegressionBaseline",
   "description": "Wind-tunnel SF6 release on 8.6° slope. Quasi-laminar (Re_l ~ 15000). Exercises the C_eps3 = -0.33 buoyancy treatment AND the SF6-not-CH4 species path. Used as regression baseline for the SF6 thermo + species-injection plumbing.",
 
   "source": {

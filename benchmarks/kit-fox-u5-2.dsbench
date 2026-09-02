@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Kit-Fox-U5-2",
   "citation": "Hanna, S.R., Hansen, O.R., Dharmavaram, S. (2004). FLACS CFD air quality model performance evaluation with Kit Fox, MUST, Prairie Grass, and EMU observations. Atmospheric Environment 38, 4675-4687. Kit Fox trial U5-2: continuous CO2 area source.",
+  "dataConfidence": "Medium",
   "description": "Kit Fox U5-2 - continuous dense gas release (CO2) over flat terrain with array of billboard-shaped roughness obstacles, Frenchman Flat 1995 (PERF 93-16). Area source 1.5 x 1.5 m at 0.8 m height. NOTE: Gaussian plume will underpredict because CO2 is denser than air (slumping not captured). Best run with CFD heavy-gas solver. Sensor values estimated from Hanna 2004 plot reading - authoritative U5-2 numerical values are in the EPA SCRAM Kit Fox database and Hanna 1999 PERF 93-16 report (restricted access). SOLVER: moved off the Gaussian plume engine, which cannot represent a gas denser than air. NOT YET A FAIR KIT FOX TEST: the billboard roughness array is still absent from the bench, and the obstacle-array schema only knows the MUST container grid. Expect the dense-gas behaviour to be captured and the array-induced mixing not to be.",
   "source": {
     "name": "Kit Fox CO2 area source",

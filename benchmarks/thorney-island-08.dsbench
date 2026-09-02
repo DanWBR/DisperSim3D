@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Thorney-Island-Trial08",
   "citation": "Roebuck, B. (1983). Thorney Island Trials Spill 008 9 September 1982 - Data Report. HSE Health and Safety Executive HGDT, Sheffield. Primary source: ADMLC/HSE Thorney Island Heavy Gas Dispersion Trials archive (admlc.com/thorney-island/).",
+  "dataConfidence": "Medium",
   "description": "Thorney Island Spill 008 (9 Sep 1982) - instantaneous release of 2000 m^3 Freon-12/N2 mixture, relative density 1.72 (~23.5 mol% Freon-12 / 76.5 mol% N2), released from collapsible cylinder. Wind 2.4 m/s at 10 m height, stability D, ambient T 290 K, RH 87.6%. Release point at grid (400, 200); sensors on masts in regular array around the source. Sensor values estimated from typical Trial 008 peak-cloud arc-max concentrations in the validation literature (~12, ~6, ~1.5, ~0.5 percent v/v of mixture at 50, 100, 200, 400 m). Authoritative numerical tables are in plotted figures in the HSE data report PDF and require digitization. SOLVER: moved off the Gaussian puff engine, which has no dense-gas slumping and could only ever fail here. Thorney Island is named in the Hansen 2010 unobstructed cohort this bench already scores against, so the comparison is now against the reference the paper actually offers.",
   "source": {
     "name": "Thorney Island 008 instantaneous source",

@@ -2,6 +2,7 @@
   "$schema": "dsbench/v1",
   "name": "Falcon-Trial03",
   "citation": "Brown, T.C. et al. (1990). Falcon series data report - 1987 LNG vapor barrier verification field trials. GRI-89/0138 / UCRL-CR-104316. Trial 3 (smallest Falcon spill). Parameters from PHMSA MVD Rev B 2024 Table 2-20.",
+  "dataConfidence": "Medium",
   "description": "Falcon Trial 3 - smallest Falcon series spill. ~28 m^3 LNG, 73 kg/s for ~96 s, into 60 m x 40 m basin inside 88 m x 44 m vapour fence (8.7 m). Wind 4.1 m/s, stability D. Sensors at fence (50 m), 150 m, 250 m downwind. NOTE: fence retention not modelled by stock solver.",
 
   "source": {
