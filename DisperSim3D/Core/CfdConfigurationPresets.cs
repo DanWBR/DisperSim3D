@@ -61,11 +61,30 @@ namespace DisperSim3D.Core
                 ? meteo.AmbientTemperature
                 : 293.15;
 
+            // The patched binary is intentionally NOT dispatched here.
+            //
             // Stock rhoReactingBuoyantFoam hard-codes Sct = 1.0 in YEqn.H, so the
-            // 0.15 we just set above is ignored unless we dispatch the patched
-            // binary that actually reads Sct from transportProperties.
-            // See scripts/build-rhoReactingBuoyantFoamSct.sh.
-            cfd.UsePatchedSctSolver = true;
+            // 0.15 set above never reaches the species equation unless we run the
+            // patched rhoReactingBuoyantFoamSct that reads it from
+            // transportProperties (scripts/build-rhoReactingBuoyantFoamSct.sh).
+            // Dispatching it was tried and moves every LNG bench AWAY from the
+            // published FLACS numbers, which is what these benches are scored
+            // against. Measured on burro3 against the Hansen 2010 unobstructed
+            // cohort (FAC2 = 0.94, MG = 1.18):
+            //
+            //     stock,   Sct = 1.0    FAC2 0.667  MG 1.571   PASS
+            //     patched, Sct = 0.15   FAC2 0.333  MG 3.271   FAIL
+            //
+            // Same direction as every other element of the Vu stack measured in
+            // docs/benchmark-results.md: her recipe amplifies turbulent species
+            // diffusion, and this baseline already under-predicts, so it pushes
+            // the wrong way. Agreement with the paper is the criterion, not
+            // whether Sct = 0.15 is honoured.
+            //
+            // Consequence to keep in mind: Sct = 0.15 is still written into the
+            // generated case and is inert there. Set UsePatchedSctSolver = true
+            // manually to make it take effect.
+            cfd.UsePatchedSctSolver = false;
 
             // The cryogenic patch injection (cfd.UseCryogenicPatchInjection)
             // is intentionally NOT enabled here. Empirical test on Coyote 3
