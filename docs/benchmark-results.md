@@ -124,6 +124,12 @@ All 31 benches are now listed; the placeholder row the table used to carry is go
 Rows 10, 26 and 28 were rerun on 2026-08-31 under OpenFOAM v2512 (WSL2, 4 procs) rather than in the 2026-05-16 batch — see
 [Three benches moved onto the CFD solver](#three-benches-moved-onto-the-cfd-solver-2026-08-31).
 
+> **The LNG rows do not reproduce from a default checkout.** burro3, burro5,
+> burro7 and coyote-05 pass here but fail when re-run today, because the
+> cryogenic preset now dispatches the patched `Sct = 0.15` solver that these
+> figures were not measured with. See
+> [The LNG cohort does not reproduce under the current defaults](#the-lng-cohort-does-not-reproduce-under-the-current-defaults-2026-08-31).
+
 ## Detailed sections
 
 ### Gaussian batch (FLACS reference: Hanna 2004)
@@ -399,6 +405,91 @@ generated case on a wall function it does not have.
 This matters for anything above that was produced through WSL2: the install
 that actually ran was whatever `PATH` resolved to, not necessarily the one
 configured.
+
+## The LNG cohort does not reproduce under the current defaults (2026-08-31)
+
+Re-running the suite on 2026-08-31 reproduced the Gaussian, FluidX3D and
+DAT632 benches to the fourth significant figure, and every OpenFOAM LNG bench
+came out far worse than the table above. Four of them turned from PASS to
+FAIL:
+
+| Bench | MG recorded | MG on 2026-08-31 | |
+|---|--:|--:|---|
+| burro3 | 1.57 | 3.27 | PASS &rarr; FAIL |
+| burro5 | 1.47 | 5.99 | PASS &rarr; FAIL |
+| burro7 | 1.17 | 4.21 | PASS &rarr; FAIL |
+| coyote-05 | 1.73 | 3.97 | PASS &rarr; FAIL |
+| burro9 | 2.18 | 3.69 | FAIL both |
+| coyote-03 | 2.30 | 5.13 | FAIL both |
+
+### The cause
+
+**The recorded LNG numbers were produced by the stock solver. The current
+defaults dispatch the patched one.**
+
+`CfdConfigurationPresets.ApplyCryogenicOverride` sets
+`UsePatchedSctSolver = true` whenever the source gas is flagged cryogenic,
+which every LNG bench is. That dispatches `rhoReactingBuoyantFoamSct`, which
+reads `Sct = 0.15` from `transportProperties` and applies it. The solver log
+confirms it plainly:
+
+```
+Exec   : rhoReactingBuoyantFoamSct -parallel        (OpenFOAM 2412)
+Selecting RAS turbulence model buoyantKEpsilon
+    Ceps3 -0.33;  sigmaEps 1.167;  Prt 0.85;  Sct 0.15;
+Reading turbulent Schmidt number (Sct) from transportProperties
+    Sct = 0.15
+```
+
+Disabling `UsePatchedSctSolver` in the preset and re-running burro3 returns
+the recorded value exactly:
+
+| burro3 | MRB | RMSE | FAC2 | MG | VG | |
+|---|--:|--:|--:|--:|--:|---|
+| Recorded 2026-05-16 | 0.43 | — | 0.67 | 1.57 | 1.14 | PASS |
+| Patched solver, `Sct = 0.15` | 1.032 | 0.9216 | 0.3333 | 3.271 | 1.188 | FAIL |
+| Stock solver, `Sct = 1.0` | 0.4321 | 0.6327 | 0.6667 | **1.571** | 1.134 | PASS |
+
+Nothing is broken. Not the environment, not the mesh, not the WSL dispatch.
+The OpenFOAM path works; it is running a different configuration from the one
+that produced the table.
+
+### The contradiction this exposes
+
+Two decisions in this project disagree, and the disagreement was silent until
+the suite was re-run.
+
+[The Vu reproduction section](#vu-2019-reproduction-attempts) concludes that
+every element of the Vu stack degraded predictions, and states that the three
+flags are **disabled by default per the empirical degradation**.
+
+`CfdConfigurationPresets` enables one of them anyway, with its own reasoning
+in the code:
+
+> Stock `rhoReactingBuoyantFoam` hard-codes `Sct = 1.0` in `YEqn.H`, so the
+> 0.15 we just set above is ignored unless we dispatch the patched binary
+> that actually reads `Sct` from `transportProperties`.
+
+Both are defensible. Writing `Sct = 0.15` into a case and then running a
+binary that ignores it is genuinely misleading, which is what the preset set
+out to fix. And the measurements genuinely say that applying it makes the LNG
+predictions worse. The code is what runs, so the patched solver wins, and the
+table above stopped matching.
+
+### What has to be decided
+
+This is a methodology question, not a bug to be quietly patched:
+
+- **Turn the preset off.** Restores the five LNG passes and matches the
+  documented decision. Accepts that `Sct = 0.15` sits in the generated case
+  with no effect, which anyone reading the case will misread.
+- **Leave it on and re-measure the table.** The honest route if `Sct = 0.15`
+  is held to be the physically correct closure. Costs five passes and owes an
+  explanation of why Vu's recipe degrades results in this implementation.
+
+Until it is settled, **five PASS rows in the LNG cohort are not reproducible
+from a default checkout**, and that is the more important fact than either
+number.
 
 ## Methodology notes
 
