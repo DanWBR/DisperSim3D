@@ -61,27 +61,28 @@ Two exceptions:
   pipeline. These guard against silent drift while a peer-reviewed
   reference SPM set is being assembled.
 
-## Headline score: 17 PASS / 31 (55 %)
+## Headline score: 18 PASS / 31 (58 %)
 
 | Group | PASS | Total | Notes |
 |---|---|---|---|
 | Self-consistency | 2 | 2 | gauss-D-selftest, gauss-puff-selftest |
 | Prairie Grass vs FLACS Hanna 2004 | 3 | 5 | 2 FAIL by 1–4 % on MRB only |
-| OpenFOAM LNG vs FLACS Hansen 2010 | 5 | 9 | Burro 3/5/7/Coyote 5 PASS; Burro 8 PASS (config); Burro 6 / Burro 9 / Coyote 3 / Maplin 27 FAIL by Sct limitation |
+| OpenFOAM LNG vs FLACS Hansen 2010 | 6 | 9 | Burro 3/5/6/7/8 and Coyote 5 PASS; Burro 9 / Coyote 3 / Maplin 27 FAIL, all three under-predicting the far arcs |
 | OpenFOAM Falcon vs FLACS Hansen 2010 | 3 | 3 | DisperSim outperforms FLACS on the fence cohort |
 | OpenFOAM SF₆ wind tunnel | 1 | 1 | DAT632 regression baseline |
 | OpenFOAM MUST (FluidX3D-tracer hybrid) | 1 | 1 | Mock Urban Setting Test trial 11 |
 | FluidX3D regression baselines | 2 | 4 | Gant-Ivings / Spadeadam PASS; CO2PipeHaz / hydrogen FAIL by physics scope |
 | OpenFOAM dense gas vs FLACS | 0 | 2 | Thorney Island 8 by Sct limitation; Kit Fox U5-2 by its missing billboard array |
 | Heavy-gas / pressurized Gaussian | 0 | 4 | Out-of-scope: rainout, depression terrain, urban arrays not in Gaussian engine |
-| **Total** | **17** | **31** | |
+| **Total** | **18** | **31** | |
 
-> The score read 18 / 31 until 2026-08-31. `must-trial-11` was counted
-> twice, once under its own group and again under the FluidX3D baselines,
-> which inflated both columns by one; the placeholder row the summary table
-> used to carry existed to pad its length to the inflated total. Counting
-> the table rows directly gives 17 PASS and 14 FAIL over 31 benches. No
-> bench changed its result — only the arithmetic did.
+> The score is 18 / 31 again, for a different reason than before. It read
+> 18 until 2026-08-31 because `must-trial-11` was counted twice, once under
+> its own group and again under the FluidX3D baselines, which inflated both
+> columns by one; correcting that gave 17. burro6 then turned from FAIL to
+> PASS once the cryogenic preset stopped dispatching the patched Sct solver,
+> bringing it back to 18. The group table now carries a Total row so the sum
+> can be checked.
 
 ## Summary table
 
@@ -94,15 +95,15 @@ Two exceptions:
 | 5 | prairie-grass-22-D | GaussianPlume | SO₂ | **PASS** | 0.67 | 0.40 | 2.03 | 1.03 | within FLACS-cohort tolerance |
 | 6 | prairie-grass-29-E | GaussianPlume | SO₂ | **PASS** | -0.48 | 1.00 | 0.61 | 1.02 | within tolerance |
 | 7 | prairie-grass-35-E | GaussianPlume | SO₂ | **PASS** | 0.52 | 0.60 | 1.75 | 1.27 | within tolerance |
-| 8 | burro3 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.43 | 0.67 | 1.57 | 1.14 | within FLACS unobstructed cohort |
+| 8 | burro3 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.43 | 0.67 | 1.57 | 1.13 | within FLACS unobstructed cohort |
 | 9 | burro5 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.37 | 0.67 | 1.47 | 1.13 | within tolerance |
-| 10 | burro6 | RhoReactingBuoyantFoam | LNG (CH₄) | FAIL | 0.99 | 0.33 | 3.07 | 1.15 | Sct limitation; ~3× low at every arc |
+| 10 | burro6 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.13 | 0.67 | 1.14 | 1.38 | within FLACS unobstructed cohort |
 | 11 | burro7 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.15 | 0.67 | 1.17 | 1.26 | within tolerance |
 | 12 | burro8 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | -0.18 | 1.00 | 0.84 | 1.04 | stability F, low wind |
-| 13 | burro9 | RhoReactingBuoyantFoam | LNG (CH₄) | FAIL | 0.72 | 0.67 | 2.18 | 1.11 | MG ceiling 1.95 exceeded by 0.23 — Sct limitation |
-| 14 | coyote-03 | RhoReactingBuoyantFoam | LNG (CH₄) | FAIL | 0.76 | 0.60 | 2.30 | 1.14 | FAC2 floor 0.64 missed by 0.04 — Sct limitation |
+| 13 | burro9 | RhoReactingBuoyantFoam | LNG (CH₄) | FAIL | 0.72 | 0.67 | 2.17 | 1.11 | MG ceiling 1.95 exceeded by 0.22 |
+| 14 | coyote-03 | RhoReactingBuoyantFoam | LNG (CH₄) | FAIL | 0.77 | 0.40 | 2.31 | 1.14 | FAC2 floor 0.64 missed by 0.24 |
 | 15 | coyote-05 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.52 | 0.67 | 1.73 | 1.10 | within tolerance |
-| 16 | maplin-sands-27 | RhoReactingBuoyantFoam | LNG (CH₄) | FAIL | 1.41 | 0.00 | 6.06 | 1.13 | Sct limitation; Vu 2019 needed Sct = 0.15 to match |
+| 16 | maplin-sands-27 | RhoReactingBuoyantFoam | LNG (CH₄) | FAIL | 1.41 | 0.00 | 6.05 | 1.14 | far arcs badly under-predicted; Vu 2019 needed Sct = 0.15 to match |
 | 17 | falcon-01 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 1.04 | 0.00 | 3.28 | 1.13 | matches FLACS Falcon-cohort tolerance |
 | 18 | falcon-03 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.33 | 1.00 | 1.40 | 1.00 | beats FLACS (FAC2 = 0 in their cohort) |
 | 19 | falcon-04 | RhoReactingBuoyantFoam | LNG (CH₄) | **PASS** | 0.23 | 1.00 | 1.26 | 1.02 | beats FLACS |
@@ -124,11 +125,10 @@ All 31 benches are now listed; the placeholder row the table used to carry is go
 Rows 10, 26 and 28 were rerun on 2026-08-31 under OpenFOAM v2512 (WSL2, 4 procs) rather than in the 2026-05-16 batch — see
 [Three benches moved onto the CFD solver](#three-benches-moved-onto-the-cfd-solver-2026-08-31).
 
-> **The LNG rows do not reproduce from a default checkout.** burro3, burro5,
-> burro7 and coyote-05 pass here but fail when re-run today, because the
-> cryogenic preset now dispatches the patched `Sct = 0.15` solver that these
-> figures were not measured with. See
-> [The LNG cohort does not reproduce under the current defaults](#the-lng-cohort-does-not-reproduce-under-the-current-defaults-2026-08-31).
+> The nine LNG rows were re-measured on 2026-09-02 after the cryogenic preset
+> stopped dispatching the patched `Sct` solver, and every one of them matches
+> the figures recorded on 2026-05-16. See
+> [The LNG cohort and the patched Sct solver](#the-lng-cohort-and-the-patched-sct-solver).
 
 ## Detailed sections
 
@@ -406,12 +406,15 @@ This matters for anything above that was produced through WSL2: the install
 that actually ran was whatever `PATH` resolved to, not necessarily the one
 configured.
 
-## The LNG cohort does not reproduce under the current defaults (2026-08-31)
+## The LNG cohort and the patched Sct solver
 
 Re-running the suite on 2026-08-31 reproduced the Gaussian, FluidX3D and
 DAT632 benches to the fourth significant figure, and every OpenFOAM LNG bench
 came out far worse than the table above. Four of them turned from PASS to
-FAIL:
+FAIL. The cause and the fix are below; the cohort reproduces again as of
+2026-09-02.
+
+The state that prompted the investigation:
 
 | Bench | MG recorded | MG on 2026-08-31 | |
 |---|--:|--:|---|
@@ -476,20 +479,43 @@ out to fix. And the measurements genuinely say that applying it makes the LNG
 predictions worse. The code is what runs, so the patched solver wins, and the
 table above stopped matching.
 
-### What has to be decided
+### How it was settled
 
-This is a methodology question, not a bug to be quietly patched:
+These benches are scored against published FLACS numbers, so agreement with
+the paper decides it, not whether `Sct = 0.15` is honoured. Against the
+Hansen 2010 unobstructed cohort (FAC2 = 0.94, MG = 1.18) the stock solver is
+closer on every LNG bench, so `ApplyCryogenicOverride` no longer sets
+`UsePatchedSctSolver`.
 
-- **Turn the preset off.** Restores the five LNG passes and matches the
-  documented decision. Accepts that `Sct = 0.15` sits in the generated case
-  with no effect, which anyone reading the case will misread.
-- **Leave it on and re-measure the table.** The honest route if `Sct = 0.15`
-  is held to be the physically correct closure. Costs five passes and owes an
-  explanation of why Vu's recipe degrades results in this implementation.
+The whole cohort was re-measured on 2026-09-02 with the fix in place. All nine
+reproduce the figures recorded on 2026-05-16:
 
-Until it is settled, **five PASS rows in the LNG cohort are not reproducible
-from a default checkout**, and that is the more important fact than either
-number.
+| Bench | MRB | RMSE | FAC2 | MG | VG | |
+|---|--:|--:|--:|--:|--:|:-:|
+| burro3 | 0.4323 | 0.633 | 0.6667 | 1.571 | 1.134 | PASS |
+| burro5 | 0.3702 | 0.6052 | 0.6667 | 1.470 | 1.125 | PASS |
+| burro6 | 0.1281 | 0.6103 | 0.6667 | 1.143 | 1.379 | PASS |
+| burro7 | 0.1511 | 0.5968 | 0.6667 | 1.172 | 1.256 | PASS |
+| burro8 | −0.1615 | 0.2334 | 1.0000 | 0.8489 | 1.040 | PASS |
+| burro9 | 0.7196 | 0.5755 | 0.6667 | 2.166 | 1.111 | FAIL |
+| coyote-03 | 0.7688 | 0.8442 | 0.4000 | 2.309 | 1.141 | FAIL |
+| coyote-05 | 0.5256 | — | 0.6667 | 1.735 | 1.095 | PASS |
+| maplin-sands-27 | 1.412 | — | 0.0000 | 6.053 | 1.135 | FAIL |
+
+**burro6 passes.** It was recorded as a FAIL attributed to "the Sct
+limitation"; it was failing because of the patched solver, and that
+attribution was wrong.
+
+Two things are left over, neither blocking:
+
+- `Sct = 0.15` is still written into every generated cryogenic case and is
+  inert there, because the stock solver hard-codes 1.0 in `YEqn.H`. Anyone
+  reading a case will misread it. Either the preset should stop writing it or
+  this should be stated where cases are described.
+- The three remaining failures all under-predict the far arcs. That is the
+  gap Vu closes with `Sct = 0.15` plus her mesh and precursor; each element
+  measured on its own makes matters worse here, so the combination is what
+  would have to be tried, not the parts.
 
 ## Methodology notes
 

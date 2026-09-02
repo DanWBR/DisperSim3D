@@ -256,8 +256,8 @@ cards = [
      "Po\u00e7as de GNL e de hidrocarbonetos de 6 a 80 m, e jatos de g\u00e1s natural de 2,8 a 19,5 kg/s, todos em escala de campo."),
     ("Autotestes num\u00e9ricos", "271", "/ 271", GOOD,
      "Sete su\u00edtes: geometria, tabela de detectores IOGP, persist\u00eancia, radia\u00e7\u00e3o, flash fire, dose t\u00e9rmica e estudo de inc\u00eandio."),
-    ("Dispers\u00e3o de gases", "17", "/ 31", WARN,
-     "Contra o desempenho publicado do FLACS e do PHAST nos mesmos ensaios. Quatro das catorze diferen\u00e7as s\u00e3o fronteiras de escopo declaradas."),
+    ("Dispers\u00e3o de gases", "18", "/ 31", WARN,
+     "Contra o desempenho publicado do FLACS e do PHAST nos mesmos ensaios. Quatro das treze diferen\u00e7as s\u00e3o fronteiras de escopo declaradas."),
     ("Experimentos codificados", "47", "", INK,
      "31 ensaios de dispers\u00e3o e 16 ensaios de inc\u00eandio, cada um com a fonte prim\u00e1ria registrada no arquivo."),
 ]
@@ -583,14 +583,14 @@ footer(s, 13)
 # 14. Dispersao por coorte
 # ════════════════════════════════════════════════════════════════════
 s = slide()
-y = header(s, "Ensaio de campo \u00b7 Dispers\u00e3o", "Dispers\u00e3o: 17 aprovados em 31",
-           "Rodadas de 16/05/2026 e 31/08/2026  \u00b7  o n\u00famero s\u00f3 \u00e9 leg\u00edvel depois de separar as catorze diferen\u00e7as por causa")
+y = header(s, "Ensaio de campo \u00b7 Dispers\u00e3o", "Dispers\u00e3o: 18 aprovados em 31",
+           "Rodadas de 16/05/2026 e 31/08/2026  \u00b7  o n\u00famero s\u00f3 \u00e9 leg\u00edvel depois de separar as treze diferen\u00e7as por causa")
 y = y - 0.3
 table(s, 0.85, y, 11.63,
       ["Coorte", "Passa", "Total", "Refer\u00eancia contra a qual a aprova\u00e7\u00e3o \u00e9 medida"],
       [["Autoconsist\u00eancia (pluma e sopro gaussianos)", ("2", {"font": F_MONO, "align": PP_ALIGN.RIGHT, "color": GOOD, "bold": True}), ("2", {"font": F_MONO, "align": PP_ALIGN.RIGHT}), "Solu\u00e7\u00e3o anal\u00edtica do pr\u00f3prio motor"],
        ["Prairie Grass, terreno plano, neutro a est\u00e1vel", ("3", {"font": F_MONO, "align": PP_ALIGN.RIGHT, "color": GOOD, "bold": True}), ("5", {"font": F_MONO, "align": PP_ALIGN.RIGHT}), "Coorte FLACS, Hanna e Chang 2004"],
-       ["Campo de GNL: Burro, Coyote, Maplin Sands", ("5", {"font": F_MONO, "align": PP_ALIGN.RIGHT, "color": GOOD, "bold": True}), ("9", {"font": F_MONO, "align": PP_ALIGN.RIGHT}), "Coorte FLACS sem obstru\u00e7\u00e3o, Hansen 2010"],
+       ["Campo de GNL: Burro, Coyote, Maplin Sands", ("6", {"font": F_MONO, "align": PP_ALIGN.RIGHT, "color": GOOD, "bold": True}), ("9", {"font": F_MONO, "align": PP_ALIGN.RIGHT}), "Coorte FLACS sem obstru\u00e7\u00e3o, Hansen 2010"],
        ["Falcon, GNL com barreira de vapor", ("3", {"font": F_MONO, "align": PP_ALIGN.RIGHT, "color": GOOD, "bold": True}), ("3", {"font": F_MONO, "align": PP_ALIGN.RIGHT}), "Coorte FLACS Falcon, Hansen 2010"],
        ["SF\u2086 em t\u00fanel de vento sobre rampa (DAT632)", ("1", {"font": F_MONO, "align": PP_ALIGN.RIGHT, "color": GOOD, "bold": True}), ("1", {"font": F_MONO, "align": PP_ALIGN.RIGHT}), "Linha de base de regress\u00e3o"],
        ["MUST, arranjo urbano de 120 obst\u00e1culos", ("1", {"font": F_MONO, "align": PP_ALIGN.RIGHT, "color": GOOD, "bold": True}), ("1", {"font": F_MONO, "align": PP_ALIGN.RIGHT}), "Linha de base de regress\u00e3o (dado por ensaio \u00e9 restrito)"],
