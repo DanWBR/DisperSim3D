@@ -61,7 +61,44 @@ Two exceptions:
   pipeline. These guard against silent drift while a peer-reviewed
   reference SPM set is being assembled.
 
-## Headline score: 18 PASS / 31 (58 %)
+### Data confidence
+
+Every `.dsbench` declares where its observed values came from, in the same
+`dataConfidence` field the fire suite has always carried:
+
+| Level | Meaning | Benches |
+|---|---|--:|
+| `High` | Read from a table in the cited source | 9 |
+| `Medium` | Read off a figure, or from a secondary citation | 14 |
+| `RegressionBaseline` | Captured from this engine's own last-known-good output | 5 |
+| `SelfConsistency` | Against the engine's own analytical solution | 2 |
+| `Unverified` | Never checked against any source | 1 |
+
+An `Unverified` bench is run and printed but **never counted**, in either
+direction. `hydrogen-jet-schefer` is the one: its own description says the
+sensor values are order-of-magnitude guesses, so counting it as a failure
+blamed the model for the benchmark's missing data.
+
+The distinction matters more than the counting rule. Seven of the 31 measure
+the engine against itself rather than against an experiment, and a headline
+that adds them to the other 23 says less than it appears to. `--validate`
+prints the split, and so does the score below.
+
+## Headline score
+
+**12 of 23 against published experiments.** The rest of the suite is worth
+stating separately, because a pass in each class buys something different:
+
+| Evidence class | Passing | What a pass there is worth |
+|---|--:|---|
+| Field trial | 12 / 23 | Measured against a published experiment |
+| Regression baseline | 4 / 5 | Against this engine's own previous output; catches drift only |
+| Self-consistency | 2 / 2 | Against its own analytical solution; says nothing about physics |
+| Unverified | — | Run and printed, never counted |
+| **Counted total** | **18 / 30** | |
+
+The single headline number is 18 of 30 counted, out of 31 benches. It was
+quoted as 18 / 31 until the unverified bench stopped being counted.
 
 | Group | PASS | Total | Notes |
 |---|---|---|---|
@@ -71,18 +108,19 @@ Two exceptions:
 | OpenFOAM Falcon vs FLACS Hansen 2010 | 3 | 3 | DisperSim outperforms FLACS on the fence cohort |
 | OpenFOAM SF₆ wind tunnel | 1 | 1 | DAT632 regression baseline |
 | OpenFOAM MUST (FluidX3D-tracer hybrid) | 1 | 1 | Mock Urban Setting Test trial 11 |
-| FluidX3D regression baselines | 2 | 4 | Gant-Ivings / Spadeadam PASS; CO2PipeHaz / hydrogen FAIL by physics scope |
+| FluidX3D regression baselines | 2 | 3 | Gant-Ivings / Spadeadam PASS; CO2PipeHaz FAIL by physics scope. The hydrogen jet is not counted |
 | OpenFOAM dense gas vs FLACS | 0 | 2 | Thorney Island 8 by Sct limitation; Kit Fox U5-2 by its missing billboard array |
 | Heavy-gas / pressurized Gaussian | 0 | 4 | Out-of-scope: rainout, depression terrain, urban arrays not in Gaussian engine |
-| **Total** | **18** | **31** | |
+| **Total** | **18** | **30** | plus 1 not counted |
 
-> The score is 18 / 31 again, for a different reason than before. It read
-> 18 until 2026-08-31 because `must-trial-11` was counted twice, once under
-> its own group and again under the FluidX3D baselines, which inflated both
-> columns by one; correcting that gave 17. burro6 then turned from FAIL to
-> PASS once the cryogenic preset stopped dispatching the patched Sct solver,
-> bringing it back to 18. The group table now carries a Total row so the sum
-> can be checked.
+> The passing count has moved three times and none of the moves was a model
+> change. It read 18 until 2026-08-31, when `must-trial-11` turned out to be
+> counted twice, once under its own group and again under the FluidX3D
+> baselines, which had inflated both columns by one; correcting that gave 17.
+> burro6 then turned from FAIL to PASS once the cryogenic preset stopped
+> dispatching the patched Sct solver, bringing it back to 18. The denominator
+> then fell from 31 to 30 when the unverified hydrogen jet stopped being
+> counted. The Total row exists so the sum can be checked.
 
 ## Summary table
 
@@ -112,7 +150,7 @@ Two exceptions:
 | 22 | gant-ivings-2005 | FluidX3DDispersion | CH₄ jet | **PASS** | -1.7e-5 | 1.00 | 1.00 | 1.00 | regression baseline; cloud volume 1.169 m³ |
 | 23 | spadeadam-co2 | FluidX3DDispersion | CO₂ | **PASS** | 0.005 | 1.00 | 1.003 | 1.21 | Witlox 2014 digitised |
 | 24 | co2pipehaz-6mm | FluidX3DDispersion | CO₂ | FAIL | — | — | — | — | no two-phase / solid CO₂ sublimation |
-| 25 | hydrogen-jet-schefer | FluidX3DDispersion | H₂ | FAIL | — | — | — | — | sensor estimates in dsbench were order-of-magnitude guesses; engine runs cleanly, cloud is plausible |
+| 25 | hydrogen-jet-schefer | FluidX3DDispersion | H₂ | *not counted* | — | — | — | — | `dataConfidence: Unverified` — the bench's own sensor values are order-of-magnitude guesses, so neither a pass nor a failure here says anything about the model |
 | 26 | kit-fox-u5-2 | RhoReactingBuoyantFoam | CO₂ | FAIL | 1.46 | 0.00 | 7.18 | 1.41 | billboard roughness array not encoded; near field 16× low, recovering downwind |
 | 27 | desert-tortoise-04 | GaussianPlume | NH₃ | FAIL | 0.19 | 0.33 | 1.22 | 7.63 | no aerosol / rainout modelling |
 | 28 | thorney-island-08 | RhoReactingBuoyantFoam | Freon-12 | FAIL | 1.03 | 0.00 | 3.15 | 1.02 | Sct limitation; ~3× low at every arc |

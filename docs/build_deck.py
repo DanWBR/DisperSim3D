@@ -256,8 +256,8 @@ cards = [
      "Po\u00e7as de GNL e de hidrocarbonetos de 6 a 80 m, e jatos de g\u00e1s natural de 2,8 a 19,5 kg/s, todos em escala de campo."),
     ("Autotestes num\u00e9ricos", "271", "/ 271", GOOD,
      "Sete su\u00edtes: geometria, tabela de detectores IOGP, persist\u00eancia, radia\u00e7\u00e3o, flash fire, dose t\u00e9rmica e estudo de inc\u00eandio."),
-    ("Dispers\u00e3o de gases", "18", "/ 31", WARN,
-     "Contra o desempenho publicado do FLACS e do PHAST nos mesmos ensaios. Quatro das treze diferen\u00e7as s\u00e3o fronteiras de escopo declaradas."),
+    ("Dispers\u00e3o de gases", "12", "/ 23", WARN,
+     "Contra experimento publicado. Outros 7 benchmarks medem o motor contra ele mesmo e 1 n\u00e3o \u00e9 contabilizado, somando 18 de 30."),
     ("Experimentos codificados", "47", "", INK,
      "31 ensaios de dispers\u00e3o e 16 ensaios de inc\u00eandio, cada um com a fonte prim\u00e1ria registrada no arquivo."),
 ]
@@ -596,12 +596,13 @@ table(s, 0.85, y, 11.63,
        ["MUST, arranjo urbano de 120 obst\u00e1culos", ("1", {"font": F_MONO, "align": PP_ALIGN.RIGHT, "color": GOOD, "bold": True}), ("1", {"font": F_MONO, "align": PP_ALIGN.RIGHT}), "Linha de base de regress\u00e3o (dado por ensaio \u00e9 restrito)"],
        ["Jatos no FluidX3D: CH\u2084, CO\u2082, H\u2082", ("2", {"font": F_MONO, "align": PP_ALIGN.RIGHT, "color": GOOD, "bold": True}), ("4", {"font": F_MONO, "align": PP_ALIGN.RIGHT}), "Linhas de base de regress\u00e3o e Witlox 2014"],
        ["G\u00e1s denso no OpenFOAM: Thorney Island, Kit Fox", ("0", {"font": F_MONO, "align": PP_ALIGN.RIGHT, "color": WARN, "bold": True}), ("2", {"font": F_MONO, "align": PP_ALIGN.RIGHT}), "Coortes FLACS Hansen 2010 e Hanna 2004"],
-       [("G\u00e1s denso no motor gaussiano", {"color": MUTED}), ("0", {"font": F_MONO, "align": PP_ALIGN.RIGHT, "color": WARN, "bold": True}), ("4", {"font": F_MONO, "align": PP_ALIGN.RIGHT, "color": MUTED}), ("Fora de escopo por declara\u00e7\u00e3o", {"color": MUTED})]],
-      widths=[4.3, 0.9, 0.9, 5.5], rowh=0.35, fsize=10.5)
+       [("G\u00e1s denso no motor gaussiano", {"color": MUTED}), ("0", {"font": F_MONO, "align": PP_ALIGN.RIGHT, "color": WARN, "bold": True}), ("4", {"font": F_MONO, "align": PP_ALIGN.RIGHT, "color": MUTED}), ("Fora de escopo por declara\u00e7\u00e3o", {"color": MUTED})],
+       [("Total contabilizado", {"bold": True}), ("18", {"font": F_MONO, "align": PP_ALIGN.RIGHT, "bold": True}), ("30", {"font": F_MONO, "align": PP_ALIGN.RIGHT, "bold": True}), ("Mais 1 n\u00e3o contabilizado, dado nunca conferido", {"color": MUTED})]],
+      widths=[4.3, 0.9, 0.9, 5.5], rowh=0.33, fsize=10.5)
 
-callout(s, 0.85, y + 3.22, 11.63, 1.15, "Onde o DisperSim \u00e9 melhor que a refer\u00eancia",
-        ["O desempenho publicado do FLACS em Falcon com barreira de vapor \u00e9 FAC2 = 0,00, MG = 5,56, VG = 23,65. O DisperSim chega a FAC2 = 1,00 em Falcon 3 e Falcon 4, com MG de 1,40 e 1,26."],
-        bar=GOOD)
+callout(s, 0.85, y + 3.22, 11.63, 1.15, "O que cada aprova\u00e7\u00e3o vale",
+        ["12 de 23 medem contra experimento publicado. Outros 5 comparam o motor com a sa\u00edda anterior dele mesmo e 2 com a pr\u00f3pria solu\u00e7\u00e3o anal\u00edtica: pegam deriva, n\u00e3o dizem nada sobre f\u00edsica. 1 n\u00e3o \u00e9 contabilizado porque seus valores de sensor nunca foram conferidos contra fonte."],
+        bar=SIGNAL)
 footer(s, 14)
 
 # ════════════════════════════════════════════════════════════════════
