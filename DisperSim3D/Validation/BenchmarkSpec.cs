@@ -139,6 +139,18 @@ namespace DisperSim3D.Validation
         public double ExitTemperatureK { get; set; }
         public double ExitVelocityMPerS { get; set; }
 
+        /// <summary>Release elevation angle in degrees (0 = horizontal downwind, 90 = vertical
+        /// upward). Default 0 keeps the legacy "horizontal, aligned with the wind" behaviour.</summary>
+        public double ElevationDeg { get; set; }
+
+        /// <summary>When true, the engines pre-dilute the release with an integral free-jet
+        /// model up to the jet-to-plume transition (momentum length) instead of treating the
+        /// source as a point: the Gaussian engine gets an initial sigma and a Briggs momentum
+        /// rise that grows with distance, and the FluidX3D tracer injects the mass along the
+        /// bent jet trajectory. Give <see cref="StackDiameterM"/> and
+        /// <see cref="ExitVelocityMPerS"/> as a momentum-conserving pseudo-source.</summary>
+        public bool JetTransition { get; set; }
+
         /// <summary>Optional two-phase pressurized-release specification. When present,
         /// <see cref="TwoPhase"/>.<see cref="BenchmarkTwoPhase.Enabled"/> may be true to
         /// have <see cref="ValidationRunner"/> pre-process the source via
@@ -237,6 +249,12 @@ namespace DisperSim3D.Validation
         public double AmbientPressure { get; set; } = 101325;
         public double WindMeasurementHeightM { get; set; } = 10;
         public double RoughnessLengthM { get; set; } = 0.03;
+
+        /// <summary>Turbulent (eddy) diffusivity, m²/s, applied to the FluidX3D tracer. When
+        /// omitted the runner derives one from the Pasquill class and wind speed
+        /// (K = u·σy·σz/(2·x) at x = domain half-size); the legacy value was only the
+        /// Smagorinsky subgrid term (~0.01 m²/s), which gave unrealistically thin plumes.</summary>
+        public double? TurbulentDiffusivityM2PerS { get; set; }
     }
 
     public class BenchmarkDomain

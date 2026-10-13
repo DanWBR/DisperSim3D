@@ -17,6 +17,15 @@ namespace DisperSim3D.Core
         /// <returns>A tuple of (sigmaY, sigmaZ) dispersion coefficients in meters.</returns>
         public static (double sigmaY, double sigmaZ) ComputeSigma(
             double downwindDistanceM, PasquillStabilityClass cls)
+            => ComputeSigma(downwindDistanceM, cls, 0.5);
+
+        /// <summary>
+        /// Same as <see cref="ComputeSigma(double, PasquillStabilityClass)"/> with an explicit lower
+        /// bound for the sigmas (the default overload keeps the legacy 0.5 m floor). Engines that
+        /// combine the curves with an initial source spread pass a small floor instead.
+        /// </summary>
+        public static (double sigmaY, double sigmaZ) ComputeSigma(
+            double downwindDistanceM, PasquillStabilityClass cls, double minSigmaM)
         {
             if (downwindDistanceM < 1.0)
                 downwindDistanceM = 1.0;
@@ -27,8 +36,8 @@ namespace DisperSim3D.Core
             double sigmaY = ay * Math.Pow(downwindDistanceM, by);
             double sigmaZ = az * Math.Pow(downwindDistanceM, bz);
 
-            if (sigmaY < 0.5) sigmaY = 0.5;
-            if (sigmaZ < 0.5) sigmaZ = 0.5;
+            if (sigmaY < minSigmaM) sigmaY = minSigmaM;
+            if (sigmaZ < minSigmaM) sigmaZ = minSigmaM;
 
             return (sigmaY, sigmaZ);
         }

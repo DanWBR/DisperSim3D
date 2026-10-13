@@ -56,7 +56,11 @@ namespace DisperSim3D.Core
                 }
 
                 double effDiam = src.EffectiveDiameterM;
-                if (effDiam > 0 && (src.ExitVelocityMPerS > 0 || src.ExitTemperatureK > meteo.AmbientTemperature))
+                // Jet-transition mode: the free-jet model supplies the initial dilution and a
+                // momentum rise that grows with distance, so the fixed Briggs rise and the
+                // bent-plume branch below are bypassed.
+                bool jetMode = src.UseJetTransition && effDiam > 0 && src.ComputedExitVelocity > 0;
+                if (!jetMode && effDiam > 0 && (src.ExitVelocityMPerS > 0 || src.ExitTemperatureK > meteo.AmbientTemperature))
                 {
                     double windAtStack = meteo.WindSpeedAtHeight(baseHeight);
                     double deltaH = BriggsPlumerise.ComputeDeltaH(
@@ -78,7 +82,22 @@ namespace DisperSim3D.Core
 
                 // Check if release direction differs from wind direction
                 double dotRW = releaseDir.X * windDir3D.X + releaseDir.Y * windDir3D.Y;
-                bool hasDifferentDirection = dotRW < 0.99;
+                bool hasDifferentDirection = dotRW < 0.99 && !jetMode;
+
+                double sigma0 = 0, jetD = 0, jetV = 0, jetSinEl = 0;
+                if (jetMode)
+                {
+                    double tAmb = meteo.AmbientTemperature > 0 ? meteo.AmbientTemperature : 293.15;
+                    double pAmb = meteo.AmbientPressure > 0 ? meteo.AmbientPressure : 101325.0;
+                    double rhoAir = pAmb * 0.028964 / (8.314 * tAmb);
+                    double mw = src.Gas != null && src.Gas.MolarMass > 0 ? src.Gas.MolarMass : 0.028964;
+                    double rhoGas = rhoAir * mw / 0.028964;
+                    double windAtStack = Math.Max(meteo.WindSpeedAtHeight(pos.Z), MinWindSpeed);
+                    double lt = JetTransitionModel.MomentumLengthM(effDiam, exitVel, windAtStack, rhoGas, rhoAir);
+                    sigma0 = JetTransitionModel.SigmaAtM(lt);
+                    jetD = effDiam; jetV = exitVel; jetSinEl = Math.Max(0.0, releaseDir.Z);
+                    windSpeed = windAtStack;
+                }
 
                 double bendLength = 0;
                 if (hasDifferentDirection)
@@ -107,7 +126,12 @@ namespace DisperSim3D.Core
                     BendLength = bendLength,
                     ReleaseDirX = releaseDir.X,
                     ReleaseDirY = releaseDir.Y,
-                    ReleaseDirZ = releaseDir.Z
+                    ReleaseDirZ = releaseDir.Z,
+                    JetMode = jetMode,
+                    Sigma0 = sigma0,
+                    JetD = jetD,
+                    JetV = jetV,
+                    JetSinEl = jetSinEl
                 };
 
                 if (bendLength > 0)
@@ -142,17 +166,31 @@ namespace DisperSim3D.Core
             double downwind = dx * src.WindDirX + dy * src.WindDirY;
             double crosswind = dx * src.WindDirY - dy * src.WindDirX;
 
-            if (downwind < 1.0) return 0;
-
-            var sigma = PasquillGiffordCoefficients.ComputeSigma(downwind, src.Stability);
-            double sigY = sigma.sigmaY;
-            double sigZ = sigma.sigmaZ;
+            double sigY, sigZ, centerH = src.H;
+            if (src.JetMode)
+            {
+                // Jet-to-plume: PG growth on top of the spread the jet already has at the
+                // transition (sigma0), no artificial 0.5 m floor, Briggs momentum rise
+                // evaluated at this downwind distance.
+                if (downwind < 0.0) return 0;
+                var sg = PasquillGiffordCoefficients.ComputeSigma(Math.Max(downwind, 1.0), src.Stability, 0.05);
+                sigY = Math.Sqrt(sg.sigmaY * sg.sigmaY + src.Sigma0 * src.Sigma0);
+                sigZ = Math.Sqrt(sg.sigmaZ * sg.sigmaZ + src.Sigma0 * src.Sigma0);
+                centerH += JetTransitionModel.RiseM(src.JetD, src.JetV, src.WindSpeed, downwind, src.JetSinEl);
+            }
+            else
+            {
+                if (downwind < 1.0) return 0;
+                var sigma = PasquillGiffordCoefficients.ComputeSigma(downwind, src.Stability);
+                sigY = sigma.sigmaY;
+                sigZ = sigma.sigmaZ;
+            }
 
             double yTerm = crosswind / sigY;
             double lateralArg = -0.5 * yTerm * yTerm;
             if (lateralArg < -18.0) return 0;
 
-            double vertTerm = ComputeVerticalTerm(z, src.H, sigZ);
+            double vertTerm = ComputeVerticalTerm(z, centerH, sigZ);
 
             double c = src.Q / (TwoPi * src.WindSpeed * sigY * sigZ)
                        * Math.Exp(lateralArg) * vertTerm;
@@ -303,6 +341,9 @@ namespace DisperSim3D.Core
             public double ReleaseDirX, ReleaseDirY, ReleaseDirZ;
             public double BendLength;
             public TrajectoryPoint[] Trajectory;
+            // jet-transition mode (see JetTransitionModel)
+            public bool JetMode;
+            public double Sigma0, JetD, JetV, JetSinEl;
         }
     }
 }

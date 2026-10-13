@@ -82,6 +82,10 @@ namespace DisperSim3D.Models
         [Description("Release elevation angle in degrees (0 = horizontal, +ve = upward).")]
         public double ReleaseElevationDeg { get; set; }
 
+        [Category("Jet")]
+        [Description("When true, the dispersion engines pre-dilute the release with an integral free-jet model up to the jet-to-plume transition (momentum length) instead of a point source. Gaussian: initial sigma + Briggs momentum rise growing with distance; FluidX3D: mass injected along the bent jet trajectory. Give StackDiameterM / ExitVelocityMPerS as a momentum-conserving pseudo-source.")]
+        public bool UseJetTransition { get; set; }
+
         [Category("Risk / IOGP")]
         [Description("Equipment inventory contributing to this release scenario. The leak frequency is computed as the sum of IOGP 434-01 per-item (or per-metre) frequencies over all items at the chosen HoleSizeBand.")]
         public List<EquipmentInventoryItem> EquipmentInventory { get; set; }

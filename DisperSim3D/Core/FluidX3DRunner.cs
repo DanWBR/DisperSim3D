@@ -184,6 +184,27 @@ namespace DisperSim3D.Core
                                     src.Position.X, src.Position.Y, src.Position.Z, radiusM,
                                     src.ReleaseRateKgPerS, diff, cellMGlobal));
                             }
+                            else if (src.UseJetTransition && exitVel > 0 && src.StackDiameterM > 0)
+                            {
+                                // Jet-to-plume transition: inject along the bent jet trajectory up to the
+                                // momentum length (where the jet velocity has decayed to the wind speed),
+                                // with the cross-section growing like a free jet. The tracer thus starts
+                                // with the dilution the jet provides instead of a point blob.
+                                double uWind = Math.Max(scenario.Meteo != null ? scenario.Meteo.WindSpeed : 1.0, 0.5);
+                                double rhoGas = airDensity * gasMW / 0.029;
+                                double lt = JetTransitionModel.MomentumLengthM(src.StackDiameterM, exitVel, uWind, rhoGas, airDensity);
+                                double wdRad = (scenario.Meteo != null ? scenario.Meteo.WindDirectionDeg : 0.0) * Math.PI / 180.0;
+                                double wdx = -Math.Sin(wdRad), wdy = -Math.Cos(wdRad);
+                                var rdir = src.ReleaseDirection;
+                                var path = JetTransitionModel.Trajectory(src.Position.X, src.Position.Y, src.Position.Z,
+                                    rdir.X, rdir.Y, rdir.Z, wdx, wdy, lt, lt, Math.Max(cellMGlobal * 0.5, 0.05), domain * 0.95, height * 0.9); // keep the line source away from the domain lid
+                                double r0 = Math.Max(2.0 * cellMGlobal, src.StackDiameterM);
+                                passiveEngine.SetJetLineSource(path, r0, JetTransitionModel.SpreadRate, src.ReleaseRateKgPerS, airDensity);
+                                Report(0.06, string.Format(
+                                    "FluidX3D jet line source: pos=({0:F1},{1:F1},{2:F1}) m, dir=({3:F2},{4:F2},{5:F2}), d_eq={6:F3} m, u_eq={7:F0} m/s, Lmomentum={8:F1} m ({9} path points), r0={10:F2} m, Q={11:E3} kg/s, D={12:E3} m²/s",
+                                    src.Position.X, src.Position.Y, src.Position.Z, rdir.X, rdir.Y, rdir.Z,
+                                    src.StackDiameterM, exitVel, lt, path.Count, r0, src.ReleaseRateKgPerS, diff));
+                            }
                             else
                             {
                                 passiveEngine.SetMassSource(src.Position.X, src.Position.Y, src.Position.Z,

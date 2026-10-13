@@ -263,8 +263,9 @@ namespace DisperSim3D.Validation
                 ExitTemperatureK = effExitT,
                 ExitVelocityMPerS = effExitV,
                 ReleaseAzimuthDeg = releaseAz,
-                ReleaseElevationDeg = 0,
-                ReleaseHeightOffset = 0
+                ReleaseElevationDeg = spec.Source.ElevationDeg,
+                ReleaseHeightOffset = 0,
+                UseJetTransition = spec.Source.JetTransition
             };
             // Mirror legacy Gas property so engines that don't go through GasRefId still see it.
             src.Gas = gasItem.PureGas;
@@ -323,6 +324,17 @@ namespace DisperSim3D.Validation
             sim.SnapshotCfdConfig.GridResolution = spec.Domain.GridResolution;
             // Propagate the GPU-tracer preference (set by CLI `--gpu-tracer`).
             sim.SnapshotCfdConfig.UseGpuBuoyantTracer = AppSettings.Instance.UseGpuBuoyantTracerPreferred;
+            // Turbulent diffusivity for the FluidX3D tracer: explicit bench value, or derived from
+            // the Pasquill class and wind speed (K = u·σy·σz/(2x) at x = domain half-size, no floor).
+            // Without this the tracer only had the Smagorinsky subgrid term (~0.01 m²/s).
+            if (spec.Meteo.TurbulentDiffusivityM2PerS.HasValue && spec.Meteo.TurbulentDiffusivityM2PerS.Value > 0)
+                sim.SnapshotCfdConfig.DiffusivityM2PerS = spec.Meteo.TurbulentDiffusivityM2PerS.Value;
+            else if (sim.SolverType == CfdSolverType.FluidX3DDispersion || sim.SolverType == CfdSolverType.FluidX3DDispersionSteady)
+            {
+                double xRef = Math.Max(spec.Domain.SizeM, 10.0);
+                var sg = PasquillGiffordCoefficients.ComputeSigma(xRef, meteo.StabilityClass, 0.0);
+                sim.SnapshotCfdConfig.DiffusivityM2PerS = Math.Max(meteo.WindSpeed, 0.5) * sg.sigmaY * sg.sigmaZ / (2.0 * xRef);
+            }
             scene.Simulations.Add(sim);
 
             // Monitor points (so the engine has them registered if needed downstream)

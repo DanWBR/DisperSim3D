@@ -148,6 +148,88 @@ namespace DisperSim3D.Core
             _injectionRatePerCellPerS = releaseRateKgPerS / (airDensityKgPerM3 * cellVol * _sourceCellCount);
         }
 
+        /// <summary>
+        /// Sets a mass-injection source distributed along a jet trajectory (jet-to-plume
+        /// transition): every point of <paramref name="path"/> (x, y, z, arc length s) is the
+        /// centre of a cross-section of radius max(<paramref name="radius0M"/>, spreadRate·s), and
+        /// the release rate is injected uniformly per unit arc length, so the tracer receives the
+        /// gas already diluted the way a free jet dilutes it before the wind takes over.
+        /// </summary>
+        public void SetJetLineSource(
+            System.Collections.Generic.IList<(double x, double y, double z, double s)> path,
+            double radius0M, double spreadRate, double releaseRateKgPerS, double airDensityKgPerM3)
+        {
+            if (path == null || path.Count == 0) throw new ArgumentException("empty jet path", nameof(path));
+            _hasSource = true; _massInjection = true; _lineMode = true;
+            _sourceX = path[0].x; _sourceY = path[0].y; _sourceZ = path[0].z; _sourceR = radius0M; _sourceC = 0;
+
+            double totalLen = path[path.Count - 1].s;
+            double slabM = Math.Max(DxM, 1e-6);
+            int nSlabs = Math.Max(1, (int)Math.Ceiling(totalLen / slabM) + 1);
+            var cellsBySlab = new System.Collections.Generic.List<(int i, int j, int k)>[nSlabs];
+            for (int n = 0; n < nSlabs; n++) cellsBySlab[n] = new System.Collections.Generic.List<(int, int, int)>();
+
+            double rMax = Math.Max(radius0M, spreadRate * totalLen);
+            double xMin = double.MaxValue, xMax = double.MinValue, yMin = double.MaxValue, yMax = double.MinValue, zMin = double.MaxValue, zMax = double.MinValue;
+            foreach (var p in path)
+            {
+                xMin = Math.Min(xMin, p.x); xMax = Math.Max(xMax, p.x); yMin = Math.Min(yMin, p.y); yMax = Math.Max(yMax, p.y);
+                zMin = Math.Min(zMin, p.z); zMax = Math.Max(zMax, p.z);
+            }
+            for (int k = 0; k < Nz; k++)
+            {
+                double z = (k + 0.5) * DzM;
+                if (z < zMin - rMax || z > zMax + rMax) continue;
+                for (int j = 0; j < Ny; j++)
+                {
+                    double y = -DomainHalfM + (j + 0.5) * DyM;
+                    if (y < yMin - rMax || y > yMax + rMax) continue;
+                    for (int i = 0; i < Nx; i++)
+                    {
+                        double x = -DomainHalfM + (i + 0.5) * DxM;
+                        if (x < xMin - rMax || x > xMax + rMax) continue;
+                        // nearest trajectory point
+                        double best = double.MaxValue; double sBest = 0;
+                        for (int n = 0; n < path.Count; n++)
+                        {
+                            double ddx = x - path[n].x, ddy = y - path[n].y, ddz = z - path[n].z;
+                            double d2 = ddx * ddx + ddy * ddy + ddz * ddz;
+                            if (d2 < best) { best = d2; sBest = path[n].s; }
+                        }
+                        double rLoc = Math.Max(radius0M, spreadRate * sBest);
+                        if (best <= rLoc * rLoc)
+                        {
+                            int slab = Math.Min(nSlabs - 1, (int)(sBest / slabM));
+                            cellsBySlab[slab].Add((i, j, k));
+                            _blocked[i, j, k] = false;
+                        }
+                    }
+                }
+            }
+            int usedSlabs = 0;
+            foreach (var l in cellsBySlab) if (l.Count > 0) usedSlabs++;
+            if (usedSlabs == 0)
+            {
+                // fall back to a sphere at the origin of the path
+                _lineMode = false;
+                SetMassSource(_sourceX, _sourceY, _sourceZ, Math.Max(radius0M, 2.0 * DxM), releaseRateKgPerS, airDensityKgPerM3);
+                return;
+            }
+            double cellVol = DxM * DyM * DzM;
+            double ratePerSlab = releaseRateKgPerS / usedSlabs;            // kg/s injected in each occupied slab
+            _lineCells = new System.Collections.Generic.List<(int i, int j, int k, double ratePerS)>();
+            foreach (var l in cellsBySlab)
+            {
+                if (l.Count == 0) continue;
+                double perCell = ratePerSlab / (airDensityKgPerM3 * cellVol * l.Count);   // concentration (kg gas / kg air basis) per second
+                foreach (var c in l) _lineCells.Add((c.i, c.j, c.k, perCell));
+            }
+            _sourceCellCount = _lineCells.Count;
+        }
+
+        private bool _lineMode;
+        private System.Collections.Generic.List<(int i, int j, int k, double ratePerS)> _lineCells;
+
         /// <summary>Clears _blocked[i,j,k] for every cell within the source sphere — so
         /// the post-step obstacle-mask pass doesn't immediately wipe out the tracer the
         /// source just injected.</summary>
@@ -187,6 +269,11 @@ namespace DisperSim3D.Core
         private void ApplySource()
         {
             if (!_hasSource) return;
+            if (_lineMode && _lineCells != null)
+            {
+                foreach (var c in _lineCells) _c[c.i, c.j, c.k] += c.ratePerS * _lastDt;
+                return;
+            }
             double r2 = _sourceR * _sourceR;
             double dC = _massInjection ? _injectionRatePerCellPerS * _lastDt : 0;
             for (int k = 0; k < Nz; k++)
