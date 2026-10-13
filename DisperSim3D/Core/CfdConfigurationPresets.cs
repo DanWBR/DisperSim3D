@@ -24,6 +24,7 @@ namespace DisperSim3D.Core
             {
                 case CfdSolverType.GaussianPuff:
                 case CfdSolverType.GaussianPlume:
+                case CfdSolverType.UnifiedDispersion:
                     // Analytical solvers — atmospheric block does not apply.
                     cfd.UseAtmosphericBL = false;
                     break;

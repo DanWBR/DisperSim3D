@@ -229,6 +229,7 @@ namespace DisperSim3D.Core
 
                 case CfdSolverType.GaussianPuff:
                 case CfdSolverType.GaussianPlume:
+                case CfdSolverType.UnifiedDispersion:
                     return EstimateDispersionCpu(gridRes, snapshotCount);
 
                 default:

@@ -69,6 +69,11 @@ namespace DisperSim3D.Core
             return (sigmaX, sigmaY, sigmaZ);
         }
 
+        /// <summary>Power-law coefficients σy = ay·x^by, σz = az·x^bz (x in m) for the class.</summary>
+        public static void PowerLaw(PasquillStabilityClass cls,
+            out double ay, out double by, out double az, out double bz)
+            => GetCoefficients(cls, out ay, out by, out az, out bz);
+
         private static void GetCoefficients(PasquillStabilityClass cls,
             out double ay, out double by, out double az, out double bz)
         {

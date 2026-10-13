@@ -238,6 +238,8 @@ namespace DisperSim3D.Validation
         public double Lfl { get; set; }
         public double Ufl { get; set; }
         public bool IsCryogenic { get; set; }
+        /// <summary>Specific heat of the gas, J/(kg·K); 0 = estimated from the name / molar mass.</summary>
+        public double SpecificHeatJPerKgK { get; set; }
     }
 
     public class BenchmarkMeteo

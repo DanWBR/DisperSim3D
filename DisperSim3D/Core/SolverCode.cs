@@ -26,6 +26,7 @@ namespace DisperSim3D.Core
                 case CfdSolverType.FluidX3DDispersion:        return "FX3DDP";
                 case CfdSolverType.FluidX3DFire:              return "FX3DFR";
                 case CfdSolverType.FluidX3DDispersionSteady:  return "FX3DDS";
+                case CfdSolverType.UnifiedDispersion:         return "UDMCNT";
                 default:                                       return "UNKSLV";
             }
         }
@@ -42,6 +43,7 @@ namespace DisperSim3D.Core
                 case CfdSolverType.FluidX3DDispersion:        return "FluidX3D Dispersion (GPU LBM)";
                 case CfdSolverType.FluidX3DFire:              return "FluidX3D Fire (Hot Buoyant Plume)";
                 case CfdSolverType.FluidX3DDispersionSteady:  return "FluidX3D Dispersion (Steady State)";
+                case CfdSolverType.UnifiedDispersion:         return "Unified Integral Model (Jet / Heavy Gas / Passive, Steady)";
                 default:                                       return type.ToString();
             }
         }

@@ -1,4 +1,4 @@
-﻿namespace DisperSim3D.Models
+namespace DisperSim3D.Models
 {
     /// <summary>
     /// Specifies the dispersion solver algorithm to use for a CFD simulation.
@@ -21,7 +21,9 @@
         /// <summary>FluidX3D wind field + CPU dual-tracer (temperature + smoke) with Boussinesq buoyancy — for jet/pool fire convective plume modelling. Radiation footprint is overlaid analytically via JetFireModel.</summary>
         FluidX3DFire,
         /// <summary>FluidX3D-driven CPU dispersion that runs until the concentration field stops changing (convergence detection). Writes one converged steady-state snapshot.</summary>
-        FluidX3DDispersionSteady
+        FluidX3DDispersionSteady,
+        /// <summary>Unified integral model (jet -> heavy gas -> passive) for continuous releases; no grid.</summary>
+        UnifiedDispersion
     }
 
     /// <summary>

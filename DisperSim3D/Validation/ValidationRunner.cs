@@ -40,6 +40,11 @@ namespace DisperSim3D.Validation
                     pairs = SampleGaussianPuff(spec, scene);
                     report.Success = true;
                 }
+                else if (solverType == CfdSolverType.UnifiedDispersion)
+                {
+                    pairs = SampleUnified(spec, scene);
+                    report.Success = true;
+                }
                 else
                 {
                     var sim = scene.Simulations[0];
@@ -190,7 +195,8 @@ namespace DisperSim3D.Validation
                     Name = spec.Source.Gas?.Name ?? "Gas",
                     MolarMass = spec.Source.Gas?.MolarMass ?? 0.029,
                     LFL = spec.Source.Gas?.Lfl ?? 0,
-                    UFL = spec.Source.Gas?.Ufl ?? 0
+                    UFL = spec.Source.Gas?.Ufl ?? 0,
+                    SpecificHeatJPerKgK = spec.Source.Gas?.SpecificHeatJPerKgK ?? 0
                 }
             };
             scene.GasLibrary.Add(gasItem);
@@ -384,6 +390,15 @@ namespace DisperSim3D.Validation
             var engine = new GaussianPlumeEngine();
             engine.Initialize(transient);
             return SamplePoints(spec, (x, y, z) => engine.EvaluateConcentration(x, y, z));
+        }
+
+        private static List<SensorPair> SampleUnified(BenchmarkSpec spec, Scene3D scene)
+        {
+            var transient = ToScenario(spec, scene);
+            var engine = new UnifiedDispersionEngine();
+            engine.Initialize(transient);
+            bool massFrac = string.Equals(spec.Unit, "MassFraction", StringComparison.OrdinalIgnoreCase);
+            return SamplePoints(spec, (x, y, z) => massFrac ? engine.EvaluateMassFraction(x, y, z) : engine.EvaluateConcentration(x, y, z));
         }
 
         private static List<SensorPair> SampleGaussianPuff(BenchmarkSpec spec, Scene3D scene)
