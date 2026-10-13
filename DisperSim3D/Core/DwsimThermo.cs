@@ -32,6 +32,19 @@ namespace DisperSim3D.Core
         /// compound databases (chemsep, dwsim, biodiesel, electrolyte, chedl).</summary>
         public static bool IsAvailable => _calc != null;
 
+        /// <summary>The underlying DWSIM calculator (null until <see cref="Initialize"/>).</summary>
+        public static Calculator CoreCalculator => _calc;
+
+        /// <summary>Name of the property package in use.</summary>
+        public static string PropertyPackageName => _propPackName;
+
+        /// <summary>A new property-package instance (with the compound database attached) for repeated flash calls.</summary>
+        public static DWSIMCore.Foundation.PropertyPackages.PropertyPackage CreatePropertyPackageInstance()
+        {
+            if (_calc == null) return null;
+            try { return _calc.GetPropPackInstance(_propPackName); } catch (Exception ex) { LastError = ex.Message; return null; }
+        }
+
         /// <summary>Last error message from a failed Initialize/Compute call.</summary>
         public static string LastError { get; private set; } = "";
 

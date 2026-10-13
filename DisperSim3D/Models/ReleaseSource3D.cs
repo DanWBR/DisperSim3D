@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using DisperSim3D.Geometry;
@@ -85,6 +85,14 @@ namespace DisperSim3D.Models
         [Category("Jet")]
         [Description("When true, the dispersion engines pre-dilute the release with an integral free-jet model up to the jet-to-plume transition (momentum length) instead of a point source. Gaussian: initial sigma + Briggs momentum rise growing with distance; FluidX3D: mass injected along the bent jet trajectory. Give StackDiameterM / ExitVelocityMPerS as a momentum-conserving pseudo-source.")]
         public bool UseJetTransition { get; set; }
+
+        [Category("Jet")]
+        [Description("When true (and HighPressureLeak gives the vessel state), the unified integral model carries the flashed liquid as aerosol in the cloud and solves the cloud temperature/density with DWSIM PH flashes of component + air.")]
+        public bool CarryAerosol { get; set; }
+
+        [Category("Jet")]
+        [Description("DWSIM compound name of the released substance for the aerosol thermodynamics (default: gas name).")]
+        public string AerosolCompound { get; set; }
 
         [Category("Risk / IOGP")]
         [Description("Equipment inventory contributing to this release scenario. The leak frequency is computed as the sum of IOGP 434-01 per-item (or per-metre) frequencies over all items at the chosen HoleSizeBand.")]

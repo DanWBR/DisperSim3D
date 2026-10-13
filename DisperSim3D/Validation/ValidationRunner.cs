@@ -220,7 +220,8 @@ namespace DisperSim3D.Validation
             double effExitT = spec.Source.ExitTemperatureK > 0
                 ? spec.Source.ExitTemperatureK : 293.15;
             double effExitV = spec.Source.ExitVelocityMPerS;
-            if (spec.Source.TwoPhase != null && spec.Source.TwoPhase.Enabled)
+            bool unifiedAerosol = spec.Source.TwoPhase != null && spec.ResolveSolverType() == CfdSolverType.UnifiedDispersion;
+            if (spec.Source.TwoPhase != null && spec.Source.TwoPhase.Enabled && !unifiedAerosol)
             {
                 var tp = spec.Source.TwoPhase;
                 string compoundName = !string.IsNullOrEmpty(tp.CompoundName)
@@ -273,6 +274,20 @@ namespace DisperSim3D.Validation
                 ReleaseHeightOffset = 0,
                 UseJetTransition = spec.Source.JetTransition
             };
+            if (unifiedAerosol)
+            {
+                // the unified model carries the flashed liquid as aerosol: keep the total rate and hand it the vessel state
+                var tp = spec.Source.TwoPhase;
+                src.HighPressureLeak = new HighPressureLeakParams
+                {
+                    VesselPressurePa = tp.VesselPressurePa, VesselTemperatureK = tp.VesselTemperatureK, OrificeDiameterM = tp.OrificeDiameterM,
+                    GasGamma = 1.30, GasMolarMassKgMol = spec.Source.Gas?.MolarMass > 0 ? spec.Source.Gas.MolarMass : 0.029,
+                    AmbientPressurePa = spec.Meteo.AmbientPressure > 0 ? spec.Meteo.AmbientPressure : 101325.0,
+                    DischargeCoefficient = tp.DischargeCoefficient, SpecifyMassFlow = true, SpecifiedMassFlowKgPerS = spec.Source.ReleaseRateKgPerS
+                };
+                src.CarryAerosol = true;
+                src.AerosolCompound = !string.IsNullOrEmpty(tp.CompoundName) ? tp.CompoundName : spec.Source.Gas?.Name;
+            }
             // Mirror legacy Gas property so engines that don't go through GasRefId still see it.
             src.Gas = gasItem.PureGas;
             // Mirror the cryogenic flag onto src.Gas (it lives only on
@@ -397,6 +412,7 @@ namespace DisperSim3D.Validation
             var transient = ToScenario(spec, scene);
             var engine = new UnifiedDispersionEngine();
             engine.Initialize(transient);
+            if (!string.IsNullOrEmpty(engine.ThermoNote)) Console.WriteLine("    " + engine.ThermoNote);
             bool massFrac = string.Equals(spec.Unit, "MassFraction", StringComparison.OrdinalIgnoreCase);
             return SamplePoints(spec, (x, y, z) => massFrac ? engine.EvaluateMassFraction(x, y, z) : engine.EvaluateConcentration(x, y, z));
         }

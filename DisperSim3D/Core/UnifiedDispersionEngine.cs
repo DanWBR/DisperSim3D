@@ -48,7 +48,7 @@ namespace DisperSim3D.Core
 
         private struct Node
         {
-            public double x, z, s, Ry, Rz, n, m, U, rho, Yc, cc, T, Ri;
+            public double x, z, s, Ry, Rz, n, m, U, rho, Yc, cc, T, Ri, fL;
             public bool grounded;
         }
 
@@ -72,6 +72,13 @@ namespace DisperSim3D.Core
         }
 
         private double _mwGas, _cpGas;
+        // aerosol / DWSIM thermodynamics
+        private AerosolCloudThermo _thermo;
+        private bool _aerosol, _dry;
+        private double _hAirJkg;
+        private AerosolCloudThermo.CloudState _tc;   // cached flash of the current step
+        private int _dryCount;
+        public string ThermoNote { get; private set; } = "";
 
         /// <summary>Environment overrides (UDM_ALPHA1, UDM_ALPHA2, UDM_CE, UDM_GEDGE, UDM_RIDAMP, UDM_RIPROF, UDM_CF, UDM_KAMB, UDM_KTOP) for calibration runs.</summary>
         private void ApplyEnvironmentOverrides()
@@ -139,6 +146,33 @@ namespace DisperSim3D.Core
 
             var st = new State { mg = mg, ma = 0, x = 0, z = z0, t = 0 };
             double uA0 = WindAt(Math.Max(z0, 0.5));
+            // ---- two-phase (aerosol) source: DWSIM PH flash of the vessel state at ambient pressure ----
+            _aerosol = false; _dry = false; _thermo = null; _dryCount = 0;
+            if (src.CarryAerosol && src.HighPressureLeak != null)
+            {
+                string comp = !string.IsNullOrWhiteSpace(src.AerosolCompound) ? src.AerosolCompound : (src.Gas != null ? src.Gas.Name : null);
+                _thermo = AerosolCloudThermo.TryCreate(comp, _pAir, _tAir, out string err);
+                if (_thermo != null)
+                {
+                    double hv = _thermo.ComponentEnthalpyKJkg(src.HighPressureLeak.VesselTemperatureK, src.HighPressureLeak.VesselPressurePa);
+                    if (!double.IsNaN(hv))
+                    {
+                        _hAirJkg = _thermo.AirEnthalpyKJkg * 1000.0;
+                        st.Hf = mg * hv * 1000.0;
+                        _tc = _thermo.Flash(mg, 0, st.Hf, src.HighPressureLeak.VesselTemperatureK);
+                        if (_tc.Ok)
+                        {
+                            _aerosol = true; _mwGas = _thermo.ComponentMolarMass;
+                            rho0 = _tc.RhoMix; T0 = _tc.T;
+                            ThermoNote = string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                                "aerosol: {0} flashed to {1:F1} K, liquid fraction {2:F3}, rho {3:F2} kg/m3 (DWSIM {4})", _thermo.Compound, _tc.T, _tc.LiquidFraction, _tc.RhoMix, DwsimThermo.PropertyPackageName);
+                        }
+                        else ThermoNote = "aerosol: initial flash failed, ideal-gas path used";
+                    }
+                    else ThermoNote = "aerosol: vessel enthalpy unavailable, ideal-gas path used";
+                }
+                else ThermoNote = "aerosol: " + err + ", ideal-gas path used";
+            }
             bool pool = uExit < 0.5 && d > 0.5 && z0 <= 0.5 * d;   // low-velocity area source on the ground
             if (pool)
             {
@@ -163,7 +197,8 @@ namespace DisperSim3D.Core
                 st.Ry = Math.Sqrt(A0 / Math.PI);
                 st.Mx = mg * u0; st.Mz = mg * w0; st.grounded = false;
             }
-            st.Hf = mg * _cpGas * T0 + st.ma * CpAir * _tAir;
+            if (!_aerosol) st.Hf = mg * _cpGas * T0 + st.ma * CpAir * _tAir;
+            else st.Hf += st.ma * _hAirJkg;
 
             double xMax = Math.Max(scenario.DomainSizeM, 50.0) * MaxDownwindFactor;
             Integrate(st, xMax);
@@ -190,12 +225,31 @@ namespace DisperSim3D.Core
                 for (int i = 0; i < k.Length; i++) k[i] = (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]) / 6.0;
                 _dumpOk = true; Derivs(st, out _); _dumpOk = false;
                 st = Advance(st, k, ds);
+                UpdateThermo(st);
                 s += ds; steps++;
                 Touchdown(st);
                 if ((steps % 2) == 0 || st.grounded) Record(st, s);
-                if (st.Hf <= 0 || double.IsNaN(st.x)) break;
+                if (double.IsNaN(st.x) || double.IsNaN(st.Hf) || (!_aerosol && st.Hf <= 0)) break;
             }
             if (_dump != null) { try { System.IO.File.WriteAllText(dumpPath, _dump.ToString()); } catch { } _dump = null; }
+        }
+
+        /// <summary>Aerosol path: PH flash of the new state (once per step); switch to the ideal-gas enthalpy
+        /// basis once the liquid has evaporated.</summary>
+        private void UpdateThermo(State st)
+        {
+            if (!_aerosol || _dry) return;
+            var tc = _thermo.Flash(st.mg, st.ma, st.Hf, _tc.T);
+            if (tc.Ok) _tc = tc;
+            if (_tc.LiquidFraction <= 1e-4) _dryCount++; else _dryCount = 0;
+            if (_dryCount >= 10)
+            {
+                // dry cloud: continue with cp-based enthalpy (no more flashes); re-base the enthalpy flux
+                double m = st.mg + st.ma;
+                double cpMix = (st.mg * _cpGas + st.ma * CpAir) / m;
+                st.Hf = m * cpMix * _tc.T;
+                _dry = true;
+            }
         }
 
         private State Advance(State st, double[] k, double ds)
@@ -272,11 +326,18 @@ namespace DisperSim3D.Core
             out double Ry, out double Rz, out double Ri, out double A)
         {
             m = st.mg + st.ma;
-            double cpMix = (st.mg * _cpGas + st.ma * CpAir) / m;
-            T = Math.Max(st.Hf / (m * cpMix), 60.0);
-            double ng = st.mg / _mwGas, na = st.ma / MwAir;
-            double mwMix = m / (ng + na);
-            rho = _pAir * mwMix / (R * T);
+            if (_aerosol && !_dry && _tc.Ok)
+            {
+                T = _tc.T; rho = _tc.RhoMix;
+            }
+            else
+            {
+                double cpMix = (st.mg * _cpGas + st.ma * CpAir) / m;
+                T = Math.Max(st.Hf / (m * cpMix), 60.0);
+                double ng = st.mg / _mwGas, na = st.ma / MwAir;
+                double mwMix = m / (ng + na);
+                rho = _pAir * mwMix / (R * T);
+            }
             u = Math.Max(st.Mx / m, 0.0); w = st.grounded ? 0.0 : st.Mz / m;
             double uA = WindAt(st.grounded ? 0.5 : st.z);
             if (u < 0.05 * uA) u = 0.05 * uA;
@@ -354,7 +415,7 @@ namespace DisperSim3D.Core
             double dMz = st.grounded ? 0 : G * (_rhoAir - rho) * A;
 
             // ---- energy ----
-            double dHf = dma * CpAir * _tAir;
+            double dHf = (_aerosol && !_dry) ? dma * _hAirJkg : dma * CpAir * _tAir;
             if (st.grounded)
             {
                 double hg = 5.0 + 3.8 * uA;                        // W/m2K, forced convection over ground
@@ -424,7 +485,7 @@ namespace DisperSim3D.Core
         {
             Props(st, out double m, out double U, out double u, out double w, out double rho, out double T, out double Yc, out double Ry, out double Rz, out double Ri, out double A);
             Exponents(Math.Max((rho - _rhoAir) / rho, 0.0), out double n, out double mm);
-            _path.Add(new Node { x = st.x, z = st.z, s = s, Ry = Ry, Rz = Rz, n = n, m = mm, U = U, rho = rho, Yc = Yc, cc = rho * Yc, T = T, Ri = Ri, grounded = st.grounded });
+            _path.Add(new Node { x = st.x, z = st.z, s = s, Ry = Ry, Rz = Rz, n = n, m = mm, U = U, rho = rho, Yc = Yc, cc = rho * Yc, T = T, Ri = Ri, fL = (_aerosol && !_dry) ? _tc.LiquidFraction : 0, grounded = st.grounded });
         }
 
         // ---------------------------------------------------------------- evaluation
