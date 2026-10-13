@@ -38,7 +38,8 @@
     "ambientTemperature": 305,
     "ambientPressure": 91500,
     "windMeasurementHeightM": 2,
-    "roughnessLengthM": 0.003
+    "roughnessLengthM": 0.003,
+    "relativeHumidity": 0.213
   },
 
   "domain": {

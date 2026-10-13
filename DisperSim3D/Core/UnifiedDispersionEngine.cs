@@ -48,7 +48,7 @@ namespace DisperSim3D.Core
 
         private struct Node
         {
-            public double x, z, s, Ry, Rz, n, m, U, rho, Yc, cc, T, Ri, fL;
+            public double x, z, s, Ry, Rz, n, m, U, rho, Yc, cc, T, Ri, fL, fW;
             public bool grounded;
         }
 
@@ -151,7 +151,8 @@ namespace DisperSim3D.Core
             if (src.CarryAerosol && src.HighPressureLeak != null)
             {
                 string comp = !string.IsNullOrWhiteSpace(src.AerosolCompound) ? src.AerosolCompound : (src.Gas != null ? src.Gas.Name : null);
-                _thermo = AerosolCloudThermo.TryCreate(comp, _pAir, _tAir, out string err);
+                double rh = _meteo.RelativeHumidity > 0 ? _meteo.RelativeHumidity : 0.5;
+                _thermo = AerosolCloudThermo.TryCreate(comp, _pAir, _tAir, rh, out string err);
                 if (_thermo != null)
                 {
                     double hv = _thermo.ComponentEnthalpyKJkg(src.HighPressureLeak.VesselTemperatureK, src.HighPressureLeak.VesselPressurePa);
@@ -165,7 +166,7 @@ namespace DisperSim3D.Core
                             _aerosol = true; _mwGas = _thermo.ComponentMolarMass;
                             rho0 = _tc.RhoMix; T0 = _tc.T;
                             ThermoNote = string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                                "aerosol: {0} flashed to {1:F1} K, liquid fraction {2:F3}, rho {3:F2} kg/m3 (DWSIM {4})", _thermo.Compound, _tc.T, _tc.LiquidFraction, _tc.RhoMix, DwsimThermo.PropertyPackageName);
+                                "aerosol: {0} flashed to {1:F1} K, liquid fraction {2:F3}, rho {3:F2} kg/m3; air RH {5:P0} (DWSIM {4})", _thermo.Compound, _tc.T, _tc.LiquidFraction, _tc.RhoMix, DwsimThermo.PropertyPackageName, rh);
                         }
                         else ThermoNote = "aerosol: initial flash failed, ideal-gas path used";
                     }
@@ -241,7 +242,7 @@ namespace DisperSim3D.Core
             if (!_aerosol || _dry) return;
             var tc = _thermo.Flash(st.mg, st.ma, st.Hf, _tc.T);
             if (tc.Ok) _tc = tc;
-            if (_tc.LiquidFraction <= 1e-4) _dryCount++; else _dryCount = 0;
+            if (_tc.TotalLiquidMassFraction <= 1e-6) _dryCount++; else _dryCount = 0;
             if (_dryCount >= 10)
             {
                 // dry cloud: continue with cp-based enthalpy (no more flashes); re-base the enthalpy flux
@@ -485,53 +486,73 @@ namespace DisperSim3D.Core
         {
             Props(st, out double m, out double U, out double u, out double w, out double rho, out double T, out double Yc, out double Ry, out double Rz, out double Ri, out double A);
             Exponents(Math.Max((rho - _rhoAir) / rho, 0.0), out double n, out double mm);
-            _path.Add(new Node { x = st.x, z = st.z, s = s, Ry = Ry, Rz = Rz, n = n, m = mm, U = U, rho = rho, Yc = Yc, cc = rho * Yc, T = T, Ri = Ri, fL = (_aerosol && !_dry) ? _tc.LiquidFraction : 0, grounded = st.grounded });
+            _path.Add(new Node { x = st.x, z = st.z, s = s, Ry = Ry, Rz = Rz, n = n, m = mm, U = U, rho = rho, Yc = Yc, cc = rho * Yc, T = T, Ri = Ri, fL = (_aerosol && !_dry) ? _tc.LiquidFraction : 0, fW = (_aerosol && !_dry) ? _tc.WaterLiquidFraction : 0, grounded = st.grounded });
         }
 
         // ---------------------------------------------------------------- evaluation
-        private bool Locate(double x, double y, double z, out Node nd, out double yLoc, out double xLoc)
+        /// <summary>Finds the centreline node nearest to the point (exact search over the path, pruned with the
+        /// monotonic x) and returns the crosswind offset and the offset perpendicular to the local trajectory in the
+        /// (x, z) plane, for the real plume and for its ground image.</summary>
+        private bool Locate(double x, double y, double z, out Node nd, out double yLoc, out double dPerp, out double dPerpImg)
         {
-            nd = default; yLoc = 0; xLoc = 0;
+            nd = default; yLoc = 0; dPerp = 0; dPerpImg = 0;
             if (_path.Count == 0) return false;
             double dx = x - _originX, dy = y - _originY;
-            xLoc = dx * _windDirX + dy * _windDirY;
+            double xLoc = dx * _windDirX + dy * _windDirY;
             yLoc = dx * _windDirY - dy * _windDirX;
             if (xLoc < -_path[0].Ry) return false;
-            // nearest centreline point in the (x, z) plane
-            int lo = 0, hi = _path.Count - 1;
+            int n = _path.Count;
+            int lo = 0, hi = n - 1;
             while (hi - lo > 1) { int mid = (lo + hi) / 2; if (_path[mid].x < xLoc) lo = mid; else hi = mid; }
             int best = lo; double bd = double.MaxValue;
-            for (int i = Math.Max(0, lo - 200); i <= Math.Min(_path.Count - 1, hi + 200); i++)
+            // scan outward from lo; stop in each direction once the x offset alone exceeds the best distance
+            for (int i = lo; i >= 0; i--)
             {
-                double ex = _path[i].x - xLoc, ez = _path[i].z - z;
-                double d2 = ex * ex + 0.25 * ez * ez;
+                double ex = _path[i].x - xLoc; if (ex * ex > bd) break;
+                double ez = _path[i].z - z, d2 = ex * ex + ez * ez;
+                if (d2 < bd) { bd = d2; best = i; }
+            }
+            for (int i = lo + 1; i < n; i++)
+            {
+                double ex = _path[i].x - xLoc; if (ex * ex > bd) break;
+                double ez = _path[i].z - z, d2 = ex * ex + ez * ez;
                 if (d2 < bd) { bd = d2; best = i; }
             }
             nd = _path[best];
+            // local tangent of the trajectory in the (x, z) plane
+            int i0 = Math.Max(best - 1, 0), i1 = Math.Min(best + 1, n - 1);
+            double tx = _path[i1].x - _path[i0].x, tz = _path[i1].z - _path[i0].z;
+            double tl = Math.Sqrt(tx * tx + tz * tz);
+            if (tl < 1e-12) { tx = 1; tz = 0; } else { tx /= tl; tz /= tl; }
+            if (nd.grounded) { tx = 1; tz = 0; }
+            double rx = xLoc - nd.x, rz = z - nd.z;
+            dPerp = Math.Abs(rx * tz - rz * tx);
+            double rzi = z + nd.z;                       // image of the centreline below the ground
+            dPerpImg = Math.Abs(rx * (-tz) - rzi * tx);
             return true;
         }
 
-        private double Profile(Node nd, double yLoc, double z)
+        private double Profile(Node nd, double yLoc, double z, double dPerp, double dPerpImg)
         {
             double fh = Math.Exp(-Math.Pow(Math.Abs(yLoc) / nd.Ry, nd.n));
             double fv;
             if (nd.grounded) fv = Math.Exp(-Math.Pow(Math.Max(z, 0) / nd.Rz, nd.m));
-            else fv = Math.Exp(-Math.Pow(Math.Abs(z - nd.z) / nd.Rz, nd.m)) + Math.Exp(-Math.Pow(Math.Abs(z + nd.z) / nd.Rz, nd.m));
+            else fv = Math.Exp(-Math.Pow(dPerp / nd.Rz, nd.m)) + Math.Exp(-Math.Pow(dPerpImg / nd.Rz, nd.m));
             return fh * Math.Min(fv, 1.0);
         }
 
         /// <summary>Gas concentration, kg/m³.</summary>
         public double EvaluateConcentration(double x, double y, double z)
         {
-            if (!Locate(x, y, z, out var nd, out double yLoc, out _)) return 0;
-            return nd.cc * Profile(nd, yLoc, z);
+            if (!Locate(x, y, z, out var nd, out double yLoc, out double dp, out double dpi)) return 0;
+            return nd.cc * Profile(nd, yLoc, z, dp, dpi);
         }
 
         /// <summary>Gas mass fraction of the local mixture.</summary>
         public double EvaluateMassFraction(double x, double y, double z)
         {
-            if (!Locate(x, y, z, out var nd, out double yLoc, out _)) return 0;
-            double f = Profile(nd, yLoc, z);
+            if (!Locate(x, y, z, out var nd, out double yLoc, out double dp, out double dpi)) return 0;
+            double f = Profile(nd, yLoc, z, dp, dpi);
             double Y = nd.Yc * f;
             return Math.Min(Y, 1.0);
         }

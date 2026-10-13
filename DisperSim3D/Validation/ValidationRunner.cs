@@ -305,7 +305,8 @@ namespace DisperSim3D.Validation
                 AmbientTemperature = spec.Meteo.AmbientTemperature,
                 AmbientPressure = spec.Meteo.AmbientPressure,
                 WindMeasurementHeightM = spec.Meteo.WindMeasurementHeightM,
-                RoughnessLengthM = spec.Meteo.RoughnessLengthM
+                RoughnessLengthM = spec.Meteo.RoughnessLengthM,
+                RelativeHumidity = spec.Meteo.RelativeHumidity
             };
 
             // Wind field (acts as the meteo carrier; only used for CFD pairs)

@@ -252,6 +252,9 @@ namespace DisperSim3D.Validation
         public double WindMeasurementHeightM { get; set; } = 10;
         public double RoughnessLengthM { get; set; } = 0.03;
 
+        /// <summary>Relative humidity (0-1) of the ambient air; used by the aerosol thermodynamics of the unified model.</summary>
+        public double RelativeHumidity { get; set; } = 0.5;
+
         /// <summary>Turbulent (eddy) diffusivity, m²/s, applied to the FluidX3D tracer. When
         /// omitted the runner derives one from the Pasquill class and wind speed
         /// (K = u·σy·σz/(2·x) at x = domain half-size); the legacy value was only the
