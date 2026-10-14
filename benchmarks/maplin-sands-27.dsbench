@@ -2,9 +2,8 @@
   "$schema": "dsbench/v1",
   "name": "Maplin-Sands-Trial27",
   "citation": "Puttock, J.S., Blackmore, D.R., Colenbrander, G.W. (1982). Field experiments on dense gas dispersion. J. Hazardous Materials 6, 13-41. Maplin Sands Trial 27. Arc-max concentrations digitised from Gant et al. (2016) Harmo17 Fig. 3.",
-  "dataConfidence": "Medium",
-  "description": "Maplin Sands Trial 27 - LNG spill on water from spill pipe. 23.2 kg/s for 160 s onto seawater (no impoundment). Sensors on floating pontoons at ~1 m above water on arcs at 90, 180, 325, 400, 525, 650 m. PHMSA MVD Rev B 2024 Table 2-35 base case. Sensor values digitised from Gant et al. 2016 Fig. 3 (Harmo17 paper) - confidence medium. Refine against original Puttock 1982 tables (PHMSA MVD spreadsheet) when available.",
-
+  "dataConfidence": "High",
+  "description": "Maplin Sands Trial 27 - LNG spill on water from spill pipe. 23.2 kg/s for 160 s onto seawater (no impoundment). Sensors on floating pontoons at ~1 m above water on arcs at 90, 180, 325, 400, 525, 650 m. PHMSA MVD Rev B 2024 Table 2-35 base case. Sensor values digitised from Gant et al. 2016 Fig. 3 (Harmo17 paper) - confidence medium. Refine against original Puttock 1982 tables (PHMSA MVD spreadsheet) when available. DATA UPDATE: sensor values replaced by the PHMSA LNG Model Validation Database maximum arc-wise concentrations (3 s averaging, sensors 0.9 m above the water) as tabulated in DNV, 'LNG Validation for UDM 6.6', report to PHMSA (Oct 2010), Table 9: 89 m: 12.30 mol%, 131 m: 9.49 mol%, 324 m: 3.56 mol%, 400 m: 2.91 mol%, 650 m: 0.57 mol%. Mass fractions converted with CH4/air molar masses.",
   "source": {
     "name": "Maplin Sands LNG pool on water",
     "gas": {
@@ -14,15 +13,19 @@
       "ufl": 0,
       "isCryogenic": true
     },
-    "position": [0, 0, 0.3],
+    "position": [
+      0,
+      0,
+      0.3
+    ],
     "releaseRateKgPerS": 23.2,
     "releaseDurationS": 160,
     "stackDiameterM": 10,
     "exitTemperatureK": 111,
     "exitVelocityMPerS": 0.04
   },
-
   "meteo": {
+    "averagingTimeS": 3,
     "windSpeed": 5.5,
     "windDirectionDeg": 270,
     "stability": "D",
@@ -31,27 +34,62 @@
     "windMeasurementHeightM": 10,
     "roughnessLengthM": 0.0003
   },
-
   "domain": {
     "sizeM": 800,
     "gridResolution": 100,
     "durationS": 400,
     "timeStepS": 1.0
   },
-
   "solver": "RhoReactingBuoyantFoam",
   "concentrationKind": "PeakOverTime",
   "unit": "MassFraction",
-
   "sensors": [
-    { "name": "arc-90m",   "position": [90,  0, 1.0], "measuredKgM3": 0.0663 },
-    { "name": "arc-180m",  "position": [180, 0, 1.0], "measuredKgM3": 0.0304 },
-    { "name": "arc-325m",  "position": [325, 0, 1.0], "measuredKgM3": 0.0166 },
-    { "name": "arc-400m",  "position": [400, 0, 1.0], "measuredKgM3": 0.0138 },
-    { "name": "arc-525m",  "position": [525, 0, 1.0], "measuredKgM3": 0.0083 },
-    { "name": "arc-650m",  "position": [650, 0, 1.0], "measuredKgM3": 0.0055 }
+    {
+      "name": "arc-89m",
+      "position": [
+        89,
+        0,
+        0.9
+      ],
+      "measuredKgM3": 0.07207
+    },
+    {
+      "name": "arc-131m",
+      "position": [
+        131,
+        0,
+        0.9
+      ],
+      "measuredKgM3": 0.05488
+    },
+    {
+      "name": "arc-324m",
+      "position": [
+        324,
+        0,
+        0.9
+      ],
+      "measuredKgM3": 0.02003
+    },
+    {
+      "name": "arc-400m",
+      "position": [
+        400,
+        0,
+        0.9
+      ],
+      "measuredKgM3": 0.01633
+    },
+    {
+      "name": "arc-650m",
+      "position": [
+        650,
+        0,
+        0.9
+      ],
+      "measuredKgM3": 0.00316
+    }
   ],
-
   "referenceModelSpms": {
     "model": "FLACS v9",
     "citation": "Hansen, Gavelli, Ichard, Davis 2010 (J. Loss Prev. Process Ind. 23, 857-877) - unobstructed-group aggregate (Burro, Coyote, Maplin Sands, Thorney Island).",
@@ -60,13 +98,12 @@
     "MG": 1.18,
     "VG": 1.14
   },
-
   "acceptance": {
     "ReferenceMatchTolerance": {
-      "MRB":  0.5,
+      "MRB": 0.5,
       "FAC2": 0.3,
-      "MG":   0.5,
-      "VG":   1.5
+      "MG": 0.5,
+      "VG": 1.5
     }
   }
 }

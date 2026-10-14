@@ -2,9 +2,8 @@
   "$schema": "dsbench/v1",
   "name": "Burro7",
   "citation": "Koopman, R.P. et al. (1982). LLNL/NWC 1980 LNG spill tests. LLNL UCID-19075. Burro Trial 7. Parameters from PHMSA MVD Rev B 2024 Table 2-8. Sensor values approximated from Hansen et al. 2010 J. Loss Prev. Process Ind. 23 figures.",
-  "dataConfidence": "Medium",
-  "description": "Burro Trial 7 - LNG spill on water from 0.61 m pipe. 39.4 m^3 LNG over ~174 s (~123 kg/s effective). Frenchman Flat 1980. High wind (8.4 m/s) with neutral C stability - the high-wind case in the Burro series. Sensors on arcs at 57, 140, 400 m, ~1 m height. NOTE: high wind reduces near-field concentrations vs Burro 8/9. Sensor values approximate from Hansen 2010 figures (confidence medium-low).",
-
+  "dataConfidence": "High",
+  "description": "Burro Trial 7 - LNG spill on water from 0.61 m pipe. 39.4 m^3 LNG over ~174 s (~123 kg/s effective). Frenchman Flat 1980. High wind (8.4 m/s) with neutral C stability - the high-wind case in the Burro series. Sensors on arcs at 57, 140, 400 m, ~1 m height. NOTE: high wind reduces near-field concentrations vs Burro 8/9. Sensor values approximate from Hansen 2010 figures (confidence medium-low). DATA UPDATE: sensor values replaced by the PHMSA LNG Model Validation Database maximum arc-wise concentrations (short averaging time, 1 s) as tabulated in DNV, 'LNG Validation for UDM 6.6', report to PHMSA (Oct 2010), Table 9: 57 m: 17.90 mol%, 140 m: 7.13 mol%, 400 m: 3.86 mol%. Long-averaging (140 s) values for reference: 57 m: 14.19 mol%, 140 m: 4.40 mol%, 400 m: 2.29 mol%. Mass fractions converted with CH4/air molar masses.",
   "source": {
     "name": "Burro7 LNG pool",
     "gas": {
@@ -14,15 +13,19 @@
       "ufl": 0,
       "isCryogenic": true
     },
-    "position": [0, 0, 0.5],
+    "position": [
+      0,
+      0,
+      0.5
+    ],
     "releaseRateKgPerS": 123.4,
     "releaseDurationS": 174,
     "stackDiameterM": 20.0,
     "exitTemperatureK": 111,
     "exitVelocityMPerS": 0.05
   },
-
   "meteo": {
+    "averagingTimeS": 1,
     "windSpeed": 8.4,
     "windDirectionDeg": 270,
     "stability": "C",
@@ -31,24 +34,44 @@
     "windMeasurementHeightM": 2,
     "roughnessLengthM": 0.0002
   },
-
   "domain": {
     "sizeM": 1000,
     "gridResolution": 100,
     "durationS": 300,
     "timeStepS": 1.0
   },
-
   "solver": "RhoReactingBuoyantFoam",
   "concentrationKind": "PeakOverTime",
   "unit": "MassFraction",
-
   "sensors": [
-    { "name": "arc-57m_centerline",  "position": [57,  0, 1.0], "measuredKgM3": 0.035 },
-    { "name": "arc-140m_centerline", "position": [140, 0, 1.0], "measuredKgM3": 0.014 },
-    { "name": "arc-400m_centerline", "position": [400, 0, 1.0], "measuredKgM3": 0.004 }
+    {
+      "name": "arc-57m",
+      "position": [
+        57,
+        0,
+        1.0
+      ],
+      "measuredKgM3": 0.10773
+    },
+    {
+      "name": "arc-140m",
+      "position": [
+        140,
+        0,
+        1.0
+      ],
+      "measuredKgM3": 0.04078
+    },
+    {
+      "name": "arc-400m",
+      "position": [
+        400,
+        0,
+        1.0
+      ],
+      "measuredKgM3": 0.02175
+    }
   ],
-
   "referenceModelSpms": {
     "model": "FLACS v9",
     "citation": "Hansen, Gavelli, Ichard, Davis 2010 (J. Loss Prev. Process Ind. 23, 857-877) - unobstructed-group aggregate (Burro, Coyote, Maplin Sands, Thorney Island).",
@@ -57,13 +80,12 @@
     "MG": 1.18,
     "VG": 1.14
   },
-
   "acceptance": {
     "ReferenceMatchTolerance": {
-      "MRB":  0.5,
+      "MRB": 0.5,
       "FAC2": 0.3,
-      "MG":   0.5,
-      "VG":   1.5
+      "MG": 0.5,
+      "VG": 1.5
     }
   }
 }

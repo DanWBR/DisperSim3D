@@ -3,8 +3,7 @@
   "name": "Prairie-Grass-Run29-E",
   "citation": "Barad, M.L. (1958). Project Prairie Grass, A Field Program in Diffusion. AFCRL-TR-58-235. Run 29: stability D-E, arc-maximum SO2 concentrations at 50-800 m.",
   "dataConfidence": "High",
-  "description": "Prairie Grass Run 29. Slightly stable (E) conditions: Q=41.5 g/s SO2 at 0.46 m height, U(2m)=3.94 m/s, dT=-0.78 C. Flat short-grass prairie, z0=0.006 m. 10-min averaged arc-max concentrations at 1.5 m height.",
-
+  "description": "Prairie Grass Run 29. Slightly stable (E) conditions: Q=41.5 g/s SO2 at 0.46 m height, U(2m)=3.94 m/s, dT=-0.78 C. Flat short-grass prairie, z0=0.006 m. 10-min averaged arc-max concentrations at 1.5 m height. STABILITY: set to D-E (intermediate class) as stated in the citation (Barad 1958 run 29: stability D-E); the unified model interpolates the dispersion coefficients.",
   "source": {
     "name": "PG Run 29 ground source",
     "gas": {
@@ -14,43 +13,82 @@
       "ufl": 0,
       "isCryogenic": false
     },
-    "position": [0, 0, 0.46],
+    "position": [
+      0,
+      0,
+      0.46
+    ],
     "releaseRateKgPerS": 0.0415,
     "releaseDurationS": 600,
     "stackDiameterM": 0,
     "exitTemperatureK": 303,
     "exitVelocityMPerS": 0
   },
-
   "meteo": {
     "windSpeed": 3.94,
     "windDirectionDeg": 270,
-    "stability": "E",
+    "stability": "D-E",
     "ambientTemperature": 300,
     "ambientPressure": 101325,
     "windMeasurementHeightM": 2,
     "roughnessLengthM": 0.006
   },
-
   "domain": {
     "sizeM": 1000,
     "gridResolution": 80,
     "durationS": 600,
     "timeStepS": 1.0
   },
-
   "solver": "GaussianPlume",
   "concentrationKind": "FinalSnapshot",
   "unit": "KgPerM3",
-
   "sensors": [
-    { "name": "arc-50m",  "position": [50,  0, 1.5], "measuredKgM3": 2.48e-4 },
-    { "name": "arc-100m", "position": [100, 0, 1.5], "measuredKgM3": 8.78e-5 },
-    { "name": "arc-200m", "position": [200, 0, 1.5], "measuredKgM3": 2.76e-5 },
-    { "name": "arc-400m", "position": [400, 0, 1.5], "measuredKgM3": 9.2e-6 },
-    { "name": "arc-800m", "position": [800, 0, 1.5], "measuredKgM3": 2.6e-6 }
+    {
+      "name": "arc-50m",
+      "position": [
+        50,
+        0,
+        1.5
+      ],
+      "measuredKgM3": 0.000248
+    },
+    {
+      "name": "arc-100m",
+      "position": [
+        100,
+        0,
+        1.5
+      ],
+      "measuredKgM3": 8.78e-05
+    },
+    {
+      "name": "arc-200m",
+      "position": [
+        200,
+        0,
+        1.5
+      ],
+      "measuredKgM3": 2.76e-05
+    },
+    {
+      "name": "arc-400m",
+      "position": [
+        400,
+        0,
+        1.5
+      ],
+      "measuredKgM3": 9.2e-06
+    },
+    {
+      "name": "arc-800m",
+      "position": [
+        800,
+        0,
+        1.5
+      ],
+      "measuredKgM3": 2.6e-06
+    }
   ],
-
   "referenceModelSpms": {
     "model": "FLACS v8",
     "citation": "Hanna, Hansen, Dharmavaram 2004 (Atmospheric Environment 38, 4675-4687), Table 2 - aggregate over 43 Prairie Grass trials.",
@@ -60,13 +98,12 @@
     "MG": 1.53,
     "VG": 2.75
   },
-
   "acceptance": {
     "ReferenceMatchTolerance": {
-      "MRB":  0.5,
+      "MRB": 0.5,
       "FAC2": 0.2,
-      "MG":   0.5,
-      "VG":   1.0
+      "MG": 0.5,
+      "VG": 1.0
     }
   }
 }

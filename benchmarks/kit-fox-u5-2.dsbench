@@ -25,6 +25,7 @@
     "exitVelocityMPerS": 0.92
   },
   "meteo": {
+    "averagingTimeS": 20,
     "windSpeed": 4.1,
     "windDirectionDeg": 270,
     "stability": "D",
@@ -45,38 +46,22 @@
   "sensors": [
     {
       "name": "arc-25m",
-      "position": [
-        25,
-        0,
-        1.5
-      ],
+      "position": [25, 0, 0.3],
       "measuredKgM3": 0.082
     },
     {
       "name": "arc-50m",
-      "position": [
-        50,
-        0,
-        1.5
-      ],
+      "position": [50, 0, 0.5],
       "measuredKgM3": 0.041
     },
     {
       "name": "arc-100m",
-      "position": [
-        100,
-        0,
-        1.5
-      ],
+      "position": [100, 0, 0.5],
       "measuredKgM3": 0.017
     },
     {
       "name": "arc-225m",
-      "position": [
-        225,
-        0,
-        1.5
-      ],
+      "position": [225, 0, 0.5],
       "measuredKgM3": 0.0058
     }
   ],

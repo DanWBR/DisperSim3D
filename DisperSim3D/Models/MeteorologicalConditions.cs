@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel;
 using DisperSim3D.Geometry;
 
@@ -37,6 +37,14 @@ namespace DisperSim3D.Models
         /// model — humid air absorbs a measurable share of the flux beyond a few tens
         /// of metres. Default is 0.5.
         /// </summary>
+        [Category("Atmosphere")]
+        [Description("Fractional Pasquill class for the unified integral model (1 = A, 2 = B, 3 = C, 4 = D, 5 = E, 6 = F; e.g. 4.5 for D-E). 0 = use the stability class.")]
+        public double StabilityIndex { get; set; }
+
+        [Category("Atmosphere")]
+        [Description("Averaging time of the concentrations (s): widens the passive plume by (t/600)^0.2 (wind meander). 600 s is the basis of the Pasquill-Gifford / McMullen sigma_y; 18.75 s gives the instantaneous (flammable) values. Used by the unified integral model.")]
+        public double AveragingTimeS { get; set; }
+
         public double RelativeHumidity { get; set; }
 
         [Category("Wind")]
@@ -139,6 +147,7 @@ namespace DisperSim3D.Models
             AmbientTemperature = 293.15;
             AmbientPressure = 101325.0;
             RelativeHumidity = 0.5;
+            AveragingTimeS = 600;
             MixingHeightM = 1000.0;
             WindMeasurementHeightM = 10.0;
             WindShearExponent = -1;

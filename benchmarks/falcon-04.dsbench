@@ -23,6 +23,7 @@
   },
 
   "meteo": {
+    "averagingTimeS": 250,
     "windSpeed": 4.3,
     "windDirectionDeg": 270,
     "stability": "D",

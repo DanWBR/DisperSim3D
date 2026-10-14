@@ -306,7 +306,9 @@ namespace DisperSim3D.Validation
                 AmbientPressure = spec.Meteo.AmbientPressure,
                 WindMeasurementHeightM = spec.Meteo.WindMeasurementHeightM,
                 RoughnessLengthM = spec.Meteo.RoughnessLengthM,
-                RelativeHumidity = spec.Meteo.RelativeHumidity
+                RelativeHumidity = spec.Meteo.RelativeHumidity,
+                AveragingTimeS = spec.Meteo.AveragingTimeS,
+                StabilityIndex = ParseStabilityIndex(spec.Meteo.Stability)
             };
 
             // Wind field (acts as the meteo carrier; only used for CFD pairs)
@@ -395,7 +397,20 @@ namespace DisperSim3D.Validation
         {
             if (string.IsNullOrEmpty(s)) return PasquillStabilityClass.D;
             PasquillStabilityClass c;
-            return Enum.TryParse(s, true, out c) ? c : PasquillStabilityClass.D;
+            if (Enum.TryParse(s, true, out c)) return c;
+            var m = System.Text.RegularExpressions.Regex.Match(s.Trim(), "^([A-Fa-f])\\s*[-/]\\s*([A-Fa-f])$");
+            if (m.Success && Enum.TryParse(m.Groups[1].Value.ToUpperInvariant(), out c)) return c;
+            return PasquillStabilityClass.D;
+        }
+
+        /// <summary>Fractional class index (A = 1 ... F = 6) for intermediate classes written as "D-E" or "D/E"; 0 otherwise.</summary>
+        private static double ParseStabilityIndex(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return 0;
+            var m = System.Text.RegularExpressions.Regex.Match(s.Trim(), "^([A-Fa-f])\\s*[-/]\\s*([A-Fa-f])$");
+            if (!m.Success) return 0;
+            double a = char.ToUpperInvariant(m.Groups[1].Value[0]) - 'A' + 1, b = char.ToUpperInvariant(m.Groups[2].Value[0]) - 'A' + 1;
+            return 0.5 * (a + b);
         }
 
         // ── Gaussian sampling ──
