@@ -27,7 +27,7 @@ from continuity; the section is circular (`Ry = Rz`) in the jet phase. Ground-co
 | Term | Form | Value |
 |---|---|---|
 | Jet entrainment | `e_jet ρa P |u_cld - u_a cosθ|`, `e_jet = 0.5 α1/√π` | α1 = 0.17 (Gaussian basis; gives the 5.4 d/x centreline decay) |
-| Cross-wind entrainment | `α2 ρa P |u_a sinθ|`, suppressed over `L_core = 6.4 D/(1 + 4.6 u_a/u_R)` and restored by `L_supp = (1 + k R) L_core` | α2 = 0.35, k = 1 |
+| Cross-wind entrainment | `α2 ρa P |u_a sinθ|`, suppressed over `L_core = 6.4 D/(1 + 4.6 u_a/u_R)` and restored by `L_supp = (1 + k R) L_core` (Morton / DNV); near-field air drag `Cd ρa P (u_a sinθ)²` phased out over `3 L_supp` | α2 = 0.35, k = 0.3, Cd = 0.39 (k fitted so that vertical jets follow the Pratte-Baines rise) |
 | Near-field passive (elevated) | Disselhorst: `ρa (1 - Wgnd/Ry) ε^(1/3) (ly^(4/3) + lz^(4/3))`, `ε = E(Z) u*³/(κ (zc + z0))`, eddy scales `min(R, 0.88 (zc+z0) L(Z))` | e_pas = 1 |
 | Heavy-gas top entrainment | `ρa (Wgnd/Ry) u_top 2 Weff`, `u_top = κ u_T/Φ(Ri*)`, `Ri* = g (ρ-ρa) Heff (1+hd)/(ρa u_T²)` | κ = 0.4; Φ = 1 (Ri* < 2.36), √(1+0.8Ri*)/1.7, Ri*/7 (> 14.72) |
 | Combination | aloft: jet + cross + near-field passive; grounded: near-field passive·(1-Wgnd/Ry) + max(jet + cross, heavy) | |

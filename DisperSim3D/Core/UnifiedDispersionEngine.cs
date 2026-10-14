@@ -31,7 +31,8 @@ namespace DisperSim3D.Core
         public double KappaTop { get; set; } = 0.4;   // heavy-gas top entrainment u_top = κ u*/Φ(Ri*)
         public double CE { get; set; } = 1.15;        // gravity spreading (Van Ulden)
         public double PoolAirFactor { get; set; } = 1.5;     // (vapour + air)/vapour mass leaving a pool / area source (pool vaporisation entrainment parameter)
-        public double SuppressionK { get; set; } = 1.0;      // k in L_supp = (1 + k R) L_core for the cross-wind entrainment suppression
+        public double SuppressionK { get; set; } = 0.3;      // k in L_supp = (1 + k R) L_core for the cross-wind entrainment suppression (Morton / DNV); 0.3 with the near-field drag reproduces the Pratte-Baines rise of vertical jets
+        public double NearFieldDragCd { get; set; } = 0.39;  // initial air-drag coefficient of the bent-over jet, phased out over 3 L_supp (Morton / DNV)
         public double RuPas { get; set; } = 0.1;      // transition: |u_cld/u_a - 1| < RuPas
         public double RrhoPas { get; set; } = 0.015;  // transition: |ρ/ρa - 1| < RrhoPas
         public double REPas { get; set; } = 0.3;      // transition: [1 - (Epas_nf + Ehvy)/Etot] < REPas
@@ -86,7 +87,7 @@ namespace DisperSim3D.Core
         // source description
         private bool _pool; private double _poolR, _poolRate;
         private bool _pointPassive;
-        private double _jetD, _jetU, _jetU0wind;
+        private double _jetD, _jetU, _jetU0wind, _rho0jet;
         // regime bookkeeping
         private SpreadMode _spread = SpreadMode.Circular;
         private double _xTr = double.NaN, _prevRyCirc = double.NaN, _prevS = double.NaN;
@@ -116,6 +117,7 @@ namespace DisperSim3D.Core
             if (TryEnv("UDM_CE", out v)) CE = v;
             if (TryEnv("UDM_POOLAIR", out v)) PoolAirFactor = v;
             if (TryEnv("UDM_KSUPP", out v)) SuppressionK = v;
+            if (TryEnv("UDM_CDRAG", out v)) NearFieldDragCd = v;
             if (TryEnv("UDM_RITRANS", out v)) RiPas = v;
             if (TryEnv("UDM_RHOCRIT", out v)) RrhoPas = v;
             if (TryEnv("UDM_REPAS", out v)) REPas = v;
@@ -247,7 +249,7 @@ namespace DisperSim3D.Core
                 double w0 = uExit > 0.05 ? U0 * dir.Z : 0.0;
                 if (u0 < 0.05 * Ua(zR) && Math.Abs(w0) < 0.05 * Ua(zR)) u0 = 0.05 * Ua(zR);
                 _jetD = d > 0 ? d : Math.Sqrt(4 * mg / (rho0 * Math.Max(U0, 0.1) * Math.PI));
-                _jetU = Math.Sqrt(u0 * u0 + w0 * w0); _jetU0wind = Ua(zR);
+                _jetU = Math.Sqrt(u0 * u0 + w0 * w0); _jetU0wind = Ua(zR); _rho0jet = rho0;
                 double A0 = mg / (rho0 * Math.Max(_jetU, 1e-3));
                 st.Ry = Math.Sqrt(A0 / Math.PI);     // circular; refined algebraically at the first step
                 st.Ix = mg * u0; st.Iz = mg * w0;
@@ -597,13 +599,14 @@ namespace DisperSim3D.Core
             // ---- entrainment terms (kg/m/s) ----
             double eJet = 0.5 * Alpha1 / Math.Sqrt(Math.PI);
             double Ejet = eJet * _rhoAir * p.Pabove * Math.Abs(p.ucld - uA * cosT);
-            double fsupp = 1.0;
+            double fsupp = 1.0, cdAir = 0.0;
             if (!_pool && !_pointPassive && _jetU > 0.05)
             {
-                double Lcore = 6.4 * _jetD / (1 + 4.6 * (_jetU0wind / _jetU));
-                double Rv = Math.Sqrt(p.rho * _jetU * _jetU / (_rhoAir * Math.Max(_jetU0wind * _jetU0wind, 1e-3)));
+                double Lcore = Math.Max(6.4 * _jetD / (1 + 4.6 * (_jetU0wind / _jetU)), 0.5 * _jetD);
+                double Rv = Math.Sqrt(_rho0jet * _jetU * _jetU / (_rhoAir * Math.Max(_jetU0wind * _jetU0wind, 1e-3)));
                 double Lsupp = (1 + SuppressionK * Rv) * Lcore;
                 fsupp = s <= Lcore ? 0 : (s >= Lsupp ? 1 : (s - Lcore) / Math.Max(Lsupp - Lcore, 1e-6));
+                cdAir = NearFieldDragCd * Math.Max(0.0, 1 - s / (3 * Lsupp));
             }
             double Ecross = fsupp * Alpha2 * _rhoAir * p.Pabove * uA * sinT * (1 - gndFrac);
             // near-field passive (Disselhorst): eddy scales from the centroid height and the Monin-Obukhov length
@@ -685,6 +688,13 @@ namespace DisperSim3D.Core
             if (!p.grounded)
             {
                 dIz += -G * (p.rho - _rhoAir) * p.A;                                                      // buoyancy
+                if (cdAir > 0 && sinT > 0)
+                {
+                    // near-field air drag on the bent-over jet (Ooms form), normal to the axis with a downwind component
+                    double Fd = cdAir * _rhoAir * p.Pabove * uA * uA * sinT * sinT;
+                    double sgn = Math.Sign(p.theta);
+                    dIx += Fd * sinT; dIz += -Fd * cosT * sgn;
+                }
                 if (gndFrac > 0 && p.uz < 0)
                 {
                     // ground impact force: perpendicular to the centreline, magnitude 2 Wgnd ρ u² |tanθ|
