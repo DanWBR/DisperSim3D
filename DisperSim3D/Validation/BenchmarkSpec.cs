@@ -143,6 +143,11 @@ namespace DisperSim3D.Validation
         /// upward). Default 0 keeps the legacy "horizontal, aligned with the wind" behaviour.</summary>
         public double ElevationDeg { get; set; }
 
+        /// <summary>Optional absolute release azimuth in degrees (0 = north / +y, 90 = east / +x, clockwise).
+        /// Null: the release points downwind. Set it to the wind "from" direction for a release against the wind
+        /// (the unified model integrates the jet upwind until it stalls and is blown back).</summary>
+        public double? ReleaseAzimuthDeg { get; set; }
+
         /// <summary>When true, the engines pre-dilute the release with an integral free-jet
         /// model up to the jet-to-plume transition (momentum length) instead of treating the
         /// source as a point: the Gaussian engine gets an initial sigma and a Briggs momentum

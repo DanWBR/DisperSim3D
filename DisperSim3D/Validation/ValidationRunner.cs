@@ -269,7 +269,7 @@ namespace DisperSim3D.Validation
                 StackDiameterM = effDiam,
                 ExitTemperatureK = effExitT,
                 ExitVelocityMPerS = effExitV,
-                ReleaseAzimuthDeg = releaseAz,
+                ReleaseAzimuthDeg = spec.Source.ReleaseAzimuthDeg ?? releaseAz,
                 ReleaseElevationDeg = spec.Source.ElevationDeg,
                 ReleaseHeightOffset = 0,
                 UseJetTransition = spec.Source.JetTransition

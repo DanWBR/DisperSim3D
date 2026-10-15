@@ -91,6 +91,7 @@ namespace DisperSim3D.Core
         // regime bookkeeping
         private SpreadMode _spread = SpreadMode.Circular;
         private double _xTr = double.NaN, _prevRyCirc = double.NaN, _prevS = double.NaN;
+        private bool _upwind;
         // aerosol / DWSIM thermodynamics
         private AerosolCloudThermo _thermo;
         private bool _aerosol, _dry;
@@ -138,7 +139,7 @@ namespace DisperSim3D.Core
         {
             ApplyEnvironmentOverrides();
             _path.Clear();
-            _spread = SpreadMode.Circular; _xTr = double.NaN; _prevRyCirc = double.NaN; _prevS = double.NaN;
+            _spread = SpreadMode.Circular; _xTr = double.NaN; _prevRyCirc = double.NaN; _prevS = double.NaN; _segments = null; _upwind = false;
             _pool = false; _pointPassive = false;
             _meteo = scenario.Meteo;
             _tAir = _meteo.AmbientTemperature > 0 ? _meteo.AmbientTemperature : 293.15;
@@ -245,9 +246,10 @@ namespace DisperSim3D.Core
             else
             {
                 double U0 = uExit > 0.05 ? uExit : Math.Max(Ua(zR), 0.5);
-                double u0 = uExit > 0.05 ? Math.Max(U0 * along, 0.0) : U0;
+                double u0 = uExit > 0.05 ? U0 * along : U0;                       // < 0: release against the wind
+                _upwind = u0 < 0;
                 double w0 = uExit > 0.05 ? U0 * dir.Z : 0.0;
-                if (u0 < 0.05 * Ua(zR) && Math.Abs(w0) < 0.05 * Ua(zR)) u0 = 0.05 * Ua(zR);
+                if (Math.Abs(u0) < 0.05 * Ua(zR) && Math.Abs(w0) < 0.05 * Ua(zR)) u0 = 0.05 * Ua(zR);
                 _jetD = d > 0 ? d : Math.Sqrt(4 * mg / (rho0 * Math.Max(U0, 0.1) * Math.PI));
                 _jetU = Math.Sqrt(u0 * u0 + w0 * w0); _jetU0wind = Ua(zR); _rho0jet = rho0;
                 double A0 = mg / (rho0 * Math.Max(_jetU, 1e-3));
@@ -510,12 +512,15 @@ namespace DisperSim3D.Core
             p.mcld = st.mc + st.ma;
             Thermo(st, out p.rho, out p.T);
             p.Yc = st.mc / p.mcld;
-            p.ux = Math.Max(st.Ix / p.mcld, 0.0); p.uz = st.Iz / p.mcld;
+            p.ux = st.Ix / p.mcld; p.uz = st.Iz / p.mcld;
             p.grounded = st.z <= 1e-9;
             if (p.grounded) p.uz = 0;
             p.ucld = Math.Max(Math.Sqrt(p.ux * p.ux + p.uz * p.uz), 0.1);
-            p.theta = Math.Atan2(p.uz, Math.Max(p.ux, 1e-6));
-            p.A = p.mcld / (p.rho * p.ucld);
+            p.theta = Math.Atan2(p.uz, Math.Abs(p.ux) < 1e-6 ? 1e-6 : p.ux);
+            // release against the wind: once the jet has stalled the gas is swept back at the wind speed, so the
+            // cross-section follows continuity with at least the ambient velocity (u_cld alone would blow up at the stall)
+            double uAdv = _upwind ? Math.Max(p.ucld, Ua(Math.Max(st.z, 0.0))) : p.ucld;
+            p.A = p.mcld / (p.rho * uAdv);
             double rel = Math.Max((p.rho - _rhoAir) / _rhoAir, 0.0);
             p.m = ExponentM(rel); p.Cm = Gam(1 + 1 / p.m);
             // vertical exponent needs Heff: iterate n, Rz, hd
@@ -711,7 +716,7 @@ namespace DisperSim3D.Core
             // ---- cross-wind spreading ----
             double dRy = 0;
             double gP = (p.rho - _rhoAir) / p.rho;
-            double heavyRate = (gndFrac > 0 && gP > 0) ? CE / (p.Cm * Math.Max(p.ux, 0.2)) * Math.Sqrt(G * gP * p.Heff * (1 + p.hd)) : 0;
+            double heavyRate = (gndFrac > 0 && gP > 0) ? CE / (p.Cm * Math.Max(Math.Abs(p.ux), 0.2)) * Math.Sqrt(G * gP * p.Heff * (1 + p.hd)) : 0;
             double chordRate = 0;
             if (_pool && st.x < 0 && Math.Abs(st.x) < _poolR && p.Ry < HalfChord(st.x)) chordRate = -st.x / HalfChord(st.x);
             switch (_spread)
@@ -783,7 +788,7 @@ namespace DisperSim3D.Core
                 {
                     double circRate = (p.Ry - _prevRyCirc) / Math.Max(s - _prevS, 1e-9);
                     double gP = (p.rho - _rhoAir) / p.rho;
-                    double heavyRate = gP > 0 ? CE / (p.Cm * Math.Max(p.ux, 0.2)) * Math.Sqrt(G * gP * p.Heff * (1 + p.hd)) : 0;
+                    double heavyRate = gP > 0 ? CE / (p.Cm * Math.Max(Math.Abs(p.ux), 0.2)) * Math.Sqrt(G * gP * p.Heff * (1 + p.hd)) : 0;
                     if (heavyRate > circRate || (p.grounded && gP <= 0)) _spread = SpreadMode.Heavy;
                 }
                 _prevRyCirc = p.Ry; _prevS = s;
@@ -816,8 +821,56 @@ namespace DisperSim3D.Core
         }
 
         // ================================================================ evaluation
-        /// <summary>Finds the centreline node nearest to the point (exact search over the path, pruned with the monotonic x)
-        /// and returns the crosswind offset and the offset perpendicular to the local trajectory in the (x, z) plane.</summary>
+        private List<(int i0, int i1)> _segments;
+
+        /// <summary>Splits the path into segments of monotonic x (one for a downwind release; two or more when the jet
+        /// goes against the wind, stalls and comes back).</summary>
+        private void EnsureSegments()
+        {
+            if (_segments != null && _segments.Count > 0 && _segments[_segments.Count - 1].i1 == _path.Count - 1) return;
+            _segments = new List<(int, int)>();
+            int n = _path.Count; if (n == 0) return;
+            int start = 0; int dir = 0;
+            for (int i = 1; i < n; i++)
+            {
+                double d = _path[i].x - _path[i - 1].x;
+                int sd = d > 1e-9 ? 1 : (d < -1e-9 ? -1 : 0);
+                if (sd == 0) continue;
+                if (dir == 0) dir = sd;
+                else if (sd != dir) { _segments.Add((start, i - 1)); start = i - 1; dir = sd; }
+            }
+            _segments.Add((start, n - 1));
+        }
+
+        private int NearestInSegment(int i0, int i1, double xLoc, double z)
+        {
+            bool inc = _path[i1].x >= _path[i0].x;
+            int lo = i0, hi = i1;
+            while (hi - lo > 1)
+            {
+                int mid = (lo + hi) / 2;
+                bool less = inc ? _path[mid].x < xLoc : _path[mid].x > xLoc;
+                if (less) lo = mid; else hi = mid;
+            }
+            int best = lo; double bd = double.MaxValue;
+            for (int i = lo; i >= i0; i--)
+            {
+                double ex = _path[i].x - xLoc; if (ex * ex > bd) break;
+                double ez = _path[i].z - z, d2 = ex * ex + ez * ez;
+                if (d2 < bd) { bd = d2; best = i; }
+            }
+            for (int i = lo + 1; i <= i1; i++)
+            {
+                double ex = _path[i].x - xLoc; if (ex * ex > bd) break;
+                double ez = _path[i].z - z, d2 = ex * ex + ez * ez;
+                if (d2 < bd) { bd = d2; best = i; }
+            }
+            return best;
+        }
+
+        /// <summary>Finds, on every monotonic segment of the path, the centreline node nearest to the point (exact search pruned
+        /// with the monotonic x) and keeps the node whose profile gives the largest mass fraction at the point; returns the
+        /// crosswind offset and the offset perpendicular to the local trajectory in the (x, z) plane.</summary>
         private bool Locate(double x, double y, double z, out Node nd, out double yLoc, out double dPerp)
         {
             nd = default; yLoc = 0; dPerp = 0;
@@ -825,31 +878,29 @@ namespace DisperSim3D.Core
             double dx = x - _originX, dy = y - _originY;
             double xLoc = dx * _windDirX + dy * _windDirY;
             yLoc = dx * _windDirY - dy * _windDirX;
-            if (xLoc < _path[0].x - _path[0].Ry) return false;
-            int n = _path.Count;
-            int lo = 0, hi = n - 1;
-            while (hi - lo > 1) { int mid = (lo + hi) / 2; if (_path[mid].x < xLoc) lo = mid; else hi = mid; }
-            int best = lo; double bd = double.MaxValue;
-            for (int i = lo; i >= 0; i--)
+            EnsureSegments();
+            int n = _path.Count; double bestVal = -1; bool found = false;
+            foreach (var seg in _segments)
             {
-                double ex = _path[i].x - xLoc; if (ex * ex > bd) break;
-                double ez = _path[i].z - z, d2 = ex * ex + ez * ez;
-                if (d2 < bd) { bd = d2; best = i; }
+                int best = NearestInSegment(seg.i0, seg.i1, xLoc, z);
+                var cand = _path[best];
+                int j0 = Math.Max(best - 1, seg.i0), j1 = Math.Min(best + 1, seg.i1);
+                // distance to the local polyline (the two sub-segments around the nearest node): equals the perpendicular
+                // offset inside the path and the distance to the end node beyond the nozzle or the stall point
+                double dp = cand.grounded ? 0 : Math.Min(DistToSegment(j0, best, xLoc, z), DistToSegment(best, j1, xLoc, z));
+                double val = cand.Yc * Profile(cand, yLoc, z, dp);
+                if (val > bestVal) { bestVal = val; nd = cand; dPerp = dp; found = true; }
             }
-            for (int i = lo + 1; i < n; i++)
-            {
-                double ex = _path[i].x - xLoc; if (ex * ex > bd) break;
-                double ez = _path[i].z - z, d2 = ex * ex + ez * ez;
-                if (d2 < bd) { bd = d2; best = i; }
-            }
-            nd = _path[best];
-            int i0 = Math.Max(best - 1, 0), i1 = Math.Min(best + 1, n - 1);
-            double tx = _path[i1].x - _path[i0].x, tz = _path[i1].z - _path[i0].z;
-            double tl = Math.Sqrt(tx * tx + tz * tz);
-            if (tl < 1e-12 || nd.grounded) { tx = 1; tz = 0; } else { tx /= tl; tz /= tl; }
-            double rx = xLoc - nd.x, rz = z - nd.z;
-            dPerp = Math.Abs(rx * tz - rz * tx);
-            return true;
+            return found;
+        }
+
+        private double DistToSegment(int ia, int ib, double x, double z)
+        {
+            double ax = _path[ia].x, az = _path[ia].z, bx = _path[ib].x, bz = _path[ib].z;
+            double vx = bx - ax, vz = bz - az, l2 = vx * vx + vz * vz;
+            double t = l2 < 1e-18 ? 0 : Math.Max(0, Math.Min(1, ((x - ax) * vx + (z - az) * vz) / l2));
+            double px = ax + t * vx - x, pz = az + t * vz - z;
+            return Math.Sqrt(px * px + pz * pz);
         }
 
         private static double Profile(Node nd, double yLoc, double z, double dPerp)

@@ -56,6 +56,13 @@ the cloud is kept at least as wide as the pool chord, initial air `(1.5 - 1)·va
 - **Fractional stability classes** ("D-E"): the class-dependent coefficients are interpolated.
 - **Two-phase releases**: the flashed liquid is carried as aerosol; at every step a DWSIM PH flash of
   {component, N2, O2, H2O} (humid air) gives temperature, liquid fraction and density. No rainout yet.
+- **Releases against the wind** (`source.releaseAzimuthDeg` pointing upwind in the bench): the jet is integrated with a
+  negative along-wind velocity; the entrained air, moving with the wind, decelerates it until it stalls (`ux = 0`),
+  after which the cloud is carried downwind over the source. Past the stall the cross-section follows continuity with
+  at least the ambient wind speed (`A = m/(ρ max(u_cld, u_a))`), since `u_cld` alone vanishes there. The path is split
+  into monotonic-x segments and the sampler takes, at every point, the largest contribution of the outgoing and
+  returning passes, measuring the offset as the distance to the local polyline (so points beyond the nozzle or the
+  stall carry no concentration).
 
 Calibration overrides (environment): `UDM_ALPHA1`, `UDM_ALPHA2`, `UDM_EPAS`, `UDM_KTOP` (κ), `UDM_CE`, `UDM_POOLAIR`,
 `UDM_KSUPP`, `UDM_RITRANS`, `UDM_RHOCRIT`, `UDM_REPAS`, `UDM_RUPAS`, `UDM_RTR`, `UDM_TAV`, `UDM_PASSEQ=0`,
@@ -64,7 +71,8 @@ Calibration overrides (environment): `UDM_ALPHA1`, `UDM_ALPHA2`, `UDM_EPAS`, `UD
 the continuous-release benchmarks.
 
 Bench inputs: `meteo.averagingTimeS` (600 s default = basis of the σy correlations; 1-18.75 s = instantaneous),
-`meteo.stability` may be "D-E", `meteo.relativeHumidity`.
+`meteo.stability` may be "D-E", `meteo.relativeHumidity`, `source.releaseAzimuthDeg` (absolute, 0 = north; default
+downwind; set to the wind "from" direction for a release against the wind).
 
 ## Validation (`--validate ... -s UnifiedDispersion`, acceptance relative to the FLACS cohort statistics)
 
