@@ -555,6 +555,33 @@ Two things are left over, neither blocking:
   measured on its own makes matters worse here, so the combination is what
   would have to be tried, not the parts.
 
+## Unified integral model (2026-10-14)
+
+The integral solver is scored on its own, against the same FLACS cohort
+acceptance ranges, over the continuous-release benches it can run (`-s
+UnifiedDispersion`). Observations of Burro 3/7, Coyote 3/5 and Maplin Sands
+27 were replaced by the PHMSA LNG Model Validation Database arc maxima (short
+averaging), so these rows are not comparable with the OpenFOAM rows above,
+which still score the digitised long-average values.
+
+| Benchmark | Type | MG | FAC2 | Status |
+|---|---|---:|---:|:-:|
+| Burro 3 / 7 | LNG on water, C / D, 1 s data | 1.02 / 0.94 | 1.00 | PASS |
+| Coyote 3 / 5 | LNG on water, C, 1 s data | 0.70 / 0.90 | 0.67 / 1.00 | PASS |
+| Falcon 1 / 3 / 4 | LNG in a fenced basin | 0.75 / 0.58 / 0.55 | 0.67 | PASS |
+| Maplin Sands 27 | LNG on the sea, 3 s data | 1.74 | 0.60 | FAIL (FAC2 0.64 needed; Phast: MG 3.9) |
+| Kit Fox U5-2 | CO₂ area source, 20 s | 1.18 | 0.75 | PASS |
+| Desert Tortoise 4 | NH₃ two-phase jet, E (aerosol path) | 1.83 | 0.33 | PASS |
+| Prairie Grass 11-C / 22-D / 29 (D-E) / 35-E | passive SO₂, 10 min | 1.30 / 1.43 / 0.68 / 1.37 | 0.8-1.0 | PASS |
+| Prairie Grass 07-B | passive SO₂, strongly convective | 0.29 | 0.00 | FAIL (Phast: MG 0.28) |
+| Burro 5 / 6 | not in the PHMSA MVD; digitised values | - | - | not counted |
+
+**13 of 15 counted.** Aggregate |ln MG| 0.39, FAC2 0.74. The two failures are
+convective lofting of a surface release (Prairie Grass 7) and the mid-field
+dense persistence of Maplin 27; neither is a regime of the other benches.
+Closures and the additions beyond the published UDM are documented on the
+[unified integral model page](unified-dispersion-model).
+
 ## Methodology notes
 
 ### SPM definitions (Chang & Hanna 2004; Vu 2019 §1.4.2)

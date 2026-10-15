@@ -10,8 +10,8 @@ nav_order: 5
 1. TOC
 {:toc}
 
-DisperSim 3D ships three solver families: analytical, OpenFOAM CFD and
-FluidX3D GPU LBM. Each has trade-offs in fidelity, runtime and the kinds of
+DisperSim 3D ships four solver families: analytical, the unified integral
+model, OpenFOAM CFD and FluidX3D GPU LBM. Each has trade-offs in fidelity, runtime and the kinds of
 release physics it can handle.
 
 ## Decision matrix
@@ -19,6 +19,7 @@ release physics it can handle.
 | Need | Best fit |
 |---|---|
 | Screening / preliminary sizing | **GaussianPuff** or **GaussianPlume**  -  seconds, no GPU/CFD |
+| Continuous release of any density on open terrain (jet, dense or cryogenic cloud, two-phase) | **UnifiedDispersion**  -  integral model, seconds, validated on 15 field trials |
 | Fast iteration on a steady design | **FluidX3DWind + FluidX3DDispersionSteady**  -  converges in tens of seconds on GPU |
 | Transient release with simple geometry | **FluidX3DDispersion** (LES on GPU) |
 | Fire plume / buoyant hot release | **FluidX3DFire** (Boussinesq tracer) or **rhoReactingBuoyantFoam** |
@@ -33,6 +34,7 @@ The full `CfdSolverType` enum:
 |---|---|---|
 | `GaussianPlume` | Analytical, steady | [`GaussianPlumeEngine.cs`](https://github.com/DanWBR/DisperSim3D/blob/main/DisperSim3D/Core/GaussianPlumeEngine.cs) |
 | `GaussianPuff` | Analytical, transient | [`GaussianPuffEngine.cs`](https://github.com/DanWBR/DisperSim3D/blob/main/DisperSim3D/Core/GaussianPuffEngine.cs) |
+| `UnifiedDispersion` | Integral model, steady (jet / heavy gas / passive) | [`UnifiedDispersionEngine.cs`](https://github.com/DanWBR/DisperSim3D/blob/main/DisperSim3D/Core/UnifiedDispersionEngine.cs) |
 | **`RhoReactingBuoyantFoam`** | **Universal CFD**  -  compressible + buoyant + multi-species | `OpenFoamCaseGenerator.cs` |
 | `FluidX3DWind` | GPU LBM wind field | [`FluidX3DWindFieldRunner.cs`](https://github.com/DanWBR/DisperSim3D/blob/main/DisperSim3D/Core/FluidX3DWindFieldRunner.cs) |
 | `FluidX3DDispersion` | GPU LBM wind + CPU tracer | [`FluidX3DRunner.cs`](https://github.com/DanWBR/DisperSim3D/blob/main/DisperSim3D/Core/FluidX3DRunner.cs) |
@@ -44,6 +46,7 @@ The six-character `SolverCode` for headless / CLI / file-format consumers:
 | Code | Solver |
 |---|---|
 | `GAUSSP` / `GAUSSPL` | Gaussian Puff / Plume |
+| `UDMCNT` | Unified integral model (continuous) |
 | `RHRBFM` | rhoReactingBuoyantFoam |
 | `FX3DWN` | FluidX3D wind field |
 | `FX3DDP` | FluidX3D dispersion (transient) |
@@ -102,6 +105,33 @@ with $V_{\mathrm{target}} \approx 100\ \mathrm{m/s}$.
 physical orifice values for non-choked flow and fall back to Birch only when
 the leak is sonic.
 
+## Unified integral model
+
+`CfdSolverType.UnifiedDispersion` integrates one set of ordinary differential
+equations along the cloud centreline, from the source through the momentum-jet,
+touchdown, heavy-gas (grounded, gravity-spreading) and passive regimes, on the
+formulation of the DNV UDM (Phast 8.5 public documentation): similarity
+profiles with density- and stability-dependent exponents, jet and cross-wind
+entrainment with the Morton / DNV near-field suppression, Disselhorst
+near-field passive entrainment, heavy-gas top entrainment with the
+Richardson-number function, far-field growth from the McMullen and Hosker
+sigmas, the four-criterion transition to passive dispersion, ground drag and
+heat transfer and a Monin-Obukhov wind profile. Releases may point downwind,
+upward or against the wind (the jet stalls and is blown back over the
+source). Two-phase sources carry the flashed liquid as aerosol with a DWSIM
+PH flash of the cloud (gas, air, water) at every step.
+
+There is no grid: a case runs in about a second, which makes the model the
+natural choice for continuous releases on open terrain where the Gaussian
+correlations do not apply (dense, cryogenic or high-momentum sources) and a
+CFD run is not warranted. It is reached through the validation harness and
+the engine API (`UnifiedDispersionEngine`); it is not yet offered as a
+project simulation in the desktop UI.
+
+Formulation, closure constants, the additions beyond the UDM and the
+15-trial validation table are on the
+[unified integral model page](unified-dispersion-model).
+
 ## OpenFOAM solvers
 
 See the [OpenFOAM section](#openfoam-pipeline) below for case generation,
@@ -142,6 +172,7 @@ Per-solver presets, configurable in code via `CfdConfigurationPresets`:
 | Solver | UseAtmBL | Sc_t | C_ε3 | σ_ε | Ground T BC |
 |---|---|---|---|---|---|
 | Gaussian Plume / Puff | n/a | n/a | n/a | n/a | n/a |
+| UnifiedDispersion | n/a (own Monin-Obukhov profile) | n/a | n/a | n/a | McAdams / Holman ground heat flux |
 | **RhoReactingBuoyantFoam** | true | 0.7 | -0.33 | 1.167 | Adiabatic |
 
 When the source gas has `IsCryogenic = true`, the preset bumps Sc_t to 0.15

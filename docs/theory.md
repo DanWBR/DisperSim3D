@@ -226,6 +226,31 @@ and the result is capped at the mixing height. Wind speed is floored at
 
 ---
 
+### 2.5 Unified integral model
+
+**File**: `Core/UnifiedDispersionEngine.cs`, `Core/AerosolCloudThermo.cs`
+
+Where the Gaussian engines prescribe σ(x) from the stability class, the
+unified model integrates the cloud itself: air mass flow, horizontal and
+vertical momentum fluxes, enthalpy flux, centreline position and crosswind
+radius along the arc length, with the concentration profile
+$c = c_0 \exp(-(|y|/R_y)^m)\exp(-(|z-z_c|/R_z)^n)$ whose exponents follow
+the density excess and the stability. Entrainment is the sum of the jet,
+cross-wind, near-field passive, heavy-gas top and far-field passive terms;
+the far-field term takes over through the four-criterion transition of the
+DNV UDM. Buoyancy, ground drag, ground heat transfer and gravity spreading
+act on the grounded cloud. Releases against the wind decelerate to a stall
+and are carried back downwind. Two-phase sources are integrated with a DWSIM
+pressure-enthalpy flash of the gas / air / water mixture at every step, so
+the aerosol, its evaporation and the temperature are part of the state.
+
+Every equation, closure constant, the additions beyond the published UDM and
+the validation table are on the
+[unified integral model page](unified-dispersion-model). That page is the
+authority for this solver.
+
+---
+
 ## 3. Source terms
 
 ### 3.1 Orifice mass flow
@@ -730,11 +755,12 @@ Which model is defensible for a given release:
 | Situation | Use | Why |
 |---|---|---|
 | Neutrally buoyant gas, flat open terrain, screening | Gaussian plume or puff | The correlations were fitted to exactly this |
+| Continuous release of any density on open terrain, incl. jets and two-phase sources | Unified integral model, §2.5 | Jet, dense-gas and passive regimes in one trajectory; 13 of 15 field trials |
 | Dense or cryogenic gas | OpenFOAM `rhoReactingBuoyantFoam` | Needs compressibility and buoyancy; §1.2 has neither |
 | Obstacle array, plant congestion | OpenFOAM, or FluidX3D with obstacles | Gaussian σ curves carry no geometry |
 | Sonic jet, area classification | FluidX3D with the expanded source of §3.3 | Resolves the near field |
 | Fast parametric sweep over many cases | FluidX3D wind field plus tracer | Seconds per case, wind solved once |
-| Flashing or two-phase release | **None of them** | No rainout or aerosol model exists — §9 |
+| Flashing or two-phase release | Unified integral model (aerosol path) | Carries the flashed liquid and flashes the cloud each step; no rainout — §9 |
 
 ---
 
@@ -743,10 +769,10 @@ Which model is defensible for a given release:
 Stated plainly, because a consequence model with undocumented limits cannot
 support a safety case.
 
-- **No two-phase, aerosol or rainout physics in the dispersion step.** The
-  jet-source thermodynamics exist but do not feed the dispersion solvers.
-  Ammonia, supercritical CO₂ and other flashing releases are outside the
-  validated envelope.
+- **No rainout or pool re-evaporation.** The unified integral model carries
+  the flashed liquid as aerosol (Desert Tortoise 4 passes); the Gaussian, CFD
+  and LBM paths have no aerosol physics at all. Ammonia-water aerosol and
+  supercritical CO₂ remain outside the validated envelope.
 - **No vapour cloud explosion model.** Flash fire gives flame arrival, never
   overpressure. No TNT equivalence, no TNO multi-energy, no Baker-Strehlow.
 - **No cross-wind flame bending**, §6.2.

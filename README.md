@@ -43,6 +43,7 @@ DisperSim 3D organizes work around a **Project** with discrete sections shown in
 
 - **Gaussian Puff Engine** with Pasquill-Gifford stability classes (A-F), Slade 1968 puff coefficients, ground reflection, mixing-height lid
 - **Gaussian Plume Engine** for steady-state continuous releases
+- **Unified integral dispersion model** (`CfdSolverType.UnifiedDispersion`) — one set of ODEs along the cloud centreline on the DNV UDM 8.5 formulation: momentum jet (co-flow, vertical or against the wind), touchdown, heavy-gas gravity spreading, passive far field, aerosol thermodynamics through the DWSIM core; no grid, seconds per case. Scored on 15 field trials (Burro, Coyote, Falcon, Maplin Sands, Kit Fox, Desert Tortoise, Prairie Grass): 13 pass. See [docs/unified-dispersion-model.md](docs/unified-dispersion-model.md)
 - **Briggs plume rise** (buoyant and momentum-dominated)
 - **Jet momentum modeling** using TNO Yellow Book correlations
 - **High-pressure leak model** with choked/unchoked flow and inventory decay
@@ -94,7 +95,7 @@ GPU selection (multi-GPU systems) and on-demand VRAM/RAM/disk sizing live under 
 ### Analysis
 
 - **Flammable cloud volume** between LFL and UFL
-- **Validation harness** — compare any solver against published benchmarks via `.dsbench` JSON files; computes Hanna SPMs (MRB, RMSE, FAC2, MG, VG) with pass/fail per metric. Available via `Dispersion → Validate against Benchmarks…` (UI) or `DisperSim3D.CLI --validate <file-or-dir>` (CI-friendly). Ships with 5 starter benchmarks under `benchmarks/`.
+- **Validation harness** — compare any solver against published benchmarks via `.dsbench` JSON files; computes Hanna SPMs (MRB, RMSE, FAC2, MG, VG) with pass/fail per metric. Available via `Dispersion → Validate against Benchmarks…` (UI) or `DisperSim3D.CLI --validate <file-or-dir>` (CI-friendly). Ships with 30+ benchmarks under `benchmarks/`; `-s UnifiedDispersion` runs any continuous-release bench through the integral model.
 - **Monitor points** sampling concentration in real time
 - **Gas detector optimization** via Set Covering Problem (Vianna 2019), with both greedy and exact Balas branch-and-bound solvers, Cardinal or Moore neighborhoods, and on-demand result loading from saved CFD cases
 - **Dispersion Studies** — curated collections of related simulations bundled into a single object with a detection criterion (`PercentLfl`/`Ppm`/`MoleFraction`/`MassFraction`/`Temperature`/`ThermalRadiation` × threshold)
@@ -157,7 +158,7 @@ DisperSim3D/                       # Calculation engine — multi-targets net10.
 │   ├── WindFieldScenario.cs       # Wind field + visualization
 │   ├── Simulation.cs              # Snapshot-based runnable
 │   ├── Decoration3D.cs            # Imported geometry (Model3D field typed object — UI casts to Model3DGroup)
-│   ├── CfdSolverType.cs           # Solver enum (Gaussian, OpenFOAM, FluidX3D)
+│   ├── CfdSolverType.cs           # Solver enum (Gaussian, unified integral, OpenFOAM, FluidX3D)
 │   ├── CfdConfiguration.cs        # OpenFOAM settings
 │   ├── DispersionStudy.cs         # Curated simulation collection + ScenarioRisk weights
 │   ├── DetectorAllocation.cs      # Placement config + results (coverage + risk reduction)
@@ -168,6 +169,9 @@ DisperSim3D/                       # Calculation engine — multi-targets net10.
 ├── Core/                          # Engines (all portable)
 │   ├── GaussianPuffEngine.cs
 │   ├── GaussianPlumeEngine.cs
+│   ├── UnifiedDispersionEngine.cs # UDMCNT integral model: jet / heavy gas / passive, no grid
+│   ├── AerosolCloudThermo.cs      # Two-phase cloud thermodynamics (DWSIM PH flash with humid air)
+│   ├── JetTransitionModel.cs      # Free-jet momentum length, σ₀ and Briggs rise for the Gaussian jet mode
 │   ├── HighPressureLeakModel.cs   # incl. Birch & Schefer expanded source
 │   ├── FlammableCloudCalculator.cs
 │   ├── DetectorOptimizer.cs       # Vianna 2019 SCP (exact + greedy)

@@ -384,6 +384,13 @@ ways to invoke it:
 - API: `DisperSim3D.Validation.ValidationRunner.Run(spec, envCfg, log)`
   returns a `ValidationReport` for custom harnesses.
 
+`-s <solver>` overrides the solver named in the file, so one bench can be
+scored with several engines. `DisperSim3D.CLI --validate benchmarks/ -s UnifiedDispersion`
+runs the continuous-release benches through the integral model;
+`scripts/udm_calibrate.py` wraps that for the 15-trial set and accepts
+closure overrides (`UDM_ALPHA1=0.2 ...`). Benches whose `dataConfidence` is
+`Unverified` are run and printed but never counted.
+
 ## Hanna Statistical Performance Measures
 
 The Hanna SPMs are implemented in
@@ -514,10 +521,10 @@ recipe plus the observed values from the cited paper. Schema version is
 
 | Field | Purpose |
 |---|---|
-| `name`, `citation`, `description` | Provenance. |
-| `source` | Gas, position, release rate, pool or stack diameter, exit conditions. |
+| `name`, `citation`, `description`, `dataConfidence` | Provenance; `Unverified` benches run but are not counted. |
+| `source` | Gas, position, release rate, pool or stack diameter, exit conditions, `elevationDeg` (0 horizontal, 90 vertical), `releaseAzimuthDeg` (absolute; set to the wind "from" direction for a release against the wind), `jetTransition`. |
 | `source.twoPhase` | Optional. Clapeyron or PH flash recipe (see [Two-phase pressurized source](#two-phase-pressurized-source)). |
-| `meteo` | Wind speed and direction, Pasquill class, ambient T and P, `roughnessLengthM`. |
+| `meteo` | Wind speed and direction, Pasquill class (also intermediate, `"D-E"`), ambient T and P, `roughnessLengthM`, `relativeHumidity`, `averagingTimeS` (600 s default; 1-18.75 s for short-average / instantaneous data). |
 | `domain` | Size, grid resolution, simulation duration, time step. |
 | `solver` | String matching `CfdSolverType` (for example, `RhoReactingBuoyantFoam`). |
 | `concentrationKind` | `PeakOverTime` or `FinalSnapshot`. |

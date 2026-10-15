@@ -33,10 +33,14 @@ CLI and Avalonia verification are plain `net10.0`, and FluidX3D builds as
 Windows `FluidX3D.dll`. Validated end-to-end on Ubuntu 24.04 / WSL2  -  see
 [Getting started](getting-started) for the cross-platform recipe.
 
-It combines three solver families inside a single project-centric workflow:
+It combines four solver families inside a single project-centric workflow:
 
 - **Analytical**  -  Gaussian puff, Gaussian plume, Briggs plume rise, TNO
   Yellow Book jets, Birch &amp; Schefer expanded source for sonic releases.
+- **Unified integral model**  -  DNV-UDM-style centreline integration for
+  continuous releases: momentum jet (also against the wind), heavy-gas
+  spreading, passive far field and aerosol thermodynamics, seconds per case,
+  13 of 15 field trials passed.
 - **CFD with OpenFOAM v2512+**  -  `rhoReactingBuoyantFoam` (universal
   compressible + buoyant + multi-species solver), with Fiates &amp;
   Vianna 2016 / Vu 2019 / Mack &amp; Spruijt 2013 atmospheric BCs baked in.
@@ -61,6 +65,7 @@ dispersion modelling, area classification and gas-detector siting studies.
 | [Getting started](getting-started) | Install requirements, build, first project walkthrough |
 | [Workflow](workflow) | Project-centric model, tree sections, snapshot semantics |
 | [Solvers](solvers) | Decision matrix, analytical, OpenFOAM and FluidX3D pages |
+| [Unified integral model](unified-dispersion-model) | UDM formulation, closures, additions, validation on 15 field trials |
 | [Visualization](visualization) | Isosurfaces, contour planes, streamlines, wind fields, playback |
 | [Dispersion Studies &amp; Detector Allocation](studies-detectors) | Curated collections and greedy max-coverage placement |
 | [Risk-Reduction Allocation](risk-allocation) | Greedy MRR + embedded IOGP 434-01 leak-frequency database |

@@ -23,9 +23,10 @@ DisperSim 3D is an open-source desktop application for simulating accidental gas
 
 - 3D scene editor with imported CAD geometry (obstacles, equipment, buildings)
 - Project model centred on reusable Gas Library, Sources, Wind Fields, Simulations
-- Four solver families:
+- Five solver families:
   - **Gaussian Puff** (transient analytical)
   - **Gaussian Plume** (steady-state analytical with bent-plume trajectory)
+  - **Unified integral model** (`UnifiedDispersion`, code `UDMCNT`): DNV-UDM-style centreline ODEs — momentum jet (downwind, vertical or against the wind), heavy-gas spreading, passive far field, aerosol thermodynamics via the DWSIM core; no grid, validation harness only
   - **CFD** (OpenFOAM v2512+): **rhoReactingBuoyantFoam** — the universal compressible + buoyant + multi-species solver (Fiates & Vianna 2016)
   - **GPU LBM** (FluidX3D): `FluidX3DWind`, `FluidX3DDispersion`, `FluidX3DDispersionSteady`, `FluidX3DFire` — invoked in-process via `FluidX3D.dll` and a C-ABI bridge, no temp-file round-trip
 - High-pressure leak modelling with **Birch & Schefer expanded-diameter** for sonic releases
@@ -103,7 +104,8 @@ A handful of formerly engine-resident methods that depend on WPF (`Decoration3D.
 Solvers (Core/)                          External pipeline
 - GaussianPuffEngine                     - OpenFoamCaseGenerator
 - GaussianPlumeEngine                    - OpenFoamRunner
-- WindFieldRunner                        - OpenFoamResultReader
+- UnifiedDispersionEngine                - OpenFoamResultReader
+- WindFieldRunner
 - SimulationRunner                       - SimulationManager (queue)
 - DetectorOptimizer
 ```
@@ -148,6 +150,15 @@ Solvers (Core/)                          External pipeline
 - For each source, `BendLength = max(R²·D·π/4, 10·D)` clamped to 80 % of domain
 - σ_y, σ_z evaluated along the curved centerline using Pasquill-Gifford
 - When a `WindField3D` is bound, wind direction and speed at the source position are interpolated from the field instead of using the uniform meteo
+
+### 3.2b Unified integral model (steady, continuous)
+
+**File**: [`Core/UnifiedDispersionEngine.cs`](DisperSim3D/Core/UnifiedDispersionEngine.cs), [`Core/AerosolCloudThermo.cs`](DisperSim3D/Core/AerosolCloudThermo.cs)
+
+- One set of ODEs along the cloud centreline (air mass flow, momentum fluxes, enthalpy flux, position, crosswind radius) on the DNV UDM 8.5 formulation: similarity profiles with density/stability exponents, jet + cross-wind + near-field passive + heavy-gas top + far-field passive entrainment, four-criterion transition to passive, gravity spreading, ground drag and heat, Monin-Obukhov wind profile
+- Sources: jets (any elevation; `ReleaseAzimuthDeg` against the wind integrates to the stall and back downwind), pools / area sources, passive point sources; two-phase sources carry aerosol with a DWSIM PH flash of {gas, N2, O2, H2O} per step
+- Reached through `ValidationRunner` (`--validate ... -s UnifiedDispersion`) and the engine API; `CfdConfigurationPresets` and `MemoryEstimator` have arms for it; not yet selectable as a project simulation in the UI
+- Closure overrides through `UDM_*` environment variables, centreline dump with `UDM_DUMP=<csv>`; `scripts/udm_calibrate.py` scores the 15 field-trial benches (13 pass). Full documentation: [docs/unified-dispersion-model.md](docs/unified-dispersion-model.md)
 
 ### 3.3 CFD — solver gallery
 

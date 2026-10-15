@@ -158,7 +158,8 @@ detector allocations (incl. RRF for risk-strategy runs), wind rose,
 monitor points, and gas detectors.
 
 `-s <solver>` accepts the analytical names (`plume`, `puff`), the OpenFOAM
-solver (`rhoReactingBuoyantFoam`) **and the FluidX3D family** (`fluidx3dDispersion`, `fluidx3dDispersionSteady`,
+solver (`rhoReactingBuoyantFoam`), the integral model (`UnifiedDispersion`,
+validation harness only) **and the FluidX3D family** (`fluidx3dDispersion`, `fluidx3dDispersionSteady`,
 `fluidx3dFire`). FluidX3D solvers run in-process via the GPU bridge  -  no
 OpenFOAM environment required.
 
@@ -170,6 +171,7 @@ for QRA reporting pipelines.
 
 ```text
 DisperSim3D.CLI --list-gpus                                      # enumerate OpenCL devices
+DisperSim3D.CLI --validate benchmarks/ -s UnifiedDispersion      # score the field trials with the integral model (seconds)
 DisperSim3D.CLI --iogp-selftest                                  # verify embedded IOGP 434-01 table
 DisperSim3D.CLI --geometry-selftest                              # verify portable Point3D / Vector3D semantics
 DisperSim3D.CLI --list-iogp FlangedJoint                         # dump one IOGP datasheet

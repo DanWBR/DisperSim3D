@@ -1,3 +1,9 @@
+---
+layout: default
+title: Unified integral model
+nav_order: 7
+---
+
 # Unified integral dispersion model (`CfdSolverType.UnifiedDispersion`)
 
 Steady, continuous release; no grid. One set of ordinary differential equations is integrated along the cloud
