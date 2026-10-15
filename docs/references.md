@@ -212,6 +212,42 @@ validation work:
 - **[#12 CH-IV 2017](https://primis.phmsa.dot.gov/rd/FileGet/11365/15704-TS-000-012_(Final_Report)_170629.pdf)**  - 
   DEGADIS/Phast/FLACS exclusion zones comparison under PHMSA.
 
+## Unified integral model (UDM)
+
+- **Witlox, H.W.M., Holt, A.** (1999). *A unified model for jet, heavy and
+  passive dispersion including droplet rainout and re-evaporation*.
+  AIChE/CCPS International Conference, San Francisco.
+- **DNV** (2024). *Phast 8.5  -  Unified Dispersion Model (UDM): Theory,
+  Validation, Verification*. Public technical documentation.
+- **Morton, B.R., Taylor, G.I., Turner, J.S.** (1956). *Turbulent
+  gravitational convection from maintained and instantaneous sources*.
+  Proceedings of the Royal Society A, 234, 1–23.
+- **Ooms, G.** (1972). *A new method for the calculation of the plume path
+  of gases emitted by a stack*. Atmospheric Environment, 6, 899–909.
+- **Pratte, B.D., Baines, W.D.** (1967). *Profiles of the round turbulent jet
+  in a cross flow*. Journal of the Hydraulics Division, ASCE, 93(HY6), 53–64.
+- **Chen, C.J., Rodi, W.** (1980). *Vertical Turbulent Buoyant Jets: A Review
+  of Experimental Data*. Pergamon.
+- **Disselhorst, J.H.M.** (1992). *The incorporation of atmospheric
+  turbulence in the HGSYSTEM dispersion models*. Shell Research, Thornton.
+- **McMullen, R.W.** (1975). *The change of concentration standard
+  deviations with distance*. JAPCA, 25(10), 1057–1058.
+- **Hosker, R.P.** (1974). *Estimates of dry deposition and plume depletion
+  over forests and grassland*. IAEA-SM-181/19.
+- **Havens, J., Spicer, T.** (1985). *Development of an atmospheric
+  dispersion model for heavier-than-air gas mixtures (DEGADIS)*. USCG
+  CG-D-22-85.
+- **Businger, J.A., Wyngaard, J.C., Izumi, Y., Bradley, E.F.** (1971).
+  *Flux-profile relationships in the atmospheric surface layer*. J. Atmos.
+  Sci., 28, 181–189; **Paulson, C.A.** (1970). J. Appl. Meteorol., 9,
+  857–861.
+- **Britter, R.E., McQuaid, J.** (1988). *Workbook on the Dispersion of
+  Dense Gases*. HSE CRR 17/88.
+- **McAdams, W.H.** (1954). *Heat Transmission*, 3rd ed.; **Holman, J.P.**
+  (2010). *Heat Transfer*, 10th ed. McGraw-Hill.
+- **PHMSA** (2024). *Model Validation Database for Flammable Dispersion*,
+  Rev. B.
+
 ## Gaussian plume and atmospheric dispersion (supporting)
 
 - **Barad, M.L.** (1958). *Project Prairie Grass, A Field Program in

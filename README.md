@@ -1,8 +1,8 @@
 # DisperSim 3D
 
-An interactive 3D gas dispersion analysis tool for process safety. Build a project, define release sources and gases, run Gaussian, CFD or GPU LBM dispersion simulations, visualize concentration fields, and optimize gas detector placement.
+An interactive 3D gas dispersion analysis tool for process safety. Build a project, define release sources and gases, run Gaussian, integral (UDM-type), CFD or GPU LBM dispersion simulations, visualize concentration fields, and optimize gas detector placement.
 
-Built on **.NET 10** with **HelixToolkit.WPF** for 3D rendering on Windows, **Avalonia 11** as the cross-platform UI proof of concept, **OpenFOAM** for CFD-based wind fields and reactive transport, and **FluidX3D** (GPU lattice Boltzmann) for fast wind, dispersion and fire-plume runs.
+Built on **.NET 10** with **HelixToolkit.WPF** for 3D rendering on Windows, **Avalonia 11** as the cross-platform UI proof of concept, **OpenFOAM** for CFD-based wind fields and reactive transport, **FluidX3D** (GPU lattice Boltzmann) for fast wind, dispersion and fire-plume runs, and the **DWSIM core** (`DWSIMCore.Foundation`, bundled) for the two-phase source and cloud thermodynamics of the integral model.
 
 **Cross-platform status — validated end-to-end on Ubuntu 24.04 / WSL2:**
 
@@ -18,9 +18,9 @@ The solution splits cleanly into a **portable engine** (`DisperSim3D.csproj` mul
 
 Full project documentation is published on **[GitHub Pages](https://danwbr.github.io/DisperSim3D/)**. For a detailed description of physical models, file format, OpenFOAM case structure, and validation, see [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md).
 
-**Theory manual** — [docs/theory.md](docs/theory.md) states every model the program evaluates as the code implements it: the Gaussian correlations, the source terms, the LBM scalar transport, the equations `rhoReactingBuoyantFoam` solves, the fire and radiation models, and a section on what is deliberately not modelled.
+**Theory manual** — [docs/theory.md](docs/theory.md) states every model the program evaluates as the code implements it: the Gaussian correlations, the source terms, the LBM scalar transport, the equations `rhoReactingBuoyantFoam` solves, the fire and radiation models, and a section on what is deliberately not modelled. The unified integral model has its own page, [docs/unified-dispersion-model.md](docs/unified-dispersion-model.md), with the closures, the additions beyond the published UDM and the field-trial scores.
 
-**Validation dossier** — [`docs/DisperSim3D-Validacao.pptx`](docs/DisperSim3D-Validacao.pptx) (Portuguese, 22 slides) presents every benchmark the project runs, the defects the literature found, the stated limits of the model and the 38 sources behind them. Rebuild it with `python docs/build_deck.py`. The underlying numbers are in [docs/validation.md](docs/validation.md) and [docs/benchmark-results.md](docs/benchmark-results.md).
+**Validation dossier** — [`docs/DisperSim3D-Validacao.pptx`](docs/DisperSim3D-Validacao.pptx) (Portuguese, 22 slides) presents every benchmark the project runs, the defects the literature found, the stated limits of the model and the 38 sources behind them. Rebuild it with `python docs/build_deck.py`. The underlying numbers are in [docs/validation.md](docs/validation.md) and [docs/benchmark-results.md](docs/benchmark-results.md); the integral model is scored separately on 15 field trials (13 pass) at the end of the latter.
 
 ---
 
@@ -43,13 +43,30 @@ DisperSim 3D organizes work around a **Project** with discrete sections shown in
 
 - **Gaussian Puff Engine** with Pasquill-Gifford stability classes (A-F), Slade 1968 puff coefficients, ground reflection, mixing-height lid
 - **Gaussian Plume Engine** for steady-state continuous releases
-- **Unified integral dispersion model** (`CfdSolverType.UnifiedDispersion`) — one set of ODEs along the cloud centreline on the DNV UDM 8.5 formulation: momentum jet (co-flow, vertical or against the wind), touchdown, heavy-gas gravity spreading, passive far field, aerosol thermodynamics through the DWSIM core; no grid, seconds per case. Scored on 15 field trials (Burro, Coyote, Falcon, Maplin Sands, Kit Fox, Desert Tortoise, Prairie Grass): 13 pass. See [docs/unified-dispersion-model.md](docs/unified-dispersion-model.md)
+- **Unified integral model** — jet, heavy-gas and passive dispersion in one centreline integration; see the next section
 - **Briggs plume rise** (buoyant and momentum-dominated)
 - **Jet momentum modeling** using TNO Yellow Book correlations
 - **High-pressure leak model** with choked/unchoked flow and inventory decay
 - **Birch & Schefer expanded source** for sonic underexpanded jets, automatically wired into CFD source patches and timestep sizing
 - **Gas mixtures** with per-component tracking
 - **Transient wind profiles** with time-varying speed, direction, stability
+
+### Unified Integral Model (`UnifiedDispersion`, code `UDMCNT`)
+
+A steady model for continuous releases that integrates the cloud itself instead of prescribing σ(x): one set of ordinary differential equations along the cloud centreline (air mass flow, horizontal and vertical momentum fluxes, enthalpy flux, position, crosswind radius), on the formulation of the DNV Unified Dispersion Model (Witlox & Holt; Phast 8.5 public theory and validation documents).
+
+- **One trajectory, four regimes** — momentum jet, touchdown, grounded heavy gas with gravity spreading, passive far field; similarity profiles `c = c₀·exp(−(|y|/Ry)^m)·exp(−(|z−z_c|/Rz)^n)` whose exponents follow the density excess (m: 2 → 50) and the stability (n: 2 → 1)
+- **Entrainment closures** — jet (α₁ = 0.17 on a Gaussian basis), cross-wind (α₂ = 0.35) with the Morton / DNV near-field suppression and the Ooms air drag of the bent-over jet (k = 0.3, Cd = 0.39, fitted to the Pratte–Baines rise), Disselhorst near-field passive, heavy-gas top entrainment κu_T/Φ(Ri*), far-field growth from the McMullen σy (averaging-time power 0.2) and the Hosker σz with roughness; the four-criterion UDM transition to passive dispersion, blended to 2·x_tr
+- **Grounded cloud** — gravity spreading (C_E = 1.15), UDM ground drag and impact forces, ground heat flux (McAdams natural / Holman forced), a convective velocity scale from the ground heating that the published UDM lacks
+- **Atmosphere** — Monin–Obukhov length from class and roughness (Havens & Spicer), log profile with the Businger / Paulson ψ functions, intermediate classes ("D-E") accepted
+- **Any discharge direction** — downwind, vertical or **against the wind**: the jet decelerates to a stall and is blown back over the source; the sampler combines the outgoing and returning passes
+- **Sources** — jets with the Birch pseudo-source, pools and low-momentum area sources (cryogenic pool size from the vaporisation flux), passive point sources
+- **Two-phase releases** — the flashed liquid is carried as aerosol; every step runs a DWSIM pressure–enthalpy flash of {component, N₂, O₂, H₂O} (humid air), so temperature, liquid fraction and density are part of the state (Desert Tortoise 4 passes). No rainout yet
+- **Cost** — no grid, about one second per case, which makes it the screening tool for dense, cryogenic or high-momentum releases on open terrain where the Gaussian correlations do not apply and a CFD run is not warranted
+- **Validation** — 15 field trials scored against the FLACS cohort acceptance ranges: Burro 3/7, Coyote 3/5, Falcon 1/3/4, Maplin Sands 27, Kit Fox U5-2, Desert Tortoise 4, Prairie Grass 7/11/22/29/35. **13 pass**; the failures are the strongly convective Prairie Grass 7 (no convective lofting) and the mid-field dense persistence of Maplin 27. LNG observations come from the PHMSA Model Validation Database (short-average arc maxima)
+- **How to run it** — `DisperSim3D.CLI --validate <bench-or-dir> -s UnifiedDispersion`; `scripts/udm_calibrate.py` scores the trial set and takes closure overrides as `KEY=value` arguments (`ALPHA1=0.2`, `KTOP=0.5`, …, exported as `UDM_KEY`); `UDM_DUMP=<csv>` writes the centreline and the entrainment budget. Reachable through the validation harness and the engine API (`UnifiedDispersionEngine`); not yet a project simulation in the desktop UI
+
+Details, constants and limitations: [docs/unified-dispersion-model.md](docs/unified-dispersion-model.md).
 
 ### CFD Integration (OpenFOAM v2512+)
 
@@ -257,6 +274,9 @@ DisperSim3D.UI.Avalonia/           # Cross-platform Avalonia 11 smoke window —
 DisperSim3D.App/                   # WinForms host that embeds the editor panel — net10.0-windows
                                    # References both DisperSim3D and DisperSim3D.UI.Wpf
 docs/                              # GitHub Pages site (Jekyll + Just the Docs)
+benchmarks/                        # 31 .dsbench field trials and self-tests for --validate
+scripts/udm_calibrate.py           # Scores the integral model on the trial set, closure overrides via UDM_* env vars
+lib/DWSIMCore/                     # Bundled DWSIMCore.Foundation (thermodynamics for the two-phase source and the integral model)
 DisperSim3D.sln
 ```
 
@@ -308,6 +328,7 @@ packaging/linux/build-deb.sh --version 1.0.0
 | **Visual Studio 2022 17.14+** _or_ `dotnet` CLI | Either works. |
 | **OpenCL 1.2+ device** | Required for FluidX3D solvers (NVIDIA, AMD, Intel). |
 | **OpenFOAM v2512+** _(optional)_ | Required only for the CFD solver family. WSL2/Docker/native Windows builds supported. |
+| **DWSIMCore.Foundation** _(bundled in `lib/DWSIMCore`)_ | Thermodynamics for the two-phase source and the aerosol path of the integral model; rebuilt with `scripts/bundle-dwsimcore.ps1`. |
 | **Windows 10/11** | Only required to run **DisperSim3D.App** (WinForms shell + WPF viewport). The engine and headless CLI run on Linux/macOS. |
 
 ### Cross-platform smoke recipe (Linux / WSL2)
@@ -389,6 +410,23 @@ editor.RefreshProjectTree();
 
 ---
 
+## Headless Quick Start
+
+```bash
+# Score a field trial with the integral model (about a second)
+DisperSim3D.CLI --validate benchmarks/burro3.dsbench -s UnifiedDispersion
+
+# The whole continuous-release set, with a closure override
+python scripts/udm_calibrate.py ALPHA1=0.2          # KEY=value becomes the UDM_KEY environment override
+
+# Same bench through the CFD solver on WSL2
+DisperSim3D.CLI --validate benchmarks/burro3.dsbench --env wsl --openfoam-path /usr/lib/openfoam/openfoam2412 --nprocs 16
+```
+
+A `.dsbench` describes the source (`elevationDeg`, `releaseAzimuthDeg` for a release against the wind, `jetTransition`, optional `twoPhase` flash), the meteorology (`stability`, also "D-E"; `averagingTimeS`; `relativeHumidity`), the domain, the solver and the observed sensor values; see [docs/validation.md](docs/validation.md).
+
+---
+
 ## XML File Format
 
 Projects are saved as XML with root `<Project Version="2">`. Legacy `<Scene3D>` files are auto-migrated on load: inline gases are hoisted into `GasLibrary`, sources promoted to top level, and old scenarios converted into `Simulation` snapshots.
@@ -430,6 +468,27 @@ See [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md) for the full schema
 - Rad, A. & Rashtchian, D. (2016). *A new approach for optimal placement of gas detectors.* Chemical Engineering Transactions, 53, 145–150. — the optional distance-weighted refinement.
 - **IOGP Report 434-01** (2019, rev 1.1 May 2021). *Risk Assessment Data Directory — Process Release Frequencies.* International Association of Oil & Gas Producers. — the embedded leak-frequency database (24 equipment types, 2006–2015 dataset).
 - TNO Yellow Book — *Methods for the Calculation of Physical Effects.*
+
+Unified integral model:
+
+- Witlox, H. W. M. & Holt, A. (1999). *A unified model for jet, heavy and passive dispersion including droplet rainout and re-evaporation.* AIChE/CCPS International Conference and Workshop on Modeling the Consequences of Accidental Releases of Hazardous Materials, San Francisco. — the UDM formulation.
+- DNV (2024). *Phast 8.5 — Unified Dispersion Model (UDM): Theory; Validation; Verification.* Public technical documentation. — profiles, entrainment closures, transition criteria and the published trial set the implementation follows.
+- Witlox, H. W. M., Fernandez, M., Harper, M., Oke, A., Stene, J. & Xu, Y. (2018). *Verification and validation of Phast consequence models for accidental releases of toxic or flammable chemicals to the atmosphere.* Journal of Loss Prevention in the Process Industries, 55, 457–470.
+- Morton, B. R., Taylor, G. I. & Turner, J. S. (1956). *Turbulent gravitational convection from maintained and instantaneous sources.* Proceedings of the Royal Society A, 234, 1–23. — entrainment hypothesis and near-field suppression length.
+- Ooms, G. (1972). *A new method for the calculation of the plume path of gases emitted by a stack.* Atmospheric Environment, 6, 899–909. — air drag on the bent-over jet.
+- Pratte, B. D. & Baines, W. D. (1967). *Profiles of the round turbulent jet in a cross flow.* Journal of the Hydraulics Division, ASCE, 93(HY6), 53–64. — rise of the vertical jet in cross-wind, used to fit the suppression constant.
+- Chen, C. J. & Rodi, W. (1980). *Vertical Turbulent Buoyant Jets: A Review of Experimental Data.* Pergamon. — free-jet decay and entrainment basis.
+- Birch, A. D., Brown, D. R., Dodson, M. G. & Swaffield, F. (1984). *The structure and concentration decay of high pressure jets of natural gas.* Combustion Science and Technology, 36, 249–261. — pseudo-source of under-expanded jets.
+- Disselhorst, J. H. M. (1992). *The incorporation of atmospheric turbulence in the HGSYSTEM dispersion models.* Shell Research, Thornton. — near-field passive entrainment.
+- McMullen, R. W. (1975). *The change of concentration standard deviations with distance.* Journal of the Air Pollution Control Association, 25(10), 1057–1058. — far-field σy and the averaging-time correction.
+- Hosker, R. P. (1974). *Estimates of dry deposition and plume depletion over forests and grassland.* Physical Behaviour of Radioactive Contaminants in the Atmosphere, IAEA-SM-181/19, Vienna. — σz with the surface-roughness function.
+- Havens, J. & Spicer, T. (1985). *Development of an atmospheric dispersion model for heavier-than-air gas mixtures (DEGADIS).* US Coast Guard report CG-D-22-85. — Monin–Obukhov length from stability class and roughness.
+- Businger, J. A., Wyngaard, J. C., Izumi, Y. & Bradley, E. F. (1971). *Flux-profile relationships in the atmospheric surface layer.* Journal of the Atmospheric Sciences, 28, 181–189; Paulson, C. A. (1970). *The mathematical representation of wind speed and temperature profiles in the unstable atmospheric surface layer.* Journal of Applied Meteorology, 9, 857–861. — stability functions of the wind profile.
+- Britter, R. E. & McQuaid, J. (1988). *Workbook on the Dispersion of Dense Gases.* HSE Contract Research Report 17/88. — heavy-gas spreading and Richardson-number regimes.
+- McAdams, W. H. (1954). *Heat Transmission*, 3rd ed., McGraw-Hill; Holman, J. P. (2010). *Heat Transfer*, 10th ed., McGraw-Hill. — ground-to-cloud heat transfer correlations.
+- Hanna, S. R., Hansen, O. R. & Dharmavaram, S. (2004). *FLACS CFD air quality model performance evaluation with Kit Fox, MUST, Prairie Grass, and EMU observations.* Atmospheric Environment, 38, 4675–4687; Hansen, O. R., Gavelli, F., Ichard, M. & Davis, S. G. (2010). *Validation of FLACS against experimental data sets from the model evaluation database for LNG vapor dispersion.* Journal of Loss Prevention in the Process Industries, 23, 857–877. — the cohort statistics behind the acceptance ranges.
+- PHMSA (2024). *Model Validation Database for Flammable Dispersion*, Rev. B, Pipeline and Hazardous Materials Safety Administration. — short-average observations of Burro, Coyote and Maplin Sands used by the integral-model benches.
+- Chang, J. C. & Hanna, S. R. (2004). *Air quality model performance evaluation.* Meteorology and Atmospheric Physics, 87, 167–196. — the statistical performance measures.
 
 ---
 
