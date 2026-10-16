@@ -68,6 +68,7 @@
             <ComboBoxItem Content="★ FluidX3D Dispersion (GPU LBM)" />
             <ComboBoxItem Content="★ FluidX3D Fire (Hot Buoyant Plume)" />
             <ComboBoxItem Content="★ FluidX3D Dispersion (Steady State)" />
+            <ComboBoxItem Content="Unified Integral (Jet / Heavy Gas / Passive, Steady)" />
           </ComboBox>
           <TextBlock Grid.Row="5" Grid.Column="1" Classes="hint"
                      Text="Gaussian models are fast; CFD respects obstacles and is slower. ★ FluidX3D solvers are GPU-accelerated." />

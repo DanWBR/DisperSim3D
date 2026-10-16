@@ -281,6 +281,8 @@ namespace DisperSim3D.CLI
             bool needsCfd = solver != null &&
                 solver != "plume" && solver != "steadystate" && solver != "gaussian-plume" &&
                 solver != "puff" && solver != "gaussian-puff" &&
+                solver != "unified" && solver != "unifieddispersion" && solver != "udm" &&
+                solver != "udmcnt" && solver != "integral" &&
                 !solver.StartsWith("fluidx3d", StringComparison.OrdinalIgnoreCase);
 
             if (needsCfd || openFoamPath != null || envType != null || simulationSelector != null)
@@ -1815,7 +1817,7 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             (read-only; reopen in the app to persist).");
             Console.WriteLine("  --validate <file|dir>      Validate against one or more .dsbench files.");
             Console.WriteLine("                             Computes Hanna SPMs and exits 0 if all pass.");
-            Console.WriteLine("  -s, --solver <name>        Override solver: plume, puff,");
+            Console.WriteLine("  -s, --solver <name>        Override solver: plume, puff, unified,");
             Console.WriteLine("                             scalarTransportFoam, scalarSimpleFoam,");
             Console.WriteLine("                             pimpleFoam, buoyantPimpleFoam, reactingFoam,");
             Console.WriteLine("                             rhoSimpleFoam, rhoReactingBuoyantFoam,");
@@ -1864,6 +1866,7 @@ namespace DisperSim3D.CLI
             Console.WriteLine("  DisperSim3D.CLI project.dsproj --simulation \"Stack#1 5m/s SW\"");
             Console.WriteLine("                                 --env wsl --openfoam-path /opt/openfoam2412");
             Console.WriteLine("  DisperSim3D.CLI project.dsproj --simulation \"Fast LBM\" -s fluidx3dDispersion --gpu-device 0");
+            Console.WriteLine("  DisperSim3D.CLI project.dsproj -s unified");
             Console.WriteLine("  DisperSim3D.CLI project.dsproj --allocation \"Site A — risk\"");
             Console.WriteLine("  DisperSim3D.CLI --list-gpus");
             Console.WriteLine("  DisperSim3D.CLI --iogp-selftest");

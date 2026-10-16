@@ -64,7 +64,7 @@ A steady model for continuous releases that integrates the cloud itself instead 
 - **Two-phase releases** — the flashed liquid is carried as aerosol; every step runs a DWSIM pressure–enthalpy flash of {component, N₂, O₂, H₂O} (humid air), so temperature, liquid fraction and density are part of the state (Desert Tortoise 4 passes). No rainout yet
 - **Cost** — no grid, about one second per case, which makes it the screening tool for dense, cryogenic or high-momentum releases on open terrain where the Gaussian correlations do not apply and a CFD run is not warranted
 - **Validation** — 15 field trials scored against the FLACS cohort acceptance ranges: Burro 3/7, Coyote 3/5, Falcon 1/3/4, Maplin Sands 27, Kit Fox U5-2, Desert Tortoise 4, Prairie Grass 7/11/22/29/35. **13 pass**; the failures are the strongly convective Prairie Grass 7 (no convective lofting) and the mid-field dense persistence of Maplin 27. LNG observations come from the PHMSA Model Validation Database (short-average arc maxima)
-- **How to run it** — `DisperSim3D.CLI --validate <bench-or-dir> -s UnifiedDispersion`; `scripts/udm_calibrate.py` scores the trial set and takes closure overrides as `KEY=value` arguments (`ALPHA1=0.2`, `KTOP=0.5`, …, exported as `UDM_KEY`); `UDM_DUMP=<csv>` writes the centreline and the entrainment budget. Reachable through the validation harness and the engine API (`UnifiedDispersionEngine`); not yet a project simulation in the desktop UI
+- **How to run it** — a project simulation in both desktop UIs (Simulation Editor, or the toolbar solver dropdown for the active scenario), `DisperSim3D.CLI <project> -s unified` headlessly, and `DisperSim3D.CLI --validate <bench-or-dir> -s UnifiedDispersion` against the trial set; `scripts/udm_calibrate.py` scores the trial set and takes closure overrides as `KEY=value` arguments (`ALPHA1=0.2`, `KTOP=0.5`, …, exported as `UDM_KEY`); `UDM_DUMP=<csv>` writes the centreline and the entrainment budget. The result is the centreline sampled on the scenario grid, so isosurfaces, contour planes, monitors and detectors read it like any other steady field
 
 Details, constants and limitations: [docs/unified-dispersion-model.md](docs/unified-dispersion-model.md).
 
@@ -415,6 +415,9 @@ editor.RefreshProjectTree();
 ```bash
 # Score a field trial with the integral model (about a second)
 DisperSim3D.CLI --validate benchmarks/burro3.dsbench -s UnifiedDispersion
+
+# Run a project's active scenario through the integral model
+DisperSim3D.CLI project.dsproj -s unified
 
 # The whole continuous-release set, with a closure override
 python scripts/udm_calibrate.py ALPHA1=0.2          # KEY=value becomes the UDM_KEY environment override

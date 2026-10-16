@@ -315,7 +315,8 @@ namespace DisperSim3D.Controls
             _solverCombo.Items.AddRange(new object[] {
                 "Gaussian Puff (Transient)",
                 "Gaussian Plume (Steady-State)",
-                "CFD Transient (rhoReactingBuoyantFoam) — universal"
+                "CFD Transient (rhoReactingBuoyantFoam) — universal",
+                "Unified Integral (Steady) — jet / heavy gas / passive"
             });
             _solverCombo.SelectedIndex = 0;
             _solverCombo.SelectedIndexChanged += (s, e) =>
@@ -330,6 +331,7 @@ namespace DisperSim3D.Controls
                         case 0: sc.SolverType = CfdSolverType.GaussianPuff; break;
                         case 1: sc.SolverType = CfdSolverType.GaussianPlume; break;
                         case 2: sc.SolverType = CfdSolverType.RhoReactingBuoyantFoam; break;
+                        case 3: sc.SolverType = CfdSolverType.UnifiedDispersion; break;
                     }
                 }
             };
@@ -345,6 +347,7 @@ namespace DisperSim3D.Controls
                     case 0: sc.SolverType = CfdSolverType.GaussianPuff; break;
                     case 1: sc.SolverType = CfdSolverType.GaussianPlume; break;
                     case 2: sc.SolverType = CfdSolverType.RhoReactingBuoyantFoam; break;
+                    case 3: sc.SolverType = CfdSolverType.UnifiedDispersion; break;
                 }
 
                 if (sc.CfdConfig == null)
@@ -2283,14 +2286,16 @@ namespace DisperSim3D.Controls
         {
             var sc = _editor.Scene.DispersionScenario;
             if (sc == null) return;
-            // 3-row toolbar dropdown — Gaussian Puff, Gaussian Plume, then
-            // rhoReactingBuoyantFoam. FluidX3D solvers are launched from the
-            // Simulation Editor dialog rather than the toolbar.
+            // 4-row toolbar dropdown — Gaussian Puff, Gaussian Plume,
+            // rhoReactingBuoyantFoam, then the unified integral model. FluidX3D
+            // solvers are launched from the Simulation Editor dialog rather than
+            // the toolbar.
             switch (sc.SolverType)
             {
                 case CfdSolverType.GaussianPuff:           _solverCombo.SelectedIndex = 0; break;
                 case CfdSolverType.GaussianPlume:          _solverCombo.SelectedIndex = 1; break;
                 case CfdSolverType.RhoReactingBuoyantFoam: _solverCombo.SelectedIndex = 2; break;
+                case CfdSolverType.UnifiedDispersion:      _solverCombo.SelectedIndex = 3; break;
                 default:                                    _solverCombo.SelectedIndex = 2; break;
             }
         }
@@ -2679,10 +2684,11 @@ namespace DisperSim3D.Controls
         private void DoSolverSettings()
         {
             var scenario = EnsureScenario();
-            bool isGaussian = scenario.SolverType == CfdSolverType.GaussianPuff
-                           || scenario.SolverType == CfdSolverType.GaussianPlume;
+            bool isAnalytical = scenario.SolverType == CfdSolverType.GaussianPuff
+                             || scenario.SolverType == CfdSolverType.GaussianPlume
+                             || scenario.SolverType == CfdSolverType.UnifiedDispersion;
 
-            if (isGaussian)
+            if (isAnalytical)
             {
                 if (scenario.Meteo == null) scenario.Meteo = new MeteorologicalConditions();
                 using (var dlg = new MeteorologicalDialog(scenario.Meteo))
@@ -2690,7 +2696,7 @@ namespace DisperSim3D.Controls
                     if (dlg.ShowDialog() == DialogResult.OK && dlg.Result != null)
                     {
                         scenario.Meteo = dlg.Result;
-                        UpdateStatus("Gaussian meteorology updated");
+                        UpdateStatus("Meteorology updated");
                     }
                 }
             }

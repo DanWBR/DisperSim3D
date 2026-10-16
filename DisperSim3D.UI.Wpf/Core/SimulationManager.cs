@@ -231,6 +231,9 @@ namespace DisperSim3D.Core
                     case CfdSolverType.GaussianPuff:
                         await RunGaussianPuffAsync(job);
                         break;
+                    case CfdSolverType.UnifiedDispersion:
+                        await RunUnifiedDispersionAsync(job);
+                        break;
                     case CfdSolverType.RhoReactingBuoyantFoam:
                         await RunCfdAsync(job);
                         break;
@@ -353,6 +356,99 @@ namespace DisperSim3D.Core
                 job.ResultEntry.Tag = new SteadyStateResultData
                 {
                     Engine = plume,
+                    Renderer = renderer,
+                    Thresholds = thresholds,
+                    IsoGroup = isoGroup,
+                    ContourGroups = contourGroups,
+                    Trajectories = trajectories
+                };
+
+                ReportProgress(job, 1.0, "Complete");
+
+            }, job.Cts.Token);
+        }
+
+        /// <summary>
+        /// Runs the unified integral model. Same shape as <see cref="RunGaussianPlumeAsync"/> —
+        /// one steady field, sampled on the scenario grid by the renderer — since the model
+        /// carries no grid and no external solver.
+        /// </summary>
+        private Task RunUnifiedDispersionAsync(SimulationJob job)
+        {
+            return Task.Run(() =>
+            {
+                job.Cts.Token.ThrowIfCancellationRequested();
+
+                var scenario = job.Scenario;
+                ReportProgress(job, 0.1, "Integrating the cloud centreline...");
+
+                var udm = new UnifiedDispersionEngine();
+                udm.Initialize(scenario);
+                if (!string.IsNullOrEmpty(udm.ThermoNote))
+                    job.LastLogLine = udm.ThermoNote;
+
+                ReportProgress(job, 0.3, "Sampling concentration field...");
+                job.PauseHandle.Wait(job.Cts.Token);
+
+                var renderer = new DispersionRenderer();
+                renderer.Initialize(scenario);
+                renderer.ComputeOccupancyGrid(job.Scene);
+
+                var thresholds = scenario.Thresholds;
+                if (thresholds.Count == 0)
+                {
+                    double lfl = ResolveScenarioLfl(scenario, job.Scene);
+                    if (lfl > 0)
+                    {
+                        thresholds = BuildLflThresholds(lfl);
+                    }
+                    else
+                    {
+                        renderer.ComputeIsosurfaces(udm, thresholds);
+                        double maxC = renderer.GetMaxConcentration();
+                        if (maxC > 1e-20)
+                            thresholds = BuildFallbackThresholds(maxC);
+                    }
+                }
+
+                ReportProgress(job, 0.6, "Generating isosurfaces...");
+                job.PauseHandle.Wait(job.Cts.Token);
+
+                var isoGroup = renderer.ComputeIsosurfaces(udm, thresholds);
+                var trajectories = udm.GetTrajectoryPaths();
+
+                var contourGroups = new List<System.Windows.Media.Media3D.Model3DGroup>();
+                if (scenario.ContourPlanes.Count > 0)
+                {
+                    double maxConc = renderer.GetMaxConcentration();
+                    double dom = renderer.DomainSize;
+                    foreach (var cp in scenario.ContourPlanes)
+                    {
+                        if (!cp.Visible) continue;
+                        contourGroups.Add(renderer.ComputeContourPlane(udm, cp, -dom, dom, maxConc));
+                    }
+                }
+
+                ReportProgress(job, 0.9, "Finalizing...");
+
+                var entry = new CfdSimulationEntry
+                {
+                    Name = job.Name,
+                    ScenarioName = scenario.Name,
+                    SolverType = SolverCode.DisplayName(CfdSolverType.UnifiedDispersion),
+                    DurationS = 0,
+                    TimeStepCount = 1,
+                    GridNx = scenario.GridResolution,
+                    GridNy = scenario.GridResolution,
+                    GridNz = Math.Max(1, scenario.GridResolution / 2),
+                    DomainSizeM = scenario.DomainSizeM,
+                    HasResults = true
+                };
+
+                job.ResultEntry = entry;
+                job.ResultEntry.Tag = new SteadyStateResultData
+                {
+                    Engine = udm,
                     Renderer = renderer,
                     Thresholds = thresholds,
                     IsoGroup = isoGroup,
@@ -780,7 +876,8 @@ namespace DisperSim3D.Core
 
     public class SteadyStateResultData
     {
-        public GaussianPlumeEngine Engine { get; set; }
+        /// <summary>The engine that produced the field — the Gaussian plume or the unified integral model.</summary>
+        public IConcentrationField Engine { get; set; }
         public DispersionRenderer Renderer { get; set; }
         public List<DispersionThreshold> Thresholds { get; set; }
         public System.Windows.Media.Media3D.Model3DGroup IsoGroup { get; set; }

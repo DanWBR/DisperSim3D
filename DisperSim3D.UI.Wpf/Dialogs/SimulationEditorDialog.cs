@@ -113,7 +113,8 @@ namespace DisperSim3D.Dialogs
                 "FluidX3D Wind (GPU LBM)",
                 "FluidX3D Dispersion (GPU LBM)",
                 "FluidX3D Fire (Hot Buoyant Plume)",
-                "FluidX3D Dispersion (Steady State)"
+                "FluidX3D Dispersion (Steady State)",
+                "Unified Integral (Jet / Heavy Gas / Passive, Steady)"
             });
             cmbSolver.SelectedIndex = 0;
             // Owner-draw: prepend a gold star to every FluidX3D row so the
@@ -226,6 +227,7 @@ namespace DisperSim3D.Dialogs
                 case 4: solverType = CfdSolverType.FluidX3DDispersion; break;
                 case 5: solverType = CfdSolverType.FluidX3DFire; break;
                 case 6: solverType = CfdSolverType.FluidX3DDispersionSteady; break;
+                case 7: solverType = CfdSolverType.UnifiedDispersion; break;
             }
 
             // Edit existing sim in place (preserves Id) when launched via the editing

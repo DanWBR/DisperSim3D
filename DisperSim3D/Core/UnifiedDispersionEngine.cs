@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DisperSim3D.Geometry;
 using DisperSim3D.Models;
 
 namespace DisperSim3D.Core
@@ -923,6 +924,22 @@ namespace DisperSim3D.Core
         {
             if (!Locate(x, y, z, out var nd, out double yLoc, out double dp)) return 0;
             return Math.Min(nd.Yc * Profile(nd, yLoc, z, dp), 1.0);
+        }
+
+        /// <summary>
+        /// The cloud centreline in world coordinates, as a single path. Mirrors
+        /// <see cref="GaussianPlumeEngine.GetTrajectoryPaths"/> so a viewport can draw this
+        /// model's trajectory with the same code it uses for the Gaussian jet.
+        /// </summary>
+        public List<List<Point3D>> GetTrajectoryPaths()
+        {
+            var paths = new List<List<Point3D>>();
+            if (_path.Count < 2) return paths;
+            var pts = new List<Point3D>(_path.Count);
+            foreach (var nd in _path)
+                pts.Add(new Point3D(_originX + nd.x * _windDirX, _originY + nd.x * _windDirY, nd.z));
+            paths.Add(pts);
+            return paths;
         }
 
         /// <summary>Gas volume (mole) fraction of the local mixture.</summary>

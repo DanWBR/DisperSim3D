@@ -365,7 +365,8 @@ namespace DisperSim3D.Controls
             var scenario = _scene.DispersionScenario;
             if (scenario == null || scenario.Sources.Count == 0) return;
 
-            if (scenario.SolverType == CfdSolverType.GaussianPlume)
+            if (scenario.SolverType == CfdSolverType.GaussianPlume
+                || scenario.SolverType == CfdSolverType.UnifiedDispersion)
             {
                 StartSteadyStateDispersion();
                 return;
@@ -612,10 +613,19 @@ namespace DisperSim3D.Controls
 
             StopDispersion();
 
-            var plume = new GaussianPlumeEngine();
-            plume.WindField = WindFieldResolver.ResolveWindField(_scene, scenario);
-            plume.Initialize(scenario);
-            _steadyStateEngine = plume;
+            if (scenario.SolverType == CfdSolverType.UnifiedDispersion)
+            {
+                var udm = new UnifiedDispersionEngine();
+                udm.Initialize(scenario);
+                _steadyStateEngine = udm;
+            }
+            else
+            {
+                var plume = new GaussianPlumeEngine();
+                plume.WindField = WindFieldResolver.ResolveWindField(_scene, scenario);
+                plume.Initialize(scenario);
+                _steadyStateEngine = plume;
+            }
 
             var renderer = new DispersionRenderer();
             renderer.Initialize(scenario);
@@ -666,7 +676,7 @@ namespace DisperSim3D.Controls
                 _viewport.Children.Add(_isosurfaceVisual);
             }
 
-            if (_steadyStateEngine is GaussianPlumeEngine plumeSS)
+            if (result.Trajectories != null)
             {
                 foreach (var path in result.Trajectories)
                 {
@@ -727,6 +737,8 @@ namespace DisperSim3D.Controls
             var trajectories = new List<List<DisperSim3D.Geometry.Point3D>>();
             if (engine is GaussianPlumeEngine plumeEngine)
                 trajectories = plumeEngine.GetTrajectoryPaths();
+            else if (engine is UnifiedDispersionEngine udmEngine)
+                trajectories = udmEngine.GetTrajectoryPaths();
 
             var contourGroups = new List<Model3DGroup>();
             if (contourConfigs != null && contourConfigs.Count > 0)
@@ -801,7 +813,9 @@ namespace DisperSim3D.Controls
             _scene.CfdSimulations.Add(entry);
             CfdSolveCompleted?.Invoke(this, entry);
 
-            if (job.SolverType == CfdSolverType.GaussianPlume && entry.Tag is SteadyStateResultData ssData)
+            if ((job.SolverType == CfdSolverType.GaussianPlume
+                 || job.SolverType == CfdSolverType.UnifiedDispersion)
+                && entry.Tag is SteadyStateResultData ssData)
             {
                 _steadyStateEngine = ssData.Engine;
                 _dispersionRenderer = ssData.Renderer;
