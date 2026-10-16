@@ -88,6 +88,71 @@ namespace DisperSim3D.Core
             };
         }
 
+        /// <summary>
+        /// Runs the unified integral model (jet / heavy gas / passive) on the active scenario.
+        /// The model carries no grid of its own: it integrates the centreline once and is then
+        /// sampled on the scenario grid so the result has the same shape as the Gaussian plume.
+        /// </summary>
+        public static HeadlessResult RunUnifiedDispersion(Scene3D scene, int scenarioIndex = -1,
+            Action<string> log = null)
+        {
+            var scenario = ResolveScenario(scene, scenarioIndex);
+            if (scenario == null)
+                return new HeadlessResult { Success = false, Error = "No dispersion scenario found" };
+
+            log?.Invoke("Initializing Unified Integral Model (Steady)...");
+            var engine = new UnifiedDispersionEngine();
+            engine.Initialize(scenario);
+            if (!string.IsNullOrEmpty(engine.ThermoNote))
+                log?.Invoke("  " + engine.ThermoNote);
+
+            log?.Invoke("Evaluating concentration field...");
+
+            int gridRes = scenario.GridResolution;
+            double domain = scenario.DomainSizeM;
+            double cellSize = (domain * 2.0) / gridRes;
+            int nz = gridRes / 2 > 0 ? gridRes / 2 : 1;
+            var origin = new Point3D(-domain, -domain, 0);
+
+            var field = new double[gridRes, gridRes, nz];
+            double maxC = 0;
+
+            for (int i = 0; i < gridRes; i++)
+            {
+                double x = origin.X + i * cellSize;
+                for (int j = 0; j < gridRes; j++)
+                {
+                    double y = origin.Y + j * cellSize;
+                    for (int k = 0; k < nz; k++)
+                    {
+                        double z = origin.Z + k * cellSize;
+                        double c = engine.EvaluateConcentration(x, y, z);
+                        field[i, j, k] = c;
+                        if (c > maxC) maxC = c;
+                    }
+                }
+            }
+
+            log?.Invoke(string.Format(CultureInfo.InvariantCulture,
+                "Done. Max concentration: {0:G6} kg/m³", maxC));
+
+            var monitorData = EvaluateMonitors(scene, engine);
+
+            foreach (var md in monitorData)
+                log?.Invoke(string.Format(CultureInfo.InvariantCulture,
+                    "  Monitor '{0}' at ({1},{2},{3}): {4:G6} kg/m³",
+                    md.Name, md.Position.X, md.Position.Y, md.Position.Z,
+                    md.Concentrations.Count > 0 ? md.Concentrations[0] : 0));
+
+            return new HeadlessResult
+            {
+                Success = true,
+                MaxConcentration = maxC,
+                ConcentrationField = field,
+                MonitorData = monitorData
+            };
+        }
+
         public static HeadlessResult RunGaussianPuff(Scene3D scene, int scenarioIndex = -1,
             Action<string> log = null)
         {
@@ -162,6 +227,11 @@ namespace DisperSim3D.Core
             // executes for those cases.
             if (IsFluidX3DSolver(solverType))
                 return RunFluidX3D(scene, scenario, cfdConfig, solverType, log, cancel);
+
+            // The unified integral model has no grid and no external solver: it integrates
+            // in-process in about a second, so it bypasses the OpenFOAM setup below.
+            if (solverType == CfdSolverType.UnifiedDispersion)
+                return RunUnifiedDispersion(scene, scenarioIndex, log);
 
             var env = new OpenFoamEnvironment();
             env.Configure(cfdConfig.OpenFoamPath, cfdConfig.DetectedEnvironment, cfdConfig.WslDistroName);
@@ -505,6 +575,10 @@ namespace DisperSim3D.Core
 
             if (solver == "puff" || solver == "gaussian-puff")
                 return RunGaussianPuff(scene, scenarioIndex, log);
+
+            if (solver == "unified" || solver == "unifieddispersion" || solver == "udm"
+                || solver == "udmcnt" || solver == "integral")
+                return RunUnifiedDispersion(scene, scenarioIndex, log);
 
             if (solver == "" && cfdConfig == null)
             {

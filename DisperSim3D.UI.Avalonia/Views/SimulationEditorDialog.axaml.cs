@@ -136,6 +136,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 4 => CfdSolverType.FluidX3DDispersion,
                 5 => CfdSolverType.FluidX3DFire,
                 6 => CfdSolverType.FluidX3DDispersionSteady,
+                7 => CfdSolverType.UnifiedDispersion,
                 _ => CfdSolverType.GaussianPuff
             };
 

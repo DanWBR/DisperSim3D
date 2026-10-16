@@ -221,6 +221,9 @@ namespace DisperSim3D.UI.Avalonia.Core
                     case CfdSolverType.GaussianPuff:
                         await RunGaussianPuffAsync(job);
                         break;
+                    case CfdSolverType.UnifiedDispersion:
+                        await RunUnifiedDispersionAsync(job);
+                        break;
                     case CfdSolverType.RhoReactingBuoyantFoam:
                         await RunCfdAsync(job);
                         break;
@@ -334,6 +337,94 @@ namespace DisperSim3D.UI.Avalonia.Core
                     Name = job.Name,
                     ScenarioName = scenario.Name,
                     SolverType = "Gaussian Plume",
+                    CasePath = tempDir,
+                    DurationS = 0,
+                    TimeStepCount = 1,
+                    GridNx = nx,
+                    GridNy = ny,
+                    GridNz = nz,
+                    DomainSizeM = domain,
+                    HasResults = true
+                };
+                entry.Tag = result;
+                job.ResultEntry = entry;
+                ReportProgress(job, 1.0, "Complete");
+
+            }, job.Cts.Token);
+        }
+
+        /// <summary>
+        /// Runs the unified integral model. The model has no grid of its own: the centreline is
+        /// integrated once and sampled on the scenario grid, so the result is stored exactly like
+        /// the Gaussian plume one and plays back through the same viewport path.
+        /// </summary>
+        private Task RunUnifiedDispersionAsync(SimulationJob job)
+        {
+            return Task.Run(() =>
+            {
+                job.Cts.Token.ThrowIfCancellationRequested();
+                var scenario = job.Scenario;
+                int nx = scenario.GridResolution;
+                int ny = scenario.GridResolution;
+                int nz = Math.Max(1, scenario.GridResolution / 2);
+                double domain = scenario.DomainSizeM;
+
+                ReportProgress(job, 0.1, "Integrating the cloud centreline...");
+
+                var udm = new DisperSim3D.Core.UnifiedDispersionEngine();
+                udm.Initialize(scenario);
+                if (!string.IsNullOrEmpty(udm.ThermoNote))
+                    job.LastLogLine = udm.ThermoNote;
+
+                ReportProgress(job, 0.3, "Sampling concentration field...");
+                job.PauseHandle.Wait(job.Cts.Token);
+
+                double cellSizeX = (domain * 2.0) / nx;
+                double cellSizeY = (domain * 2.0) / ny;
+                double cellSizeZ = domain / nz;
+
+                var field = new double[nx, ny, nz];
+                for (int i = 0; i < nx; i++)
+                    for (int j = 0; j < ny; j++)
+                        for (int k = 0; k < nz; k++)
+                        {
+                            double x = -domain + (i + 0.5) * cellSizeX;
+                            double y = -domain + (j + 0.5) * cellSizeY;
+                            double z = (k + 0.5) * cellSizeZ;
+                            field[i, j, k] = udm.EvaluateConcentration(x, y, z);
+                        }
+
+                ReportProgress(job, 0.7, "Storing result...");
+                job.PauseHandle.Wait(job.Cts.Token);
+
+                string tempDir = System.IO.Path.Combine(TempManager.GetWorkDir(),
+                    "DisperSim_UDM_" + Guid.NewGuid().ToString("N")[..8]);
+                System.IO.Directory.CreateDirectory(tempDir);
+                TempManager.RegisterActive(tempDir);
+
+                string binPath = System.IO.Path.Combine(tempDir, "0.0000.bin");
+                OpenFoamResult.SaveBinaryField(binPath, field);
+
+                var result = new OpenFoamResult
+                {
+                    GridNx = nx, GridNy = ny, GridNz = nz,
+                    DomainSizeM = domain,
+                    DomainXMin = -domain, DomainXMax = domain,
+                    DomainYMin = -domain, DomainYMax = domain,
+                    DomainZMax = domain,
+                    CaseDir = tempDir,
+                    IsLoaded = true
+                };
+                result.TimeSteps.Add(0.0);
+                result.TimeStepPaths[0.0] = binPath;
+
+                ReportProgress(job, 0.9, "Finalizing...");
+
+                var entry = new CfdSimulationEntry
+                {
+                    Name = job.Name,
+                    ScenarioName = scenario.Name,
+                    SolverType = SolverCode.DisplayName(CfdSolverType.UnifiedDispersion),
                     CasePath = tempDir,
                     DurationS = 0,
                     TimeStepCount = 1,

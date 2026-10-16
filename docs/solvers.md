@@ -124,9 +124,13 @@ PH flash of the cloud (gas, air, water) at every step.
 There is no grid: a case runs in about a second, which makes the model the
 natural choice for continuous releases on open terrain where the Gaussian
 correlations do not apply (dense, cryogenic or high-momentum sources) and a
-CFD run is not warranted. It is reached through the validation harness and
-the engine API (`UnifiedDispersionEngine`); it is not yet offered as a
-project simulation in the desktop UI.
+CFD run is not warranted. It is offered as a project simulation in both
+desktop UIs (Simulation Editor, and the toolbar solver dropdown for the
+active scenario), headlessly as `-s unified`, and through the validation
+harness and the engine API (`UnifiedDispersionEngine`). The model carries no
+grid of its own: the result is the centreline sampled on the scenario grid,
+so isosurfaces, contour planes, monitors and detectors read it like any other
+steady field, and the cloud centreline is drawn as the trajectory.
 
 Formulation, closure constants, the additions beyond the UDM and the
 15-trial validation table are on the

@@ -111,13 +111,16 @@ namespace DisperSim3D.Core
                 {
                     Name = src.Gas.Name,
                     MolarMass = src.Gas.MolarMass,
+                    SpecificHeatJPerKgK = src.Gas.SpecificHeatJPerKgK,
                     LFL = src.Gas.LFL,
+                    UFL = src.Gas.UFL,
                     IDLH = src.Gas.IDLH,
                     ERPG1 = src.Gas.ERPG1,
                     ERPG2 = src.Gas.ERPG2,
                     ERPG3 = src.Gas.ERPG3,
                     HalfLifeS = src.Gas.HalfLifeS,
-                    DryDepositionVelocityMPerS = src.Gas.DryDepositionVelocityMPerS
+                    DryDepositionVelocityMPerS = src.Gas.DryDepositionVelocityMPerS,
+                    IsCryogenic = src.Gas.IsCryogenic
                 } : null,
                 GasRefId = src.GasRefId,
                 Position = src.Position,
@@ -129,6 +132,10 @@ namespace DisperSim3D.Core
                 StackDiameterM = src.StackDiameterM,
                 ExitVelocityMPerS = src.ExitVelocityMPerS,
                 ExitTemperatureK = src.ExitTemperatureK,
+                ReleaseDurationS = src.ReleaseDurationS,
+                UseJetTransition = src.UseJetTransition,
+                CarryAerosol = src.CarryAerosol,
+                AerosolCompound = src.AerosolCompound,
                 HighPressureLeak = src.HighPressureLeak
             };
         }
@@ -140,8 +147,16 @@ namespace DisperSim3D.Core
                 WindSpeed = m.WindSpeed,
                 WindDirectionDeg = m.WindDirectionDeg,
                 StabilityClass = m.StabilityClass,
+                StabilityIndex = m.StabilityIndex,
                 AmbientTemperature = m.AmbientTemperature,
-                AmbientPressure = m.AmbientPressure
+                AmbientPressure = m.AmbientPressure,
+                RelativeHumidity = m.RelativeHumidity,
+                AveragingTimeS = m.AveragingTimeS,
+                MixingHeightM = m.MixingHeightM,
+                WindMeasurementHeightM = m.WindMeasurementHeightM,
+                WindShearExponent = m.WindShearExponent,
+                IsUrbanTerrain = m.IsUrbanTerrain,
+                RoughnessLengthM = m.RoughnessLengthM
             };
         }
     }

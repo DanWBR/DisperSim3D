@@ -148,6 +148,7 @@ DisperSim3D.CLI project.dsproj --simulation "Stack#1 5m/s SW"    # run an existi
 DisperSim3D.CLI project.dsproj --simulation "Fast LBM" -s fluidx3dDispersion --gpu-device 0
 DisperSim3D.CLI project.dsproj --allocation "Site A  -  risk"     # re-run a detector allocation
 DisperSim3D.CLI project.dsproj -s plume                          # run a solver directly
+DisperSim3D.CLI project.dsproj -s unified                        # integral model, about a second
 DisperSim3D.CLI legacy.xml -s rhoReactingBuoyantFoam --env native --openfoam-path "<path>"
 ```
 
@@ -157,9 +158,9 @@ fields, simulations, dispersion studies (incl. per-scenario risk weights),
 detector allocations (incl. RRF for risk-strategy runs), wind rose,
 monitor points, and gas detectors.
 
-`-s <solver>` accepts the analytical names (`plume`, `puff`), the OpenFOAM
-solver (`rhoReactingBuoyantFoam`), the integral model (`UnifiedDispersion`,
-validation harness only) **and the FluidX3D family** (`fluidx3dDispersion`, `fluidx3dDispersionSteady`,
+`-s <solver>` accepts the analytical names (`plume`, `puff`), the integral
+model (`unified`, also `udm` / `udmcnt` / `integral`), the OpenFOAM solver
+(`rhoReactingBuoyantFoam`) **and the FluidX3D family** (`fluidx3dDispersion`, `fluidx3dDispersionSteady`,
 `fluidx3dFire`). FluidX3D solvers run in-process via the GPU bridge  -  no
 OpenFOAM environment required.
 
