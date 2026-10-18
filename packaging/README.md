@@ -41,16 +41,19 @@ FluidX3D bridge, which is the fast path when iterating on packaging itself.
 
 ## CI
 
-`Installers` runs on every push to `master`, on pull requests, and on demand.
-Pushing a `v*` tag additionally publishes the three files plus `SHA256SUMS.txt`
-as a GitHub release:
+`Installers` runs when a `v*` tag is pushed, which also publishes the three
+files plus `SHA256SUMS.txt` as a GitHub release, and on demand from the Actions
+tab (`workflow_dispatch`) against any branch:
 
 ```bash
 git tag -a v1.0.0 -m "1.0.0" && git push origin v1.0.0
 ```
 
-Untagged runs stamp `<csproj version>-ci.<run number>` and only upload build
-artifacts.
+Packaging three desktop targets is slow enough that it is not worth running on
+every push, so nothing else triggers it. A `workflow_dispatch` run stamps the
+version typed into the dialog, or `<version>-ci.<run number>` read from
+`DisperSim3D.App/DisperSim3D.App.csproj` when that box is left empty, and only
+uploads build artifacts.
 
 ## Platform notes
 

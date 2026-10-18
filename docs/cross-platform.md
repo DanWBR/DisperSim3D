@@ -12,12 +12,14 @@ nav_order: 14
 
 DisperSim 3D started life as a Windows-only WinForms + WPF application. As of
 the 1.0 cross-platform port, **the calculation engine, the FluidX3D GPU
-bridge, the headless CLI, and a proof-of-concept Avalonia UI all run on
-Windows, Linux and macOS from the same source**. The original WinForms
-desktop shell still launches and works exactly as before on Windows. This
-page tells the story of how that's structured, shows the actual screenshots
-from the validation run on Ubuntu 24.04 / WSL2, and provides the recipe to
-reproduce it from a clean clone.
+bridge, the headless CLI, and the Avalonia UI all run on Windows, Linux and
+macOS from the same source**. The original WinForms desktop shell still
+launches and works exactly as before on Windows. This page tells the story of
+how that's structured, shows the actual screenshots from the validation run on
+Ubuntu 24.04 / WSL2, and provides the recipe to reproduce it from a clean
+clone. Those screenshots are the record of that run; the Avalonia window has
+since grown into the project editor the published `.deb` and `.dmg` ship  -
+see [Where it landed](#where-it-landed).
 
 ## What's portable, what isn't
 
@@ -25,7 +27,7 @@ reproduce it from a clean clone.
 |---|---|:-:|:-:|:-:|
 | `DisperSim3D` (engine) | `net10.0` + `net10.0-windows` (multi-target) | ✅ | ✅ | ✅ |
 | `DisperSim3D.CLI` (headless) | `net10.0` | ✅ | ✅ | ✅ |
-| `DisperSim3D.UI.Avalonia` (cross-platform verification) | `net10.0` + Avalonia 11 | ✅ | ✅ (WSLg) | ✅ |
+| `DisperSim3D.UI.Avalonia` (Linux / macOS UI) | `net10.0` + Avalonia 11 | ✅ | ✅ (WSLg) | ✅ |
 | `DisperSim3D.UI.Wpf` + `DisperSim3D.App` (WinForms shell) | `net10.0-windows` | ✅ |  -  |  -  |
 | `FluidX3D` native library | C++ / OpenCL | `FluidX3D.dll` (MSVC) | `libFluidX3D.so` (g++) | `libFluidX3D.dylib` (g++) |
 
@@ -47,9 +49,10 @@ DisperSim3D.UI.Wpf/                (Windows-only UI library)
 └── net10.0-windows. Holds every type that touches WPF / HelixToolkit /
     HandyControl / DockPanelSuite. References DisperSim3D.
 
-DisperSim3D.UI.Avalonia/           (Cross-platform verification window)
-└── net10.0. Pure Avalonia 11  -  a 4-panel proof that the engine works
-    behind a non-WPF UI on the same source. References DisperSim3D.
+DisperSim3D.UI.Avalonia/           (Linux / macOS UI)
+└── net10.0. Pure Avalonia 11  -  the project editor the .deb and the .dmg
+    ship: tree, property editor, an OpenGL 3.3 viewport (GlViewport) and its
+    own dialogs, over the same engine. References DisperSim3D.
 
 DisperSim3D.CLI/                   (headless runner)
 └── net10.0. References DisperSim3D. Same binary on every OS.
@@ -92,7 +95,7 @@ dotnet DisperSim3D.CLI/bin/Release/net10.0/DisperSim3D.CLI.dll --geometry-selfte
 dotnet DisperSim3D.CLI/bin/Release/net10.0/DisperSim3D.CLI.dll --iogp-selftest       # 27/27 PASS
 dotnet DisperSim3D.CLI/bin/Release/net10.0/DisperSim3D.CLI.dll --list-gpus           # JSON device list
 
-# 4) Avalonia verification window  -  opens via WSLg on the Windows desktop
+# 4) The Avalonia UI  -  opens via WSLg on the Windows desktop
 dotnet build DisperSim3D.UI.Avalonia/DisperSim3D.UI.Avalonia.csproj -c Release
 dotnet DisperSim3D.UI.Avalonia/bin/Release/net10.0/DisperSim3D.UI.Avalonia.dll
 ```
@@ -161,9 +164,10 @@ PoCL CPU runtime → results back up the stack as JSON.
 
 ### Step 4  -  Avalonia verification window (4 panels, all green)
 
-The proof-of-concept Avalonia UI. Native window on the Windows desktop via
-WSLg, identical layout the user would get on a bare-metal Linux desktop or
-macOS:
+How the Avalonia UI looked when the port was validated: a four-panel window
+whose only job was to exercise the engine behind a non-WPF front end. Native
+window on the Windows desktop via WSLg, identical layout the user would get on
+a bare-metal Linux desktop or macOS:
 
 ![DisperSim 3D Avalonia verification  -  4 panels all green on WSL2]({{ site.baseurl }}/assets/cross-platform/04-avalonia-all-green-wsl2.png)
 
@@ -238,38 +242,40 @@ WSL2 introduces a thin layer of overhead vs. bare-metal Linux:
 - **FluidX3D + NVIDIA GPU via WSLg vGPU**: ~10–20% overhead vs. native
   Linux on the same hardware, but full CUDA-class throughput. The Windows
   driver does the actual work.
-- **Avalonia UI rendering via WSLg**: imperceptible for non-3D UI; for the
-  future Avalonia 3D viewport (OpenTK / Silk.NET), expect some marshalling
-  cost.
+- **Avalonia UI rendering via WSLg**: imperceptible for the 2D UI; the
+  OpenGL 3.3 viewport goes through WSLg's GL stack, so expect some
+  marshalling cost on large scenes.
 
 For development the WSL2 round-trip is excellent  -  you can edit on
 Windows, build on Linux, and the resulting binary lands on the same NTFS
 share both OSs see. For release validation, verification on a bare-metal Linux
 container too.
 
-## What's next
+## Where it landed
 
-The cross-platform port is complete as a **foundation**. The pieces above
-prove the engine, the C++ bridge, and a non-WPF UI all hold up together
-on Linux. The remaining work to ship a full Linux/macOS desktop app
-against this foundation is:
+The port is past the foundation stage: a Linux and a macOS desktop app ship
+from this source tree as a `.deb` and a `.dmg`. Of the five items this page
+used to list as next steps, four are done:
 
-1. **3D viewport on Avalonia**  -  substitute `HelixToolkit.Wpf` with
-   OpenTK or Silk.NET on top of Avalonia's `OpenGlControlBase`.
-2. **Avalonia dialogs**  -  port the WPF dialogs in `DisperSim3D.UI.Wpf` to
-   Avalonia 11 XAML. The code-behind logic is mostly pure C# already, so
-   this is largely XAML conversion.
-3. **OpenFOAM path detection on Linux**  -  the runner currently looks for
-   `%APPDATA%\ESI-OpenCFD`; on Linux it should also probe
-   `~/OpenFOAM/`, `/opt/openfoam*/`, `/usr/lib/openfoam/`.
-4. **DWSIM thermo on Linux**  -  `DwsimThermo.cs` is reflection-loaded
-   (zero compile-time dependency on DWSIM), so it should work
-   out-of-the-box once `AppSettings.DwsimInstallPath` points at the
-   DWSIM Linux install. Subject to a real test.
-5. **CI on `ubuntu-latest`**  -  a GitHub Actions workflow that runs
-   `--validate benchmarks/` + `--geometry-selftest` + `--iogp-selftest`
-   on every PR. Small, deterministic, prevents cross-platform regressions.
+1. **3D viewport on Avalonia**  -  done. `GlViewport` is an OpenGL 3.3
+   renderer (OpenGL ES 3.0 via ANGLE) on Avalonia's `OpenGlControlBase`,
+   drawing the ground grid, the sky, imported `.stl` / `.obj` / `.rvm`
+   geometry, wind lines, `PortableMarchingCubes` isosurfaces, contour
+   planes, flash-fire envelopes and result playback.
+2. **Avalonia dialogs**  -  done. The editor's dialogs are ported, from the
+   source, gas and meteorology editors to the dispersion and fire studies,
+   the detector allocator, the benchmark harness and the simulation manager.
+3. **OpenFOAM path detection on Linux**  -  done. The environment probe
+   searches `/usr/lib/openfoam/*/etc/bashrc` and `/opt/openfoam*/etc/bashrc`
+   before falling back.
+4. **DWSIM thermo on Linux**  -  obsolete. `DwsimThermo` wraps the bundled
+   `DWSIMCore.Foundation` as a plain assembly reference, so there is no
+   install path to point at and no reflection probing on any OS.
+5. **CI on `ubuntu-latest`**  -  still open. The `Installers` workflow builds
+   the `.deb` on `ubuntu-latest`, but nothing runs `--validate benchmarks/`
+   + `--geometry-selftest` + `--iogp-selftest` on every PR yet. Small,
+   deterministic, prevents cross-platform regressions.
 
-None of these are blockers for the existing WinForms experience  -  they're
-additive. The current state is "engine and CLI fully cross-platform,
-WinForms UI fully functional on Windows" and that holds indefinitely.
+What stays Windows-only is the WinForms shell itself  -  the HelixToolkit
+viewport, the DockPanelSuite docking layout and the `.3ds` importer  -  and it
+is unaffected by any of the above.
