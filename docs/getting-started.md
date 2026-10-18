@@ -87,7 +87,7 @@ dotnet DisperSim3D.CLI/bin/Release/net10.0/DisperSim3D.CLI.dll --geometry-selfte
 dotnet DisperSim3D.CLI/bin/Release/net10.0/DisperSim3D.CLI.dll --iogp-selftest       # 27/27 PASS
 ```
 
-Analytical Gaussian solvers and external OpenFOAM runs work cross-platform from day one. **FluidX3D solvers** (`FX3DWN`/`FX3DDP`/`FX3DDS`/`FX3DFR`) now also build on Linux/macOS  -  see the [Building FluidX3D on Linux / macOS](solvers-fluidx3d#building-fluidx3d-on-linux--macos) section. Short version:
+Analytical Gaussian solvers and external OpenFOAM runs work cross-platform from day one. **FluidX3D solvers** (`FX3DWN`/`FX3DDP`/`FX3DDS`/`FX3DFR`) now also build on Linux/macOS  -  see the [Building FluidX3D on Linux / macOS](solvers-fluidx3d.html#building-fluidx3d-on-linux--macos) section. Short version:
 
 ```bash
 # Build the native library
@@ -129,7 +129,7 @@ From here you can:
 - Add **monitor points** to record concentration vs. time at fixed locations.
 - Run a **Dispersion Study** that bundles many simulations and feed it to the
   **Detector Allocation** algorithm  -  see
-  [Dispersion Studies &amp; Detector Allocation](studies-detectors).
+  [Dispersion Studies &amp; Detector Allocation](studies-detectors.html).
 - **Export** the case to a `.dsproj` bundle (zipped self-contained project)
   for sharing or re-running headlessly via `DisperSim3D.CLI`.
 

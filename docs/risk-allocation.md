@@ -16,7 +16,7 @@ expected unmitigated risk across a portfolio of leak scenarios, with leak
 frequencies derived from the embedded IOGP 434-01 database.
 
 For the unweighted max-coverage allocator and the classic Vianna 2019 Set
-Covering Problem, see [Dispersion Studies &amp; Detector Allocation](studies-detectors).
+Covering Problem, see [Dispersion Studies &amp; Detector Allocation](studies-detectors.html).
 
 ## When to use which strategy
 

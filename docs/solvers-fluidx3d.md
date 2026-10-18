@@ -25,7 +25,7 @@ heavy lifting happens in VRAM.
 
 That speed unlocks workflows that are impractical with OpenFOAM: parameter
 sweeps, design iteration with a "rebuild &amp; re-run" cycle of seconds, and
-the [Dispersion Studies](studies-detectors) workflow where dozens of
+the [Dispersion Studies](studies-detectors.html) workflow where dozens of
 simulations feed a single detector-allocation problem.
 
 ## The four FluidX3D runners
@@ -160,7 +160,7 @@ contour bands when both are toggled in the View menu.
 ## GPU device selection
 
 Multi-GPU systems route through the **Compute GPU** dialog under
-**Settings → GPU &amp; Memory...**. See [GPU &amp; Memory](gpu-memory).
+**Settings → GPU &amp; Memory...**. See [GPU &amp; Memory](gpu-memory.html).
 
 If `AppSettings.PreferredComputeDeviceId` is set (default `-1` = let
 FluidX3D pick), `fx3d_create_on_device(..., device_id)` pins the LBM

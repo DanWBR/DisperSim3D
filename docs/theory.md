@@ -246,7 +246,7 @@ the aerosol, its evaporation and the temperature are part of the state.
 
 Every equation, closure constant, the additions beyond the published UDM and
 the validation table are on the
-[unified integral model page](unified-dispersion-model). That page is the
+[unified integral model page](unified-dispersion-model.html). That page is the
 authority for this solver.
 
 ---

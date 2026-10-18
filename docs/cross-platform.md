@@ -102,7 +102,7 @@ dotnet DisperSim3D.UI.Avalonia/bin/Release/net10.0/DisperSim3D.UI.Avalonia.dll
 
 For production-speed FluidX3D runs, swap PoCL for the GPU vendor's ICD
 (NVIDIA driver / `intel-opencl-icd` / `amdgpu-install --usecase=opencl`)  - 
-see [FluidX3D solvers]({{ site.baseurl }}/solvers-fluidx3d#building-fluidx3d-on-linux--macos).
+see [FluidX3D solvers]({{ site.baseurl }}/solvers-fluidx3d.html#building-fluidx3d-on-linux--macos).
 
 ## Validation outputs
 

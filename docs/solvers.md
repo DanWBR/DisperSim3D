@@ -134,7 +134,7 @@ steady field, and the cloud centreline is drawn as the trajectory.
 
 Formulation, closure constants, the additions beyond the UDM and the
 15-trial validation table are on the
-[unified integral model page](unified-dispersion-model).
+[unified integral model page](unified-dispersion-model.html).
 
 ## OpenFOAM solvers
 
@@ -207,5 +207,5 @@ BlueCFD backends. Native Windows is recommended and validated end-to-end with
 
 ## FluidX3D solvers
 
-See the [FluidX3D page](solvers-fluidx3d) for details on the GPU LBM
+See the [FluidX3D page](solvers-fluidx3d.html) for details on the GPU LBM
 implementation, the C# / C++ bridge and what each runner produces.

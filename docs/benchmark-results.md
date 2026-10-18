@@ -580,7 +580,7 @@ which still score the digitised long-average values.
 convective lofting of a surface release (Prairie Grass 7) and the mid-field
 dense persistence of Maplin 27; neither is a regime of the other benches.
 Closures and the additions beyond the published UDM are documented on the
-[unified integral model page](unified-dispersion-model).
+[unified integral model page](unified-dispersion-model.html).
 
 ## Methodology notes
 

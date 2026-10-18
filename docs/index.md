@@ -15,7 +15,7 @@ FluidX3D simulations, visualise concentration fields and optimise gas-detector
 placement.
 {: .fs-6 .fw-300 }
 
-[Get started](getting-started){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 }
+[Get started](getting-started.html){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 }
 [View on GitHub](https://github.com/DanWBR/DisperSim3D){: .btn .fs-5 .mb-4 .mb-md-0 }
 
 ---
@@ -31,7 +31,7 @@ the same source. The engine multi-targets `net10.0;net10.0-windows`, the
 CLI and Avalonia verification are plain `net10.0`, and FluidX3D builds as
 `libFluidX3D.so` / `.dylib` from the same C++ sources that produce the
 Windows `FluidX3D.dll`. Validated end-to-end on Ubuntu 24.04 / WSL2  -  see
-[Getting started](getting-started) for the cross-platform recipe.
+[Getting started](getting-started.html) for the cross-platform recipe.
 
 It combines four solver families inside a single project-centric workflow:
 
@@ -62,18 +62,18 @@ dispersion modelling, area classification and gas-detector siting studies.
 
 | Page | What you'll find |
 |---|---|
-| [Getting started](getting-started) | Install requirements, build, first project walkthrough |
-| [Workflow](workflow) | Project-centric model, tree sections, snapshot semantics |
-| [Solvers](solvers) | Decision matrix, analytical, OpenFOAM and FluidX3D pages |
-| [Unified integral model](unified-dispersion-model) | UDM formulation, closures, additions, validation on 15 field trials |
-| [Visualization](visualization) | Isosurfaces, contour planes, streamlines, wind fields, playback |
-| [Dispersion Studies &amp; Detector Allocation](studies-detectors) | Curated collections and greedy max-coverage placement |
-| [Risk-Reduction Allocation](risk-allocation) | Greedy MRR + embedded IOGP 434-01 leak-frequency database |
-| [GPU &amp; Memory](gpu-memory) | OpenCL device selection, RAM/VRAM/disk estimator |
-| [Validation](validation) | Hanna SPMs, `.dsbench` files, bundled benchmarks |
-| [Project File Format](file-format) | XML schema, `.dsproj` bundle, migration rules |
-| [Cross-platform](cross-platform) | Solution layout, end-to-end Linux/WSL2 recipe, validation screenshots, architecture decisions |
-| [References](references) | Bibliography and bundled PDFs |
+| [Getting started](getting-started.html) | Install requirements, build, first project walkthrough |
+| [Workflow](workflow.html) | Project-centric model, tree sections, snapshot semantics |
+| [Solvers](solvers.html) | Decision matrix, analytical, OpenFOAM and FluidX3D pages |
+| [Unified integral model](unified-dispersion-model.html) | UDM formulation, closures, additions, validation on 15 field trials |
+| [Visualization](visualization.html) | Isosurfaces, contour planes, streamlines, wind fields, playback |
+| [Dispersion Studies &amp; Detector Allocation](studies-detectors.html) | Curated collections and greedy max-coverage placement |
+| [Risk-Reduction Allocation](risk-allocation.html) | Greedy MRR + embedded IOGP 434-01 leak-frequency database |
+| [GPU &amp; Memory](gpu-memory.html) | OpenCL device selection, RAM/VRAM/disk estimator |
+| [Validation](validation.html) | Hanna SPMs, `.dsbench` files, bundled benchmarks |
+| [Project File Format](file-format.html) | XML schema, `.dsproj` bundle, migration rules |
+| [Cross-platform](cross-platform.html) | Solution layout, end-to-end Linux/WSL2 recipe, validation screenshots, architecture decisions |
+| [References](references.html) | Bibliography and bundled PDFs |
 
 ## License and contributions
 
