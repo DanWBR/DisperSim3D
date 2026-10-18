@@ -3,7 +3,7 @@
 # Theme: Just the Docs (remote theme  -  no local build required, GitHub Pages
 #        compiles server-side).
 # Source: /docs (configure under Settings → Pages → "Deploy from a branch" →
-#         Branch: main, Folder: /docs).
+#         Branch: master, Folder: /docs).
 # Live URL: https://danwbr.github.io/DisperSim3D/
 
 title: DisperSim 3D
