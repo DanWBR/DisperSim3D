@@ -6,7 +6,7 @@ so a release build can always be reproduced by hand on the matching OS.
 
 | Target | Script | Output | Ships |
 |---|---|---|---|
-| Windows | `windows/build-installer.ps1` | `dist/DisperSim3D-<ver>-win-x64-setup.exe` | WinForms shell (`DisperSim3D.App`) + CLI |
+| Windows | `windows/build-installer.ps1` | `dist/DisperSim3D-<ver>-win-x64-setup.exe` | WinForms shell (`DisperSim3D.App`) + Avalonia UI + CLI |
 | Linux | `linux/build-deb.sh` | `dist/dispersim3d_<ver>_amd64.deb` | Avalonia UI + CLI |
 | macOS | `macos/build-dmg.sh` | `dist/DisperSim3D-<ver>-osx-<arch>.dmg` | Avalonia UI + CLI |
 
@@ -14,10 +14,12 @@ Every payload is a **self-contained .NET 10 publish**: no runtime prerequisite
 on the target machine. Each one also carries the native FluidX3D bridge for its
 platform, compiled from `FluidX3D/src` as part of the build.
 
-The Windows package ships the WinForms shell because that is the production
-Windows UI (HelixToolkit / HandyControl / DockPanelSuite have no cross-platform
-equivalent); Linux and macOS ship the Avalonia UI, which is the same engine
-behind a portable front end.
+The Windows package installs both UIs and puts a Start menu entry on each: the
+WinForms shell is the production Windows UI (HelixToolkit / HandyControl /
+DockPanelSuite have no cross-platform equivalent) and keeps the plain product
+name, while the Avalonia UI installs under `avalonia\` with its own entry.
+Linux and macOS ship the Avalonia UI alone. Each payload is a separate
+self-contained publish, so installing both UIs costs the runtime twice.
 
 ## Building locally
 

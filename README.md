@@ -314,7 +314,12 @@ Ready-to-install packages are built by the [`Installers`](.github/workflows/inst
 workflow and attached to every `v*` release: a Windows setup executable, a
 Debian/Ubuntu `.deb` and a macOS `.dmg`. All three bundle a self-contained
 .NET 10 runtime and the native FluidX3D bridge, so there is no prerequisite to
-install first. To build one locally, see [packaging/README.md](packaging/README.md):
+install first. The Windows setup installs **both UIs** — the WinForms shell
+under the product name and the Avalonia UI in `avalonia\`, each with its own
+Start menu entry and optional desktop icon — plus the headless CLI in `cli\`;
+the `.deb` and the `.dmg` carry the Avalonia UI and the CLI.
+
+To build one locally, see [packaging/README.md](packaging/README.md):
 
 ```bash
 packaging/linux/build-deb.sh --version 1.0.0

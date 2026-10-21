@@ -17,6 +17,9 @@
     the engine, FluidX3D P/Invoke and a Gaussian-plume run on the same code base
     that powers the WinForms app, but compiled for any OS Avalonia targets.</Description>
     <Version>0.1.0</Version>
+    <!-- Win32 icon resource for the .exe (ignored on non-Windows builds). The
+         window icon comes from the same file as an AvaloniaResource below. -->
+    <ApplicationIcon>Assets\Air.ico</ApplicationIcon>
     <!-- NU1903 fires on Tmds.DBus.Protocol 0.20.0 (Avalonia transitive dep, Linux
          D-Bus only). Kept suppressed across the 11.2 → 12 upgrade in case it
          lingers in the new transitive graph; safe to remove if a clean build

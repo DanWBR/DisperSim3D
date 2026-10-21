@@ -6,9 +6,11 @@
     Three steps, all runnable on a clean clone:
 
       1. MSBuild FluidX3D.vcxproj  -> bin\FluidX3D.dll (the OpenCL/LBM bridge)
-      2. dotnet publish            -> build\win-x64\  (WinForms shell + CLI,
-                                      self-contained win-x64, no runtime
-                                      prerequisite on the target machine)
+      2. dotnet publish            -> build\win-x64\           (WinForms shell)
+                                     build\win-x64\avalonia\  (Avalonia UI)
+                                     build\win-x64\cli\       (headless runner)
+                                      each self-contained win-x64, so there is no
+                                      runtime prerequisite on the target machine
       3. ISCC DisperSim3D.iss      -> dist\*-setup.exe
 
     Same script the CI workflow calls, so a local reproduction of a release
@@ -68,9 +70,16 @@ if (Test-Path $payload) { Remove-Item $payload -Recurse -Force }
     -o $payload --nologo
 if ($LASTEXITCODE -ne 0) { throw "DisperSim3D.App publish failed" }
 
-# The headless runner goes into a subfolder: it targets plain net10.0 while the
-# shell targets net10.0-windows, so publishing both into one directory would
-# have the two DisperSim3D.dll flavours overwrite each other.
+# The Avalonia UI and the headless runner go into subfolders: both target plain
+# net10.0 while the shell targets net10.0-windows, so publishing them into one
+# directory would have the two DisperSim3D.dll flavours overwrite each other.
+Write-Step "Publishing DisperSim3D.UI.Avalonia -> $payload\avalonia"
+& dotnet publish (Join-Path $repoRoot "DisperSim3D.UI.Avalonia\DisperSim3D.UI.Avalonia.csproj") `
+    -c Release -r win-x64 --self-contained true `
+    -p:Version=$Version -p:DebugType=none `
+    -o (Join-Path $payload "avalonia") --nologo
+if ($LASTEXITCODE -ne 0) { throw "DisperSim3D.UI.Avalonia publish failed" }
+
 Write-Step "Publishing DisperSim3D.CLI -> $payload\cli"
 & dotnet publish (Join-Path $repoRoot "DisperSim3D.CLI\DisperSim3D.CLI.csproj") `
     -c Release -r win-x64 --self-contained true `
@@ -78,9 +87,10 @@ Write-Step "Publishing DisperSim3D.CLI -> $payload\cli"
     -o (Join-Path $payload "cli") --nologo
 if ($LASTEXITCODE -ne 0) { throw "DisperSim3D.CLI publish failed" }
 
-# Both csproj files copy ..\bin\FluidX3D.dll when it exists at evaluation time;
-# copy it again so the payload is correct even if the DLL appeared later.
+# All three csproj files copy ..\bin\FluidX3D.dll when it exists at evaluation
+# time; copy it again so the payload is correct even if the DLL appeared later.
 Copy-Item $fluidDll (Join-Path $payload "FluidX3D.dll") -Force
+Copy-Item $fluidDll (Join-Path $payload "avalonia\FluidX3D.dll") -Force
 Copy-Item $fluidDll (Join-Path $payload "cli\FluidX3D.dll") -Force
 
 $sizeMb = [Math]::Round(((Get-ChildItem $payload -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), 1)

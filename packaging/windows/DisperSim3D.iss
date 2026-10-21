@@ -1,4 +1,4 @@
-; DisperSim3D.iss — Inno Setup 6 script for the Windows installer.
+﻿; DisperSim3D.iss — Inno Setup 6 script for the Windows installer.
 ;
 ; Compiled by packaging/windows/build-installer.ps1, which publishes the
 ; payload first and then passes the paths in as preprocessor defines:
@@ -31,7 +31,12 @@
 #define AppName        "DisperSim 3D"
 #define AppPublisher   "Daniel Wagner Oliveira de Medeiros"
 #define AppURL         "https://github.com/DanWBR/DisperSim3D"
+; Both UIs are installed: the WinForms shell at the root of {app} and the
+; Avalonia UI in avalonia\ (it targets plain net10.0, so its DisperSim3D.dll
+; cannot share a directory with the net10.0-windows one).
 #define AppExeName     "DisperSim3D.App.exe"
+#define AvaloniaDir    "avalonia"
+#define AvaloniaExe    "DisperSim3D.UI.Avalonia.exe"
 #define CliExeName     "DisperSim3D.CLI.exe"
 
 [Setup]
@@ -76,19 +81,35 @@ ShowLanguageDialog=auto
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 
+[CustomMessages]
+english.WinFormsName=Windows UI (WinForms)
+english.AvaloniaName=Avalonia UI (OpenGL)
+english.DesktopIconWinForms=Desktop icon for the Windows UI
+english.DesktopIconAvalonia=Desktop icon for the Avalonia UI
+brazilianportuguese.WinFormsName=Interface Windows (WinForms)
+brazilianportuguese.AvaloniaName=Interface Avalonia (OpenGL)
+brazilianportuguese.DesktopIconWinForms=Ícone na Área de Trabalho para a interface Windows
+brazilianportuguese.DesktopIconAvalonia=Ícone na Área de Trabalho para a interface Avalonia
+
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:DesktopIconWinForms}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "desktopiconavalonia"; Description: "{cm:DesktopIconAvalonia}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; Whole publish tree, including the cli\ subfolder and FluidX3D.dll.
+; Whole publish tree, including the avalonia\ and cli\ subfolders and
+; FluidX3D.dll next to each executable.
 Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#RepoRoot}\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "{#RepoRoot}\README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
+; The plain name launches the WinForms shell, the production Windows UI; the
+; Avalonia entry sits next to it for the same project files.
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Comment: "{cm:WinFormsName}"
+Name: "{group}\{#AppName} - {cm:AvaloniaName}"; Filename: "{app}\{#AvaloniaDir}\{#AvaloniaExe}"; Comment: "{cm:AvaloniaName}"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Comment: "{cm:WinFormsName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#AppName} - {cm:AvaloniaName}"; Filename: "{app}\{#AvaloniaDir}\{#AvaloniaExe}"; Comment: "{cm:AvaloniaName}"; Tasks: desktopiconavalonia
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
