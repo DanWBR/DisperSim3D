@@ -16,7 +16,7 @@
     <Description>Cross-platform Avalonia UI smoke test for DisperSim 3D — exercises
     the engine, FluidX3D P/Invoke and a Gaussian-plume run on the same code base
     that powers the WinForms app, but compiled for any OS Avalonia targets.</Description>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <!-- Win32 icon resource for the .exe (ignored on non-Windows builds). The
          window icon comes from the same file as an AvaloniaResource below. -->
     <ApplicationIcon>Assets\Air.ico</ApplicationIcon>
