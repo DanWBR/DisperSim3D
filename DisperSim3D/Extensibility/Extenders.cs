@@ -158,4 +158,48 @@ namespace DisperSim3D.Extensibility
         /// </summary>
         Task RunOnUiThreadAsync(Func<Task> action);
     }
+
+    /// <summary>Where a simulation run stands in a host's simulation manager.</summary>
+    public sealed class ExtenderRunStatus
+    {
+        public ExtenderRunStatus(string state, double progress, string message, string? lastLogLine)
+        {
+            State = state;
+            Progress = progress;
+            Message = message;
+            LastLogLine = lastLogLine;
+        }
+
+        /// <summary>Queued, Running, Paused, Completed, Failed or Cancelled.</summary>
+        public string State { get; }
+
+        /// <summary>0 to 1.</summary>
+        public double Progress { get; }
+
+        public string Message { get; }
+
+        public string? LastLogLine { get; }
+    }
+
+    /// <summary>
+    /// Third version of the host contract: run the project's simulations. An
+    /// extender checks for it with <c>host is IExtenderHost3</c>.
+    /// </summary>
+    public interface IExtenderHost3 : IExtenderHost2
+    {
+        /// <summary>
+        /// Redraws the project tree and the 3D view after an extender changed
+        /// <see cref="IExtenderHost.CurrentScene"/>, and marks the project modified.
+        /// </summary>
+        void RefreshProject();
+
+        /// <summary>
+        /// Runs a project simulation as its Run command does, queued in the host's
+        /// simulation manager. Null when it was queued; otherwise why it was not.
+        /// </summary>
+        Task<string?> RunSimulationAsync(string simulationId);
+
+        /// <summary>The latest run of a simulation, or null when it has not been run in this session.</summary>
+        ExtenderRunStatus? GetSimulationRunStatus(string simulationId);
+    }
 }

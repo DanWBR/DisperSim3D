@@ -117,6 +117,31 @@ namespace DisperSim3D.CLI
                       scene?["gasDetectors"]?[0]?["position"]?[2]?.GetValue<double>() == 1.5,
                       "GET /scene describes the project", scene?.ToJsonString());
 
+                // ── Simulations ──────────────────────────────────────────
+                var badSolver = await Post(http, "simulations", new { source = "S-1", solver = "NoSuchSolver" });
+                Check(badSolver.StatusCode == HttpStatusCode.BadRequest, "an unknown solver is 400");
+                var noSource = await Post(http, "simulations", new { source = "Nowhere", solver = "GaussianPlume" });
+                Check(noSource.StatusCode == HttpStatusCode.NotFound, "an unknown source is 404");
+                JsonNode? added = await PostJson(http, "simulations",
+                    new { source = "s-1", solver = "gaussianplume", name = "Plume", durationS = 120, gridResolution = 30 });
+                string? simId = added?["simulation"]?["id"]?.GetValue<string>();
+                Check(added?["ok"]?.GetValue<bool>() == true && simId != null &&
+                      added?["simulation"]?["solver"]?.GetValue<string>() == "GaussianPlume" &&
+                      added?["simulation"]?["windField"]?.GetValue<string>() == "W-1" &&
+                      added?["simulation"]?["gridResolution"]?.GetValue<int>() == 30 &&
+                      host.Scene.Simulations.Count == 1 && host.Refreshes == 1,
+                      "POST /simulations adds one, by source name, with the first wind field", added?.ToJsonString());
+                JsonNode? sims = await GetJson(http, "simulations");
+                Check(sims?["simulations"]?[0]?["source"]?.GetValue<string>() == "S-1" && sims?["simulations"]?[0]?["run"] == null,
+                      "GET /simulations lists it, not yet run", sims?.ToJsonString());
+                var runMissing = await Post(http, "simulations/run", new { id = "nope" });
+                Check(runMissing.StatusCode == HttpStatusCode.Conflict, "running an unknown simulation is refused");
+                JsonNode? ran = await PostJson(http, "simulations/run", new { id = simId });
+                Check(ran?["ok"]?.GetValue<bool>() == true && ran?["run"]?["state"]?.GetValue<string>() == "Queued" &&
+                      host.RunRequests.Contains(simId!), "POST /simulations/run queues it in the host", ran?.ToJsonString());
+                JsonNode? runStatus = await GetJson(http, "simulations/status?id=" + simId);
+                Check(runStatus?["run"]?["state"]?.GetValue<string>() == "Queued", "GET /simulations/status reports the run");
+
                 var missing = await Post(http, "project/open", new { path = Path.Combine(work, "missing.dsproj") });
                 Check(missing.StatusCode == HttpStatusCode.NotFound, "opening a missing file is 404");
                 var relative = await Post(http, "project/open", new { path = "relative.dsproj" });
@@ -234,7 +259,7 @@ namespace DisperSim3D.CLI
         /// through the engine as the UIs do, and the "view" is a generated gradient.
         /// Its dialogs must never be reached — the server answers them itself.
         /// </summary>
-        private sealed class ScriptedHost : IExtenderHost2
+        private sealed class ScriptedHost : IExtenderHost3
         {
             private readonly SemaphoreSlim _ui = new(1, 1);
 
@@ -242,6 +267,8 @@ namespace DisperSim3D.CLI
             {
                 Scene = new Scene3D { Name = "Automation self-test" };
                 Scene.GasDetectors.Add(new GasDetector3D { Name = "GD-1", Position = new Point3D(10, 20, 1.5) });
+                Scene.TopLevelSources.Add(new ReleaseSource3D { Name = "S-1", Position = new Point3D(0, 0, 0) });
+                Scene.WindFieldScenarios.Add(new WindFieldScenario { Name = "W-1" });
             }
 
             public Scene3D Scene { get; set; }
@@ -249,6 +276,27 @@ namespace DisperSim3D.CLI
             public bool ViewAvailable { get; set; } = true;
 
             public List<string> UnexpectedCalls { get; } = new();
+
+            public int Refreshes { get; private set; }
+
+            public List<string> RunRequests { get; } = new();
+
+            private readonly Dictionary<string, ExtenderRunStatus> _runs = new();
+
+            public void RefreshProject() => Refreshes++;
+
+            /// <summary>Records the request as a queued run, as a host's simulation manager would.</summary>
+            public Task<string?> RunSimulationAsync(string simulationId)
+            {
+                if (!Scene.Simulations.Exists(s => s.Id == simulationId))
+                    return Task.FromResult<string?>("No simulation " + simulationId + " in the project.");
+                RunRequests.Add(simulationId);
+                _runs[simulationId] = new ExtenderRunStatus("Queued", 0, "Queued", null);
+                return Task.FromResult<string?>(null);
+            }
+
+            public ExtenderRunStatus? GetSimulationRunStatus(string simulationId) =>
+                _runs.TryGetValue(simulationId, out var run) ? run : null;
 
             public string HostName => "SelfTest";
 

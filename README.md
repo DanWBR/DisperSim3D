@@ -491,6 +491,10 @@ launch with environment variables:
 | `POST /project/save` | `{"path": "..."}`, or no body to save in place |
 | `GET /viewport.png?width=&height=` | the 3D view as a PNG (the Avalonia UI captures at the on-screen size) |
 | `POST /viewport/save` | `{"path": "...", "width": 0, "height": 0}` |
+| `GET /simulations` | the project's simulations, each with its latest run |
+| `POST /simulations` | `{"source": "Release 01", "solver": "RhoReactingBuoyantFoam", "windField": "...", "durationS": 300, "timeStepS": 0.5, "domainSizeM": 200, "gridResolution": 40, "snapshotCount": 20}` — source and solver required, the rest default as in Add Simulation |
+| `POST /simulations/run` | `{"id": "..."}` — queues it in the simulation manager, as its Run command does |
+| `GET /simulations/status?id=` | state, progress and last log line of its latest run |
 | `GET /log?after=N` | what the server did |
 
 ```bash

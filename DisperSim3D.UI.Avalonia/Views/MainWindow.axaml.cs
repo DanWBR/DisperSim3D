@@ -2037,6 +2037,13 @@ namespace DisperSim3D.UI.Avalonia.Views
         private void RunSimulation(ProjectTreeNode node)
         {
             if (_scene is null || node.Tag is not Simulation sim) return;
+            RunSimulation(sim);
+        }
+
+        /// <summary>Queues <paramref name="sim"/>; null when queued, otherwise why it was not.</summary>
+        internal string? RunSimulation(Simulation sim)
+        {
+            if (_scene is null) return "No project is open.";
 
             // The simulation names its own source and wind field; run those in a
             // scenario of its own, as the WinForms shell and the headless runner
@@ -2045,11 +2052,13 @@ namespace DisperSim3D.UI.Avalonia.Views
             if (source == null)
             {
                 StatusText.Text = $"The source of simulation '{sim.Name}' is not in the project — cannot run it.";
-                return;
+                return StatusText.Text;
             }
             var windField = _scene.WindFieldScenarios?.FirstOrDefault(w => w.Id == sim.WindFieldId);
             var meteo = windField?.Meteo ?? _scene.GeneralSettings?.DefaultMeteo ?? new MeteorologicalConditions();
-            var config = sim.SnapshotCfdConfig ?? new CfdConfiguration();
+            // The application's CFD settings (OpenFOAM install, processors) when the
+            // simulation carries none, as the WinForms runner does.
+            var config = sim.SnapshotCfdConfig ?? AppSettings.Instance.CreateCfdConfig();
 
             var scenario = new DispersionScenario
             {
@@ -2110,7 +2119,19 @@ namespace DisperSim3D.UI.Avalonia.Views
 
             ShowSimulationManager();
             StatusText.Text = $"Simulation enqueued: {sim.Name}";
+            return null;
         }
+
+        /// <summary>The latest run of a simulation in this session's simulation manager.</summary>
+        internal DisperSim3D.Extensibility.ExtenderRunStatus? SimulationRunStatus(string simulationId)
+        {
+            var job = SimulationManager.AllJobs.LastOrDefault(j => j.SimulationId == simulationId);
+            return job == null ? null
+                : new DisperSim3D.Extensibility.ExtenderRunStatus(job.Status.ToString(), job.Progress, job.StatusText, job.LastLogLine);
+        }
+
+        /// <summary>Redraws the tree and the view after an extender changed the project.</summary>
+        internal void RefreshProjectFromExtender() => MarkDirtyAndRefresh(StatusText.Text ?? "");
 
         private void MenuToolsSimManager_Click(object? sender, RoutedEventArgs e)
             => ShowSimulationManager();

@@ -16,7 +16,7 @@ namespace DisperSim3D.Core
     /// to the UI thread through the editor panel, so an extender may call it from
     /// a worker.
     /// </summary>
-    public sealed class WinFormsExtenderHost : IExtenderHost2
+    public sealed class WinFormsExtenderHost : IExtenderHost3
     {
         private readonly Scene3DEditorPanel _panel;
 
@@ -91,6 +91,14 @@ namespace DisperSim3D.Core
 
         public Task<byte[]?> CaptureViewportPngAsync(int width, int height) =>
             Task.FromResult<byte[]?>(OnUi(() => _panel.RenderViewportPng(width, height)));
+
+        public void RefreshProject() => OnUi(() => { _panel.RefreshProjectFromExtender(); return true; });
+
+        public Task<string?> RunSimulationAsync(string simulationId) =>
+            Task.FromResult<string?>(OnUi(() => _panel.RunSimulationFromExtender(simulationId)));
+
+        public ExtenderRunStatus? GetSimulationRunStatus(string simulationId) =>
+            OnUi(() => _panel.SimulationRunStatus(simulationId));
 
         public Task RunOnUiThreadAsync(Func<Task> action)
         {

@@ -1819,6 +1819,32 @@ namespace DisperSim3D.Controls
             }
         }
 
+        /// <summary>Runs a simulation for an extender; null when queued, otherwise why it was not.</summary>
+        internal string RunSimulationFromExtender(string id)
+        {
+            var sim = _editor.Scene.Simulations.FirstOrDefault(s => s.Id == id);
+            if (sim == null) return "No simulation " + id + " in the project.";
+            bool queued = SimulationRunner.RunSnapshot(sim, _editor.Scene, _editor, m => UpdateStatus(m));
+            if (queued) DoShowSimulationManager();
+            RefreshProjectTree();
+            return queued ? null : sim.StatusMessage;
+        }
+
+        /// <summary>The latest run of a simulation; the runner names the run's scenario after it.</summary>
+        internal DisperSim3D.Extensibility.ExtenderRunStatus SimulationRunStatus(string id)
+        {
+            var job = _editor.SimulationManager.AllJobs.LastOrDefault(j => j.Scenario != null && j.Scenario.Id == id);
+            return job == null ? null
+                : new DisperSim3D.Extensibility.ExtenderRunStatus(job.Status.ToString(), job.Progress, job.StatusText, job.LastLogLine);
+        }
+
+        /// <summary>Redraws the tree and the view after an extender changed the project.</summary>
+        internal void RefreshProjectFromExtender()
+        {
+            RefreshProjectTree();
+            _editor.RefreshViewport();
+        }
+
         private void DoRunSimulation(string id)
         {
             var sim = _editor.Scene.Simulations.FirstOrDefault(s => s.Id == id);

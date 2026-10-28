@@ -38,6 +38,10 @@ namespace DisperSim3D.Automation
             "POST /project/save                {\"path\": \"C:\\\\project.dsproj\"} (path optional)",
             "GET  /viewport.png?width=&height= the 3D view as a PNG",
             "POST /viewport/save               {\"path\": \"C:\\\\view.png\", \"width\": 0, \"height\": 0}",
+            "GET  /simulations                 the project's simulations and their runs",
+            "POST /simulations                 {\"source\": \"Release 01\", \"solver\": \"GaussianPlume\", \"windField\": \"...\", \"durationS\": 300, ...}",
+            "POST /simulations/run             {\"id\": \"...\"} queues it as its Run command does",
+            "GET  /simulations/status?id=      where its latest run stands",
             "GET  /log?after=N                 what the server did"
         };
 
@@ -313,6 +317,14 @@ namespace DisperSim3D.Automation
                     return await OnUiGateAsync(() => ViewportPngAsync(r));
                 case "POST /viewport/save":
                     return await OnUiGateAsync(() => SaveViewportAsync(r));
+                case "GET /simulations":
+                    return JsonResponse(200, new { simulations = await SimulationsAsync() });
+                case "POST /simulations":
+                    return await OnUiGateAsync(() => AddSimulationAsync(r));
+                case "POST /simulations/run":
+                    return await OnUiGateAsync(() => RunSimulationAsync(r));
+                case "GET /simulations/status":
+                    return RunStatusResponse(r);
                 case "GET /log":
                     long after = r.Query.TryGetValue("after", out string? a) && long.TryParse(a, out long v) ? v : 0;
                     return JsonResponse(200, new { entries = _log.Since(after) });
@@ -515,6 +527,125 @@ namespace DisperSim3D.Automation
             return png;
         }
 
+        // ── Simulations ───────────────────────────────────────────────────
+
+        private IExtenderHost3 Host3 => _host as IExtenderHost3
+            ?? throw new HttpError(501, "This DisperSim 3D cannot run simulations for extenders.");
+
+        private async Task<List<object>> SimulationsAsync()
+        {
+            var host = Host3;
+            var list = new List<object>();
+            await _host.RunOnUiThreadAsync(() =>
+            {
+                Scene3D? scene = _host.CurrentScene;
+                if (scene != null)
+                    foreach (Simulation sim in scene.Simulations)
+                        list.Add(DescribeSimulation(scene, sim, host.GetSimulationRunStatus(sim.Id)));
+                return Task.CompletedTask;
+            });
+            return list;
+        }
+
+        private static object DescribeSimulation(Scene3D scene, Simulation sim, ExtenderRunStatus? run)
+        {
+            var source = scene.TopLevelSources.FirstOrDefault(s => s.Id == sim.SourceId);
+            var wind = scene.WindFieldScenarios.FirstOrDefault(w => w.Id == sim.WindFieldId);
+            return new
+            {
+                sim.Id,
+                sim.Name,
+                solver = sim.SolverType.ToString(),
+                status = sim.Status.ToString(),
+                source = source?.Name,
+                sim.SourceId,
+                windField = wind?.Name,
+                sim.WindFieldId,
+                windSpeedMPerS = wind?.Meteo?.WindSpeed,
+                durationS = sim.SnapshotDurationS,
+                timeStepS = sim.SnapshotTimeStepS,
+                domainSizeM = sim.SnapshotDomainSizeM,
+                gridResolution = sim.SnapshotGridResolution,
+                snapshotCount = sim.SnapshotCount,
+                maxConcentration = sim.MaxConcentration,
+                run
+            };
+        }
+
+        /// <summary>Adds a simulation with the Add Simulation dialog's defaults for what the request leaves out.</summary>
+        private async Task<Response> AddSimulationAsync(Request r)
+        {
+            var host = Host3;
+            JsonObject body = ReadJson(r);
+            string sourceKey = RequiredString(body, "source");
+            string solverText = RequiredString(body, "solver");
+            if (!Enum.TryParse(solverText, ignoreCase: true, out CfdSolverType solver) || !Enum.IsDefined(solver))
+                throw new HttpError(400, "Unknown solver " + solverText + "; one of " + string.Join(", ", Enum.GetNames<CfdSolverType>()) + ".");
+            string? windKey = OptionalString(body, "windField");
+
+            object? created = null;
+            string? error = null;
+            await _host.RunOnUiThreadAsync(() =>
+            {
+                Scene3D? scene = _host.CurrentScene;
+                if (scene == null) { error = "No project is open."; return Task.CompletedTask; }
+
+                var source = scene.TopLevelSources.FirstOrDefault(s => s.Id == sourceKey)
+                             ?? scene.TopLevelSources.FirstOrDefault(s => string.Equals(s.Name, sourceKey, StringComparison.OrdinalIgnoreCase));
+                if (source == null) { error = "No source " + sourceKey + " in the project."; return Task.CompletedTask; }
+
+                WindFieldScenario? wind = windKey == null
+                    ? scene.WindFieldScenarios.FirstOrDefault()
+                    : scene.WindFieldScenarios.FirstOrDefault(w => w.Id == windKey)
+                      ?? scene.WindFieldScenarios.FirstOrDefault(w => string.Equals(w.Name, windKey, StringComparison.OrdinalIgnoreCase));
+                if (windKey != null && wind == null) { error = "No wind field " + windKey + " in the project."; return Task.CompletedTask; }
+
+                var sim = new Simulation
+                {
+                    Name = OptionalString(body, "name") ?? "Simulation " + (scene.Simulations.Count + 1),
+                    SourceId = source.Id,
+                    WindFieldId = wind?.Id,
+                    SolverType = solver,
+                    Status = SimulationStatus.Configured,
+                    SnapshotDurationS = OptionalDouble(body, "durationS") ?? 300,
+                    SnapshotTimeStepS = OptionalDouble(body, "timeStepS") ?? 0.5,
+                    SnapshotDomainSizeM = OptionalDouble(body, "domainSizeM") ?? scene.GeneralSettings?.DefaultDomainSizeM ?? 200,
+                    SnapshotGridResolution = (int)(OptionalDouble(body, "gridResolution") ?? scene.GeneralSettings?.DefaultGridResolution ?? 40),
+                    SnapshotCount = (int)(OptionalDouble(body, "snapshotCount") ?? 20)
+                };
+                scene.Simulations.Add(sim);
+                host.RefreshProject();
+                created = DescribeSimulation(scene, sim, null);
+                return Task.CompletedTask;
+            });
+            if (error != null) throw new HttpError(error.StartsWith("No project") ? 409 : 404, error);
+            _log.Add("added simulation " + solver + " for " + sourceKey);
+            return JsonResponse(200, new { ok = true, simulation = created });
+        }
+
+        private async Task<Response> RunSimulationAsync(Request r)
+        {
+            var host = Host3;
+            string id = RequiredString(ReadJson(r), "id");
+            _log.Add("run simulation " + id);
+            string? refused = await host.RunSimulationAsync(id);
+            if (refused != null)
+            {
+                _log.Add("simulation " + id + " not run: " + refused);
+                throw new HttpError(409, refused);
+            }
+            return JsonResponse(200, new { ok = true, id, run = host.GetSimulationRunStatus(id) });
+        }
+
+        private Response RunStatusResponse(Request r)
+        {
+            if (!r.Query.TryGetValue("id", out string? id) || string.IsNullOrWhiteSpace(id))
+                throw new HttpError(400, "Give the simulation as ?id=.");
+            ExtenderRunStatus? run = Host3.GetSimulationRunStatus(id);
+            if (run == null) throw new HttpError(404, "Simulation " + id + " has not been run in this session.");
+            return JsonResponse(200, new { id, run });
+        }
+
         // ── Helpers ───────────────────────────────────────────────────────
 
         private static Response JsonResponse(int status, object value) =>
@@ -537,6 +668,18 @@ namespace DisperSim3D.Automation
             string? value = body[name] is JsonValue v && v.TryGetValue(out string? s) ? s : null;
             if (string.IsNullOrWhiteSpace(value)) throw new HttpError(400, "\"" + name + "\" is required.");
             return value;
+        }
+
+        private static string? OptionalString(JsonObject body, string name) =>
+            body[name] is JsonValue v && v.TryGetValue(out string? s) && !string.IsNullOrWhiteSpace(s) ? s : null;
+
+        private static double? OptionalDouble(JsonObject body, string name)
+        {
+            if (body[name] is not JsonValue v) return null;
+            if (v.TryGetValue(out double d)) return d;
+            if (v.TryGetValue(out string? s) && double.TryParse(s, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out d)) return d;
+            throw new HttpError(400, "\"" + name + "\" must be a number.");
         }
 
         private static string FullPath(string path)

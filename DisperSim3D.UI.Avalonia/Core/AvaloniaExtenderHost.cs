@@ -17,7 +17,7 @@ namespace DisperSim3D.UI.Avalonia.Core
     /// The Avalonia UI's side of the extender contract. Every member marshals to
     /// the UI thread itself, so an extender may call it from a worker.
     /// </summary>
-    internal sealed class AvaloniaExtenderHost : IExtenderHost2
+    internal sealed class AvaloniaExtenderHost : IExtenderHost3
     {
         private readonly MainWindow _window;
 
@@ -93,6 +93,18 @@ namespace DisperSim3D.UI.Avalonia.Core
         }
 
         public Task RunOnUiThreadAsync(Func<Task> action) => Dispatcher.UIThread.InvokeAsync(action);
+
+        public void RefreshProject() => OnUi(() => { _window.RefreshProjectFromExtender(); return true; });
+
+        public Task<string?> RunSimulationAsync(string simulationId) =>
+            Dispatcher.UIThread.InvokeAsync<string?>(() =>
+            {
+                var sim = _window.CurrentScene?.Simulations.FirstOrDefault(s => s.Id == simulationId);
+                return sim == null ? "No simulation " + simulationId + " in the project." : _window.RunSimulation(sim);
+            }).GetTask();
+
+        public ExtenderRunStatus? GetSimulationRunStatus(string simulationId) =>
+            OnUi(() => _window.SimulationRunStatus(simulationId));
 
         private static T OnUi<T>(Func<T> func) =>
             Dispatcher.UIThread.CheckAccess() ? func() : Dispatcher.UIThread.Invoke(func);
