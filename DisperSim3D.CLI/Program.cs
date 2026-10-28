@@ -63,6 +63,7 @@ namespace DisperSim3D.CLI
             bool iogpSelftest = false;
             bool geometrySelftest = false;
             bool fireRoundTripSelftest = false;
+            bool sourceRoundTripSelftest = false;
             bool solidFlameSelftest = false;
             bool flashFireSelftest = false;
             bool thermalDoseSelftest = false;
@@ -143,6 +144,9 @@ namespace DisperSim3D.CLI
                     case "--fire-roundtrip-selftest":
                         fireRoundTripSelftest = true;
                         break;
+                    case "--source-roundtrip-selftest":
+                        sourceRoundTripSelftest = true;
+                        break;
                     case "--solid-flame-selftest":
                         solidFlameSelftest = true;
                         break;
@@ -205,6 +209,7 @@ namespace DisperSim3D.CLI
             if (tracerGpuSelftest) return RunTracerGpuSelfTest();
             if (geometrySelftest) return RunGeometrySelfTest();
             if (fireRoundTripSelftest) return RunFireRoundTripSelfTest();
+            if (sourceRoundTripSelftest) return RunSourceRoundTripSelfTest();
             if (solidFlameSelftest) return RunSolidFlameSelfTest();
             if (flashFireSelftest) return RunFlashFireSelfTest();
             if (thermalDoseSelftest) return RunThermalDoseSelfTest();
@@ -667,6 +672,21 @@ namespace DisperSim3D.CLI
         /// 1 otherwise. Guards the SceneFileSaver/SceneFileLoader contract: a
         /// FireSource property written by one side and not read by the other
         /// fails here instead of silently resetting to its default.</summary>
+        /// <summary>Round-trips a release source through the project file and
+        /// compares every field. See <see cref="SourceRoundTripSelfTest"/>.</summary>
+        static int RunSourceRoundTripSelfTest()
+        {
+            try
+            {
+                return SourceRoundTripSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Source round-trip self-test failed: " + ex.Message);
+                return 2;
+            }
+        }
+
         static int RunFireRoundTripSelfTest()
         {
             try
@@ -1831,6 +1851,10 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             the published values; exit 0 on full pass.");
             Console.WriteLine("  --fire-roundtrip-selftest  Save and reload a FireScenario and compare");
             Console.WriteLine("                             every field; exit 0 on full pass.");
+            Console.WriteLine("  --source-roundtrip-selftest");
+            Console.WriteLine("                             Save and reload a release source in all three");
+            Console.WriteLine("                             places a project stores one, and compare every");
+            Console.WriteLine("                             field; exit 0 on full pass.");
             Console.WriteLine("  --solid-flame-selftest     Check the solid-flame radiation model against");
             Console.WriteLine("                             the point source and its limiting cases.");
             Console.WriteLine("  --flash-fire-selftest      Ignite synthetic clouds and check the burnt");
