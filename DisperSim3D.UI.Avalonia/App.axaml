@@ -77,6 +77,15 @@
     <Style Selector="CheckBox">
       <Setter Property="FontSize" Value="11" />
     </Style>
+    <!-- Compact tab headers, sized like DWSIM's: Fluent's 24px text and
+         48px header are meant for page-level navigation, not panel tabs. -->
+    <Style Selector="TabItem">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontWeight" Value="Normal" />
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
     <!-- Centre the button label (Avalonia Fluent's default is start-aligned). -->
     <Style Selector="Button">
       <Setter Property="FontSize" Value="11" />
