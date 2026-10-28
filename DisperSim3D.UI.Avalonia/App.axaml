@@ -47,10 +47,16 @@
       <Setter Property="Padding" Value="5,0" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
+    <!-- Padding and VerticalContentAlignment go on the NumericUpDown itself:
+         its template hands them to the inner TextBox by TemplateBinding,
+         which outranks the TextBox style below, and Fluent's default
+         padding (10,6,6,5) leaves no room for the text in 24px. -->
     <Style Selector="NumericUpDown">
       <Setter Property="FontSize" Value="11" />
       <Setter Property="Height" Value="24" />
       <Setter Property="MinHeight" Value="24" />
+      <Setter Property="Padding" Value="5,0" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
     <!-- NumericUpDown wraps its internal TextBox; override that one too so
          the wrapper's height actually applies. The inner TextBox would
