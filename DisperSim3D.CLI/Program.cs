@@ -64,6 +64,7 @@ namespace DisperSim3D.CLI
             bool geometrySelftest = false;
             bool fireRoundTripSelftest = false;
             bool sourceRoundTripSelftest = false;
+            bool listExtenders = false;
             bool solidFlameSelftest = false;
             bool flashFireSelftest = false;
             bool thermalDoseSelftest = false;
@@ -147,6 +148,9 @@ namespace DisperSim3D.CLI
                     case "--source-roundtrip-selftest":
                         sourceRoundTripSelftest = true;
                         break;
+                    case "--list-extenders":
+                        listExtenders = true;
+                        break;
                     case "--solid-flame-selftest":
                         solidFlameSelftest = true;
                         break;
@@ -210,6 +214,7 @@ namespace DisperSim3D.CLI
             if (geometrySelftest) return RunGeometrySelfTest();
             if (fireRoundTripSelftest) return RunFireRoundTripSelfTest();
             if (sourceRoundTripSelftest) return RunSourceRoundTripSelfTest();
+            if (listExtenders) return RunListExtenders();
             if (solidFlameSelftest) return RunSolidFlameSelfTest();
             if (flashFireSelftest) return RunFlashFireSelfTest();
             if (thermalDoseSelftest) return RunThermalDoseSelfTest();
@@ -672,6 +677,34 @@ namespace DisperSim3D.CLI
         /// 1 otherwise. Guards the SceneFileSaver/SceneFileLoader contract: a
         /// FireSource property written by one side and not read by the other
         /// fails here instead of silently resetting to its default.</summary>
+        /// <summary>Loads the extenders exactly as the desktop UIs do and lists
+        /// what they would add to the menus. Exit 0 when nothing failed to load.</summary>
+        static int RunListExtenders()
+        {
+            Console.WriteLine("Extender folders:");
+            foreach (string dir in DisperSim3D.Extensibility.ExtenderLoader.SearchDirectories)
+                Console.WriteLine("  " + dir + (System.IO.Directory.Exists(dir) ? "" : "   (missing)"));
+
+            var result = DisperSim3D.Extensibility.ExtenderLoader.LoadAll();
+            Console.WriteLine();
+            foreach (string line in result.Messages)
+                Console.WriteLine("  " + line);
+
+            Console.WriteLine();
+            Console.WriteLine(result.Collections.Count + " extender collection(s):");
+            foreach (var c in result.Collections)
+            {
+                Console.WriteLine("  [" + c.Category + "] " + c.DisplayText + "  (" + c.ID + ")");
+                if (!string.IsNullOrEmpty(c.Description)) Console.WriteLine("      " + c.Description);
+                foreach (var item in c.Collection)
+                    Console.WriteLine("      - " + item.DisplayText + "  (" + item.ID + ", position " + item.InsertAtPosition +
+                                      (item.DisplayImage != null ? ", icon " + item.DisplayImage.Length + " bytes" : "") + ")");
+            }
+
+            bool failed = result.Messages.Exists(m => m.StartsWith("skipped") || m.Contains("failed to start"));
+            return failed ? 1 : 0;
+        }
+
         /// <summary>Round-trips a release source through the project file and
         /// compares every field. See <see cref="SourceRoundTripSelfTest"/>.</summary>
         static int RunSourceRoundTripSelfTest()
@@ -1851,6 +1884,8 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             the published values; exit 0 on full pass.");
             Console.WriteLine("  --fire-roundtrip-selftest  Save and reload a FireScenario and compare");
             Console.WriteLine("                             every field; exit 0 on full pass.");
+            Console.WriteLine("  --list-extenders           Load the extenders the desktop UIs would load and");
+            Console.WriteLine("                             list their menu commands, with every load decision.");
             Console.WriteLine("  --source-roundtrip-selftest");
             Console.WriteLine("                             Save and reload a release source in all three");
             Console.WriteLine("                             places a project stores one, and compare every");

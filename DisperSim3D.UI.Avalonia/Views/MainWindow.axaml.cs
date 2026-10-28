@@ -51,6 +51,7 @@ namespace DisperSim3D.UI.Avalonia.Views
     {
         private Scene3D? _scene;
         private string? _projectPath;
+        private DisperSim3D.UI.Avalonia.Core.AvaloniaExtenderHost? _extenderHost;
         private bool _isDirty;
 
         // ── Simulation manager ──────────────────────────────────────────
@@ -82,6 +83,7 @@ namespace DisperSim3D.UI.Avalonia.Views
         public MainWindow()
         {
             InitializeComponent();
+            AddExtenderMenuItems();
             StatusEnv.Text = BuildEnvLine();
             RefreshWorkDirStatus();
             StatusWorkDir.PointerPressed += (_, _) =>
@@ -618,6 +620,92 @@ namespace DisperSim3D.UI.Avalonia.Views
 
             string path = files[0].TryGetLocalPath() ?? files[0].Path.LocalPath;
             await LoadProjectAsync(path);
+        }
+
+        /// <summary>The open project, for extenders.</summary>
+        internal Scene3D? CurrentScene => _scene;
+
+        /// <summary>Path the project was opened from or saved to; null for an unsaved one.</summary>
+        internal string? CurrentProjectPath => _projectPath;
+
+        internal void SetStatusText(string text) => StatusText.Text = text;
+
+        /// <summary>Opens a project for an extender, through the same path as File → Open.</summary>
+        internal Task OpenProjectFromExtenderAsync(string path) => LoadProjectAsync(path);
+
+        /// <summary>
+        /// Adds the File commands of every loaded extender (see
+        /// <see cref="DisperSim3D.Extensibility.ExtenderLoader"/>). A command with a
+        /// position goes there; the rest are grouped above Exit. Extenders of other
+        /// categories land in File too, until this window grows a menu for them.
+        /// </summary>
+        private void AddExtenderMenuItems()
+        {
+            DisperSim3D.Extensibility.ExtenderLoadResult loaded;
+            try
+            {
+                loaded = DisperSim3D.Extensibility.ExtenderLoader.LoadAll();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[Extenders] " + ex);
+                return;
+            }
+            foreach (string line in loaded.Messages)
+                System.Diagnostics.Debug.WriteLine("[Extenders] " + line);
+            if (loaded.Collections.Count == 0) return;
+
+            _extenderHost = new DisperSim3D.UI.Avalonia.Core.AvaloniaExtenderHost(this);
+            var appended = new List<MenuItem>();
+
+            foreach (var collection in loaded.Collections)
+            {
+                foreach (var item in collection.Collection)
+                {
+                    var mi = new MenuItem { Header = item.DisplayText, Icon = IconFromPng(item.DisplayImage) };
+                    var command = item;
+                    mi.Click += async (_, _) =>
+                    {
+                        try
+                        {
+                            await command.RunAsync(_extenderHost);
+                        }
+                        catch (Exception ex)
+                        {
+                            await _extenderHost.ShowMessageAsync("Extender error",
+                                command.DisplayText + " failed:\n\n" + ex.Message, isError: true);
+                        }
+                    };
+
+                    if (item.InsertAtPosition >= 0 && item.InsertAtPosition <= MenuFile.Items.Count)
+                        MenuFile.Items.Insert(item.InsertAtPosition, mi);
+                    else
+                        appended.Add(mi);
+                }
+            }
+
+            if (appended.Count > 0)
+            {
+                // Above the separator that precedes Exit, as a group of its own.
+                int exitSeparator = Math.Max(0, MenuFile.Items.Count - 2);
+                MenuFile.Items.Insert(exitSeparator, new Separator());
+                for (int i = 0; i < appended.Count; i++)
+                    MenuFile.Items.Insert(exitSeparator + 1 + i, appended[i]);
+            }
+        }
+
+        private static Image? IconFromPng(byte[]? png)
+        {
+            if (png == null || png.Length == 0) return null;
+            try
+            {
+                using var ms = new MemoryStream(png);
+                return new Image { Source = new global::Avalonia.Media.Imaging.Bitmap(ms), Width = 16, Height = 16 };
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private async Task LoadProjectAsync(string path)

@@ -434,6 +434,34 @@ A `.dsbench` describes the source (`elevationDeg`, `releaseAzimuthDeg` for a rel
 
 ---
 
+## Extenders
+
+Menu commands can be added to both desktop UIs without rebuilding them, on the
+model of DWSIM's extenders. At start-up each UI loads every DLL whose name
+contains `Extender` from these folders, directly or one folder down:
+
+- `extenders\` beside the executable, for what ships with an install
+- `%APPDATA%\DisperSim3D\extenders\` (`~/.config/DisperSim3D/extenders/` elsewhere), for what the user adds
+- any folder listed in the `DISPERSIM3D_EXTENDERS` environment variable
+
+An extender implements the contract in `DisperSim3D.Extensibility`: a public
+`IExtenderCollection` (ID, display text, menu `Category`) holding `IExtender`
+commands (display text, optional PNG icon, `InsertAtPosition`, `RunAsync`).
+Unlike DWSIM's, a command never receives the host's window: it talks to the host
+through `IExtenderHost` — open and save dialogs, open a project, show a message,
+set the status text — which the WinForms shell and the Avalonia UI each
+implement, so one DLL runs in both.
+
+Each extender loads in a load context of its own and resolves its dependencies,
+native libraries included, from its own folder and `.deps.json` (build it with
+`<EnableDynamicLoading>true</EnableDynamicLoading>`). Whatever the host already
+ships — `DisperSim3D.dll` above all — is shared rather than loaded twice, so an
+extender's `Scene3D` is the host's. Reference the engine with `Private="false"`
+and `PrivateAssets="all"` to keep it out of the extender's folder.
+
+`DisperSim3D.CLI --list-extenders` loads them exactly as the UIs do and prints
+every command and every load decision, without opening a window.
+
 ## XML File Format
 
 Projects are saved as XML with root `<Project Version="2">`. Legacy `<Scene3D>` files are auto-migrated on load: inline gases are hoisted into `GasLibrary`, sources promoted to top level, and old scenarios converted into `Simulation` snapshots.
