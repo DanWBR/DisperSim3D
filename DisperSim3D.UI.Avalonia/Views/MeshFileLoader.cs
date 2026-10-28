@@ -224,21 +224,20 @@ namespace DisperSim3D.UI.Avalonia.Views
 
                 if (parts[0] == "v" && parts.Length >= 4)
                 {
-                    // OBJ convention is Y-up; DisperSim world is Z-up.
-                    // Apply Rx(90°): (x, y, z) → (x, -z, y) so a model
-                    // exported from Blender/MeshLab/etc. comes in standing
-                    // upright instead of lying on its side.
-                    float vx = float.Parse(parts[1], inv);
-                    float vy = float.Parse(parts[2], inv);
-                    float vz = float.Parse(parts[3], inv);
-                    positions.Add(new Vector3(vx, -vz, vy));
+                    // Coordinates as written, Z up, as the WinForms shell's
+                    // HelixToolkit importer reads them: one project shows the
+                    // same geometry in both UIs.
+                    positions.Add(new Vector3(
+                        float.Parse(parts[1], inv),
+                        float.Parse(parts[2], inv),
+                        float.Parse(parts[3], inv)));
                 }
                 else if (parts[0] == "vn" && parts.Length >= 4)
                 {
-                    float nx = float.Parse(parts[1], inv);
-                    float ny = float.Parse(parts[2], inv);
-                    float nz = float.Parse(parts[3], inv);
-                    normals.Add(new Vector3(nx, -nz, ny));
+                    normals.Add(new Vector3(
+                        float.Parse(parts[1], inv),
+                        float.Parse(parts[2], inv),
+                        float.Parse(parts[3], inv)));
                 }
                 else if (parts[0] == "f" && parts.Length >= 4)
                 {
@@ -318,24 +317,19 @@ namespace DisperSim3D.UI.Avalonia.Views
                         break;
 
                     case "v" when parts.Length >= 4:
-                    {
-                        // OBJ Y-up → DisperSim Z-up: Rx(90°) maps
-                        // (x, y, z) → (x, -z, y).
-                        float vx = float.Parse(parts[1], inv);
-                        float vy = float.Parse(parts[2], inv);
-                        float vz = float.Parse(parts[3], inv);
-                        positions.Add(new Vector3(vx, -vz, vy));
+                        // As written, Z up — see LoadObjSolid.
+                        positions.Add(new Vector3(
+                            float.Parse(parts[1], inv),
+                            float.Parse(parts[2], inv),
+                            float.Parse(parts[3], inv)));
                         break;
-                    }
 
                     case "vn" when parts.Length >= 4:
-                    {
-                        float nx = float.Parse(parts[1], inv);
-                        float ny = float.Parse(parts[2], inv);
-                        float nz = float.Parse(parts[3], inv);
-                        normals.Add(new Vector3(nx, -nz, ny));
+                        normals.Add(new Vector3(
+                            float.Parse(parts[1], inv),
+                            float.Parse(parts[2], inv),
+                            float.Parse(parts[3], inv)));
                         break;
-                    }
 
                     case "vt" when parts.Length >= 3:
                         texCoords.Add(new Vector2(

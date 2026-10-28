@@ -1869,7 +1869,9 @@ namespace DisperSim3D.UI.Avalonia.Views
             {
                 Name = preset.Label,
                 FilePath = resolved,
-                Scale = preset.DefaultScale
+                Scale = preset.DefaultScale,
+                // The props are stock Y-up OBJs; stand them up in the Z-up world.
+                Rotation = new DisperSim3D.Geometry.Vector3D(90, 0, 0)
             };
             _scene.Decorations.Add(deco);
             bool grew = Views.DecorationBounds.FitGrid(_scene, deco);
