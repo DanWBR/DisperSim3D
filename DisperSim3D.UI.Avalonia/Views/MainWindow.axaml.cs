@@ -633,6 +633,36 @@ namespace DisperSim3D.UI.Avalonia.Views
         /// <summary>Opens a project for an extender, through the same path as File → Open.</summary>
         internal Task OpenProjectFromExtenderAsync(string path) => LoadProjectAsync(path);
 
+        /// <summary>Saves the project for an extender, through the same path as File → Save As.</summary>
+        internal Task SaveProjectFromExtenderAsync(string path) => SaveAsync(path);
+
+        internal string StatusTextValue => StatusText.Text ?? "";
+
+        /// <summary>The 3D view's next frame as a PNG.</summary>
+        internal Task<byte[]?> CaptureViewportAsync() => Viewport3D.CaptureFrameAsync();
+
+        private bool _extendersStarted;
+
+        /// <summary>Starts the extenders that work in the background, once the window is up.</summary>
+        private void StartExtendersOnce()
+        {
+            if (_extendersStarted || _extenderHost == null) return;
+            _extendersStarted = true;
+            foreach (var collection in DisperSim3D.Extensibility.ExtenderLoader.LoadAll().Collections)
+            {
+                if (collection is not DisperSim3D.Extensibility.IExtenderStartup startup) continue;
+                try
+                {
+                    startup.OnHostStarted(_extenderHost);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("[Extenders] " + collection.ID + " failed to start: " + ex);
+                    StatusText.Text = collection.DisplayText + " failed to start: " + ex.Message;
+                }
+            }
+        }
+
         /// <summary>
         /// Adds the File commands of every loaded extender (see
         /// <see cref="DisperSim3D.Extensibility.ExtenderLoader"/>). A command with a
@@ -692,6 +722,9 @@ namespace DisperSim3D.UI.Avalonia.Views
                 for (int i = 0; i < appended.Count; i++)
                     MenuFile.Items.Insert(exitSeparator + 1 + i, appended[i]);
             }
+
+            // Extenders that work in the background start once the window is up.
+            Opened += (_, _) => StartExtendersOnce();
         }
 
         private static Image? IconFromPng(byte[]? png)

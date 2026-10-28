@@ -1769,14 +1769,29 @@ namespace DisperSim3D.Controls
 
         public void ExportViewportImage(string filePath, int width, int height)
         {
+            System.IO.File.WriteAllBytes(filePath, RenderViewportPng(width, height));
+        }
+
+        /// <summary>
+        /// The 3D view rendered as a PNG at <paramref name="width"/> × <paramref name="height"/>,
+        /// or at the view's on-screen size when either is not positive.
+        /// </summary>
+        public byte[] RenderViewportPng(int width, int height)
+        {
+            if (width <= 0 || height <= 0)
+            {
+                width = Math.Max(1, (int)_viewport.ActualWidth);
+                height = Math.Max(1, (int)_viewport.ActualHeight);
+            }
             var bitmap = HelixToolkit.Wpf.Viewport3DHelper.RenderBitmap(
                 _viewport.Viewport, width, height,
                 System.Windows.Media.Brushes.White);
-            using (var stream = System.IO.File.Create(filePath))
+            using (var stream = new System.IO.MemoryStream())
             {
                 var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
                 encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
                 encoder.Save(stream);
+                return stream.ToArray();
             }
         }
 

@@ -17,7 +17,7 @@ namespace DisperSim3D.UI.Avalonia.Core
     /// The Avalonia UI's side of the extender contract. Every member marshals to
     /// the UI thread itself, so an extender may call it from a worker.
     /// </summary>
-    internal sealed class AvaloniaExtenderHost : IExtenderHost
+    internal sealed class AvaloniaExtenderHost : IExtenderHost2
     {
         private readonly MainWindow _window;
 
@@ -72,6 +72,27 @@ namespace DisperSim3D.UI.Avalonia.Core
             Dispatcher.UIThread.InvokeAsync(() => ShowDialogAsync(title, message, isError));
 
         public void SetStatus(string text) => OnUi(() => { _window.SetStatusText(text); return true; });
+
+        public string StatusText => OnUi(() => _window.StatusTextValue);
+
+        public Task SaveProjectAsync(string path) =>
+            Dispatcher.UIThread.InvokeAsync(() => _window.SaveProjectFromExtenderAsync(path));
+
+        /// <summary>
+        /// The GL view renders at its on-screen size only, so the requested size is
+        /// ignored. Null when no frame arrives within a few seconds — the window is
+        /// minimised, or the view is not being drawn.
+        /// </summary>
+        public async Task<byte[]?> CaptureViewportPngAsync(int width, int height)
+        {
+            // The request is made on the UI thread; the frame itself arrives from the
+            // render callback, so it is awaited here, with a timeout.
+            Task<byte[]?> frame = OnUi(() => _window.CaptureViewportAsync());
+            Task finished = await Task.WhenAny(frame, Task.Delay(TimeSpan.FromSeconds(5)));
+            return finished == frame && frame.Status == TaskStatus.RanToCompletion ? frame.Result : null;
+        }
+
+        public Task RunOnUiThreadAsync(Func<Task> action) => Dispatcher.UIThread.InvokeAsync(action);
 
         private static T OnUi<T>(Func<T> func) =>
             Dispatcher.UIThread.CheckAccess() ? func() : Dispatcher.UIThread.Invoke(func);

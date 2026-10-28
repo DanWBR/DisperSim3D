@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -118,5 +119,43 @@ namespace DisperSim3D.Extensibility
 
         /// <summary>Text for the host's status bar.</summary>
         void SetStatus(string text);
+    }
+
+    /// <summary>
+    /// Optional, on an <see cref="IExtenderCollection"/>: called once by each host
+    /// after its main window is up. The place for an extender that works in the
+    /// background rather than from a menu — DWSIM's InitializationScript category,
+    /// as an interface.
+    /// </summary>
+    public interface IExtenderStartup
+    {
+        void OnHostStarted(IExtenderHost host);
+    }
+
+    /// <summary>
+    /// Second version of the host contract. <see cref="IExtenderHost"/> stays as it
+    /// is, as DWSIM's IExtender does, and what a newer extender needs comes here: an
+    /// extender checks for it with <c>host is IExtenderHost2</c>.
+    /// </summary>
+    public interface IExtenderHost2 : IExtenderHost
+    {
+        /// <summary>Saves the open project to <paramref name="path"/>, as File → Save does.</summary>
+        Task SaveProjectAsync(string path);
+
+        /// <summary>What the host's status bar shows now.</summary>
+        string StatusText { get; }
+
+        /// <summary>
+        /// The 3D view as a PNG. A host renders at the requested size when it can and
+        /// at the view's on-screen size otherwise; null when it has no view to render.
+        /// </summary>
+        Task<byte[]?> CaptureViewportPngAsync(int width, int height);
+
+        /// <summary>
+        /// Runs <paramref name="action"/> on the UI thread and completes when it does,
+        /// for code that lives on another thread and must run a command or read the
+        /// project the way the UI does.
+        /// </summary>
+        Task RunOnUiThreadAsync(Func<Task> action);
     }
 }

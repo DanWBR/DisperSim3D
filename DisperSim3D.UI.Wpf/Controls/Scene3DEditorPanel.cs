@@ -3045,6 +3045,10 @@ namespace DisperSim3D.Controls
 
         internal void SetStatusText(string text) => UpdateStatus(text);
 
+        internal string StatusTextValue => _statusLabel.Text;
+
+        internal byte[] RenderViewportPng(int width, int height) => _editor.RenderViewportPng(width, height);
+
         /// <summary>
         /// Adds the File commands of every loaded extender (see
         /// <see cref="DisperSim3D.Extensibility.ExtenderLoader"/>). A command with a
@@ -3104,6 +3108,33 @@ namespace DisperSim3D.Controls
                 for (int i = 0; i < appended.Count; i++)
                     menuFile.DropDownItems.Insert(exitSeparator + 1 + i, appended[i]);
             }
+
+            // Extenders that work in the background start once the window exists.
+            HandleCreated += StartExtendersOnce;
+        }
+
+        private bool _extendersStarted;
+
+        private void StartExtendersOnce(object sender, EventArgs e)
+        {
+            if (_extendersStarted || _extenderHost == null) return;
+            _extendersStarted = true;
+            BeginInvoke(new Action(() =>
+            {
+                foreach (var collection in DisperSim3D.Extensibility.ExtenderLoader.LoadAll().Collections)
+                {
+                    if (!(collection is DisperSim3D.Extensibility.IExtenderStartup startup)) continue;
+                    try
+                    {
+                        startup.OnHostStarted(_extenderHost);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine("[Extenders] " + collection.ID + " failed to start: " + ex);
+                        UpdateStatus(collection.DisplayText + " failed to start: " + ex.Message);
+                    }
+                }
+            }));
         }
 
         private static Image ImageFromPng(byte[] png)

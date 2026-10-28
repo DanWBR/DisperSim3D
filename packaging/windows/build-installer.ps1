@@ -87,6 +87,22 @@ Write-Step "Publishing DisperSim3D.CLI -> $payload\cli"
     -o (Join-Path $payload "cli") --nologo
 if ($LASTEXITCODE -ne 0) { throw "DisperSim3D.CLI publish failed" }
 
+# The automation extender ships next to each program, off until the
+# DISPERSIM3D_AUTOMATION variable or its menu command starts it. It runs on the
+# host's engine, so only its own DLL goes into each extenders folder.
+Write-Step "Publishing DisperSim3D.Automation -> extenders\Automation"
+$automationOut = Join-Path $repoRoot "build\automation-extender"
+if (Test-Path $automationOut) { Remove-Item $automationOut -Recurse -Force }
+& dotnet publish (Join-Path $repoRoot "DisperSim3D.Automation\DisperSim3D.Automation.csproj") `
+    -c Release -p:Version=$Version -p:DebugType=none `
+    -o $automationOut --nologo
+if ($LASTEXITCODE -ne 0) { throw "DisperSim3D.Automation publish failed" }
+foreach ($dir in @($payload, (Join-Path $payload "avalonia"), (Join-Path $payload "cli"))) {
+    $target = Join-Path $dir "extenders\Automation"
+    New-Item -ItemType Directory -Force $target | Out-Null
+    Copy-Item (Join-Path $automationOut "DisperSim3D.AutomationExtender.*") $target -Force
+}
+
 # All three csproj files copy ..\bin\FluidX3D.dll when it exists at evaluation
 # time; copy it again so the payload is correct even if the DLL appeared later.
 Copy-Item $fluidDll (Join-Path $payload "FluidX3D.dll") -Force

@@ -16,7 +16,7 @@ namespace DisperSim3D.Core
     /// to the UI thread through the editor panel, so an extender may call it from
     /// a worker.
     /// </summary>
-    public sealed class WinFormsExtenderHost : IExtenderHost
+    public sealed class WinFormsExtenderHost : IExtenderHost2
     {
         private readonly Scene3DEditorPanel _panel;
 
@@ -80,6 +80,37 @@ namespace DisperSim3D.Core
         }
 
         public void SetStatus(string text) => OnUi(() => { _panel.SetStatusText(text); return true; });
+
+        public string StatusText => OnUi(() => _panel.StatusTextValue);
+
+        public Task SaveProjectAsync(string path)
+        {
+            OnUi(() => { _panel.SaveToFile(path); return true; });
+            return Task.CompletedTask;
+        }
+
+        public Task<byte[]?> CaptureViewportPngAsync(int width, int height) =>
+            Task.FromResult<byte[]?>(OnUi(() => _panel.RenderViewportPng(width, height)));
+
+        public Task RunOnUiThreadAsync(Func<Task> action)
+        {
+            if (!_panel.InvokeRequired) return action();
+
+            var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _panel.BeginInvoke(new Action(async () =>
+            {
+                try
+                {
+                    await action();
+                    done.TrySetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    done.TrySetException(ex);
+                }
+            }));
+            return done.Task;
+        }
 
         private T OnUi<T>(Func<T> func) =>
             _panel.InvokeRequired ? (T)_panel.Invoke(func) : func();

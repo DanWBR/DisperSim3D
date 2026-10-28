@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The automation extender: a local HTTP server that lets a test or an agent
+       drive either desktop UI — open and save projects, run menu commands with
+       their dialogs answered, read the project, capture the 3D view. It is an
+       ordinary extender, so it reaches the UI only through IExtenderHost2 and the
+       same DLL runs in the WinForms shell and in the Avalonia UI. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- DisperSim 3D loads DLLs whose name contains "Extender". -->
+    <AssemblyName>DisperSim3D.AutomationExtender</AssemblyName>
+    <RootNamespace>DisperSim3D.Automation</RootNamespace>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The engine is the host's: compile against it, never ship it. -->
+    <ProjectReference Include="..\DisperSim3D\DisperSim3D.csproj"
+                      Private="false" PrivateAssets="all" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+</Project>
