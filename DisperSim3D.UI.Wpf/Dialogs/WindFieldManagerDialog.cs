@@ -208,7 +208,7 @@ namespace DisperSim3D.Dialogs
 
             AddSectionHeader(propsTable, row++, "Inlet Wind");
 
-            _nudWindSpeed = MakeNud(0.1m, 100m, 5m, 1);
+            _nudWindSpeed = MakeNud(0m, 100m, 5m, 1); // 0 = calm
             DialogHelpers.AddRowWithHelp(propsTable, ref row, "Wind Speed (m/s):", _nudWindSpeed,
                 "Free-stream wind speed at the inlet boundary.");
 

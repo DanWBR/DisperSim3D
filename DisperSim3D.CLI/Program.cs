@@ -66,6 +66,7 @@ namespace DisperSim3D.CLI
             bool sourceRoundTripSelftest = false;
             bool listExtenders = false;
             bool automationSelftest = false;
+            bool calmWindSelftest = false;
             string automationExtenderDir = null;
             bool solidFlameSelftest = false;
             bool flashFireSelftest = false;
@@ -153,6 +154,9 @@ namespace DisperSim3D.CLI
                     case "--list-extenders":
                         listExtenders = true;
                         break;
+                    case "--calm-wind-selftest":
+                        calmWindSelftest = true;
+                        break;
                     case "--automation-selftest":
                         automationSelftest = true;
                         if (i + 1 < args.Length && !args[i + 1].StartsWith("-"))
@@ -223,6 +227,7 @@ namespace DisperSim3D.CLI
             if (sourceRoundTripSelftest) return RunSourceRoundTripSelfTest();
             if (listExtenders) return RunListExtenders();
             if (automationSelftest) return AutomationSelfTest.Run(automationExtenderDir, Console.Out);
+            if (calmWindSelftest) return DisperSim3D.Validation.CalmWindSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             if (solidFlameSelftest) return RunSolidFlameSelfTest();
             if (flashFireSelftest) return RunFlashFireSelfTest();
             if (thermalDoseSelftest) return RunThermalDoseSelfTest();
@@ -1894,6 +1899,8 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             every field; exit 0 on full pass.");
             Console.WriteLine("  --list-extenders           Load the extenders the desktop UIs would load and");
             Console.WriteLine("                             list their menu commands, with every load decision.");
+            Console.WriteLine("  --calm-wind-selftest       Run every model at 0 m/s across the leak range and");
+            Console.WriteLine("                             check each uses its minimum wind; exit 0 on full pass.");
             Console.WriteLine("  --automation-selftest [dir]");
             Console.WriteLine("                             Start the automation extender (from dir, or the");
             Console.WriteLine("                             extender folders) against a host with no window");

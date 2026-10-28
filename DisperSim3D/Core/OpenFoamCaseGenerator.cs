@@ -20,7 +20,7 @@ namespace DisperSim3D.Core
         private static double ComputeTurbulentDiffusivity(DispersionScenario scenario)
         {
             double xRef = Math.Max(scenario.DomainSizeM * 0.5, 50.0);
-            double windSpeed = Math.Max(scenario.Meteo.WindSpeed, 0.5);
+            double windSpeed = CalmWind.AtLeast(scenario.Meteo.WindSpeed, CalmWind.OpenFoamMinimumMPerS);
             var sigma = PasquillGiffordCoefficients.ComputeSigma(xRef, scenario.Meteo.StabilityClass);
             double Ky = sigma.sigmaY * sigma.sigmaY * windSpeed / (2.0 * xRef);
             return Math.Max(Ky, 1e-5);
@@ -429,7 +429,8 @@ namespace DisperSim3D.Core
             int nz = scenario.GridResolution / 2;
             if (nz < 1) nz = 1;
 
-            var wind = scenario.Meteo.WindVector;
+            var meteo = CalmWind.AtLeast(scenario.Meteo, CalmWind.OpenFoamMinimumMPerS);
+            var wind = meteo.WindVector;
 
             WriteBlockMeshDict(caseDir, xMin, xMax, yMin, yMax, zMax, nx, ny, nz);
             WriteWindControlDict(caseDir);
@@ -437,7 +438,7 @@ namespace DisperSim3D.Core
             WriteWindFvSolution(caseDir);
             WriteWindTransportProperties(caseDir);
             WriteWindTurbulenceProperties(caseDir);
-            WriteUField(caseDir, wind.X, wind.Y, wind.Z, config, scenario.Meteo);
+            WriteUField(caseDir, wind.X, wind.Y, wind.Z, config, meteo);
             WritePField(caseDir);
 
             if (obstacles != null && obstacles.Count > 0)
@@ -755,7 +756,7 @@ namespace DisperSim3D.Core
             double dx = speed > 1e-9 ? ux / speed : 1;
             double dy = speed > 1e-9 ? uy / speed : 0;
             double dz = 0; // horizontal flow direction; z is the "up" axis
-            double uref = meteo.WindSpeed > 0 ? meteo.WindSpeed : speed;
+            double uref = CalmWind.AtLeast(meteo.WindSpeed > 0 ? meteo.WindSpeed : speed, CalmWind.OpenFoamMinimumMPerS);
             double zref = meteo.WindMeasurementHeightM > 0 ? meteo.WindMeasurementHeightM : 10.0;
             double z0 = meteo.RoughnessLengthM > 0 ? meteo.RoughnessLengthM : 0.03;
 
@@ -775,7 +776,7 @@ namespace DisperSim3D.Core
         private static void AppendAtmInletK(StringBuilder sb, string patch,
             double kFallback, MeteorologicalConditions meteo)
         {
-            double uref = meteo.WindSpeed > 0 ? meteo.WindSpeed : 5.0;
+            double uref = CalmWind.AtLeast(meteo.WindSpeed, CalmWind.OpenFoamMinimumMPerS);
             double zref = meteo.WindMeasurementHeightM > 0 ? meteo.WindMeasurementHeightM : 10.0;
             double z0 = meteo.RoughnessLengthM > 0 ? meteo.RoughnessLengthM : 0.03;
 
@@ -796,7 +797,7 @@ namespace DisperSim3D.Core
         private static void AppendAtmInletEpsilon(StringBuilder sb, string patch,
             double epsFallback, MeteorologicalConditions meteo)
         {
-            double uref = meteo.WindSpeed > 0 ? meteo.WindSpeed : 5.0;
+            double uref = CalmWind.AtLeast(meteo.WindSpeed, CalmWind.OpenFoamMinimumMPerS);
             double zref = meteo.WindMeasurementHeightM > 0 ? meteo.WindMeasurementHeightM : 10.0;
             double z0 = meteo.RoughnessLengthM > 0 ? meteo.RoughnessLengthM : 0.03;
 
@@ -1671,7 +1672,9 @@ namespace DisperSim3D.Core
             int nz = scenario.GridResolution / 2;
             if (nz < 1) nz = 1;
 
-            var wind = scenario.Meteo.WindVector;
+            // A calm case runs at the lowest wind the atmospheric inlet accepts.
+            var meteo = CalmWind.AtLeast(scenario.Meteo, CalmWind.OpenFoamMinimumMPerS);
+            var wind = meteo.WindVector;
             double cellSize = Math.Max((xMax - xMin) / nx, (yMax - yMin) / ny);
             double endTime = scenario.SimulationDurationS;
 
@@ -1701,8 +1704,8 @@ namespace DisperSim3D.Core
                 ? config.WriteIntervalS
                 : Math.Max(endTime / 20.0, dt);
 
-            double ambientT = scenario.Meteo.AmbientTemperature > 0
-                ? scenario.Meteo.AmbientTemperature : 293.15;
+            double ambientT = meteo.AmbientTemperature > 0
+                ? meteo.AmbientTemperature : 293.15;
 
             WritePimpleControlDict(caseDir, endTime, dt, writeInterval, config, "rhoReactingBuoyantFoam");
             WriteReactingFvSchemes(caseDir, config);
@@ -1719,13 +1722,13 @@ namespace DisperSim3D.Core
             // read this file but its presence is harmless.
             WriteBuoyantTransportProperties(caseDir, config?.DiffusivityM2PerS ?? 1e-5, config);
             WriteGravity(caseDir);
-            WriteBuoyantUField(caseDir, wind.X, wind.Y, wind.Z, config, scenario.Meteo, scenario.Sources);
+            WriteBuoyantUField(caseDir, wind.X, wind.Y, wind.Z, config, meteo, scenario.Sources);
             WriteBuoyantPRghField(caseDir, config, scenario.Sources);
             WriteReactingPField(caseDir, config, scenario.Sources);
             WriteBuoyantTemperatureField(caseDir, ambientT, config, scenario.Sources);
             WriteSpeciesFields(caseDir, scenario.Sources, config);
             WriteAlphatField(caseDir, config, scenario.Sources);
-            WriteKEpsilonFields(caseDir, wind.Length, config, scenario.Meteo, scenario.Sources);
+            WriteKEpsilonFields(caseDir, wind.Length, config, meteo, scenario.Sources);
             bool useCryoPatch = config != null && config.UseCryogenicPatchInjection
                 && scenario.Sources.Any(IsCryogenicSource);
 
@@ -1755,7 +1758,7 @@ namespace DisperSim3D.Core
                 WriteReactingSpeciesSourceFvOptions(caseDir, scenario.Sources, compressible: true);
             }
             WriteRefinementDicts(caseDir, scenario.Sources, cellSize, null,
-                scenario.Meteo, scenario.DomainSizeM,
+                meteo, scenario.DomainSizeM,
                 useVu2019Boxes: config != null && config.UseVu2019MeshRefinement);
             if (config != null && config.UseAblPrecursor)
                 WriteAblPrecursorDicts(caseDir, config);
@@ -1763,7 +1766,7 @@ namespace DisperSim3D.Core
             if (config.NumberOfProcessors > 1)
                 WriteDecomposeParDict(caseDir, config.NumberOfProcessors);
 
-            WriteMeshVsRoughnessAdvisory(caseDir, cellSize, config, scenario.Meteo);
+            WriteMeshVsRoughnessAdvisory(caseDir, cellSize, config, meteo);
 
             return caseDir;
         }
@@ -2042,7 +2045,7 @@ namespace DisperSim3D.Core
             CfdConfiguration cfd = null, MeteorologicalConditions meteo = null,
             List<ReleaseSource3D> sources = null)
         {
-            double U = Math.Max(windSpeed, 0.5);
+            double U = CalmWind.AtLeast(windSpeed, CalmWind.OpenFoamMinimumMPerS);
             double I = 0.05;
             double k = 1.5 * (U * I) * (U * I);
             double epsilon = 0.09 * k * k / (0.1 * k / U + 1e-10);

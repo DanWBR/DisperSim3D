@@ -137,7 +137,8 @@ namespace DisperSim3D.Core
             {
                 try
                 {
-                    ReportProgress(0, "Generating case...", "");
+                    ReportProgress(0, "Generating case...",
+                        CalmWind.Note(scenario.Meteo, CalmWind.OpenFoamMinimumMPerS, "OpenFOAM") ?? "");
                     _casePath = OpenFoamCaseGenerator.GenerateRhoReactingBuoyantFoam(scenario, config);
 
                     if (!string.IsNullOrEmpty(_casePath))
