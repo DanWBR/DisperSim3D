@@ -201,5 +201,8 @@ namespace DisperSim3D.Extensibility
 
         /// <summary>The latest run of a simulation, or null when it has not been run in this session.</summary>
         ExtenderRunStatus? GetSimulationRunStatus(string simulationId);
+
+        /// <summary>Cancels the latest run of a simulation; null when cancelled, otherwise why not.</summary>
+        Task<string?> CancelSimulationAsync(string simulationId);
     }
 }

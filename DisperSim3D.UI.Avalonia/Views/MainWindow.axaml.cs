@@ -2056,9 +2056,9 @@ namespace DisperSim3D.UI.Avalonia.Views
             }
             var windField = _scene.WindFieldScenarios?.FirstOrDefault(w => w.Id == sim.WindFieldId);
             var meteo = windField?.Meteo ?? _scene.GeneralSettings?.DefaultMeteo ?? new MeteorologicalConditions();
-            // The application's CFD settings (OpenFOAM install, processors) when the
-            // simulation carries none, as the WinForms runner does.
-            var config = sim.SnapshotCfdConfig ?? AppSettings.Instance.CreateCfdConfig();
+            // This machine's CFD settings (OpenFOAM install, processors), with the
+            // atmospheric settings the project keeps for the simulation on top.
+            var config = AppSettings.Instance.CreateCfdConfig(sim.SnapshotCfdConfig);
 
             var scenario = new DispersionScenario
             {
@@ -2128,6 +2128,17 @@ namespace DisperSim3D.UI.Avalonia.Views
             var job = SimulationManager.AllJobs.LastOrDefault(j => j.SimulationId == simulationId);
             return job == null ? null
                 : new DisperSim3D.Extensibility.ExtenderRunStatus(job.Status.ToString(), job.Progress, job.StatusText, job.LastLogLine);
+        }
+
+        /// <summary>Cancels the latest run of a simulation; null when cancelled, otherwise why not.</summary>
+        internal string? CancelSimulationRun(string simulationId)
+        {
+            var job = SimulationManager.AllJobs.LastOrDefault(j => j.SimulationId == simulationId);
+            if (job == null) return "Simulation " + simulationId + " has not been run in this session.";
+            if (job.Status is not (Core.SimulationJobStatus.Queued or Core.SimulationJobStatus.Running or Core.SimulationJobStatus.Paused))
+                return "Its latest run is already " + job.Status + ".";
+            SimulationManager.CancelJob(job);
+            return null;
         }
 
         /// <summary>Redraws the tree and the view after an extender changed the project.</summary>

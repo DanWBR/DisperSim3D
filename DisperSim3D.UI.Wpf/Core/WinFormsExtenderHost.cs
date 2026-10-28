@@ -100,6 +100,9 @@ namespace DisperSim3D.Core
         public ExtenderRunStatus? GetSimulationRunStatus(string simulationId) =>
             OnUi(() => _panel.SimulationRunStatus(simulationId));
 
+        public Task<string?> CancelSimulationAsync(string simulationId) =>
+            Task.FromResult<string?>(OnUi(() => _panel.CancelSimulationRun(simulationId)));
+
         public Task RunOnUiThreadAsync(Func<Task> action)
         {
             if (!_panel.InvokeRequired) return action();

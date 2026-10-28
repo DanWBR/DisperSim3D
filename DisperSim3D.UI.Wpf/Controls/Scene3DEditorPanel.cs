@@ -1838,6 +1838,17 @@ namespace DisperSim3D.Controls
                 : new DisperSim3D.Extensibility.ExtenderRunStatus(job.Status.ToString(), job.Progress, job.StatusText, job.LastLogLine);
         }
 
+        /// <summary>Cancels the latest run of a simulation; null when cancelled, otherwise why not.</summary>
+        internal string CancelSimulationRun(string id)
+        {
+            var job = _editor.SimulationManager.AllJobs.LastOrDefault(j => j.Scenario != null && j.Scenario.Id == id);
+            if (job == null) return "Simulation " + id + " has not been run in this session.";
+            if (job.Status != SimulationJobStatus.Queued && job.Status != SimulationJobStatus.Running && job.Status != SimulationJobStatus.Paused)
+                return "Its latest run is already " + job.Status + ".";
+            _editor.SimulationManager.CancelJob(job);
+            return null;
+        }
+
         /// <summary>Redraws the tree and the view after an extender changed the project.</summary>
         internal void RefreshProjectFromExtender()
         {

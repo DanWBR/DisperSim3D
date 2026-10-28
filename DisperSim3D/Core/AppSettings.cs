@@ -283,6 +283,37 @@ namespace DisperSim3D.Core
         }
 
         /// <summary>
+        /// The configuration a project simulation runs with: this machine's settings
+        /// (OpenFOAM install, processors, numerics), with the atmospheric settings the
+        /// project keeps for the simulation — what <see cref="SceneFileSaver"/> writes
+        /// under &lt;Cfd&gt; — on top. A project never carries the machine's settings, so
+        /// a reloaded simulation's own configuration cannot run on its own.
+        /// </summary>
+        public CfdConfiguration CreateCfdConfig(CfdConfiguration projectSettings)
+        {
+            var cfg = CreateCfdConfig();
+            if (projectSettings == null) return cfg;
+            cfg.UseAtmosphericBL = projectSettings.UseAtmosphericBL;
+            cfg.TurbulentSchmidtNumber = projectSettings.TurbulentSchmidtNumber;
+            cfg.TurbulentPrandtlNumber = projectSettings.TurbulentPrandtlNumber;
+            cfg.KEpsilonSigmaEpsilon = projectSettings.KEpsilonSigmaEpsilon;
+            cfg.GroundThermalBC = projectSettings.GroundThermalBC;
+            cfg.GroundTemperatureK = projectSettings.GroundTemperatureK;
+            cfg.GroundHeatFluxWPerM2 = projectSettings.GroundHeatFluxWPerM2;
+            cfg.BuoyancyEpsCoefficient = projectSettings.BuoyancyEpsCoefficient;
+            cfg.UsePatchedSctSolver = projectSettings.UsePatchedSctSolver;
+            cfg.PatchedSctSolverBinary = projectSettings.PatchedSctSolverBinary;
+            cfg.PatchedSctSolverWslDistro = projectSettings.PatchedSctSolverWslDistro;
+            cfg.PatchedSctSolverBashrc = projectSettings.PatchedSctSolverBashrc;
+            cfg.UseVu2019MeshRefinement = projectSettings.UseVu2019MeshRefinement;
+            cfg.UseAblPrecursor = projectSettings.UseAblPrecursor;
+            cfg.AblPrecursorIterations = projectSettings.AblPrecursorIterations;
+            cfg.UseCryogenicPatchInjection = projectSettings.UseCryogenicPatchInjection;
+            cfg.UseGpuBuoyantTracer = projectSettings.UseGpuBuoyantTracer;
+            return cfg;
+        }
+
+        /// <summary>
         /// Copies all properties from the specified configuration into <see cref="CfdDefaults"/> and saves to disk.
         /// </summary>
         /// <param name="config">The <see cref="CfdConfiguration"/> whose values will replace the current defaults.</param>

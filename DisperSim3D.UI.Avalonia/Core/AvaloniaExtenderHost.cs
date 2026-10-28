@@ -106,6 +106,9 @@ namespace DisperSim3D.UI.Avalonia.Core
         public ExtenderRunStatus? GetSimulationRunStatus(string simulationId) =>
             OnUi(() => _window.SimulationRunStatus(simulationId));
 
+        public Task<string?> CancelSimulationAsync(string simulationId) =>
+            Task.FromResult(OnUi(() => _window.CancelSimulationRun(simulationId)));
+
         private static T OnUi<T>(Func<T> func) =>
             Dispatcher.UIThread.CheckAccess() ? func() : Dispatcher.UIThread.Invoke(func);
 

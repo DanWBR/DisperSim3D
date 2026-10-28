@@ -42,6 +42,7 @@ namespace DisperSim3D.Automation
             "POST /simulations                 {\"source\": \"Release 01\", \"solver\": \"GaussianPlume\", \"windField\": \"...\", \"durationS\": 300, ...}",
             "POST /simulations/run             {\"id\": \"...\"} queues it as its Run command does",
             "GET  /simulations/status?id=      where its latest run stands",
+            "POST /simulations/cancel          {\"id\": \"...\"} cancels its latest run",
             "GET  /log?after=N                 what the server did"
         };
 
@@ -323,6 +324,8 @@ namespace DisperSim3D.Automation
                     return await OnUiGateAsync(() => AddSimulationAsync(r));
                 case "POST /simulations/run":
                     return await OnUiGateAsync(() => RunSimulationAsync(r));
+                case "POST /simulations/cancel":
+                    return await CancelSimulationAsync(r);
                 case "GET /simulations/status":
                     return RunStatusResponse(r);
                 case "GET /log":
@@ -634,6 +637,16 @@ namespace DisperSim3D.Automation
                 _log.Add("simulation " + id + " not run: " + refused);
                 throw new HttpError(409, refused);
             }
+            return JsonResponse(200, new { ok = true, id, run = host.GetSimulationRunStatus(id) });
+        }
+
+        private async Task<Response> CancelSimulationAsync(Request r)
+        {
+            var host = Host3;
+            string id = RequiredString(ReadJson(r), "id");
+            string? refused = await host.CancelSimulationAsync(id);
+            if (refused != null) throw new HttpError(409, refused);
+            _log.Add("cancelled simulation " + id);
             return JsonResponse(200, new { ok = true, id, run = host.GetSimulationRunStatus(id) });
         }
 

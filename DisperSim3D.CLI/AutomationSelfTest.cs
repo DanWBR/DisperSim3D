@@ -141,6 +141,10 @@ namespace DisperSim3D.CLI
                       host.RunRequests.Contains(simId!), "POST /simulations/run queues it in the host", ran?.ToJsonString());
                 JsonNode? runStatus = await GetJson(http, "simulations/status?id=" + simId);
                 Check(runStatus?["run"]?["state"]?.GetValue<string>() == "Queued", "GET /simulations/status reports the run");
+                JsonNode? cancelledRun = await PostJson(http, "simulations/cancel", new { id = simId });
+                Check(cancelledRun?["run"]?["state"]?.GetValue<string>() == "Cancelled", "POST /simulations/cancel cancels it", cancelledRun?.ToJsonString());
+                var cancelAgain = await Post(http, "simulations/cancel", new { id = simId });
+                Check(cancelAgain.StatusCode == HttpStatusCode.Conflict, "cancelling a finished run is refused");
 
                 var missing = await Post(http, "project/open", new { path = Path.Combine(work, "missing.dsproj") });
                 Check(missing.StatusCode == HttpStatusCode.NotFound, "opening a missing file is 404");
@@ -297,6 +301,14 @@ namespace DisperSim3D.CLI
 
             public ExtenderRunStatus? GetSimulationRunStatus(string simulationId) =>
                 _runs.TryGetValue(simulationId, out var run) ? run : null;
+
+            public Task<string?> CancelSimulationAsync(string simulationId)
+            {
+                if (!_runs.TryGetValue(simulationId, out var run)) return Task.FromResult<string?>("Not run.");
+                if (run.State != "Queued" && run.State != "Running") return Task.FromResult<string?>("Already " + run.State + ".");
+                _runs[simulationId] = new ExtenderRunStatus("Cancelled", run.Progress, "Cancelled", null);
+                return Task.FromResult<string?>(null);
+            }
 
             public string HostName => "SelfTest";
 
