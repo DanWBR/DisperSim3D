@@ -86,6 +86,7 @@ namespace DisperSim3D.Core
             DeserializeViews(root, inv, scene);
             DeserializeDispersionScenarios(root, inv, scene);
             LegacyProjectMigrator.MigrateInPlace(scene);
+            DeserializeWindRose(root, inv, scene);
             DeserializeMonitorPoints(root, inv, scene);
             DeserializeFireScenario(root, inv, scene);
             DeserializeIgnitions(root, inv, scene);
@@ -230,6 +231,12 @@ namespace DisperSim3D.Core
             };
         }
 
+        /// <summary>
+        /// Reads a &lt;Source&gt; element written by <c>SceneFileSaver.SerializeSourceCommon</c>.
+        /// Every attribute that writer emits is read back here: this is the only source
+        /// parser, shared by the top-level list, the dispersion scenarios and the
+        /// snapshots of project simulations.
+        /// </summary>
         private static ReleaseSource3D ParseSource(XElement se, CultureInfo inv)
         {
             var s = new ReleaseSource3D
@@ -246,10 +253,84 @@ namespace DisperSim3D.Core
                 PuffIntervalS = double.Parse((string)se.Attribute("PuffInterval") ?? "1", inv),
                 ReleaseHeightOffset = double.Parse((string)se.Attribute("HeightOffset") ?? "2", inv),
                 ReleaseAzimuthDeg = double.Parse((string)se.Attribute("Azimuth") ?? "0", inv),
-                ReleaseElevationDeg = double.Parse((string)se.Attribute("Elevation") ?? "0", inv)
+                ReleaseElevationDeg = double.Parse((string)se.Attribute("Elevation") ?? "0", inv),
+                StackDiameterM = double.Parse((string)se.Attribute("StackDia") ?? "0", inv),
+                ExitVelocityMPerS = double.Parse((string)se.Attribute("ExitVel") ?? "0", inv),
+                ExitTemperatureK = double.Parse((string)se.Attribute("ExitTemp") ?? "293.15", inv),
+                ReleaseDurationS = double.Parse((string)se.Attribute("Duration") ?? "0", inv),
+                AerosolCompound = (string)se.Attribute("AerosolCompound")
             };
             if (string.IsNullOrEmpty(s.AttachedUnitId)) s.AttachedUnitId = null;
             if (string.IsNullOrEmpty(s.GasRefId)) s.GasRefId = null;
+            if (string.IsNullOrEmpty(s.AerosolCompound)) s.AerosolCompound = null;
+
+            if (bool.TryParse((string)se.Attribute("JetTransition"), out bool jet)) s.UseJetTransition = jet;
+            if (bool.TryParse((string)se.Attribute("CarryAerosol"), out bool aerosol)) s.CarryAerosol = aerosol;
+            if (bool.TryParse((string)se.Attribute("Visible"), out bool visible)) s.IsVisible = visible;
+            if (bool.TryParse((string)se.Attribute("AutoLeakFreq"), out bool autoFreq)) s.AutoComputeLeakFrequency = autoFreq;
+
+            string leakFreq = (string)se.Attribute("LeakFreq");
+            if (!string.IsNullOrEmpty(leakFreq)) s.LeakFrequencyPerYear = double.Parse(leakFreq, inv);
+
+            if (Enum.TryParse((string)se.Attribute("HoleSize") ?? "", out IogpHoleSizeBand band))
+                s.HoleSizeBand = band;
+
+            var hpEl = se.Element("HPLeak");
+            if (hpEl != null)
+            {
+                s.HighPressureLeak = new HighPressureLeakParams
+                {
+                    VesselPressurePa = double.Parse((string)hpEl.Attribute("VesselP") ?? "1000000", inv),
+                    VesselTemperatureK = double.Parse((string)hpEl.Attribute("VesselT") ?? "293.15", inv),
+                    OrificeDiameterM = double.Parse((string)hpEl.Attribute("Orifice") ?? "0.01", inv),
+                    VesselVolumeM3 = double.Parse((string)hpEl.Attribute("Volume") ?? "10", inv),
+                    GasGamma = double.Parse((string)hpEl.Attribute("Gamma") ?? "1.4", inv),
+                    GasMolarMassKgMol = double.Parse((string)hpEl.Attribute("MolarMass") ?? "0.016", inv),
+                    DischargeCoefficient = double.Parse((string)hpEl.Attribute("Cd") ?? "0.65", inv),
+                    SpecifyMassFlow = ((string)hpEl.Attribute("SpecifyMdot") ?? "0") == "1",
+                    SpecifiedMassFlowKgPerS = double.Parse((string)hpEl.Attribute("Mdot") ?? "1", inv)
+                };
+            }
+
+            var gasEl = se.Element("Gas");
+            if (gasEl != null)
+            {
+                s.Gas = new GasProperties
+                {
+                    Name = (string)gasEl.Attribute("Name") ?? "",
+                    MolarMass = double.Parse((string)gasEl.Attribute("MolarMass") ?? "0.016", inv),
+                    SpecificHeatJPerKgK = double.Parse((string)gasEl.Attribute("Cp") ?? "0", inv),
+                    LFL = double.Parse((string)gasEl.Attribute("LFL") ?? "0", inv),
+                    UFL = double.Parse((string)gasEl.Attribute("UFL") ?? "0", inv),
+                    IDLH = double.Parse((string)gasEl.Attribute("IDLH") ?? "0", inv),
+                    ERPG1 = double.Parse((string)gasEl.Attribute("ERPG1") ?? "0", inv),
+                    ERPG2 = double.Parse((string)gasEl.Attribute("ERPG2") ?? "0", inv),
+                    ERPG3 = double.Parse((string)gasEl.Attribute("ERPG3") ?? "0", inv),
+                    HalfLifeS = double.Parse((string)gasEl.Attribute("HalfLife") ?? "0", inv),
+                    DryDepositionVelocityMPerS = double.Parse((string)gasEl.Attribute("DryDep") ?? "0", inv)
+                };
+                if (bool.TryParse((string)gasEl.Attribute("Cryo"), out bool cryo)) s.Gas.IsCryogenic = cryo;
+            }
+
+            var invEl = se.Element("Inventory");
+            if (invEl != null)
+            {
+                s.EquipmentInventory ??= new List<EquipmentInventoryItem>();
+                s.EquipmentInventory.Clear();
+                foreach (var ie in invEl.Elements("I"))
+                {
+                    var item = new EquipmentInventoryItem
+                    {
+                        NominalDiameterMm = double.Parse((string)ie.Attribute("DiamMm") ?? "0", inv),
+                        Count = int.Parse((string)ie.Attribute("Count") ?? "0", inv),
+                        Note = (string)ie.Attribute("Note")
+                    };
+                    if (Enum.TryParse((string)ie.Attribute("Type") ?? "", out IogpEquipmentType type))
+                        item.Type = type;
+                    s.EquipmentInventory.Add(item);
+                }
+            }
+
             return s;
         }
 
@@ -402,59 +483,7 @@ namespace DisperSim3D.Core
             if (srcEl != null)
             {
                 foreach (var se in srcEl.Elements("Source"))
-                {
-                    var source = new ReleaseSource3D();
-                    source.Id = (string)se.Attribute("Id") ?? Guid.NewGuid().ToString();
-                    source.Name = (string)se.Attribute("Name") ?? "";
-                    source.AttachedUnitId = (string)se.Attribute("AttachedUnitId");
-                    if (string.IsNullOrEmpty(source.AttachedUnitId)) source.AttachedUnitId = null;
-                    source.Position = new Point3D(
-                        double.Parse((string)se.Attribute("PosX") ?? "0", inv),
-                        double.Parse((string)se.Attribute("PosY") ?? "0", inv),
-                        double.Parse((string)se.Attribute("PosZ") ?? "0", inv));
-                    source.ReleaseRateKgPerS = double.Parse((string)se.Attribute("ReleaseRate") ?? "0.5", inv);
-                    source.PuffIntervalS = double.Parse((string)se.Attribute("PuffInterval") ?? "1", inv);
-                    source.ReleaseHeightOffset = double.Parse((string)se.Attribute("HeightOffset") ?? "2", inv);
-                    source.ReleaseAzimuthDeg = double.Parse((string)se.Attribute("Azimuth") ?? "0", inv);
-                    source.ReleaseElevationDeg = double.Parse((string)se.Attribute("Elevation") ?? "0", inv);
-                    source.StackDiameterM = double.Parse((string)se.Attribute("StackDia") ?? "0", inv);
-                    source.ExitVelocityMPerS = double.Parse((string)se.Attribute("ExitVel") ?? "0", inv);
-                    source.ExitTemperatureK = double.Parse((string)se.Attribute("ExitTemp") ?? "293.15", inv);
-
-                    var hpEl = se.Element("HPLeak");
-                    if (hpEl != null)
-                    {
-                        source.HighPressureLeak = new HighPressureLeakParams
-                        {
-                            VesselPressurePa = double.Parse((string)hpEl.Attribute("VesselP") ?? "1000000", inv),
-                            VesselTemperatureK = double.Parse((string)hpEl.Attribute("VesselT") ?? "293.15", inv),
-                            OrificeDiameterM = double.Parse((string)hpEl.Attribute("Orifice") ?? "0.01", inv),
-                            VesselVolumeM3 = double.Parse((string)hpEl.Attribute("Volume") ?? "10", inv),
-                            GasGamma = double.Parse((string)hpEl.Attribute("Gamma") ?? "1.4", inv),
-                            GasMolarMassKgMol = double.Parse((string)hpEl.Attribute("MolarMass") ?? "0.016", inv),
-                            DischargeCoefficient = double.Parse((string)hpEl.Attribute("Cd") ?? "0.65", inv),
-                            SpecifyMassFlow = ((string)hpEl.Attribute("SpecifyMdot") ?? "0") == "1",
-                            SpecifiedMassFlowKgPerS = double.Parse((string)hpEl.Attribute("Mdot") ?? "1", inv)
-                        };
-                    }
-
-                    var gasEl = se.Element("Gas");
-                    if (gasEl != null)
-                    {
-                        source.Gas = new GasProperties
-                        {
-                            Name = (string)gasEl.Attribute("Name") ?? "",
-                            MolarMass = double.Parse((string)gasEl.Attribute("MolarMass") ?? "0.016", inv),
-                            LFL = double.Parse((string)gasEl.Attribute("LFL") ?? "0", inv),
-                            IDLH = double.Parse((string)gasEl.Attribute("IDLH") ?? "0", inv),
-                            ERPG1 = double.Parse((string)gasEl.Attribute("ERPG1") ?? "0", inv),
-                            ERPG2 = double.Parse((string)gasEl.Attribute("ERPG2") ?? "0", inv),
-                            ERPG3 = double.Parse((string)gasEl.Attribute("ERPG3") ?? "0", inv)
-                        };
-                    }
-
-                    sc.Sources.Add(source);
-                }
+                    sc.Sources.Add(ParseSource(se, inv));
             }
 
             var thrEl = dEl.Element("Thresholds");
@@ -518,6 +547,31 @@ namespace DisperSim3D.Core
             }
 
             return sc;
+        }
+
+        /// <summary>Wind rose, written by <c>SceneFileSaver.SerializeWindRose</c>.</summary>
+        private static void DeserializeWindRose(XElement root, CultureInfo inv, Scene3D scene)
+        {
+            var el = root.Element("WindRose");
+            if (el == null) return;
+
+            var rose = new WindRoseData();
+            if (bool.TryParse((string)el.Attribute("ShowIn3D"), out bool show)) rose.ShowIn3D = show;
+
+            foreach (var be in el.Elements("Bin"))
+            {
+                var bin = new WindRoseBin
+                {
+                    DirectionDeg = double.Parse((string)be.Attribute("Dir") ?? "0", inv),
+                    Frequency = double.Parse((string)be.Attribute("Freq") ?? "0", inv),
+                    WindSpeed = double.Parse((string)be.Attribute("Speed") ?? "5", inv)
+                };
+                if (Enum.TryParse((string)be.Attribute("Stability") ?? "D", out PasquillStabilityClass st))
+                    bin.StabilityClass = st;
+                rose.Bins.Add(bin);
+            }
+
+            scene.WindRose = rose;
         }
 
         private static void DeserializeMonitorPoints(XElement root, CultureInfo inv, Scene3D scene)
