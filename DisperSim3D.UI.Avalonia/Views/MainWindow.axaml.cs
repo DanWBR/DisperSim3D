@@ -2038,13 +2038,28 @@ namespace DisperSim3D.UI.Avalonia.Views
         {
             if (_scene is null || node.Tag is not Simulation sim) return;
 
-            var scenario = _scene.DispersionScenario;
-            if (scenario == null || scenario.Sources.Count == 0)
+            // The simulation names its own source and wind field; run those in a
+            // scenario of its own, as the WinForms shell and the headless runner
+            // do, rather than in the project's active scenario.
+            var source = _scene.TopLevelSources?.FirstOrDefault(s => s.Id == sim.SourceId);
+            if (source == null)
             {
-                StatusText.Text = "No dispersion scenario or sources — cannot run simulation.";
+                StatusText.Text = $"The source of simulation '{sim.Name}' is not in the project — cannot run it.";
                 return;
             }
+            var windField = _scene.WindFieldScenarios?.FirstOrDefault(w => w.Id == sim.WindFieldId);
+            var meteo = windField?.Meteo ?? _scene.GeneralSettings?.DefaultMeteo ?? new MeteorologicalConditions();
+            var config = sim.SnapshotCfdConfig ?? new CfdConfiguration();
 
+            var scenario = new DispersionScenario
+            {
+                Id = sim.Id,
+                Name = sim.Name,
+                Meteo = meteo,
+                SolverType = sim.SolverType,
+                CfdConfig = config,
+                WindFieldScenarioId = string.IsNullOrEmpty(sim.WindFieldId) ? null : sim.WindFieldId
+            };
             if (sim.SnapshotGridResolution > 0)
                 scenario.GridResolution = sim.SnapshotGridResolution;
             if (sim.SnapshotDomainSizeM > 0)
@@ -2055,10 +2070,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 scenario.TimeStepS = sim.SnapshotTimeStepS;
             if (sim.SnapshotCount > 0)
                 scenario.SnapshotCount = sim.SnapshotCount;
-            if (!string.IsNullOrEmpty(sim.WindFieldId))
-                scenario.WindFieldScenarioId = sim.WindFieldId;
-
-            var config = sim.SnapshotCfdConfig ?? scenario.CfdConfig ?? new CfdConfiguration();
+            scenario.Sources.Add(source);
 
             var obstacles = new List<BoundingBox>();
             foreach (var deco in _scene.Decorations)
@@ -2087,10 +2099,10 @@ namespace DisperSim3D.UI.Avalonia.Views
             }
 
             sim.Status = SimulationStatus.Queued;
-            var topSrc = _scene.TopLevelSources?.FirstOrDefault(s => s.Id == sim.SourceId);
-            if (topSrc != null) sim.SnapshotSource = topSrc;
-            if (!string.IsNullOrEmpty(topSrc?.GasRefId) && _scene.GasLibrary != null)
-                sim.SnapshotGas = _scene.GasLibrary.FirstOrDefault(g => g.Id == topSrc.GasRefId);
+            sim.SnapshotSource = source;
+            sim.SnapshotMeteo = meteo;
+            if (!string.IsNullOrEmpty(source.GasRefId) && _scene.GasLibrary != null)
+                sim.SnapshotGas = _scene.GasLibrary.FirstOrDefault(g => g.Id == source.GasRefId);
 
             SimulationManager.Enqueue(
                 scenario, sim.SolverType, config, _scene, env,
