@@ -67,6 +67,7 @@ namespace DisperSim3D.CLI
             bool listExtenders = false;
             bool automationSelftest = false;
             bool calmWindSelftest = false;
+            bool exitVelocitySelftest = false;
             string automationExtenderDir = null;
             bool solidFlameSelftest = false;
             bool flashFireSelftest = false;
@@ -154,6 +155,9 @@ namespace DisperSim3D.CLI
                     case "--list-extenders":
                         listExtenders = true;
                         break;
+                    case "--exit-velocity-selftest":
+                        exitVelocitySelftest = true;
+                        break;
                     case "--calm-wind-selftest":
                         calmWindSelftest = true;
                         break;
@@ -228,6 +232,7 @@ namespace DisperSim3D.CLI
             if (listExtenders) return RunListExtenders();
             if (automationSelftest) return AutomationSelfTest.Run(automationExtenderDir, Console.Out);
             if (calmWindSelftest) return DisperSim3D.Validation.CalmWindSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
+            if (exitVelocitySelftest) return DisperSim3D.Validation.ExitVelocitySelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             if (solidFlameSelftest) return RunSolidFlameSelfTest();
             if (flashFireSelftest) return RunFlashFireSelfTest();
             if (thermalDoseSelftest) return RunThermalDoseSelfTest();
@@ -1899,6 +1904,8 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             every field; exit 0 on full pass.");
             Console.WriteLine("  --list-extenders           Load the extenders the desktop UIs would load and");
             Console.WriteLine("                             list their menu commands, with every load decision.");
+            Console.WriteLine("  --exit-velocity-selftest   Check a source with no exit velocity is capped at the");
+            Console.WriteLine("                             sonic velocity across the leak range; exit 0 on pass.");
             Console.WriteLine("  --calm-wind-selftest       Run every model at 0 m/s across the leak range and");
             Console.WriteLine("                             check each uses its minimum wind; exit 0 on full pass.");
             Console.WriteLine("  --automation-selftest [dir]");
