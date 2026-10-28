@@ -14,7 +14,12 @@ namespace DisperSim3D.Core
     public class ModelLoader
     {
         private readonly Dictionary<string, Model3DGroup> _modelCache = new Dictionary<string, Model3DGroup>();
-        private readonly ModelImporter _importer = new ModelImporter();
+        private readonly ModelImporter _importer = new ModelImporter
+        {
+            // HelixToolkit's fallback for a material an OBJ names but cannot find
+            // is pure blue; use the light gray a model with no material gets.
+            DefaultMaterial = new DiffuseMaterial(Brushes.LightGray)
+        };
 
         /// <summary>
         /// Loads a 3D model from the specified file path (.obj, .stl, .3ds).

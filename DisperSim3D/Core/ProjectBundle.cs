@@ -189,9 +189,96 @@ namespace DisperSim3D.Core
                 Directory.CreateDirectory(destDir);
                 string destPath = Path.Combine(destDir, fileName);
                 File.Copy(original, destPath, overwrite: true);
+                CopyCompanionFiles(original, destDir);
 
                 filePathAttr.Value = BundlePathResolver.Scheme + relDir + "/" + fileName;
             }
+        }
+
+        /// <summary>Statements in a .mtl that name a texture file.</summary>
+        private static readonly string[] MtlTextureStatements =
+        {
+            "map_Kd", "map_Ka", "map_Ks", "map_Ke", "map_Ns", "map_d", "map_bump", "map_Pr",
+            "map_Pm", "map_Ps", "bump", "disp", "decal", "refl", "norm"
+        };
+
+        /// <summary>
+        /// Copies the files a model needs beside it: an OBJ's material libraries
+        /// (<c>mtllib</c>) and the textures they name. Without them a reopened OBJ
+        /// loses every material, and the WPF viewport then paints it in
+        /// HelixToolkit's fallback blue. Each file keeps its path relative to the
+        /// model, so the model's own references still resolve once the bundle is
+        /// extracted; a reference that is absolute or climbs out of the model's
+        /// folder is left as it is.
+        /// </summary>
+        private static void CopyCompanionFiles(string modelPath, string destDir)
+        {
+            if (!string.Equals(Path.GetExtension(modelPath), ".obj", StringComparison.OrdinalIgnoreCase)) return;
+
+            string srcDir = Path.GetDirectoryName(Path.GetFullPath(modelPath)) ?? "";
+            foreach (string library in ReferencedFiles(modelPath, srcDir, new[] { "mtllib" }))
+            {
+                if (!CopyRelative(srcDir, library, destDir)) continue;
+
+                string librarySrc = Path.Combine(srcDir, library);
+                string libraryDir = Path.GetDirectoryName(librarySrc) ?? srcDir;
+                string libraryDest = Path.GetDirectoryName(Path.Combine(destDir, library)) ?? destDir;
+                foreach (string texture in ReferencedFiles(librarySrc, libraryDir, MtlTextureStatements))
+                    CopyRelative(libraryDir, texture, libraryDest);
+            }
+        }
+
+        /// <summary>
+        /// Files a text model or material file names after one of
+        /// <paramref name="statements"/>. The name is the rest of the line when that
+        /// exists as a file (names may hold spaces), otherwise its last token
+        /// (texture statements put options such as <c>-s 1 1 1</c> before it).
+        /// </summary>
+        private static IEnumerable<string> ReferencedFiles(string path, string baseDir, string[] statements)
+        {
+            var found = new List<string>();
+            if (!File.Exists(path)) return found;
+
+            foreach (string raw in File.ReadLines(path))
+            {
+                string line = raw.Trim();
+                if (line.Length == 0 || line[0] == '#') continue;
+
+                foreach (string statement in statements)
+                {
+                    if (!line.StartsWith(statement, StringComparison.Ordinal)) continue;
+                    if (line.Length == statement.Length || !char.IsWhiteSpace(line[statement.Length])) continue;
+
+                    string rest = line.Substring(statement.Length).Trim();
+                    string lastToken = rest.Split((char[])null, StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? "";
+                    string name = File.Exists(Path.Combine(baseDir, rest)) ? rest : lastToken;
+                    if (name.Length > 0 && !found.Contains(name, StringComparer.OrdinalIgnoreCase))
+                        found.Add(name);
+                    break;
+                }
+            }
+            return found;
+        }
+
+        /// <summary>
+        /// Copies <paramref name="relative"/> from under <paramref name="srcBase"/> to
+        /// the same place under <paramref name="destBase"/>. Returns false when the
+        /// file is missing, absolute, or would land outside <paramref name="destBase"/>.
+        /// </summary>
+        private static bool CopyRelative(string srcBase, string relative, string destBase)
+        {
+            if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative)) return false;
+
+            string source = Path.GetFullPath(Path.Combine(srcBase, relative));
+            if (!File.Exists(source)) return false;
+
+            string root = Path.GetFullPath(destBase).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            string target = Path.GetFullPath(Path.Combine(destBase, relative));
+            if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return false;
+
+            Directory.CreateDirectory(Path.GetDirectoryName(target) ?? destBase);
+            File.Copy(source, target, overwrite: true);
+            return true;
         }
 
         private static void CopyWindFieldCases(XDocument doc, Scene3D scene, string bundleRoot)
