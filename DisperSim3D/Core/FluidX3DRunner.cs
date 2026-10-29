@@ -80,13 +80,14 @@ namespace DisperSim3D.Core
                     double writeInterval = Math.Max(scenario.SimulationDurationS / snapCount,
                         scenario.SimulationDurationS / 1000.0); // hard cap at 1000 snapshots
 
-                    Report(0.05, "FluidX3D dispersion: initialising tracer engine...");
+                    Report(0.05, CalmWind.Note(scenario.Meteo, CalmWind.FluidX3DMinimumMPerS, "FluidX3D dispersion")
+                                 ?? "FluidX3D dispersion: initialising tracer engine...");
 
                     double diff = config?.DiffusivityM2PerS > 0 ? config.DiffusivityM2PerS : 1e-5;
                     double cellMGlobal = scenario.DomainSizeM * 2.0 / nx;
                     if (scenario.Meteo != null)
                     {
-                        double ws = Math.Max(scenario.Meteo.WindSpeed, 0.5);
+                        double ws = CalmWind.AtLeast(scenario.Meteo.WindSpeed, CalmWind.FluidX3DMinimumMPerS);
                         // Subgrid turbulent diffusivity: Dt = (Cs²/Sct) · Δ · U
                         // Cs=0.092 (standard Smagorinsky for shear flows), Sct=0.7
                         double Dt = 0.0084 * cellMGlobal * ws / 0.7;
@@ -114,7 +115,7 @@ namespace DisperSim3D.Core
                     double tracerCellM = domain * 2.0 / tnx;
                     if (useBuoyant && scenario.Meteo != null)
                     {
-                        double ws2 = Math.Max(scenario.Meteo.WindSpeed, 0.5);
+                        double ws2 = CalmWind.AtLeast(scenario.Meteo.WindSpeed, CalmWind.FluidX3DMinimumMPerS);
                         diff = Math.Max(config?.DiffusivityM2PerS > 0 ? config.DiffusivityM2PerS : 1e-5,
                             0.0084 * tracerCellM * ws2 / 0.7);
                     }
@@ -190,7 +191,7 @@ namespace DisperSim3D.Core
                                 // momentum length (where the jet velocity has decayed to the wind speed),
                                 // with the cross-section growing like a free jet. The tracer thus starts
                                 // with the dilution the jet provides instead of a point blob.
-                                double uWind = Math.Max(scenario.Meteo != null ? scenario.Meteo.WindSpeed : 1.0, 0.5);
+                                double uWind = CalmWind.AtLeast(scenario.Meteo != null ? scenario.Meteo.WindSpeed : 1.0, CalmWind.FluidX3DMinimumMPerS);
                                 double rhoGas = airDensity * gasMW / 0.029;
                                 double lt = JetTransitionModel.MomentumLengthM(src.StackDiameterM, exitVel, uWind, rhoGas, airDensity);
                                 double wdRad = (scenario.Meteo != null ? scenario.Meteo.WindDirectionDeg : 0.0) * Math.PI / 180.0;

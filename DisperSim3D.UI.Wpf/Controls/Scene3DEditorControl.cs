@@ -1003,6 +1003,30 @@ namespace DisperSim3D.Controls
                 await RenderCfdFrameAsync(_cfdPlaybackIndex);
         }
 
+        /// <summary>
+        /// Pauses playback on the snapshot at or before <paramref name="timeS"/>, or on
+        /// the last snapshot when it is null, and returns that snapshot's time.
+        /// </summary>
+        public async Task<double> ShowCfdFrameAsync(double? timeS)
+        {
+            if (_cfdResult == null || _cfdResult.TimeSteps.Count == 0) return 0;
+            PauseDispersion();
+
+            var steps = _cfdResult.TimeSteps;
+            int index = steps.Count - 1;
+            if (timeS.HasValue)
+            {
+                index = 0;
+                while (index < steps.Count - 1 && steps[index + 1] <= timeS.Value) index++;
+            }
+            _cfdPlaybackIndex = index;
+            _cfdPlaybackTimeS = steps[index];
+
+            while (_computingFrame) await Task.Delay(20);
+            await RenderCfdFrameAsync(index);
+            return steps[index];
+        }
+
         private async Task RenderCfdFrameAsync(int frameIndex)
         {
             if (_cfdResult == null || !_cfdResult.IsLoaded || _computingFrame) return;
@@ -1769,14 +1793,29 @@ namespace DisperSim3D.Controls
 
         public void ExportViewportImage(string filePath, int width, int height)
         {
+            System.IO.File.WriteAllBytes(filePath, RenderViewportPng(width, height));
+        }
+
+        /// <summary>
+        /// The 3D view rendered as a PNG at <paramref name="width"/> × <paramref name="height"/>,
+        /// or at the view's on-screen size when either is not positive.
+        /// </summary>
+        public byte[] RenderViewportPng(int width, int height)
+        {
+            if (width <= 0 || height <= 0)
+            {
+                width = Math.Max(1, (int)_viewport.ActualWidth);
+                height = Math.Max(1, (int)_viewport.ActualHeight);
+            }
             var bitmap = HelixToolkit.Wpf.Viewport3DHelper.RenderBitmap(
                 _viewport.Viewport, width, height,
                 System.Windows.Media.Brushes.White);
-            using (var stream = System.IO.File.Create(filePath))
+            using (var stream = new System.IO.MemoryStream())
             {
                 var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
                 encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
                 encoder.Save(stream);
+                return stream.ToArray();
             }
         }
 

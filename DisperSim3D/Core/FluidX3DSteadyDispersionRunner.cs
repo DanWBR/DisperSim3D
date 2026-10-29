@@ -91,13 +91,14 @@ namespace DisperSim3D.Core
                     double maxDuration = scenario.SimulationDurationS > 0
                         ? scenario.SimulationDurationS : 600.0;
 
-                    Report(0.05, "FluidX3D dispersion (steady): initialising tracer...");
+                    Report(0.05, CalmWind.Note(scenario.Meteo, CalmWind.FluidX3DMinimumMPerS, "FluidX3D dispersion (steady)")
+                                 ?? "FluidX3D dispersion (steady): initialising tracer...");
 
                     double diff = config?.DiffusivityM2PerS > 0 ? config.DiffusivityM2PerS : 1e-5;
                     double cellMGlobal = scenario.DomainSizeM * 2.0 / nx;
                     if (scenario.Meteo != null)
                     {
-                        double ws = Math.Max(scenario.Meteo.WindSpeed, 0.5);
+                        double ws = CalmWind.AtLeast(scenario.Meteo.WindSpeed, CalmWind.FluidX3DMinimumMPerS);
                         double Dt = 0.0084 * cellMGlobal * ws / 0.7;
                         diff = Math.Max(diff, Dt);
                     }
@@ -123,7 +124,7 @@ namespace DisperSim3D.Core
                     double tracerCellM = domain * 2.0 / tnx;
                     if (useBuoyant && scenario.Meteo != null)
                     {
-                        double ws2 = Math.Max(scenario.Meteo.WindSpeed, 0.5);
+                        double ws2 = CalmWind.AtLeast(scenario.Meteo.WindSpeed, CalmWind.FluidX3DMinimumMPerS);
                         diff = Math.Max(config?.DiffusivityM2PerS > 0 ? config.DiffusivityM2PerS : 1e-5,
                             0.0084 * tracerCellM * ws2 / 0.7);
                     }

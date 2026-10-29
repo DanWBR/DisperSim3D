@@ -87,6 +87,31 @@ namespace DisperSim3D.Validation
                     results.Add(Near("wind rose speed", a.WindSpeed, b.WindSpeed, 1e-9));
                     results.Add(Same("wind rose stability", a.StabilityClass, b.StabilityClass));
                 }
+
+                // One Meteo writer serves every place a project stores weather; check
+                // each field through a wind field.
+                if (reloaded.WindFieldScenarios.Count == 1 && reloaded.WindFieldScenarios[0].Meteo != null)
+                {
+                    MeteorologicalConditions m0 = original.WindFieldScenarios[0].Meteo, m1 = reloaded.WindFieldScenarios[0].Meteo;
+                    results.Add(Near("meteo: wind speed", m0.WindSpeed, m1.WindSpeed, 1e-9));
+                    results.Add(Near("meteo: wind direction", m0.WindDirectionDeg, m1.WindDirectionDeg, 1e-9));
+                    results.Add(Same("meteo: stability class", m0.StabilityClass, m1.StabilityClass));
+                    results.Add(Near("meteo: stability index", m0.StabilityIndex, m1.StabilityIndex, 1e-9));
+                    results.Add(Near("meteo: temperature", m0.AmbientTemperature, m1.AmbientTemperature, 1e-9));
+                    results.Add(Near("meteo: pressure", m0.AmbientPressure, m1.AmbientPressure, 1e-6));
+                    results.Add(Near("meteo: humidity", m0.RelativeHumidity, m1.RelativeHumidity, 1e-9));
+                    results.Add(Near("meteo: averaging time", m0.AveragingTimeS, m1.AveragingTimeS, 1e-9));
+                    results.Add(Near("meteo: mixing height", m0.MixingHeightM, m1.MixingHeightM, 1e-9));
+                    results.Add(Near("meteo: measurement height", m0.WindMeasurementHeightM, m1.WindMeasurementHeightM, 1e-9));
+                    results.Add(Near("meteo: shear exponent", m0.WindShearExponent, m1.WindShearExponent, 1e-9));
+                    results.Add(Same("meteo: urban terrain", m0.IsUrbanTerrain, m1.IsUrbanTerrain));
+                    results.Add(Near("meteo: roughness", m0.RoughnessLengthM, m1.RoughnessLengthM, 1e-12));
+                }
+                else
+                {
+                    results.Add(new Result("wind field meteo survives", false,
+                        $"expected 1 wind field, got {reloaded.WindFieldScenarios.Count}"));
+                }
             }
             catch (Exception ex)
             {
@@ -148,6 +173,28 @@ namespace DisperSim3D.Validation
                 Name = "simulation",
                 SourceId = src.Id,
                 SnapshotSource = BuildSource()
+            });
+
+            scene.WindFieldScenarios.Add(new WindFieldScenario
+            {
+                Id = Guid.NewGuid().ToString(),
+                Name = "wind field",
+                Meteo = new MeteorologicalConditions
+                {
+                    WindSpeed = 3.25,
+                    WindDirectionDeg = 112.5,
+                    StabilityClass = PasquillStabilityClass.E,
+                    StabilityIndex = 4.5,
+                    AmbientTemperature = 278.15,
+                    AmbientPressure = 98765,
+                    RelativeHumidity = 0.83,
+                    AveragingTimeS = 18.75,
+                    MixingHeightM = 650,
+                    WindMeasurementHeightM = 7.5,
+                    WindShearExponent = 0.21,
+                    IsUrbanTerrain = true,
+                    RoughnessLengthM = 0.0123
+                }
             });
 
             return scene;

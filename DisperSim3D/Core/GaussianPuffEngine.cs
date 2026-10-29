@@ -110,7 +110,8 @@ namespace DisperSim3D.Core
         public void Initialize(DispersionScenario scenario)
         {
             _scenario = scenario;
-            _meteo = scenario.Meteo;
+            // Calm runs at the minimum wind: puffs that never move would pile up at the source.
+            _meteo = CalmWind.AtLeast(scenario.Meteo, CalmWind.GaussianMinimumMPerS);
             _windVector = _meteo.WindVector;
             _stability = _meteo.StabilityClass;
             _mixingHeight = _meteo.MixingHeightM > 0 ? _meteo.MixingHeightM : 1e6;
@@ -162,7 +163,7 @@ namespace DisperSim3D.Core
                 {
                     // TNO Yellow Book jet-in-crossflow: tau = d / U_wind
                     // Jet penetration distance = v_jet * tau = d * v_jet / U_wind
-                    double effectiveWind = Math.Max(windSpeed, 0.5);
+                    double effectiveWind = CalmWind.AtLeast(windSpeed, CalmWind.GaussianMinimumMPerS);
                     tau = effDiam / effectiveWind;
                     tau = Math.Max(tau, 0.001);
                     tau = Math.Min(tau, 30.0);

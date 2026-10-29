@@ -276,8 +276,19 @@ namespace DisperSim3D.Models
 
                 double areaSimple = Math.PI * 0.25 * diam * diam;
                 double molarMass = Gas != null && Gas.MolarMass > 0 ? Gas.MolarMass : 0.029;
-                double rhoSimple = 101325.0 * molarMass / (8.314 * ExitTemperatureK);
-                return effRate / (rhoSimple * areaSimple);
+                double exitT = ExitTemperatureK > 0 ? ExitTemperatureK : 293.15;
+                double rhoSimple = 101325.0 * molarMass / (8.314 * exitT);
+                double velocity = effRate / (rhoSimple * areaSimple);
+
+                // Past the speed of sound the orifice is choked: the gas leaves at the
+                // sonic throat velocity, denser than at 1 atm, not faster. The same
+                // limit as the choked branch above.
+                double cp = Gas != null ? Gas.EffectiveSpecificHeatJPerKgK : 1005.0;
+                double rSpecific = 8.314 / molarMass;
+                double gammaSimple = cp > rSpecific ? cp / (cp - rSpecific) : 1.4;
+                gammaSimple = Math.Max(1.05, Math.Min(1.67, gammaSimple));
+                double sonic = Math.Sqrt(gammaSimple * rSpecific * exitT * (2.0 / (gammaSimple + 1)));
+                return Math.Min(velocity, sonic);
             }
         }
 

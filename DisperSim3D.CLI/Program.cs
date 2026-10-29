@@ -64,6 +64,11 @@ namespace DisperSim3D.CLI
             bool geometrySelftest = false;
             bool fireRoundTripSelftest = false;
             bool sourceRoundTripSelftest = false;
+            bool listExtenders = false;
+            bool automationSelftest = false;
+            bool calmWindSelftest = false;
+            bool exitVelocitySelftest = false;
+            string automationExtenderDir = null;
             bool solidFlameSelftest = false;
             bool flashFireSelftest = false;
             bool thermalDoseSelftest = false;
@@ -147,6 +152,20 @@ namespace DisperSim3D.CLI
                     case "--source-roundtrip-selftest":
                         sourceRoundTripSelftest = true;
                         break;
+                    case "--list-extenders":
+                        listExtenders = true;
+                        break;
+                    case "--exit-velocity-selftest":
+                        exitVelocitySelftest = true;
+                        break;
+                    case "--calm-wind-selftest":
+                        calmWindSelftest = true;
+                        break;
+                    case "--automation-selftest":
+                        automationSelftest = true;
+                        if (i + 1 < args.Length && !args[i + 1].StartsWith("-"))
+                            automationExtenderDir = args[++i];
+                        break;
                     case "--solid-flame-selftest":
                         solidFlameSelftest = true;
                         break;
@@ -210,6 +229,10 @@ namespace DisperSim3D.CLI
             if (geometrySelftest) return RunGeometrySelfTest();
             if (fireRoundTripSelftest) return RunFireRoundTripSelfTest();
             if (sourceRoundTripSelftest) return RunSourceRoundTripSelfTest();
+            if (listExtenders) return RunListExtenders();
+            if (automationSelftest) return AutomationSelfTest.Run(automationExtenderDir, Console.Out);
+            if (calmWindSelftest) return DisperSim3D.Validation.CalmWindSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
+            if (exitVelocitySelftest) return DisperSim3D.Validation.ExitVelocitySelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             if (solidFlameSelftest) return RunSolidFlameSelfTest();
             if (flashFireSelftest) return RunFlashFireSelfTest();
             if (thermalDoseSelftest) return RunThermalDoseSelfTest();
@@ -667,11 +690,34 @@ namespace DisperSim3D.CLI
             }
         }
 
-        /// <summary>Wrapper around <see cref="FireRoundTripSelfTest.RunAndPrint"/>.
-        /// Returns 0 when a FireScenario survives a save/load cycle unchanged,
-        /// 1 otherwise. Guards the SceneFileSaver/SceneFileLoader contract: a
-        /// FireSource property written by one side and not read by the other
-        /// fails here instead of silently resetting to its default.</summary>
+        /// <summary>Loads the extenders exactly as the desktop UIs do and lists
+        /// what they would add to the menus. Exit 0 when nothing failed to load.</summary>
+        static int RunListExtenders()
+        {
+            Console.WriteLine("Extender folders:");
+            foreach (string dir in DisperSim3D.Extensibility.ExtenderLoader.SearchDirectories)
+                Console.WriteLine("  " + dir + (System.IO.Directory.Exists(dir) ? "" : "   (missing)"));
+
+            var result = DisperSim3D.Extensibility.ExtenderLoader.LoadAll();
+            Console.WriteLine();
+            foreach (string line in result.Messages)
+                Console.WriteLine("  " + line);
+
+            Console.WriteLine();
+            Console.WriteLine(result.Collections.Count + " extender collection(s):");
+            foreach (var c in result.Collections)
+            {
+                Console.WriteLine("  [" + c.Category + "] " + c.DisplayText + "  (" + c.ID + ")");
+                if (!string.IsNullOrEmpty(c.Description)) Console.WriteLine("      " + c.Description);
+                foreach (var item in c.Collection)
+                    Console.WriteLine("      - " + item.DisplayText + "  (" + item.ID + ", position " + item.InsertAtPosition +
+                                      (item.DisplayImage != null ? ", icon " + item.DisplayImage.Length + " bytes" : "") + ")");
+            }
+
+            bool failed = result.Messages.Exists(m => m.StartsWith("skipped") || m.Contains("failed to start"));
+            return failed ? 1 : 0;
+        }
+
         /// <summary>Round-trips a release source through the project file and
         /// compares every field. See <see cref="SourceRoundTripSelfTest"/>.</summary>
         static int RunSourceRoundTripSelfTest()
@@ -687,6 +733,11 @@ namespace DisperSim3D.CLI
             }
         }
 
+        /// <summary>Wrapper around <see cref="FireRoundTripSelfTest.RunAndPrint"/>.
+        /// Returns 0 when a FireScenario survives a save/load cycle unchanged,
+        /// 1 otherwise. Guards the SceneFileSaver/SceneFileLoader contract: a
+        /// FireSource property written by one side and not read by the other
+        /// fails here instead of silently resetting to its default.</summary>
         static int RunFireRoundTripSelfTest()
         {
             try
@@ -1851,6 +1902,18 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             the published values; exit 0 on full pass.");
             Console.WriteLine("  --fire-roundtrip-selftest  Save and reload a FireScenario and compare");
             Console.WriteLine("                             every field; exit 0 on full pass.");
+            Console.WriteLine("  --list-extenders           Load the extenders the desktop UIs would load and");
+            Console.WriteLine("                             list their menu commands, with every load decision.");
+            Console.WriteLine("  --exit-velocity-selftest   Check a source with no exit velocity is capped at the");
+            Console.WriteLine("                             sonic velocity across the leak range; exit 0 on pass.");
+            Console.WriteLine("  --calm-wind-selftest       Run every model at 0 m/s across the leak range and");
+            Console.WriteLine("                             check each uses its minimum wind; exit 0 on full pass.");
+            Console.WriteLine("  --automation-selftest [dir]");
+            Console.WriteLine("                             Start the automation extender (from dir, or the");
+            Console.WriteLine("                             extender folders) against a host with no window");
+            Console.WriteLine("                             and drive every endpoint over HTTP. Set");
+            Console.WriteLine("                             DISPERSIM3D_AUTOMATION_TEST_IFX to also import an");
+            Console.WriteLine("                             in:Flux project through it.");
             Console.WriteLine("  --source-roundtrip-selftest");
             Console.WriteLine("                             Save and reload a release source in all three");
             Console.WriteLine("                             places a project stores one, and compare every");

@@ -104,6 +104,23 @@ namespace DisperSim3D.Core
             return job;
         }
 
+        /// <summary>
+        /// A runner's failure. Cancelling kills the solver, and the runner reports
+        /// that as a failure too; the job then stays Cancelled.
+        /// </summary>
+        private static void FailRun(SimulationJob job, TaskCompletionSource<bool> tcs, string msg)
+        {
+            if (job.Cts.IsCancellationRequested)
+            {
+                tcs.TrySetCanceled();
+                return;
+            }
+            job.Status = SimulationJobStatus.Failed;
+            job.StatusText = "FAILED: " + msg;
+            job.LastLogLine = msg;
+            tcs.TrySetException(new Exception(msg));
+        }
+
         public void CancelJob(SimulationJob job)
         {
             if (job.Status == SimulationJobStatus.Queued)
@@ -617,13 +634,7 @@ namespace DisperSim3D.Core
                 job.ResultEntry = entry;
                 tcs.TrySetResult(true);
             };
-            runner.Failed += (s, msg) =>
-            {
-                job.Status = SimulationJobStatus.Failed;
-                job.StatusText = "FAILED: " + msg;
-                job.LastLogLine = msg;
-                tcs.TrySetException(new Exception(msg));
-            };
+            runner.Failed += (s, msg) => FailRun(job, tcs, msg);
 
             job.Cts.Token.Register(() =>
             {
@@ -675,13 +686,7 @@ namespace DisperSim3D.Core
                 job.ResultEntry = entry;
                 tcs.TrySetResult(true);
             };
-            runner.Failed += (s, msg) =>
-            {
-                job.Status = SimulationJobStatus.Failed;
-                job.StatusText = "FAILED: " + msg;
-                job.LastLogLine = msg;
-                tcs.TrySetException(new Exception(msg));
-            };
+            runner.Failed += (s, msg) => FailRun(job, tcs, msg);
             job.Cts.Token.Register(() =>
             {
                 runner.Cancel();
@@ -729,13 +734,7 @@ namespace DisperSim3D.Core
                 job.ResultEntry = entry;
                 tcs.TrySetResult(true);
             };
-            runner.Failed += (s, msg) =>
-            {
-                job.Status = SimulationJobStatus.Failed;
-                job.StatusText = "FAILED: " + msg;
-                job.LastLogLine = msg;
-                tcs.TrySetException(new Exception(msg));
-            };
+            runner.Failed += (s, msg) => FailRun(job, tcs, msg);
             job.Cts.Token.Register(() =>
             {
                 runner.Cancel();
@@ -799,13 +798,7 @@ namespace DisperSim3D.Core
                 job.ResultEntry = entry;
                 tcs.TrySetResult(true);
             };
-            runner.Failed += (s, msg) =>
-            {
-                job.Status = SimulationJobStatus.Failed;
-                job.StatusText = "FAILED: " + msg;
-                job.LastLogLine = msg;
-                tcs.TrySetException(new Exception(msg));
-            };
+            runner.Failed += (s, msg) => FailRun(job, tcs, msg);
 
             job.Cts.Token.Register(() =>
             {

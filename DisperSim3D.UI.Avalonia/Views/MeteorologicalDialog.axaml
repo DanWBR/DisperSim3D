@@ -39,7 +39,7 @@
           ColumnDefinitions="200,*" RowSpacing="6">
       <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Wind Speed (m/s):" />
       <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="NudWindSpeed"
-                     Minimum="0.1" Maximum="50" Value="5"
+                     Minimum="0" Maximum="50" Value="5"
                      FormatString="0.0" Increment="0.1" />
 
       <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Wind Direction (°, 0=N):" />

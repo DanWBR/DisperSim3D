@@ -106,6 +106,23 @@ namespace DisperSim3D.UI.Avalonia.Core
             return job;
         }
 
+        /// <summary>
+        /// A runner's failure. Cancelling kills the solver, and the runner reports
+        /// that as a failure too; the job then stays Cancelled.
+        /// </summary>
+        private static void FailRun(SimulationJob job, TaskCompletionSource<bool> tcs, string msg)
+        {
+            if (job.Cts.IsCancellationRequested)
+            {
+                tcs.TrySetCanceled();
+                return;
+            }
+            job.Status = SimulationJobStatus.Failed;
+            job.StatusText = "FAILED: " + msg;
+            job.LastLogLine = msg;
+            tcs.TrySetException(new Exception(msg));
+        }
+
         public void CancelJob(SimulationJob job)
         {
             if (job.Status == SimulationJobStatus.Queued)
@@ -584,13 +601,7 @@ namespace DisperSim3D.UI.Avalonia.Core
                 job.ResultEntry = entry;
                 tcs.TrySetResult(true);
             };
-            runner.Failed += (s, msg) =>
-            {
-                job.Status = SimulationJobStatus.Failed;
-                job.StatusText = "FAILED: " + msg;
-                job.LastLogLine = msg;
-                tcs.TrySetException(new Exception(msg));
-            };
+            runner.Failed += (s, msg) => FailRun(job, tcs, msg);
             job.Cts.Token.Register(() => { runner.Cancel(); tcs.TrySetCanceled(); });
             runner.RunAsync(scenario, config, job.Scene, job.Obstacles, job.SolverType);
             return tcs.Task;
@@ -619,13 +630,7 @@ namespace DisperSim3D.UI.Avalonia.Core
                 job.ResultEntry = entry;
                 tcs.TrySetResult(true);
             };
-            runner.Failed += (s, msg) =>
-            {
-                job.Status = SimulationJobStatus.Failed;
-                job.StatusText = "FAILED: " + msg;
-                job.LastLogLine = msg;
-                tcs.TrySetException(new Exception(msg));
-            };
+            runner.Failed += (s, msg) => FailRun(job, tcs, msg);
             job.Cts.Token.Register(() => { runner.Cancel(); tcs.TrySetCanceled(); });
             runner.RunAsync(scenario, config, job.Scene, job.Obstacles);
             return tcs.Task;
@@ -654,13 +659,7 @@ namespace DisperSim3D.UI.Avalonia.Core
                 job.ResultEntry = entry;
                 tcs.TrySetResult(true);
             };
-            runner.Failed += (s, msg) =>
-            {
-                job.Status = SimulationJobStatus.Failed;
-                job.StatusText = "FAILED: " + msg;
-                job.LastLogLine = msg;
-                tcs.TrySetException(new Exception(msg));
-            };
+            runner.Failed += (s, msg) => FailRun(job, tcs, msg);
             job.Cts.Token.Register(() => { runner.Cancel(); tcs.TrySetCanceled(); });
             runner.RunAsync(scenario, config, job.Scene, job.Obstacles);
             return tcs.Task;
@@ -711,13 +710,7 @@ namespace DisperSim3D.UI.Avalonia.Core
                 job.ResultEntry = entry;
                 tcs.TrySetResult(true);
             };
-            runner.Failed += (s, msg) =>
-            {
-                job.Status = SimulationJobStatus.Failed;
-                job.StatusText = "FAILED: " + msg;
-                job.LastLogLine = msg;
-                tcs.TrySetException(new Exception(msg));
-            };
+            runner.Failed += (s, msg) => FailRun(job, tcs, msg);
             job.Cts.Token.Register(() => { runner.Cancel(); tcs.TrySetCanceled(); });
 
             // After the OpenFOAM steady-state solver variants were retired,

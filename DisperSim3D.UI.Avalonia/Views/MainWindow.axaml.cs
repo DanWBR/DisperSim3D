@@ -51,6 +51,7 @@ namespace DisperSim3D.UI.Avalonia.Views
     {
         private Scene3D? _scene;
         private string? _projectPath;
+        private DisperSim3D.UI.Avalonia.Core.AvaloniaExtenderHost? _extenderHost;
         private bool _isDirty;
 
         // ── Simulation manager ──────────────────────────────────────────
@@ -82,6 +83,7 @@ namespace DisperSim3D.UI.Avalonia.Views
         public MainWindow()
         {
             InitializeComponent();
+            AddExtenderMenuItems();
             StatusEnv.Text = BuildEnvLine();
             RefreshWorkDirStatus();
             StatusWorkDir.PointerPressed += (_, _) =>
@@ -618,6 +620,125 @@ namespace DisperSim3D.UI.Avalonia.Views
 
             string path = files[0].TryGetLocalPath() ?? files[0].Path.LocalPath;
             await LoadProjectAsync(path);
+        }
+
+        /// <summary>The open project, for extenders.</summary>
+        internal Scene3D? CurrentScene => _scene;
+
+        /// <summary>Path the project was opened from or saved to; null for an unsaved one.</summary>
+        internal string? CurrentProjectPath => _projectPath;
+
+        internal void SetStatusText(string text) => StatusText.Text = text;
+
+        /// <summary>Opens a project for an extender, through the same path as File → Open.</summary>
+        internal Task OpenProjectFromExtenderAsync(string path) => LoadProjectAsync(path);
+
+        /// <summary>Saves the project for an extender, through the same path as File → Save As.</summary>
+        internal Task SaveProjectFromExtenderAsync(string path) => SaveAsync(path);
+
+        internal string StatusTextValue => StatusText.Text ?? "";
+
+        /// <summary>The 3D view's next frame as a PNG.</summary>
+        internal Task<byte[]?> CaptureViewportAsync() => Viewport3D.CaptureFrameAsync();
+
+        private bool _extendersStarted;
+
+        /// <summary>Starts the extenders that work in the background, once the window is up.</summary>
+        private void StartExtendersOnce()
+        {
+            if (_extendersStarted || _extenderHost == null) return;
+            _extendersStarted = true;
+            foreach (var collection in DisperSim3D.Extensibility.ExtenderLoader.LoadAll().Collections)
+            {
+                if (collection is not DisperSim3D.Extensibility.IExtenderStartup startup) continue;
+                try
+                {
+                    startup.OnHostStarted(_extenderHost);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("[Extenders] " + collection.ID + " failed to start: " + ex);
+                    StatusText.Text = collection.DisplayText + " failed to start: " + ex.Message;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Adds the File commands of every loaded extender (see
+        /// <see cref="DisperSim3D.Extensibility.ExtenderLoader"/>). A command with a
+        /// position goes there; the rest are grouped above Exit. Extenders of other
+        /// categories land in File too, until this window grows a menu for them.
+        /// </summary>
+        private void AddExtenderMenuItems()
+        {
+            DisperSim3D.Extensibility.ExtenderLoadResult loaded;
+            try
+            {
+                loaded = DisperSim3D.Extensibility.ExtenderLoader.LoadAll();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[Extenders] " + ex);
+                return;
+            }
+            foreach (string line in loaded.Messages)
+                System.Diagnostics.Debug.WriteLine("[Extenders] " + line);
+            if (loaded.Collections.Count == 0) return;
+
+            _extenderHost = new DisperSim3D.UI.Avalonia.Core.AvaloniaExtenderHost(this);
+            var appended = new List<MenuItem>();
+
+            foreach (var collection in loaded.Collections)
+            {
+                foreach (var item in collection.Collection)
+                {
+                    var mi = new MenuItem { Header = item.DisplayText, Icon = IconFromPng(item.DisplayImage) };
+                    var command = item;
+                    mi.Click += async (_, _) =>
+                    {
+                        try
+                        {
+                            await command.RunAsync(_extenderHost);
+                        }
+                        catch (Exception ex)
+                        {
+                            await _extenderHost.ShowMessageAsync("Extender error",
+                                command.DisplayText + " failed:\n\n" + ex.Message, isError: true);
+                        }
+                    };
+
+                    if (item.InsertAtPosition >= 0 && item.InsertAtPosition <= MenuFile.Items.Count)
+                        MenuFile.Items.Insert(item.InsertAtPosition, mi);
+                    else
+                        appended.Add(mi);
+                }
+            }
+
+            if (appended.Count > 0)
+            {
+                // Above the separator that precedes Exit, as a group of its own.
+                int exitSeparator = Math.Max(0, MenuFile.Items.Count - 2);
+                MenuFile.Items.Insert(exitSeparator, new Separator());
+                for (int i = 0; i < appended.Count; i++)
+                    MenuFile.Items.Insert(exitSeparator + 1 + i, appended[i]);
+            }
+
+            // Extenders that work in the background start once the window is up.
+            Opened += (_, _) => StartExtendersOnce();
+        }
+
+        private static Image? IconFromPng(byte[]? png)
+        {
+            if (png == null || png.Length == 0) return null;
+            try
+            {
+                using var ms = new MemoryStream(png);
+                return new Image { Source = new global::Avalonia.Media.Imaging.Bitmap(ms), Width = 16, Height = 16 };
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private async Task LoadProjectAsync(string path)
@@ -1748,7 +1869,9 @@ namespace DisperSim3D.UI.Avalonia.Views
             {
                 Name = preset.Label,
                 FilePath = resolved,
-                Scale = preset.DefaultScale
+                Scale = preset.DefaultScale,
+                // The props are stock Y-up OBJs; stand them up in the Z-up world.
+                Rotation = new DisperSim3D.Geometry.Vector3D(90, 0, 0)
             };
             _scene.Decorations.Add(deco);
             bool grew = Views.DecorationBounds.FitGrid(_scene, deco);
@@ -1914,14 +2037,38 @@ namespace DisperSim3D.UI.Avalonia.Views
         private void RunSimulation(ProjectTreeNode node)
         {
             if (_scene is null || node.Tag is not Simulation sim) return;
+            RunSimulation(sim);
+        }
 
-            var scenario = _scene.DispersionScenario;
-            if (scenario == null || scenario.Sources.Count == 0)
+        /// <summary>Queues <paramref name="sim"/>; null when queued, otherwise why it was not.</summary>
+        internal string? RunSimulation(Simulation sim)
+        {
+            if (_scene is null) return "No project is open.";
+
+            // The simulation names its own source and wind field; run those in a
+            // scenario of its own, as the WinForms shell and the headless runner
+            // do, rather than in the project's active scenario.
+            var source = _scene.TopLevelSources?.FirstOrDefault(s => s.Id == sim.SourceId);
+            if (source == null)
             {
-                StatusText.Text = "No dispersion scenario or sources — cannot run simulation.";
-                return;
+                StatusText.Text = $"The source of simulation '{sim.Name}' is not in the project — cannot run it.";
+                return StatusText.Text;
             }
+            var windField = _scene.WindFieldScenarios?.FirstOrDefault(w => w.Id == sim.WindFieldId);
+            var meteo = windField?.Meteo ?? _scene.GeneralSettings?.DefaultMeteo ?? new MeteorologicalConditions();
+            // This machine's CFD settings (OpenFOAM install, processors), with the
+            // atmospheric settings the project keeps for the simulation on top.
+            var config = AppSettings.Instance.CreateCfdConfig(sim.SnapshotCfdConfig);
 
+            var scenario = new DispersionScenario
+            {
+                Id = sim.Id,
+                Name = sim.Name,
+                Meteo = meteo,
+                SolverType = sim.SolverType,
+                CfdConfig = config,
+                WindFieldScenarioId = string.IsNullOrEmpty(sim.WindFieldId) ? null : sim.WindFieldId
+            };
             if (sim.SnapshotGridResolution > 0)
                 scenario.GridResolution = sim.SnapshotGridResolution;
             if (sim.SnapshotDomainSizeM > 0)
@@ -1932,10 +2079,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 scenario.TimeStepS = sim.SnapshotTimeStepS;
             if (sim.SnapshotCount > 0)
                 scenario.SnapshotCount = sim.SnapshotCount;
-            if (!string.IsNullOrEmpty(sim.WindFieldId))
-                scenario.WindFieldScenarioId = sim.WindFieldId;
-
-            var config = sim.SnapshotCfdConfig ?? scenario.CfdConfig ?? new CfdConfiguration();
+            scenario.Sources.Add(source);
 
             var obstacles = new List<BoundingBox>();
             foreach (var deco in _scene.Decorations)
@@ -1964,10 +2108,10 @@ namespace DisperSim3D.UI.Avalonia.Views
             }
 
             sim.Status = SimulationStatus.Queued;
-            var topSrc = _scene.TopLevelSources?.FirstOrDefault(s => s.Id == sim.SourceId);
-            if (topSrc != null) sim.SnapshotSource = topSrc;
-            if (!string.IsNullOrEmpty(topSrc?.GasRefId) && _scene.GasLibrary != null)
-                sim.SnapshotGas = _scene.GasLibrary.FirstOrDefault(g => g.Id == topSrc.GasRefId);
+            sim.SnapshotSource = source;
+            sim.SnapshotMeteo = meteo;
+            if (!string.IsNullOrEmpty(source.GasRefId) && _scene.GasLibrary != null)
+                sim.SnapshotGas = _scene.GasLibrary.FirstOrDefault(g => g.Id == source.GasRefId);
 
             SimulationManager.Enqueue(
                 scenario, sim.SolverType, config, _scene, env,
@@ -1975,6 +2119,54 @@ namespace DisperSim3D.UI.Avalonia.Views
 
             ShowSimulationManager();
             StatusText.Text = $"Simulation enqueued: {sim.Name}";
+            return null;
+        }
+
+        /// <summary>The latest run of a simulation in this session's simulation manager.</summary>
+        internal DisperSim3D.Extensibility.ExtenderRunStatus? SimulationRunStatus(string simulationId)
+        {
+            var job = SimulationManager.AllJobs.LastOrDefault(j => j.SimulationId == simulationId);
+            return job == null ? null
+                : new DisperSim3D.Extensibility.ExtenderRunStatus(job.Status.ToString(), job.Progress, job.StatusText, job.LastLogLine);
+        }
+
+        /// <summary>Cancels the latest run of a simulation; null when cancelled, otherwise why not.</summary>
+        internal string? CancelSimulationRun(string simulationId)
+        {
+            var job = SimulationManager.AllJobs.LastOrDefault(j => j.SimulationId == simulationId);
+            if (job == null) return "Simulation " + simulationId + " has not been run in this session.";
+            if (job.Status is not (Core.SimulationJobStatus.Queued or Core.SimulationJobStatus.Running or Core.SimulationJobStatus.Paused))
+                return "Its latest run is already " + job.Status + ".";
+            SimulationManager.CancelJob(job);
+            return null;
+        }
+
+        /// <summary>Redraws the tree and the view after an extender changed the project.</summary>
+        internal void RefreshProjectFromExtender() => MarkDirtyAndRefresh(StatusText.Text ?? "");
+
+        /// <summary>Shows a completed simulation paused at the snapshot at or before <paramref name="timeS"/> (the last when null).</summary>
+        internal string? ShowSimulationResult(string id, double? timeS)
+        {
+            var sim = _scene?.Simulations.FirstOrDefault(s => s.Id == id);
+            if (sim == null) return "No simulation " + id + " in the project.";
+            if (sim.Status != SimulationStatus.Completed)
+                return "Simulation '" + sim.Name + "' has no results yet (" + sim.Status + ").";
+
+            InitPlayback(sim);
+            var steps = _playbackResult?.TimeSteps;
+            if (steps == null || steps.Count == 0) return "No result data found for '" + sim.Name + "'.";
+
+            int index = steps.Count - 1;
+            if (timeS.HasValue)
+            {
+                index = 0;
+                while (index < steps.Count - 1 && steps[index + 1] <= timeS.Value) index++;
+            }
+            _playbackTimeS = steps[index];
+            UpdatePlaybackSlider();
+            RenderPlaybackFrame(_playbackTimeS);
+            StatusText.Text = $"Showing results: {sim.Name} at {_playbackTimeS:F1} s";
+            return null;
         }
 
         private void MenuToolsSimManager_Click(object? sender, RoutedEventArgs e)

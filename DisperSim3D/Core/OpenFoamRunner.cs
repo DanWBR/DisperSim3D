@@ -137,7 +137,8 @@ namespace DisperSim3D.Core
             {
                 try
                 {
-                    ReportProgress(0, "Generating case...", "");
+                    ReportProgress(0, "Generating case...",
+                        CalmWind.Note(scenario.Meteo, CalmWind.OpenFoamMinimumMPerS, "OpenFOAM") ?? "");
                     _casePath = OpenFoamCaseGenerator.GenerateRhoReactingBuoyantFoam(scenario, config);
 
                     if (!string.IsNullOrEmpty(_casePath))
@@ -366,7 +367,7 @@ namespace DisperSim3D.Core
 
                 if (_worker.CancellationPending)
                 {
-                    try { _currentProcess.Kill(); } catch { }
+                    KillTree(_currentProcess);
                     return;
                 }
             }
@@ -374,7 +375,7 @@ namespace DisperSim3D.Core
             const int timeoutMs = 30 * 60 * 1000; // 30 min — large meshes / many ranks can be slow
             if (!_currentProcess.WaitForExit(timeoutMs))
             {
-                try { _currentProcess.Kill(); } catch { }
+                KillTree(_currentProcess);
                 throw new Exception(command + " timed out after " + (timeoutMs / 60000) + " min");
             }
             if (_currentProcess.ExitCode != 0)
@@ -545,7 +546,7 @@ namespace DisperSim3D.Core
             const int timeoutMs = 30 * 60 * 1000; // 30 min — large meshes / many ranks can be slow
             if (!_currentProcess.WaitForExit(timeoutMs))
             {
-                try { _currentProcess.Kill(); } catch { }
+                KillTree(_currentProcess);
                 throw new Exception(command + " timed out after " + (timeoutMs / 60000) + " min");
             }
             if (_currentProcess.ExitCode != 0)
@@ -579,12 +580,23 @@ namespace DisperSim3D.Core
         }
 
         /// <summary>
+        /// Ends <paramref name="process"/> and everything it started. A command runs as
+        /// <c>cmd /c mpiexec ... solver -parallel</c>: killing cmd alone leaves mpiexec and
+        /// every solver rank running.
+        /// </summary>
+        private static void KillTree(Process process)
+        {
+            if (process == null) return;
+            try { process.Kill(entireProcessTree: true); } catch { /* already exited */ }
+        }
+
+        /// <summary>
         /// Requests cancellation of the currently running simulation and kills the active OpenFOAM process.
         /// </summary>
         public void Cancel()
         {
             if (_worker != null) _worker.CancelAsync();
-            try { _currentProcess?.Kill(); } catch { }
+            KillTree(_currentProcess);
         }
 
         private void RunStep(string command)
@@ -695,7 +707,9 @@ namespace DisperSim3D.Core
 
                 if (_worker.CancellationPending)
                 {
-                    try { _currentProcess.Kill(); } catch { }
+                    KillTree(_currentProcess);
+                    // Close the log, or the next run of this case cannot delete its folder.
+                    try { logWriter?.Dispose(); } catch { }
                     return;
                 }
             }
@@ -705,7 +719,7 @@ namespace DisperSim3D.Core
             const int timeoutMs = 30 * 60 * 1000;
             if (!_currentProcess.WaitForExit(timeoutMs))
             {
-                try { _currentProcess.Kill(); } catch { }
+                KillTree(_currentProcess);
                 throw new Exception(command + " timed out after " + (timeoutMs / 60000) + " min");
             }
             if (_currentProcess.ExitCode != 0)
@@ -946,7 +960,9 @@ namespace DisperSim3D.Core
 
                 if (_worker.CancellationPending)
                 {
-                    try { _currentProcess.Kill(); } catch { }
+                    KillTree(_currentProcess);
+                    // Close the log, or the next run of this case cannot delete its folder.
+                    try { logWriter?.Dispose(); } catch { }
                     return;
                 }
             }
@@ -955,7 +971,7 @@ namespace DisperSim3D.Core
             const int timeoutMs = 30 * 60 * 1000;
             if (!_currentProcess.WaitForExit(timeoutMs))
             {
-                try { _currentProcess.Kill(); } catch { }
+                KillTree(_currentProcess);
                 throw new Exception("WSL patched solver timed out after " + (timeoutMs / 60000) + " min");
             }
             if (_currentProcess.ExitCode != 0)

@@ -53,7 +53,7 @@ namespace DisperSim3D.Core
             sim.SnapshotMeteo = wf.Meteo != null
                 ? CloneMeteo(wf.Meteo)
                 : (scene.GeneralSettings?.DefaultMeteo != null ? CloneMeteo(scene.GeneralSettings.DefaultMeteo) : new MeteorologicalConditions());
-            sim.SnapshotCfdConfig = AppSettings.Instance.CreateCfdConfig();
+            sim.SnapshotCfdConfig = AppSettings.Instance.CreateCfdConfig(sim.SnapshotCfdConfig);
 
             // Build a transient DispersionScenario for the existing pipeline
             var transientScenario = new DispersionScenario

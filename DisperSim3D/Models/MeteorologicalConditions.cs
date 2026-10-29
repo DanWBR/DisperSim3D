@@ -84,6 +84,9 @@ namespace DisperSim3D.Models
             }
         }
 
+        /// <summary>A copy of these conditions; every member is a value.</summary>
+        public MeteorologicalConditions Clone() => (MeteorologicalConditions)MemberwiseClone();
+
         /// <summary>
         /// Computes the wind speed at a given height using the power-law wind profile.
         /// </summary>

@@ -49,6 +49,8 @@ namespace DisperSim3D.Controls
         private ToolStripMenuItem _miSelectMode;
         private ToolStripMenuItem _miSnap, _miGround, _miVectors, _miWindArrows;
         private ToolStripMenuItem _miRecentFiles;
+        private string _currentProjectPath;
+        private WinFormsExtenderHost _extenderHost;
         private string _resPath;
 
         public static string ResourcesBasePath { get; set; }
@@ -161,6 +163,7 @@ namespace DisperSim3D.Controls
                 new ToolStripSeparator(),
                 new ToolStripMenuItem("E&xit", Img("cross.png"), (s, e) => DoExit())
             });
+            AddExtenderMenuItems(menuFile);
 
             // --- Edit menu ---
             var menuEdit = new ToolStripMenuItem("&Edit");
@@ -790,6 +793,7 @@ namespace DisperSim3D.Controls
         public void SaveToFile(string filePath)
         {
             _editor.SaveToFile(filePath);
+            _currentProjectPath = filePath;
             UpdateStatus("Saved: " + filePath);
             AppSettings.Instance.AddRecentFile(filePath);
         }
@@ -797,6 +801,7 @@ namespace DisperSim3D.Controls
         public void LoadFromFile(string filePath)
         {
             _editor.LoadFromFile(filePath);
+            _currentProjectPath = filePath;
             RefreshScenarioCombo();
             RefreshProjectTree();
             UpdateStatus("Loaded: " + filePath);
@@ -1812,6 +1817,64 @@ namespace DisperSim3D.Controls
                     DoRunSimulation(id);
                 }
             }
+        }
+
+        /// <summary>Runs a simulation for an extender; null when queued, otherwise why it was not.</summary>
+        internal string RunSimulationFromExtender(string id)
+        {
+            var sim = _editor.Scene.Simulations.FirstOrDefault(s => s.Id == id);
+            if (sim == null) return "No simulation " + id + " in the project.";
+            bool queued = SimulationRunner.RunSnapshot(sim, _editor.Scene, _editor, m => UpdateStatus(m));
+            if (queued) DoShowSimulationManager();
+            RefreshProjectTree();
+            return queued ? null : sim.StatusMessage;
+        }
+
+        /// <summary>The latest run of a simulation; the runner names the run's scenario after it.</summary>
+        internal DisperSim3D.Extensibility.ExtenderRunStatus SimulationRunStatus(string id)
+        {
+            var job = _editor.SimulationManager.AllJobs.LastOrDefault(j => j.Scenario != null && j.Scenario.Id == id);
+            return job == null ? null
+                : new DisperSim3D.Extensibility.ExtenderRunStatus(job.Status.ToString(), job.Progress, job.StatusText, job.LastLogLine);
+        }
+
+        /// <summary>Cancels the latest run of a simulation; null when cancelled, otherwise why not.</summary>
+        internal string CancelSimulationRun(string id)
+        {
+            var job = _editor.SimulationManager.AllJobs.LastOrDefault(j => j.Scenario != null && j.Scenario.Id == id);
+            if (job == null) return "Simulation " + id + " has not been run in this session.";
+            if (job.Status != SimulationJobStatus.Queued && job.Status != SimulationJobStatus.Running && job.Status != SimulationJobStatus.Paused)
+                return "Its latest run is already " + job.Status + ".";
+            _editor.SimulationManager.CancelJob(job);
+            return null;
+        }
+
+        /// <summary>Redraws the tree and the view after an extender changed the project.</summary>
+        internal void RefreshProjectFromExtender()
+        {
+            RefreshProjectTree();
+            _editor.RefreshViewport();
+        }
+
+        /// <summary>Shows a completed simulation paused at the snapshot at or before timeS (the last when null); null when shown, otherwise why not.</summary>
+        internal async System.Threading.Tasks.Task<string> ShowSimulationResultFromExtender(string id, double? timeS)
+        {
+            var sim = _editor.Scene.Simulations.FirstOrDefault(s => s.Id == id);
+            if (sim == null) return "No simulation " + id + " in the project.";
+            if (sim.Status != SimulationStatus.Completed)
+                return "Simulation '" + sim.Name + "' has no results yet (" + sim.Status + ").";
+            var entry = _editor.Scene.CfdSimulations.FirstOrDefault(en =>
+                en.Id == sim.Id || en.Name == sim.Name || en.ScenarioName == sim.Name);
+            if (entry == null) return "No result entry found for simulation '" + sim.Name + "'.";
+            if (!_editor.LoadCfdSimulation(entry)) return "Failed to load results from: " + entry.CasePath;
+
+            double shownS = await _editor.ShowCfdFrameAsync(timeS);
+            sim.IsVisible = true;
+            UpdatePlaybackBarState(sim.Name);
+            UpdatePlaybackButtons();
+            RefreshProjectTree();
+            UpdateStatus("Showing results: " + sim.Name + " at " + shownS.ToString("F1") + " s");
+            return null;
         }
 
         private void DoRunSimulation(string id)
@@ -3030,6 +3093,120 @@ namespace DisperSim3D.Controls
             if (panel.DockState == DockState.Hidden || panel.DockState == DockState.Unknown)
                 panel.Show(_dockPanel, defaultState);
             panel.Activate();
+        }
+
+        /// <summary>The project in the editor, for extenders.</summary>
+        internal Scene3D CurrentScene => _editor.Scene;
+
+        /// <summary>Path the project was last opened from or saved to; null for an unsaved one.</summary>
+        internal string CurrentProjectPath => _currentProjectPath;
+
+        internal void SetStatusText(string text) => UpdateStatus(text);
+
+        internal string StatusTextValue => _statusLabel.Text;
+
+        internal byte[] RenderViewportPng(int width, int height) => _editor.RenderViewportPng(width, height);
+
+        /// <summary>
+        /// Adds the File commands of every loaded extender (see
+        /// <see cref="DisperSim3D.Extensibility.ExtenderLoader"/>). A command with a
+        /// position goes there; the rest are grouped above Exit. Extenders of other
+        /// categories land in File too, until this shell grows a menu for them.
+        /// </summary>
+        private void AddExtenderMenuItems(ToolStripMenuItem menuFile)
+        {
+            DisperSim3D.Extensibility.ExtenderLoadResult loaded;
+            try
+            {
+                loaded = DisperSim3D.Extensibility.ExtenderLoader.LoadAll();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[Extenders] " + ex);
+                return;
+            }
+            foreach (string line in loaded.Messages)
+                System.Diagnostics.Debug.WriteLine("[Extenders] " + line);
+            if (loaded.Collections.Count == 0) return;
+
+            _extenderHost = new WinFormsExtenderHost(this);
+            var appended = new System.Collections.Generic.List<ToolStripItem>();
+
+            foreach (var collection in loaded.Collections)
+            {
+                foreach (var item in collection.Collection)
+                {
+                    var mi = new ToolStripMenuItem(item.DisplayText, ImageFromPng(item.DisplayImage));
+                    var command = item;
+                    mi.Click += async (s, e) =>
+                    {
+                        try
+                        {
+                            await command.RunAsync(_extenderHost);
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show(FindForm(), command.DisplayText + " failed:\n\n" + ex.Message,
+                                "Extender error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                    };
+
+                    if (item.InsertAtPosition >= 0 && item.InsertAtPosition <= menuFile.DropDownItems.Count)
+                        menuFile.DropDownItems.Insert(item.InsertAtPosition, mi);
+                    else
+                        appended.Add(mi);
+                }
+            }
+
+            if (appended.Count > 0)
+            {
+                // Above the separator that precedes Exit, as a group of its own.
+                int exitSeparator = Math.Max(0, menuFile.DropDownItems.Count - 2);
+                menuFile.DropDownItems.Insert(exitSeparator, new ToolStripSeparator());
+                for (int i = 0; i < appended.Count; i++)
+                    menuFile.DropDownItems.Insert(exitSeparator + 1 + i, appended[i]);
+            }
+
+            // Extenders that work in the background start once the window exists.
+            HandleCreated += StartExtendersOnce;
+        }
+
+        private bool _extendersStarted;
+
+        private void StartExtendersOnce(object sender, EventArgs e)
+        {
+            if (_extendersStarted || _extenderHost == null) return;
+            _extendersStarted = true;
+            BeginInvoke(new Action(() =>
+            {
+                foreach (var collection in DisperSim3D.Extensibility.ExtenderLoader.LoadAll().Collections)
+                {
+                    if (!(collection is DisperSim3D.Extensibility.IExtenderStartup startup)) continue;
+                    try
+                    {
+                        startup.OnHostStarted(_extenderHost);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine("[Extenders] " + collection.ID + " failed to start: " + ex);
+                        UpdateStatus(collection.DisplayText + " failed to start: " + ex.Message);
+                    }
+                }
+            }));
+        }
+
+        private static Image ImageFromPng(byte[] png)
+        {
+            if (png == null || png.Length == 0) return null;
+            try
+            {
+                using (var ms = new MemoryStream(png))
+                    return new Bitmap(Image.FromStream(ms));
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private void UpdateStatus(string message)

@@ -218,8 +218,16 @@ namespace DisperSim3D.Core
 
         private static MeteorologicalConditions ParseMeteo(XElement mEl, CultureInfo inv)
         {
+            // Files written before these attributes existed get the model's defaults.
+            var defaults = new MeteorologicalConditions();
             return new MeteorologicalConditions
             {
+                StabilityIndex = AttrDouble(mEl, inv, defaults.StabilityIndex, "StabilityIndex"),
+                AveragingTimeS = AttrDouble(mEl, inv, defaults.AveragingTimeS, "AveragingTime"),
+                MixingHeightM = AttrDouble(mEl, inv, defaults.MixingHeightM, "MixingHeight"),
+                WindMeasurementHeightM = AttrDouble(mEl, inv, defaults.WindMeasurementHeightM, "MeasurementHeight"),
+                WindShearExponent = AttrDouble(mEl, inv, defaults.WindShearExponent, "ShearExponent"),
+                IsUrbanTerrain = AttrBool(mEl, defaults.IsUrbanTerrain, "Urban"),
                 WindSpeed = double.Parse((string)mEl.Attribute("WindSpeed") ?? "5", inv),
                 WindDirectionDeg = double.Parse((string)mEl.Attribute("WindDir") ?? "270", inv),
                 StabilityClass = (PasquillStabilityClass)Enum.Parse(typeof(PasquillStabilityClass),

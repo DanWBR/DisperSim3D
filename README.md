@@ -434,6 +434,82 @@ A `.dsbench` describes the source (`elevationDeg`, `releaseAzimuthDeg` for a rel
 
 ---
 
+## Extenders
+
+Menu commands can be added to both desktop UIs without rebuilding them, on the
+model of DWSIM's extenders. At start-up each UI loads every DLL whose name
+contains `Extender` from these folders, directly or one folder down:
+
+- `extenders\` beside the executable, for what ships with an install
+- `%APPDATA%\DisperSim3D\extenders\` (`~/.config/DisperSim3D/extenders/` elsewhere), for what the user adds
+- any folder listed in the `DISPERSIM3D_EXTENDERS` environment variable
+
+An extender implements the contract in `DisperSim3D.Extensibility`: a public
+`IExtenderCollection` (ID, display text, menu `Category`) holding `IExtender`
+commands (display text, optional PNG icon, `InsertAtPosition`, `RunAsync`).
+Unlike DWSIM's, a command never receives the host's window: it talks to the host
+through `IExtenderHost` — open and save dialogs, open a project, show a message,
+set the status text — which the WinForms shell and the Avalonia UI each
+implement, so one DLL runs in both.
+
+Each extender loads in a load context of its own and resolves its dependencies,
+native libraries included, from its own folder and `.deps.json` (build it with
+`<EnableDynamicLoading>true</EnableDynamicLoading>`). Whatever the host already
+ships — `DisperSim3D.dll` above all — is shared rather than loaded twice, so an
+extender's `Scene3D` is the host's. Reference the engine with `Private="false"`
+and `PrivateAssets="all"` to keep it out of the extender's folder.
+
+`DisperSim3D.CLI --list-extenders` loads them exactly as the UIs do and prints
+every command and every load decision, without opening a window.
+
+A collection that also implements `IExtenderStartup` is called once when the
+main window is up, for extenders that work in the background. Newer host
+features come through `IExtenderHost2` (save the project, read the status bar,
+capture the 3D view as a PNG, run code on the UI thread); check for it with
+`host is IExtenderHost2`.
+
+### Automation server
+
+The installer puts one extender in `extenders\Automation\`: a small HTTP server
+on `127.0.0.1` that lets a script, a test or an AI agent drive either desktop UI.
+It is off by default. Start it from **File → Automation Server: Start**, or at
+launch with environment variables:
+
+| Variable | Meaning |
+|---|---|
+| `DISPERSIM3D_AUTOMATION=1` | start the server when the main window opens |
+| `DISPERSIM3D_AUTOMATION_PORT` | port, `5013` by default; `0` takes any free one |
+| `DISPERSIM3D_AUTOMATION_TOKEN` | when set, every request must send it in `X-Automation-Token` |
+
+| Endpoint | |
+|---|---|
+| `GET /status` | host, version, open project, status bar |
+| `GET /scene` | the open project: name, counts, decorations, sources, detectors |
+| `GET /commands` | the extender menu commands |
+| `POST /commands/run` | `{"id": "...", "answers": ["C:\\file.ifx"]}` — runs a command; its file dialogs take the answers in order, and its messages come back in the response instead of being shown |
+| `POST /project/open` | `{"path": "..."}` |
+| `POST /project/save` | `{"path": "..."}`, or no body to save in place |
+| `GET /viewport.png?width=&height=` | the 3D view as a PNG (the Avalonia UI captures at the on-screen size) |
+| `POST /viewport/save` | `{"path": "...", "width": 0, "height": 0}` |
+| `GET /simulations` | the project's simulations, each with its latest run |
+| `POST /simulations` | `{"source": "Release 01", "solver": "RhoReactingBuoyantFoam", "windField": "...", "durationS": 300, "timeStepS": 0.5, "domainSizeM": 200, "gridResolution": 40, "snapshotCount": 20}` — source and solver required, the rest default as in Add Simulation |
+| `POST /simulations/run` | `{"id": "..."}` — queues it in the simulation manager, as its Run command does |
+| `GET /simulations/status?id=` | state, progress and last log line of its latest run |
+| `POST /simulations/cancel` | `{"id": "..."}` — cancels its latest run |
+| `POST /simulations/show` | `{"id": "...", "timeS": 30}` — loads a completed result into the 3D view, paused at the snapshot at or before `timeS` (the last snapshot when omitted); capture it with `/viewport.png` |
+| `GET /log?after=N` | what the server did |
+
+```bash
+curl http://127.0.0.1:5013/status
+curl -X POST http://127.0.0.1:5013/project/open -d "{\"path\": \"C:\\\\Projects\\\\plant.dsproj\"}"
+curl -o view.png "http://127.0.0.1:5013/viewport.png?width=1600&height=900"
+```
+
+The server listens on the loopback interface only and turns away requests a web
+page could make (any request with an `Origin` header, or for a host name other
+than `127.0.0.1`/`localhost`). `DisperSim3D.CLI --automation-selftest` starts it
+against a host with no window and checks every endpoint over HTTP.
+
 ## XML File Format
 
 Projects are saved as XML with root `<Project Version="2">`. Legacy `<Scene3D>` files are auto-migrated on load: inline gases are hoisted into `GasLibrary`, sources promoted to top level, and old scenarios converted into `Simulation` snapshots.

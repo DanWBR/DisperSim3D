@@ -23,12 +23,13 @@ namespace DisperSim3D.Core
 
         private static readonly double TwoPi = 2.0 * Math.PI;
         private const int TrajectoryPoints = 200;
-        private const double MinWindSpeed = 0.5;
+        private const double MinWindSpeed = CalmWind.GaussianMinimumMPerS;
 
         public void Initialize(DispersionScenario scenario)
         {
             _sources.Clear();
-            var meteo = scenario.Meteo;
+            // Calm runs at the minimum wind — plume rise and dilution both go as 1/u.
+            var meteo = CalmWind.AtLeast(scenario.Meteo, MinWindSpeed);
             _mixingHeight = meteo.MixingHeightM > 0 ? meteo.MixingHeightM : 1e6;
 
             double windDirRad = meteo.WindDirectionDeg * Math.PI / 180.0;
