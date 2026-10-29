@@ -618,7 +618,13 @@ namespace DisperSim3D.Core
                 new XAttribute("Temp", meteo.AmbientTemperature.ToString(inv)),
                 new XAttribute("Pressure", meteo.AmbientPressure.ToString(inv)),
                 new XAttribute("Humidity", meteo.RelativeHumidity.ToString(inv)),
-                new XAttribute("Roughness", meteo.RoughnessLengthM.ToString(inv)));
+                new XAttribute("Roughness", meteo.RoughnessLengthM.ToString(inv)),
+                new XAttribute("StabilityIndex", meteo.StabilityIndex.ToString(inv)),
+                new XAttribute("AveragingTime", meteo.AveragingTimeS.ToString(inv)),
+                new XAttribute("MixingHeight", meteo.MixingHeightM.ToString(inv)),
+                new XAttribute("MeasurementHeight", meteo.WindMeasurementHeightM.ToString(inv)),
+                new XAttribute("ShearExponent", meteo.WindShearExponent.ToString(inv)),
+                new XAttribute("Urban", meteo.IsUrbanTerrain));
         }
 
         /// <summary>Fire studies. Read back by

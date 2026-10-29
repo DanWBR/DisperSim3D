@@ -179,18 +179,34 @@ namespace DisperSim3D.Extensibility
         protected override Assembly? Load(AssemblyName assemblyName)
         {
             string? name = assemblyName.Name;
-            if (name == null || Shared.Contains(name)) return null;
+            if (name == null) return null;
 
             // Already loaded by the host: share it rather than load a second copy.
+            // The host's assembly is returned whatever its version, so an extender
+            // built against a newer or older engine still binds to the one running;
+            // handing the request on to the default context would demand the exact
+            // version the extender was compiled against.
             foreach (Assembly loaded in Default.Assemblies)
                 if (string.Equals(loaded.GetName().Name, name, StringComparison.OrdinalIgnoreCase))
-                    return null;
+                    return loaded;
 
-            // Shipped with the host but not loaded yet: the host's copy serves it
-            // too, so an extender never runs against a library version of its own
-            // where the host has one.
-            if (File.Exists(Path.Combine(AppContext.BaseDirectory, name + ".dll")))
-                return null;
+            // A host assembly, or one shipped with the host but not loaded yet: the
+            // host's copy serves it too, so an extender never runs against a library
+            // version of its own where the host has one.
+            if (Shared.Contains(name) || File.Exists(Path.Combine(AppContext.BaseDirectory, name + ".dll")))
+            {
+                try
+                {
+                    return Default.LoadFromAssemblyName(new AssemblyName(name));
+                }
+                catch (FileNotFoundException)
+                {
+                    // Not a part of this host (the WinForms assembly in the Avalonia
+                    // UI, say): nothing to share, and a host assembly is never loaded
+                    // from the extender's folder. Anything else may still come from there.
+                    if (Shared.Contains(name)) return null;
+                }
+            }
 
             string? path = _resolver.ResolveAssemblyToPath(assemblyName);
             return path != null && File.Exists(path) ? LoadFromAssemblyPath(path) : null;
