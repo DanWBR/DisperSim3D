@@ -67,6 +67,7 @@ namespace DisperSim3D.CLI
             bool listExtenders = false;
             bool automationSelftest = false;
             bool calmWindSelftest = false;
+            bool solverExtenderSelftest = false;
             bool exitVelocitySelftest = false;
             string automationExtenderDir = null;
             bool solidFlameSelftest = false;
@@ -161,6 +162,9 @@ namespace DisperSim3D.CLI
                     case "--calm-wind-selftest":
                         calmWindSelftest = true;
                         break;
+                    case "--solver-extender-selftest":
+                        solverExtenderSelftest = true;
+                        break;
                     case "--automation-selftest":
                         automationSelftest = true;
                         if (i + 1 < args.Length && !args[i + 1].StartsWith("-"))
@@ -232,6 +236,7 @@ namespace DisperSim3D.CLI
             if (listExtenders) return RunListExtenders();
             if (automationSelftest) return AutomationSelfTest.Run(automationExtenderDir, Console.Out);
             if (calmWindSelftest) return DisperSim3D.Validation.CalmWindSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
+            if (solverExtenderSelftest) return DisperSim3D.Validation.SolverExtenderSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             if (exitVelocitySelftest) return DisperSim3D.Validation.ExitVelocitySelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             if (solidFlameSelftest) return RunSolidFlameSelfTest();
             if (flashFireSelftest) return RunFlashFireSelfTest();
@@ -311,7 +316,8 @@ namespace DisperSim3D.CLI
                 solver != "puff" && solver != "gaussian-puff" &&
                 solver != "unified" && solver != "unifieddispersion" && solver != "udm" &&
                 solver != "udmcnt" && solver != "integral" &&
-                !solver.StartsWith("fluidx3d", StringComparison.OrdinalIgnoreCase);
+                !solver.StartsWith("fluidx3d", StringComparison.OrdinalIgnoreCase) &&
+                DisperSim3D.Extensibility.SolverExtenderRegistry.FindByName(solver) == null;
 
             if (needsCfd || openFoamPath != null || envType != null || simulationSelector != null)
             {
@@ -712,6 +718,10 @@ namespace DisperSim3D.CLI
                 foreach (var item in c.Collection)
                     Console.WriteLine("      - " + item.DisplayText + "  (" + item.ID + ", position " + item.InsertAtPosition +
                                       (item.DisplayImage != null ? ", icon " + item.DisplayImage.Length + " bytes" : "") + ")");
+                if (c is DisperSim3D.Extensibility.ISolverExtenderCollection sc && sc.Solvers != null)
+                    foreach (var s in sc.Solvers)
+                        Console.WriteLine("      * solver [" + s.Code + "] " + s.DisplayName + "  (" + s.Id +
+                                          (s.Aliases != null && s.Aliases.Count > 0 ? ", -s " + string.Join(" | ", s.Aliases) : "") + ")");
             }
 
             bool failed = result.Messages.Exists(m => m.StartsWith("skipped") || m.Contains("failed to start"));
@@ -1908,6 +1918,8 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             sonic velocity across the leak range; exit 0 on pass.");
             Console.WriteLine("  --calm-wind-selftest       Run every model at 0 m/s across the leak range and");
             Console.WriteLine("                             check each uses its minimum wind; exit 0 on full pass.");
+            Console.WriteLine("  --solver-extender-selftest Run a stand-in solver extender through the registry,");
+            Console.WriteLine("                             project file, headless run and validation harness.");
             Console.WriteLine("  --automation-selftest [dir]");
             Console.WriteLine("                             Start the automation extender (from dir, or the");
             Console.WriteLine("                             extender folders) against a host with no window");

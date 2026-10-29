@@ -468,6 +468,16 @@ features come through `IExtenderHost2` (save the project, read the status bar,
 capture the 3D view as a PNG, run code on the UI thread); check for it with
 `host is IExtenderHost2`.
 
+A collection that also implements `ISolverExtenderCollection` adds dispersion
+solvers. Each `ISolverExtender` (ID, six-letter code, display name, CLI aliases,
+`Run`) is listed after the built-in solvers in the Simulation Editor of both UIs,
+is saved as `SolverType="Extender"` plus its `ExtenderSolverId`, and runs through
+the same paths as the built-in ones: the simulation managers, `DisperSim3D.CLI
+<project> -s <alias>` and `--validate <bench> -s <alias>`. `Run` receives the
+scenario, the CFD settings and the obstacle boxes, and returns its snapshots as
+an `OpenFoamResult` on the scenario grid; it may also return a point evaluator,
+which the validation harness then samples instead of the grid.
+
 ### Automation server
 
 The installer puts one extender in `extenders\Automation\`: a small HTTP server

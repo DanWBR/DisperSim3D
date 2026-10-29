@@ -2066,6 +2066,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 Name = sim.Name,
                 Meteo = meteo,
                 SolverType = sim.SolverType,
+                ExtenderSolverId = sim.ExtenderSolverId,
                 CfdConfig = config,
                 WindFieldScenarioId = string.IsNullOrEmpty(sim.WindFieldId) ? null : sim.WindFieldId
             };

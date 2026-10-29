@@ -27,8 +27,32 @@ namespace DisperSim3D.Core
                 case CfdSolverType.FluidX3DFire:              return "FX3DFR";
                 case CfdSolverType.FluidX3DDispersionSteady:  return "FX3DDS";
                 case CfdSolverType.UnifiedDispersion:         return "UDMCNT";
+                case CfdSolverType.Extender:                  return "EXTSLV";
                 default:                                       return "UNKSLV";
             }
+        }
+
+        /// <summary>Tag of a solver, resolving an extender solver to its own code.</summary>
+        public static string Of(CfdSolverType type, string extenderSolverId)
+        {
+            if (type == CfdSolverType.Extender)
+            {
+                var s = Extensibility.SolverExtenderRegistry.Find(extenderSolverId);
+                if (s != null && !string.IsNullOrEmpty(s.Code)) return s.Code;
+            }
+            return Of(type);
+        }
+
+        /// <summary>Display name of a solver, resolving an extender solver to its own name.</summary>
+        public static string DisplayName(CfdSolverType type, string extenderSolverId)
+        {
+            if (type == CfdSolverType.Extender)
+            {
+                var s = Extensibility.SolverExtenderRegistry.Find(extenderSolverId);
+                if (s != null) return s.DisplayName;
+                return "Extender solver '" + (extenderSolverId ?? "?") + "' (not installed)";
+            }
+            return DisplayName(type);
         }
 
         /// <summary>Human-friendly long-form name (matches the editor dialog labels).</summary>

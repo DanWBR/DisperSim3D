@@ -123,7 +123,15 @@ namespace DisperSim3D.Validation
         {
             CfdSolverType t;
             if (System.Enum.TryParse(Solver ?? "GaussianPlume", ignoreCase: true, out t)) return t;
+            if (ResolveExtenderSolverId() != null) return CfdSolverType.Extender;
             return CfdSolverType.GaussianPlume;
+        }
+
+        /// <summary>ID of the extender solver <see cref="Solver"/> names, or null when it names a built-in one.</summary>
+        public string ResolveExtenderSolverId()
+        {
+            if (string.IsNullOrWhiteSpace(Solver) || System.Enum.TryParse(Solver, ignoreCase: true, out CfdSolverType _)) return null;
+            return Extensibility.SolverExtenderRegistry.FindByName(Solver)?.Id;
         }
     }
 

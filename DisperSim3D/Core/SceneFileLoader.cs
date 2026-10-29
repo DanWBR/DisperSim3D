@@ -202,6 +202,7 @@ namespace DisperSim3D.Core
                 sim.SolverType = ParseSolverType(
                     (string)se.Attribute("SolverType") ?? "GaussianPuff",
                     CfdSolverType.GaussianPuff);
+                sim.ExtenderSolverId = (string)se.Attribute("ExtenderSolverId");
                 SimulationStatus statusVal;
                 if (Enum.TryParse((string)se.Attribute("Status") ?? "Configured", out statusVal))
                     sim.Status = statusVal;
@@ -480,6 +481,7 @@ namespace DisperSim3D.Core
             var solverTypeStr = (string)dEl.Attribute("SolverType");
             if (!string.IsNullOrEmpty(solverTypeStr))
                 sc.SolverType = ParseSolverType(solverTypeStr, sc.SolverType);
+            sc.ExtenderSolverId = (string)dEl.Attribute("ExtenderSolverId");
 
             var wfId = (string)dEl.Attribute("WindFieldId");
             sc.WindFieldScenarioId = string.IsNullOrEmpty(wfId) ? null : wfId;

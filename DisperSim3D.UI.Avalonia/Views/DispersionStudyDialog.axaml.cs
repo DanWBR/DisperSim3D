@@ -96,7 +96,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 {
                     SimulationId = s.Id ?? "",
                     Name         = s.Name ?? "(unnamed)",
-                    Solver       = SolverCode.Of(s.SolverType),
+                    Solver       = SolverCode.Of(s.SolverType, s.ExtenderSolverId),
                     Source       = srcName,
                     WindField    = wfName,
                     Status       = s.Status.ToString(),

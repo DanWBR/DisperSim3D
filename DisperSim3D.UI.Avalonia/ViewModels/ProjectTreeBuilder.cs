@@ -184,7 +184,7 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
                         ?? sim.SnapshotSource?.Name ?? "?";
                     string wfName = scene.WindFieldScenarios?.FirstOrDefault(w => w.Id == sim.WindFieldId)?.Name
                         ?? "?";
-                    string solverTag = DisperSim3D.Core.SolverCode.Of(sim.SolverType);
+                    string solverTag = DisperSim3D.Core.SolverCode.Of(sim.SolverType, sim.ExtenderSolverId);
                     string label = string.Format("{0}  [{1}]  [{2} / {3}]",
                         string.IsNullOrEmpty(sim.Name) ? "(simulation)" : sim.Name,
                         solverTag, srcName, wfName);

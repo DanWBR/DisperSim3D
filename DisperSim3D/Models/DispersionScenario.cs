@@ -87,6 +87,12 @@ namespace DisperSim3D.Models
         public CfdSolverType SolverType { get; set; }
 
         /// <summary>
+        /// Gets or sets the ID of the extender solver when <see cref="SolverType"/> is
+        /// <see cref="CfdSolverType.Extender"/>.
+        /// </summary>
+        public string ExtenderSolverId { get; set; }
+
+        /// <summary>
         /// Gets or sets the CFD solver configuration parameters.
         /// </summary>
         public CfdConfiguration CfdConfig { get; set; }

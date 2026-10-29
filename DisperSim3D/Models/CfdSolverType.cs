@@ -23,7 +23,9 @@ namespace DisperSim3D.Models
         /// <summary>FluidX3D-driven CPU dispersion that runs until the concentration field stops changing (convergence detection). Writes one converged steady-state snapshot.</summary>
         FluidX3DDispersionSteady,
         /// <summary>Unified integral model (jet -> heavy gas -> passive) for continuous releases; no grid.</summary>
-        UnifiedDispersion
+        UnifiedDispersion,
+        /// <summary>A solver provided by an extender assembly; the simulation's <c>ExtenderSolverId</c> names it.</summary>
+        Extender
     }
 
     /// <summary>

@@ -315,6 +315,7 @@ namespace DisperSim3D.Core
                     new XAttribute("SourceId", s.SourceId ?? ""),
                     new XAttribute("WindFieldId", s.WindFieldId ?? ""),
                     new XAttribute("SolverType", s.SolverType.ToString()),
+                    string.IsNullOrEmpty(s.ExtenderSolverId) ? null : new XAttribute("ExtenderSolverId", s.ExtenderSolverId),
                     new XAttribute("Status", s.Status.ToString()),
                     new XAttribute("StatusMessage", s.StatusMessage ?? ""),
                     new XAttribute("DomainSize", s.SnapshotDomainSizeM.ToString(inv)),
@@ -520,6 +521,7 @@ namespace DisperSim3D.Core
                 new XAttribute("DomainSize", sc.DomainSizeM.ToString(inv)),
                 new XAttribute("GridRes", sc.GridResolution.ToString(inv)),
                 new XAttribute("SolverType", sc.SolverType.ToString()),
+                string.IsNullOrEmpty(sc.ExtenderSolverId) ? null : new XAttribute("ExtenderSolverId", sc.ExtenderSolverId),
                 new XAttribute("WindFieldId", sc.WindFieldScenarioId ?? ""),
 
                 SerializeMeteo("Meteo", sc.Meteo, inv),

@@ -16,6 +16,10 @@ namespace DisperSim3D.Dialogs
         private ComboBox cmbSource;
         private ComboBox cmbWindField;
         private ComboBox cmbSolver;
+        /// <summary>Solvers from extenders, listed in the combo after the built-in ones.</summary>
+        private readonly System.Collections.Generic.List<DisperSim3D.Extensibility.ISolverExtender> _extenderSolvers =
+            new System.Collections.Generic.List<DisperSim3D.Extensibility.ISolverExtender>(DisperSim3D.Extensibility.SolverExtenderRegistry.All);
+        private const int BuiltInSolverCount = 8;
         private NumericUpDown nudDuration;
         private NumericUpDown nudTimeStep;
         private NumericUpDown nudDomain;
@@ -52,7 +56,9 @@ namespace DisperSim3D.Dialogs
                     int wi = _scene.WindFieldScenarios.FindIndex(w => w.Id == sim.WindFieldId);
                     if (wi >= 0) cmbWindField.SelectedIndex = wi + 1;
                 }
-                int sx = (int)sim.SolverType;
+                int sx = sim.SolverType == CfdSolverType.Extender
+                    ? BuiltInSolverCount + _extenderSolvers.FindIndex(s => string.Equals(s.Id, sim.ExtenderSolverId, StringComparison.OrdinalIgnoreCase))
+                    : (int)sim.SolverType;
                 if (sx >= 0 && sx < cmbSolver.Items.Count) cmbSolver.SelectedIndex = sx;
                 if (sim.SnapshotDurationS > 0) nudDuration.Value = (decimal)Math.Max(1, Math.Min(100000, sim.SnapshotDurationS));
                 if (sim.SnapshotTimeStepS > 0) nudTimeStep.Value = (decimal)Math.Max(0.01, Math.Min(60, sim.SnapshotTimeStepS));
@@ -116,6 +122,7 @@ namespace DisperSim3D.Dialogs
                 "FluidX3D Dispersion (Steady State)",
                 "Unified Integral (Jet / Heavy Gas / Passive, Steady)"
             });
+            foreach (var s in _extenderSolvers) cmbSolver.Items.Add(s.DisplayName);
             cmbSolver.SelectedIndex = 0;
             // Owner-draw: prepend a gold star to every FluidX3D row so the
             // recommended GPU solvers stand out in both the dropdown and the
@@ -229,6 +236,13 @@ namespace DisperSim3D.Dialogs
                 case 6: solverType = CfdSolverType.FluidX3DDispersionSteady; break;
                 case 7: solverType = CfdSolverType.UnifiedDispersion; break;
             }
+            string extenderSolverId = null;
+            int ext = cmbSolver.SelectedIndex - BuiltInSolverCount;
+            if (ext >= 0 && ext < _extenderSolvers.Count)
+            {
+                solverType = CfdSolverType.Extender;
+                extenderSolverId = _extenderSolvers[ext].Id;
+            }
 
             // Edit existing sim in place (preserves Id) when launched via the editing
             // constructor; otherwise create a new instance.
@@ -237,6 +251,7 @@ namespace DisperSim3D.Dialogs
             target.SourceId = _scene.TopLevelSources[srcIdx].Id;
             target.WindFieldId = _scene.WindFieldScenarios[wfIdx].Id;
             target.SolverType = solverType;
+            target.ExtenderSolverId = extenderSolverId;
             target.Status = SimulationStatus.Configured;
             target.SnapshotDurationS = (double)nudDuration.Value;
             target.SnapshotTimeStepS = (double)nudTimeStep.Value;

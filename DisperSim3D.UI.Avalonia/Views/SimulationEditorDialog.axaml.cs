@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using DisperSim3D.Models;
@@ -18,6 +19,10 @@ namespace DisperSim3D.UI.Avalonia.Views
     {
         private readonly Scene3D _scene;
         private readonly Simulation? _editingSim;
+        /// <summary>Solvers from extenders, listed in the combo after the built-in ones.</summary>
+        private readonly List<DisperSim3D.Extensibility.ISolverExtender> _extenderSolvers =
+            new List<DisperSim3D.Extensibility.ISolverExtender>(DisperSim3D.Extensibility.SolverExtenderRegistry.All);
+        private const int BuiltInSolverCount = 8;
 
         public Simulation? Result { get; private set; }
 
@@ -29,6 +34,7 @@ namespace DisperSim3D.UI.Avalonia.Views
             InitializeComponent();
 
             TxtName.Text = "Simulation " + (_scene.Simulations.Count + 1);
+            foreach (var s in _extenderSolvers) CmbSolver.Items.Add(new ComboBoxItem { Content = s.DisplayName });
             CmbSolver.SelectedIndex = 0;
 
             // Pick up engine defaults so a fresh sim matches what the WPF dialog produces.
@@ -56,7 +62,9 @@ namespace DisperSim3D.UI.Avalonia.Views
                     int wi = _scene.WindFieldScenarios.FindIndex(w => w.Id == sim.WindFieldId);
                     if (wi >= 0) CmbWindField.SelectedIndex = wi + 1;
                 }
-                int sx = (int)sim.SolverType;
+                int sx = sim.SolverType == CfdSolverType.Extender
+                    ? BuiltInSolverCount + _extenderSolvers.FindIndex(s => string.Equals(s.Id, sim.ExtenderSolverId, StringComparison.OrdinalIgnoreCase))
+                    : (int)sim.SolverType;
                 if (sx >= 0 && sx < CmbSolver.Items.Count) CmbSolver.SelectedIndex = sx;
                 if (sim.SnapshotDurationS > 0)
                     NudDuration.Value = (decimal)Math.Max(1, Math.Min(100000, sim.SnapshotDurationS));
@@ -139,6 +147,13 @@ namespace DisperSim3D.UI.Avalonia.Views
                 7 => CfdSolverType.UnifiedDispersion,
                 _ => CfdSolverType.GaussianPuff
             };
+            string? extenderSolverId = null;
+            int ext = CmbSolver.SelectedIndex - BuiltInSolverCount;
+            if (ext >= 0 && ext < _extenderSolvers.Count)
+            {
+                solverType = CfdSolverType.Extender;
+                extenderSolverId = _extenderSolvers[ext].Id;
+            }
 
             // Edit existing sim in place (preserves Id) when launched via the
             // editing constructor; otherwise create a new instance.
@@ -147,6 +162,7 @@ namespace DisperSim3D.UI.Avalonia.Views
             target.SourceId               = _scene.TopLevelSources[srcIdx].Id;
             target.WindFieldId            = _scene.WindFieldScenarios[wfIdx].Id;
             target.SolverType             = solverType;
+            target.ExtenderSolverId       = extenderSolverId;
             target.Status                 = SimulationStatus.Configured;
             target.SnapshotDurationS      = (double)(NudDuration.Value ?? 300m);
             target.SnapshotTimeStepS      = (double)(NudTimeStep.Value ?? 0.5m);

@@ -333,6 +333,7 @@ namespace DisperSim3D.Validation
                 SourceId = src.Id,
                 WindFieldId = wf.Id,
                 SolverType = spec.ResolveSolverType(),
+                ExtenderSolverId = spec.ResolveExtenderSolverId(),
                 SnapshotSource = src,
                 SnapshotMeteo = meteo,
                 SnapshotGas = gasItem,
@@ -485,6 +486,13 @@ namespace DisperSim3D.Validation
 
             bool peakKind = string.Equals(spec.ConcentrationKind, "PeakOverTime",
                 StringComparison.OrdinalIgnoreCase);
+
+            // A solver that evaluates its own field at a point (an extender on a
+            // grid finer than the scenario's) is sampled exactly, in the unit of the bench.
+            bool massFraction = string.Equals(spec.Unit, "MassFraction", StringComparison.OrdinalIgnoreCase);
+            var exact = massFraction ? cfdResult.MassFractionAt : cfdResult.ConcentrationAt;
+            if (exact != null)
+                return SamplePoints(spec, (x, y, z) => exact(x, y, z));
 
             // FluidX3D runners populate ConcentrationField in-memory (no OpenFOAM
             // case directory). Use it directly when available.

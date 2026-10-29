@@ -67,6 +67,7 @@ namespace DisperSim3D.Core
                 DomainSizeM = sim.SnapshotDomainSizeM,
                 GridResolution = sim.SnapshotGridResolution,
                 SolverType = sim.SolverType,
+                ExtenderSolverId = sim.ExtenderSolverId,
                 CfdConfig = sim.SnapshotCfdConfig,
                 WindFieldScenarioId = sim.WindFieldId
             };

@@ -49,6 +49,10 @@ namespace DisperSim3D.Models
         public CfdSolverType SolverType { get; set; }
 
         [Category("Solver")]
+        [Description("ID of the extender solver when the solver type is Extender.")]
+        public string ExtenderSolverId { get; set; }
+
+        [Category("Solver")]
         [Description("Current state: Configured, Queued, Running, Completed or Failed.")]
         public SimulationStatus Status { get; set; }
 
