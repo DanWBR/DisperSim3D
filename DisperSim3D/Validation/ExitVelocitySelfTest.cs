@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using DisperSim3D.Core;
 using DisperSim3D.Geometry;
@@ -117,6 +118,18 @@ namespace DisperSim3D.Validation
                 results.Add(new Result("OpenFOAM: the first time step follows the sonic velocity",
                     m.Success && Math.Abs(dt - expected) <= 1e-3 * expected, // as written in controlDict
                     Fmt("deltaT {0} s (0.3·{1} m / {2:F0} m/s = {3:G6})", m.Success ? m.Groups[1].Value : "?", cell, sonic, expected)));
+
+                // The source points along +Y (azimuth 0, elevation 0): the jet force is ṁ·v on U.
+                string fvOptions = File.ReadAllText(Path.Combine(caseDir, "constant", "fvOptions"));
+                Match u = Regex.Match(fvOptions,
+                    @"momentum_0\s*\{[^}]*?cellSet\s+sourceZone_0;[\s\S]*?U\s+\(\(([^ ]+) ([^ ]+) ([^ )]+)\) 0\);");
+                double[] f = u.Success
+                    ? new[] { 1, 2, 3 }.Select(i => double.Parse(u.Groups[i].Value, CultureInfo.InvariantCulture)).ToArray()
+                    : new double[3];
+                double force = 0.1 * sonic;
+                results.Add(new Result("OpenFOAM: the jet keeps ṁ·v of momentum along the release direction",
+                    u.Success && Math.Abs(f[0]) < 1e-9 * force && Math.Abs(f[1] - force) <= 1e-6 * force && Math.Abs(f[2]) < 1e-9 * force,
+                    Fmt("U source ({0:G6} {1:G6} {2:G6}) N, expected (0 {3:G6} 0)", f[0], f[1], f[2], force)));
             }
             catch (Exception ex)
             {

@@ -965,6 +965,35 @@ namespace DisperSim3D.Core
                     sb.Append("        }\n");
                     sb.Append("    }\n");
                     sb.Append("}\n\n");
+
+                    // The species source adds mass but no momentum, so the release
+                    // direction would only reach the initial field. A force of ṁ·v
+                    // along it on the same cells keeps the jet going while the
+                    // release runs.
+                    double v = src.ExpandedVelocityForCfdMS;
+                    if (v > 0)
+                    {
+                        var dir = src.ReleaseDirection;
+                        double force = q * v;
+                        sb.AppendFormat(Inv, "momentum_{0}\n{{\n", s);
+                        sb.Append("    type            vectorSemiImplicitSource;\n");
+                        sb.Append("    active          true;\n");
+                        if (src.ReleaseDurationS > 0)
+                        {
+                            sb.Append("    timeStart       0;\n");
+                            sb.AppendFormat(Inv, "    duration        {0};\n", src.ReleaseDurationS);
+                        }
+                        sb.Append("    vectorSemiImplicitSourceCoeffs\n    {\n");
+                        sb.Append("        selectionMode   cellSet;\n");
+                        sb.AppendFormat(Inv, "        cellSet         sourceZone_{0};\n", s);
+                        sb.Append("        volumeMode      absolute;\n");
+                        sb.Append("        injectionRateSuSp\n        {\n");
+                        sb.AppendFormat(Inv, "            U         (({0} {1} {2}) 0);\n",
+                            force * dir.X, force * dir.Y, force * dir.Z);
+                        sb.Append("        }\n");
+                        sb.Append("    }\n");
+                        sb.Append("}\n\n");
+                    }
                 }
                 else
                 {
