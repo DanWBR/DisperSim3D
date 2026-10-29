@@ -2144,6 +2144,31 @@ namespace DisperSim3D.UI.Avalonia.Views
         /// <summary>Redraws the tree and the view after an extender changed the project.</summary>
         internal void RefreshProjectFromExtender() => MarkDirtyAndRefresh(StatusText.Text ?? "");
 
+        /// <summary>Shows a completed simulation paused at the snapshot at or before <paramref name="timeS"/> (the last when null).</summary>
+        internal string? ShowSimulationResult(string id, double? timeS)
+        {
+            var sim = _scene?.Simulations.FirstOrDefault(s => s.Id == id);
+            if (sim == null) return "No simulation " + id + " in the project.";
+            if (sim.Status != SimulationStatus.Completed)
+                return "Simulation '" + sim.Name + "' has no results yet (" + sim.Status + ").";
+
+            InitPlayback(sim);
+            var steps = _playbackResult?.TimeSteps;
+            if (steps == null || steps.Count == 0) return "No result data found for '" + sim.Name + "'.";
+
+            int index = steps.Count - 1;
+            if (timeS.HasValue)
+            {
+                index = 0;
+                while (index < steps.Count - 1 && steps[index + 1] <= timeS.Value) index++;
+            }
+            _playbackTimeS = steps[index];
+            UpdatePlaybackSlider();
+            RenderPlaybackFrame(_playbackTimeS);
+            StatusText.Text = $"Showing results: {sim.Name} at {_playbackTimeS:F1} s";
+            return null;
+        }
+
         private void MenuToolsSimManager_Click(object? sender, RoutedEventArgs e)
             => ShowSimulationManager();
 

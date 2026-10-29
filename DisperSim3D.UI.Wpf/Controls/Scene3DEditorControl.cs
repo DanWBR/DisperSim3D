@@ -1003,6 +1003,30 @@ namespace DisperSim3D.Controls
                 await RenderCfdFrameAsync(_cfdPlaybackIndex);
         }
 
+        /// <summary>
+        /// Pauses playback on the snapshot at or before <paramref name="timeS"/>, or on
+        /// the last snapshot when it is null, and returns that snapshot's time.
+        /// </summary>
+        public async Task<double> ShowCfdFrameAsync(double? timeS)
+        {
+            if (_cfdResult == null || _cfdResult.TimeSteps.Count == 0) return 0;
+            PauseDispersion();
+
+            var steps = _cfdResult.TimeSteps;
+            int index = steps.Count - 1;
+            if (timeS.HasValue)
+            {
+                index = 0;
+                while (index < steps.Count - 1 && steps[index + 1] <= timeS.Value) index++;
+            }
+            _cfdPlaybackIndex = index;
+            _cfdPlaybackTimeS = steps[index];
+
+            while (_computingFrame) await Task.Delay(20);
+            await RenderCfdFrameAsync(index);
+            return steps[index];
+        }
+
         private async Task RenderCfdFrameAsync(int frameIndex)
         {
             if (_cfdResult == null || !_cfdResult.IsLoaded || _computingFrame) return;

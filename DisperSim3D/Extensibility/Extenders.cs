@@ -204,5 +204,12 @@ namespace DisperSim3D.Extensibility
 
         /// <summary>Cancels the latest run of a simulation; null when cancelled, otherwise why not.</summary>
         Task<string?> CancelSimulationAsync(string simulationId);
+
+        /// <summary>
+        /// Loads a completed simulation's result into the 3D view, paused at the
+        /// snapshot at or before <paramref name="timeS"/>, or at the last snapshot
+        /// when it is null. Null when shown; otherwise why not.
+        /// </summary>
+        Task<string?> ShowSimulationResultAsync(string simulationId, double? timeS);
     }
 }

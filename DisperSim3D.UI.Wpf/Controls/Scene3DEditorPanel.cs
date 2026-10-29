@@ -1856,6 +1856,27 @@ namespace DisperSim3D.Controls
             _editor.RefreshViewport();
         }
 
+        /// <summary>Shows a completed simulation paused at the snapshot at or before timeS (the last when null); null when shown, otherwise why not.</summary>
+        internal async System.Threading.Tasks.Task<string> ShowSimulationResultFromExtender(string id, double? timeS)
+        {
+            var sim = _editor.Scene.Simulations.FirstOrDefault(s => s.Id == id);
+            if (sim == null) return "No simulation " + id + " in the project.";
+            if (sim.Status != SimulationStatus.Completed)
+                return "Simulation '" + sim.Name + "' has no results yet (" + sim.Status + ").";
+            var entry = _editor.Scene.CfdSimulations.FirstOrDefault(en =>
+                en.Id == sim.Id || en.Name == sim.Name || en.ScenarioName == sim.Name);
+            if (entry == null) return "No result entry found for simulation '" + sim.Name + "'.";
+            if (!_editor.LoadCfdSimulation(entry)) return "Failed to load results from: " + entry.CasePath;
+
+            double shownS = await _editor.ShowCfdFrameAsync(timeS);
+            sim.IsVisible = true;
+            UpdatePlaybackBarState(sim.Name);
+            UpdatePlaybackButtons();
+            RefreshProjectTree();
+            UpdateStatus("Showing results: " + sim.Name + " at " + shownS.ToString("F1") + " s");
+            return null;
+        }
+
         private void DoRunSimulation(string id)
         {
             var sim = _editor.Scene.Simulations.FirstOrDefault(s => s.Id == id);

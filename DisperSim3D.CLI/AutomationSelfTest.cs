@@ -145,6 +145,14 @@ namespace DisperSim3D.CLI
                 Check(cancelledRun?["run"]?["state"]?.GetValue<string>() == "Cancelled", "POST /simulations/cancel cancels it", cancelledRun?.ToJsonString());
                 var cancelAgain = await Post(http, "simulations/cancel", new { id = simId });
                 Check(cancelAgain.StatusCode == HttpStatusCode.Conflict, "cancelling a finished run is refused");
+                var showCancelled = await Post(http, "simulations/show", new { id = simId });
+                Check(showCancelled.StatusCode == HttpStatusCode.Conflict, "showing a simulation without results is refused");
+                host.CompleteRun(simId!);
+                JsonNode? shown = await PostJson(http, "simulations/show", new { id = simId, timeS = 30 });
+                Check(shown?["ok"]?.GetValue<bool>() == true && host.Shown == (simId, 30.0),
+                      "POST /simulations/show shows the result at the given time", shown?.ToJsonString());
+                await PostJson(http, "simulations/show", new { id = simId });
+                Check(host.Shown == (simId, (double?)null), "POST /simulations/show without timeS asks for the last snapshot");
 
                 var missing = await Post(http, "project/open", new { path = Path.Combine(work, "missing.dsproj") });
                 Check(missing.StatusCode == HttpStatusCode.NotFound, "opening a missing file is 404");
@@ -307,6 +315,20 @@ namespace DisperSim3D.CLI
                 if (!_runs.TryGetValue(simulationId, out var run)) return Task.FromResult<string?>("Not run.");
                 if (run.State != "Queued" && run.State != "Running") return Task.FromResult<string?>("Already " + run.State + ".");
                 _runs[simulationId] = new ExtenderRunStatus("Cancelled", run.Progress, "Cancelled", null);
+                return Task.FromResult<string?>(null);
+            }
+
+            public (string Id, double? TimeS)? Shown { get; private set; }
+
+            public void CompleteRun(string simulationId) =>
+                _runs[simulationId] = new ExtenderRunStatus("Completed", 1, "Completed", null);
+
+            public Task<string?> ShowSimulationResultAsync(string simulationId, double? timeS)
+            {
+                if (!_runs.TryGetValue(simulationId, out var run) || run.State != "Completed")
+                    return Task.FromResult<string?>("No results yet.");
+                Shown = (simulationId, timeS);
+                StatusText = "Showing results";
                 return Task.FromResult<string?>(null);
             }
 

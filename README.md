@@ -495,6 +495,8 @@ launch with environment variables:
 | `POST /simulations` | `{"source": "Release 01", "solver": "RhoReactingBuoyantFoam", "windField": "...", "durationS": 300, "timeStepS": 0.5, "domainSizeM": 200, "gridResolution": 40, "snapshotCount": 20}` — source and solver required, the rest default as in Add Simulation |
 | `POST /simulations/run` | `{"id": "..."}` — queues it in the simulation manager, as its Run command does |
 | `GET /simulations/status?id=` | state, progress and last log line of its latest run |
+| `POST /simulations/cancel` | `{"id": "..."}` — cancels its latest run |
+| `POST /simulations/show` | `{"id": "...", "timeS": 30}` — loads a completed result into the 3D view, paused at the snapshot at or before `timeS` (the last snapshot when omitted); capture it with `/viewport.png` |
 | `GET /log?after=N` | what the server did |
 
 ```bash

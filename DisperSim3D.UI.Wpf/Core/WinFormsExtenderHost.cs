@@ -103,6 +103,13 @@ namespace DisperSim3D.Core
         public Task<string?> CancelSimulationAsync(string simulationId) =>
             Task.FromResult<string?>(OnUi(() => _panel.CancelSimulationRun(simulationId)));
 
+        public async Task<string?> ShowSimulationResultAsync(string simulationId, double? timeS)
+        {
+            string? refused = null;
+            await RunOnUiThreadAsync(async () => refused = await _panel.ShowSimulationResultFromExtender(simulationId, timeS));
+            return refused;
+        }
+
         public Task RunOnUiThreadAsync(Func<Task> action)
         {
             if (!_panel.InvokeRequired) return action();
