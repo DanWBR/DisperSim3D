@@ -67,6 +67,7 @@ namespace DisperSim3D.CLI
             bool listExtenders = false;
             bool automationSelftest = false;
             bool calmWindSelftest = false;
+            bool obstacleMaskSelftest = false;
             bool solverExtenderSelftest = false;
             bool exitVelocitySelftest = false;
             string automationExtenderDir = null;
@@ -162,6 +163,9 @@ namespace DisperSim3D.CLI
                     case "--calm-wind-selftest":
                         calmWindSelftest = true;
                         break;
+                    case "--obstacle-mask-selftest":
+                        obstacleMaskSelftest = true;
+                        break;
                     case "--solver-extender-selftest":
                         solverExtenderSelftest = true;
                         break;
@@ -236,6 +240,7 @@ namespace DisperSim3D.CLI
             if (listExtenders) return RunListExtenders();
             if (automationSelftest) return AutomationSelfTest.Run(automationExtenderDir, Console.Out);
             if (calmWindSelftest) return DisperSim3D.Validation.CalmWindSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
+            if (obstacleMaskSelftest) return DisperSim3D.Validation.ObstacleMaskSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             if (solverExtenderSelftest) return DisperSim3D.Validation.SolverExtenderSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             if (exitVelocitySelftest) return DisperSim3D.Validation.ExitVelocitySelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             if (solidFlameSelftest) return RunSolidFlameSelfTest();
@@ -1918,6 +1923,8 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             sonic velocity across the leak range; exit 0 on pass.");
             Console.WriteLine("  --calm-wind-selftest       Run every model at 0 m/s across the leak range and");
             Console.WriteLine("                             check each uses its minimum wind; exit 0 on full pass.");
+            Console.WriteLine("  --obstacle-mask-selftest   Check the FluidX3D tracers block the cells decoration");
+            Console.WriteLine("                             meshes occupy, not their boxes; exit 0 on full pass.");
             Console.WriteLine("  --solver-extender-selftest Run a stand-in solver extender through the registry,");
             Console.WriteLine("                             project file, headless run and validation harness.");
             Console.WriteLine("  --automation-selftest [dir]");

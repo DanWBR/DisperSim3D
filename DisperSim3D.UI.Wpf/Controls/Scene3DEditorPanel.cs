@@ -2221,9 +2221,8 @@ namespace DisperSim3D.Controls
                     var boxes = Core.FluidX3DObstacleVoxelizerWpf.ExtractWorldAabbs(deco);
                     fluidObstacles.AddRange(boxes);
                 }
-                // GPU-side: extract a flat world-space triangle list. FluidX3D's
-                // voxelize_mesh_on_device raycasts every cell against the mesh on the GPU,
-                // producing accurate occupancy for curved surfaces (tanks, vessels) that
+                // A flat world-space triangle list: the runner marks the lattice nodes
+                // the meshes occupy, accurate for curved surfaces (tanks, vessels) that
                 // the per-triangle AABB approach can only approximate.
                 fluidTriangles = Core.FluidX3DObstacleVoxelizerWpf.ExtractWorldTriangles(fs.Decorations);
             }

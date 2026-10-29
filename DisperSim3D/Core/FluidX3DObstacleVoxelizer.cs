@@ -24,29 +24,62 @@ namespace DisperSim3D.Core
 
     public static class FluidX3DObstacleVoxelizer
     {
-        /// <summary>BACKGROUND-SAFE. Converts world-SI triangle vertices to lattice
-        /// coords and dispatches FluidX3D's GPU raycasting voxelizer. Returns the
-        /// triangle count actually processed (0 = nothing voxelized).</summary>
-        public static int VoxelizeTrianglesOnGpu(TriangleBundle bundle, ulong lbmHandle,
-            FluidX3DUnits units)
+        /// <summary>BACKGROUND-SAFE. Marks the lattice nodes the triangles occupy as
+        /// TYPE_S, the way the dispersion tracers block their cells
+        /// (<see cref="DecorationSolids"/>): nodes the surfaces cross and nodes they
+        /// enclose. FluidX3D's own GPU voxelizer decides inside by ray parity, which
+        /// needs closed meshes — an imported site, open at its ground and edges,
+        /// came out as a lattice that was solid throughout. Returns the number of
+        /// solid boxes written.</summary>
+        public static int VoxelizeTriangles(TriangleBundle bundle, ulong lbmHandle,
+            FluidX3DUnits units, int nx, int ny, int nz, double domainHalfM, double heightM)
         {
             if (bundle == null || bundle.TriangleCount == 0) return 0;
-            int n3 = bundle.TriangleCount * 3;
-            var p0L = new float[n3];
-            var p1L = new float[n3];
-            var p2L = new float[n3];
-            for (int i = 0; i < bundle.TriangleCount; i++)
+            // Lattice node i sits at −half + i·dx (FluidX3DUnits.SiToLattice), so
+            // each node owns the cell centred on it.
+            double dx = units.DxSi, dz = heightM / nz;
+            bool[,,] mask = DecorationSolids.FromTriangles(bundle).Rasterize(
+                -domainHalfM - dx / 2, -domainHalfM - dx / 2, -dz / 2, dx, dx, dz, nx, ny, nz);
+            return VoxelizeMask(mask, lbmHandle);
+        }
+
+        /// <summary>BACKGROUND-SAFE. Writes a mask of lattice nodes as TYPE_S, merged
+        /// into rectangles layer by layer. Returns the number of boxes written.</summary>
+        public static int VoxelizeMask(bool[,,] mask, ulong lbmHandle)
+        {
+            int nx = mask.GetLength(0), ny = mask.GetLength(1), nz = mask.GetLength(2);
+            int boxes = 0;
+            for (int k = 0; k < nz; k++)
             {
-                int b = 3 * i;
-                var (x0, y0, z0) = units.SiToLatticeF(bundle.P0[b], bundle.P0[b + 1], bundle.P0[b + 2]);
-                var (x1, y1, z1) = units.SiToLatticeF(bundle.P1[b], bundle.P1[b + 1], bundle.P1[b + 2]);
-                var (x2, y2, z2) = units.SiToLatticeF(bundle.P2[b], bundle.P2[b + 1], bundle.P2[b + 2]);
-                p0L[b] = x0; p0L[b + 1] = y0; p0L[b + 2] = z0;
-                p1L[b] = x1; p1L[b + 1] = y1; p1L[b + 2] = z1;
-                p2L[b] = x2; p2L[b + 1] = y2; p2L[b + 2] = z2;
+                // Runs along x in the current row, each extended over the rows above
+                // for as long as the same run repeats there.
+                var open = new Dictionary<(int, int), int>();
+                for (int j = 0; j <= ny; j++)
+                {
+                    var runs = new HashSet<(int, int)>();
+                    if (j < ny)
+                    {
+                        for (int i = 0; i < nx; i++)
+                        {
+                            if (!mask[i, j, k]) continue;
+                            int start = i;
+                            while (i + 1 < nx && mask[i + 1, j, k]) i++;
+                            runs.Add((start, i));
+                        }
+                    }
+                    foreach (var run in new List<(int, int)>(open.Keys))
+                    {
+                        if (runs.Contains(run)) continue;
+                        FluidX3DBridge.fx3d_set_box_solid(lbmHandle, (uint)run.Item1, (uint)open[run], (uint)k,
+                            (uint)run.Item2, (uint)(j - 1), (uint)k);
+                        open.Remove(run);
+                        boxes++;
+                    }
+                    foreach (var run in runs)
+                        if (!open.ContainsKey(run)) open[run] = j;
+                }
             }
-            FluidX3DBridge.fx3d_voxelize_triangles(lbmHandle, p0L, p1L, p2L, (uint)bundle.TriangleCount);
-            return bundle.TriangleCount;
+            return boxes;
         }
 
         /// <summary>BACKGROUND-THREAD SAFE. Emits each AABB in the list as a TYPE_S box

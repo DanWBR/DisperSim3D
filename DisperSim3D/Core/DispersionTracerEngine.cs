@@ -33,7 +33,8 @@ namespace DisperSim3D.Core
         public DispersionTracerEngine(WindField3D wind, double domainHalfM, double domainHeightM,
             int nx, int ny, int nz,
             double diffusivityM2PerS, double decayPerS = 0.0,
-            System.Collections.Generic.IList<BoundingBox> obstacles = null)
+            System.Collections.Generic.IList<BoundingBox> obstacles = null,
+            DecorationSolids solids = null)
         {
             if (wind == null) throw new ArgumentNullException(nameof(wind));
             Nx = nx; Ny = ny; Nz = nz;
@@ -70,27 +71,9 @@ namespace DisperSim3D.Core
             _c = new double[nx, ny, nz];
             _cNext = new double[nx, ny, nz];
 
-            // Build obstacle mask — cells whose centre is inside any BBox stay at C=0.
-            // Without this, the tracer leaks through tank walls because the engine doesn't
-            // know about solid geometry (we never voxelised obstacles for the CPU path).
-            _blocked = new bool[nx, ny, nz];
-            if (obstacles != null)
-            {
-                foreach (var bb in obstacles)
-                {
-                    if (bb == null) continue;
-                    int i0 = Math.Max(0, (int)Math.Floor((bb.Min.X + domainHalfM) / DxM));
-                    int i1 = Math.Min(nx - 1, (int)Math.Ceiling((bb.Max.X + domainHalfM) / DxM));
-                    int j0 = Math.Max(0, (int)Math.Floor((bb.Min.Y + domainHalfM) / DyM));
-                    int j1 = Math.Min(ny - 1, (int)Math.Ceiling((bb.Max.Y + domainHalfM) / DyM));
-                    int k0 = Math.Max(0, (int)Math.Floor(Math.Max(0, bb.Min.Z) / DzM));
-                    int k1 = Math.Min(nz - 1, (int)Math.Ceiling(Math.Max(0, bb.Max.Z) / DzM));
-                    for (int k = k0; k <= k1; k++)
-                        for (int j = j0; j <= j1; j++)
-                            for (int i = i0; i <= i1; i++)
-                                _blocked[i, j, k] = true;
-                }
-            }
+            // Obstacle mask — blocked cells stay at C=0. Without it the tracer leaks
+            // through tank walls. The decorations' meshes when given, otherwise boxes.
+            _blocked = DecorationSolids.ObstacleMask(obstacles, solids, domainHalfM, domainHeightM, nx, ny, nz);
         }
 
         /// <summary>Sets a spherical source: cells within <paramref name="radiusM"/> of

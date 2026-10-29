@@ -85,6 +85,8 @@ Embedded sibling C++ project (`FluidX3D.dll`) compiled from [Moritz Lehmann's Fl
 - **FluidX3DDispersionSteady** (`FX3DDS`) — same tracer driven until cell-by-cell L2 delta drops below tolerance; result is a single converged frame, playback bar hidden
 - **FluidX3DFire** (`FX3DFR`) — buoyant fire plume via dual-tracer `FireTracerEngine` (smoke + temperature) with Boussinesq buoyancy `β·g·(T-T_amb)`
 
+The dispersion tracers block the cells the decorations' meshes occupy (`DecorationSolids`): the triangles of every STL, OBJ and RVM decoration, read from its file and placed as the 3D view places it, mark the cells they cross and the cells they enclose; surfaces at ground level, such as paving, block nothing. A decoration whose mesh cannot be read (a procedural primitive) blocks its bounding box. `--obstacle-mask-selftest` checks it.
+
 GPU selection (multi-GPU systems) and on-demand VRAM/RAM/disk sizing live under **Settings → GPU & Memory…**.
 
 **Atmospheric Boundary Layer treatment** is enabled by default (per-solver presets via `CfdConfigurationPresets`):

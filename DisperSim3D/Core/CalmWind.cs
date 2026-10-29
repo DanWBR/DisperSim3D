@@ -23,7 +23,7 @@ namespace DisperSim3D.Core
         /// <summary>OpenFOAM: the atmospheric inlet's Uref, k and ε, and the turbulent diffusivity.</summary>
         public const double OpenFoamMinimumMPerS = 0.5;
 
-        /// <summary>FluidX3D dispersion: subgrid diffusivity and jet momentum length.</summary>
+        /// <summary>FluidX3D: the wind field's inlet, and the dispersion tracer's subgrid diffusivity and jet momentum length.</summary>
         public const double FluidX3DMinimumMPerS = 0.5;
 
         /// <summary>The wind speed a model runs at: <paramref name="windSpeed"/>, or its minimum.</summary>

@@ -81,7 +81,8 @@ namespace DisperSim3D.Core
             double ambientPressurePa = 101325.0,
             double thermalDiffusivityM2PerS = 2.2e-5,
             double decayPerS = 0.0,
-            System.Collections.Generic.IList<BoundingBox> obstacles = null)
+            System.Collections.Generic.IList<BoundingBox> obstacles = null,
+            DecorationSolids solids = null)
         {
             if (wind == null) throw new ArgumentNullException(nameof(wind));
             Nx = nx; Ny = ny; Nz = nz;
@@ -133,24 +134,7 @@ namespace DisperSim3D.Core
             _yOrig = new double[nx, ny, nz];
             _tOrig = new double[nx, ny, nz];
 
-            _blocked = new bool[nx, ny, nz];
-            if (obstacles != null)
-            {
-                foreach (var bb in obstacles)
-                {
-                    if (bb == null) continue;
-                    int i0 = Math.Max(0, (int)Math.Floor((bb.Min.X + domainHalfM) / DxM));
-                    int i1 = Math.Min(nx - 1, (int)Math.Ceiling((bb.Max.X + domainHalfM) / DxM));
-                    int j0 = Math.Max(0, (int)Math.Floor((bb.Min.Y + domainHalfM) / DyM));
-                    int j1 = Math.Min(ny - 1, (int)Math.Ceiling((bb.Max.Y + domainHalfM) / DyM));
-                    int k0 = Math.Max(0, (int)Math.Floor(Math.Max(0, bb.Min.Z) / DzM));
-                    int k1 = Math.Min(nz - 1, (int)Math.Ceiling(Math.Max(0, bb.Max.Z) / DzM));
-                    for (int k = k0; k <= k1; k++)
-                        for (int j = j0; j <= j1; j++)
-                            for (int i = i0; i <= i1; i++)
-                                _blocked[i, j, k] = true;
-                }
-            }
+            _blocked = DecorationSolids.ObstacleMask(obstacles, solids, domainHalfM, domainHeightM, nx, ny, nz);
         }
 
         public void SetMassSource(double xSi, double ySi, double zSi,
