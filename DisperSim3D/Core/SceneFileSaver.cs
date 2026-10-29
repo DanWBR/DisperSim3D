@@ -624,6 +624,7 @@ namespace DisperSim3D.Core
                 new XAttribute("StabilityIndex", meteo.StabilityIndex.ToString(inv)),
                 new XAttribute("AveragingTime", meteo.AveragingTimeS.ToString(inv)),
                 new XAttribute("MixingHeight", meteo.MixingHeightM.ToString(inv)),
+                new XAttribute("ObukhovLength", meteo.ObukhovLengthM.ToString(inv)),
                 new XAttribute("MeasurementHeight", meteo.WindMeasurementHeightM.ToString(inv)),
                 new XAttribute("ShearExponent", meteo.WindShearExponent.ToString(inv)),
                 new XAttribute("Urban", meteo.IsUrbanTerrain));

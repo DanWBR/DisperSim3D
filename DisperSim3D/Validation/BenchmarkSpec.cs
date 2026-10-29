@@ -271,6 +271,12 @@ namespace DisperSim3D.Validation
         /// <summary>Averaging time of the measured concentrations (s); the unified model widens the passive plume by (t/600)^0.2. Default 600 s (Pasquill-Gifford basis).</summary>
         public double AveragingTimeS { get; set; } = 600;
 
+        /// <summary>Mixing height of the trial (m); omitted = the model default.</summary>
+        public double? MixingHeightM { get; set; }
+
+        /// <summary>Measured Monin-Obukhov length of the trial (m); omitted = estimated from the stability class.</summary>
+        public double? ObukhovLengthM { get; set; }
+
         /// <summary>Turbulent (eddy) diffusivity, m²/s, applied to the FluidX3D tracer. When
         /// omitted the runner derives one from the Pasquill class and wind speed
         /// (K = u·σy·σz/(2·x) at x = domain half-size); the legacy value was only the

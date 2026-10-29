@@ -226,6 +226,7 @@ namespace DisperSim3D.Core
                 StabilityIndex = AttrDouble(mEl, inv, defaults.StabilityIndex, "StabilityIndex"),
                 AveragingTimeS = AttrDouble(mEl, inv, defaults.AveragingTimeS, "AveragingTime"),
                 MixingHeightM = AttrDouble(mEl, inv, defaults.MixingHeightM, "MixingHeight"),
+                ObukhovLengthM = AttrDouble(mEl, inv, defaults.ObukhovLengthM, "ObukhovLength"),
                 WindMeasurementHeightM = AttrDouble(mEl, inv, defaults.WindMeasurementHeightM, "MeasurementHeight"),
                 WindShearExponent = AttrDouble(mEl, inv, defaults.WindShearExponent, "ShearExponent"),
                 IsUrbanTerrain = AttrBool(mEl, defaults.IsUrbanTerrain, "Urban"),

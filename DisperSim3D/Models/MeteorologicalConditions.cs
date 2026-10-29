@@ -51,6 +51,10 @@ namespace DisperSim3D.Models
         [Description("Atmospheric mixing height — vertical extent above which dispersion is bounded (m).")]
         public double MixingHeightM { get; set; }
 
+        [Category("Stability")]
+        [Description("Measured Monin-Obukhov length (m), e.g. from wind and temperature profiles or eddy covariance; negative = unstable, positive = stable. 0 = not given: solvers that model the surface layer estimate it from the stability class and the roughness length.")]
+        public double ObukhovLengthM { get; set; }
+
         [Category("Wind")]
         [Description("Reference height at which the wind speed was measured (m). Default = 10 m.")]
         public double WindMeasurementHeightM { get; set; }

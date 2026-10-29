@@ -310,6 +310,8 @@ namespace DisperSim3D.Validation
                 AveragingTimeS = spec.Meteo.AveragingTimeS,
                 StabilityIndex = ParseStabilityIndex(spec.Meteo.Stability)
             };
+            if (spec.Meteo.MixingHeightM > 0) meteo.MixingHeightM = spec.Meteo.MixingHeightM.Value;
+            if (spec.Meteo.ObukhovLengthM.HasValue) meteo.ObukhovLengthM = spec.Meteo.ObukhovLengthM.Value;
 
             // Wind field (acts as the meteo carrier; only used for CFD pairs)
             var wf = new WindFieldScenario
