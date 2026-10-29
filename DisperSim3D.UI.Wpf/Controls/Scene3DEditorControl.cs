@@ -1488,6 +1488,12 @@ namespace DisperSim3D.Controls
         {
             if (_cfdResult == null || !_cfdResult.IsLoaded || _cfdResult.TimeSteps.Count == 0) return;
 
+            // A project made only of Simulations has no legacy scenario; the
+            // renderer keeps its thresholds on one.
+            if (_scene.DispersionScenario == null)
+            {
+                _scene.DispersionScenario = new DispersionScenario();
+            }
             var scenario = _scene.DispersionScenario;
             _dispersionRenderer = new DispersionRenderer();
             _dispersionRenderer.Initialize(scenario);
