@@ -136,6 +136,8 @@ namespace DisperSim3D.Core
                 ExitVelocityMPerS = src.ExitVelocityMPerS,
                 ExitTemperatureK = src.ExitTemperatureK,
                 ReleaseDurationS = src.ReleaseDurationS,
+                ReleaseRateProfile = src.ReleaseRateProfile?.Select(p => new ReleaseRatePoint { TimeS = p.TimeS, RateKgPerS = p.RateKgPerS }).ToList()
+                    ?? new System.Collections.Generic.List<ReleaseRatePoint>(),
                 UseJetTransition = src.UseJetTransition,
                 CarryAerosol = src.CarryAerosol,
                 AerosolCompound = src.AerosolCompound,

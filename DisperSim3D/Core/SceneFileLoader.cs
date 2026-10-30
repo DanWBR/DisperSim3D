@@ -323,6 +323,8 @@ namespace DisperSim3D.Core
                 if (bool.TryParse((string)gasEl.Attribute("Cryo"), out bool cryo)) s.Gas.IsCryogenic = cryo;
             }
 
+            ReleaseRateProfileXml.Read(se, s);
+
             var invEl = se.Element("Inventory");
             if (invEl != null)
             {

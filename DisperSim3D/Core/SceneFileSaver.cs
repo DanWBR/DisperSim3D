@@ -300,7 +300,8 @@ namespace DisperSim3D.Core
                     new XAttribute("HalfLife", src.Gas.HalfLifeS.ToString(inv)),
                     new XAttribute("DryDep", src.Gas.DryDepositionVelocityMPerS.ToString(inv)),
                     new XAttribute("Cryo", src.Gas.IsCryogenic.ToString())) : null,
-                invEl);
+                invEl,
+                ReleaseRateProfileXml.Write(src));
         }
 
         private static XElement? SerializeSimulations(Scene3D scene, CultureInfo inv)
