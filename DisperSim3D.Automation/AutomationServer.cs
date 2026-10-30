@@ -39,7 +39,7 @@ namespace DisperSim3D.Automation
             "GET  /viewport.png?width=&height= the 3D view as a PNG",
             "POST /viewport/save               {\"path\": \"C:\\\\view.png\", \"width\": 0, \"height\": 0}",
             "GET  /simulations                 the project's simulations and their runs",
-            "POST /simulations                 {\"source\": \"Release 01\", \"solver\": \"GaussianPlume\", \"windField\": \"...\", \"durationS\": 300, ...}",
+            "POST /simulations                 {\"source\": \"Release 01\", \"solver\": \"GaussianPlume\" (or an extender solver's ID or code), \"windField\": \"...\", \"durationS\": 300, ...}",
             "POST /simulations/run             {\"id\": \"...\"} queues it as its Run command does",
             "GET  /simulations/status?id=      where its latest run stands",
             "POST /simulations/cancel          {\"id\": \"...\"} cancels its latest run",
@@ -562,6 +562,7 @@ namespace DisperSim3D.Automation
                 sim.Id,
                 sim.Name,
                 solver = sim.SolverType.ToString(),
+                sim.ExtenderSolverId,
                 status = sim.Status.ToString(),
                 source = source?.Name,
                 sim.SourceId,
@@ -585,8 +586,17 @@ namespace DisperSim3D.Automation
             JsonObject body = ReadJson(r);
             string sourceKey = RequiredString(body, "source");
             string solverText = RequiredString(body, "solver");
+            // A built-in solver by its enum name, else an extender solver by its ID, code or alias.
+            ISolverExtender? extenderSolver = null;
             if (!Enum.TryParse(solverText, ignoreCase: true, out CfdSolverType solver) || !Enum.IsDefined(solver))
-                throw new HttpError(400, "Unknown solver " + solverText + "; one of " + string.Join(", ", Enum.GetNames<CfdSolverType>()) + ".");
+            {
+                extenderSolver = SolverExtenderRegistry.FindByName(solverText)
+                    ?? throw new HttpError(400, "Unknown solver " + solverText + "; one of " + string.Join(", ", Enum.GetNames<CfdSolverType>())
+                        + (SolverExtenderRegistry.All.Count > 0 ? " or an extender solver: " + string.Join(", ", SolverExtenderRegistry.All.Select(s => s.Id)) : "") + ".");
+                solver = CfdSolverType.Extender;
+            }
+            else if (solver == CfdSolverType.Extender)
+                throw new HttpError(400, "Name the extender solver by its ID or code.");
             string? windKey = OptionalString(body, "windField");
 
             object? created = null;
@@ -612,6 +622,7 @@ namespace DisperSim3D.Automation
                     SourceId = source.Id,
                     WindFieldId = wind?.Id,
                     SolverType = solver,
+                    ExtenderSolverId = extenderSolver?.Id,
                     Status = SimulationStatus.Configured,
                     SnapshotDurationS = OptionalDouble(body, "durationS") ?? 300,
                     SnapshotTimeStepS = OptionalDouble(body, "timeStepS") ?? 0.5,
@@ -625,7 +636,7 @@ namespace DisperSim3D.Automation
                 return Task.CompletedTask;
             });
             if (error != null) throw new HttpError(error.StartsWith("No project") ? 409 : 404, error);
-            _log.Add("added simulation " + solver + " for " + sourceKey);
+            _log.Add("added simulation " + (extenderSolver?.Id ?? solver.ToString()) + " for " + sourceKey);
             return JsonResponse(200, new { ok = true, simulation = created });
         }
 

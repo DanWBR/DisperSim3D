@@ -31,6 +31,12 @@ namespace DisperSim3D.Extensibility
         bool IsSteady { get; }
 
         /// <summary>
+        /// True when the solver reads the simulation's computed wind field, which then has to be
+        /// Ready before a run; false when it takes only the wind field's meteorology.
+        /// </summary>
+        bool ReadsWindField => true;
+
+        /// <summary>
         /// Runs the scenario to completion on the calling thread. Reports progress through
         /// the request and stops when its cancellation token is set.
         /// </summary>

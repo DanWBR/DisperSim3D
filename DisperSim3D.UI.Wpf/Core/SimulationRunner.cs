@@ -33,7 +33,9 @@ namespace DisperSim3D.Core
                 log?.Invoke(sim.StatusMessage);
                 return false;
             }
-            if (wf.Status != WindFieldStatus.Ready)
+            bool readsWindField = sim.SolverType != CfdSolverType.Extender
+                || DisperSim3D.Extensibility.SolverExtenderRegistry.Find(sim.ExtenderSolverId)?.ReadsWindField != false;
+            if (readsWindField && wf.Status != WindFieldStatus.Ready)
             {
                 sim.Status = SimulationStatus.Failed;
                 sim.StatusMessage = "Wind field '" + wf.Name + "' is not Ready (status: " + wf.Status + ")";
