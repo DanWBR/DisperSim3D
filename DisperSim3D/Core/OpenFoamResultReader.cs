@@ -115,6 +115,24 @@ namespace DisperSim3D.Core
         public static OpenFoamResult TryLoadFlatBinCase(string caseDir,
             ref int nx, ref int ny, ref int nz, double half,
             bool temperatureChannel = false)
+            => TryLoadFlatBinCase(caseDir, ref nx, ref ny, ref nz, half,
+                temperatureChannel ? TemperatureChannel : SpeciesChannel);
+
+        /// <summary>Channel suffix of the plain <c>{time}.bin</c> files: the species.</summary>
+        public const string SpeciesChannel = "";
+        /// <summary>Channel suffix of <c>{time}_T.bin</c>: temperature, K.</summary>
+        public const string TemperatureChannel = "T";
+        /// <summary>Channel suffix of <c>{time}_Q.bin</c>: thermal radiation, kW/m², from a
+        /// solver that computes it rather than the analytic fire models.</summary>
+        public const string RadiationChannel = "Q";
+
+        /// <summary>
+        /// Reads one channel of a flat-bin case directory: the plain <c>{time}.bin</c>
+        /// files for <see cref="SpeciesChannel"/>, or the <c>{time}_&lt;channel&gt;.bin</c>
+        /// ones written alongside them.
+        /// </summary>
+        public static OpenFoamResult TryLoadFlatBinCase(string caseDir,
+            ref int nx, ref int ny, ref int nz, double half, string channel)
         {
             if (string.IsNullOrEmpty(caseDir) || !Directory.Exists(caseDir)) return null;
             string controlDict = Path.Combine(caseDir, "system", "controlDict");
@@ -123,12 +141,18 @@ namespace DisperSim3D.Core
             var allBin = Directory.GetFiles(caseDir, "*.bin", SearchOption.TopDirectoryOnly);
             if (allBin.Length == 0) return null;
 
-            // Filter to the requested channel. _T.bin = temperature, plain .bin = species.
+            // Filter to the requested channel: a time, then "_<channel>" unless it is the species.
+            string suffix = string.IsNullOrEmpty(channel) ? "" : "_" + channel;
             var binFiles = allBin.Where(p =>
             {
-                bool isT = Path.GetFileNameWithoutExtension(p).EndsWith("_T",
-                    StringComparison.OrdinalIgnoreCase);
-                return temperatureChannel ? isT : !isT;
+                string name = Path.GetFileNameWithoutExtension(p);
+                if (suffix.Length > 0)
+                {
+                    if (!name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) return false;
+                    name = name.Substring(0, name.Length - suffix.Length);
+                }
+                return double.TryParse(name, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out _);
             }).ToArray();
             if (binFiles.Length == 0) return null;
 
@@ -162,8 +186,7 @@ namespace DisperSim3D.Core
             foreach (var f in binFiles)
             {
                 string name = Path.GetFileNameWithoutExtension(f);
-                if (temperatureChannel && name.EndsWith("_T", StringComparison.OrdinalIgnoreCase))
-                    name = name.Substring(0, name.Length - 2);
+                name = name.Substring(0, name.Length - suffix.Length);
                 if (double.TryParse(name, System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out double t))
                 {

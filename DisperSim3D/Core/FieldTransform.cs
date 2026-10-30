@@ -177,14 +177,42 @@ namespace DisperSim3D.Core
         }
 
         /// <summary>
+        /// The thermal radiation a simulation computed itself, kW/m²: the per-cell
+        /// maximum over its <c>{time}_Q.bin</c> files. Null when it wrote none.
+        /// </summary>
+        public static double[,,] StoredRadiationField(Simulation sim, double halfM)
+        {
+            if (sim == null || string.IsNullOrEmpty(sim.CasePath)) return null;
+            int nx = sim.SnapshotGridResolution > 0 ? sim.SnapshotGridResolution : 60, ny = nx, nz = Math.Max(1, nx / 2);
+            var result = OpenFoamResultReader.TryLoadFlatBinCase(sim.CasePath, ref nx, ref ny, ref nz, halfM,
+                OpenFoamResultReader.RadiationChannel);
+            if (result == null || !result.IsLoaded) return null;
+
+            double[,,] peak = null;
+            foreach (double t in result.TimeSteps)
+            {
+                var field = result.GetField(t);
+                if (field == null) continue;
+                if (peak == null) { peak = field; continue; }
+                for (int i = 0; i < nx; i++)
+                    for (int j = 0; j < ny; j++)
+                        for (int k = 0; k < nz; k++)
+                            peak[i, j, k] = Math.Max(peak[i, j, k], field[i, j, k]);
+            }
+            return peak;
+        }
+
+        /// <summary>
         /// Builds whichever analytic field the property asks for. Radiation is the
-        /// base; dose applies the scenario's exposure time to it, and the fatality
-        /// probability runs the dose through the Eisenberg probit.
+        /// base: the field <paramref name="sim"/> computed itself when it wrote one
+        /// (<see cref="StoredRadiationField"/>), else the analytic one from the scene's
+        /// fire sources. Dose applies the scenario's exposure time to it, and the
+        /// fatality probability runs the dose through the Eisenberg probit.
         /// </summary>
         public static double[,,] BuildAnalyticField(Scene3D scene, ViewFieldProperty property,
-            int nx, int ny, int nz, double halfM)
+            int nx, int ny, int nz, double halfM, Simulation sim = null)
         {
-            var radiation = BuildRadiationField(scene, nx, ny, nz, halfM);
+            var radiation = StoredRadiationField(sim, halfM) ?? BuildRadiationField(scene, nx, ny, nz, halfM);
             if (property == ViewFieldProperty.ThermalRadiationKwM2) return radiation;
 
             double exposure = scene?.FireScenario?.ExposureTimeS ?? 20.0;

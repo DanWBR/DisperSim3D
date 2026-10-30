@@ -2957,7 +2957,7 @@ void main() { }
             // Try analytic fields first (thermal radiation, dose, fatality)
             if (FieldTransform.IsAnalytic(view.FieldProperty))
                 return FieldTransform.BuildAnalyticField(
-                    scene, view.FieldProperty, nx, ny, nz, half);
+                    scene, view.FieldProperty, nx, ny, nz, half, sim);
 
             // Resolve OpenFOAM field name from the view property
             string? fieldName = ResolveFieldName(view.FieldProperty, sim);

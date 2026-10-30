@@ -53,7 +53,8 @@ namespace DisperSim3D.Models
         PercentLFL = 12,
         /// <summary>Percentage of Upper Flammability Limit (kg/m³ / UFL_kg/m³ × 100).</summary>
         PercentUFL = 13,
-        /// <summary>Thermal radiation flux (kW/m²) — computed analytically from every FireSource.</summary>
+        /// <summary>Thermal radiation flux (kW/m²) — the simulation's own {time}_Q.bin field when it
+        /// wrote one, else computed analytically from every FireSource.</summary>
         ThermalRadiationKwM2 = 14,
         /// <summary>Time (s) at which the flash-fire flame front reaches each cell,
         /// from the IgnitionEvent attached to the view's simulation.</summary>

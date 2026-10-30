@@ -42,9 +42,9 @@ namespace DisperSim3D.Core
             double[,,] field;
             if (FieldTransform.IsAnalytic(view.FieldProperty))
             {
-                // Thermal radiation: doesn't sample from the CFD result — computed
-                // analytically from every FireSource in the scene at each cell centre.
-                field = FieldTransform.BuildAnalyticField(scene, view.FieldProperty, nx, ny, nz, half);
+                // Thermal radiation: the simulation's own field when it computed one,
+                // else analytic from every FireSource in the scene at each cell centre.
+                field = FieldTransform.BuildAnalyticField(scene, view.FieldProperty, nx, ny, nz, half, sim);
                 if (field == null) { LogView("[ViewRenderer] analytic field null"); return null; }
                 LogView($"[ViewRenderer] analytic radiation field {nx}x{ny}x{nz}");
             }
