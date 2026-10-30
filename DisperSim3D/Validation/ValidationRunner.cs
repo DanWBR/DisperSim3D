@@ -312,6 +312,7 @@ namespace DisperSim3D.Validation
             };
             if (spec.Meteo.MixingHeightM > 0) meteo.MixingHeightM = spec.Meteo.MixingHeightM.Value;
             if (spec.Meteo.ObukhovLengthM.HasValue) meteo.ObukhovLengthM = spec.Meteo.ObukhovLengthM.Value;
+            if (spec.Meteo.WindDirectionSigmaDeg > 0) meteo.WindDirectionSigmaDeg = spec.Meteo.WindDirectionSigmaDeg.Value;
 
             // Wind field (acts as the meteo carrier; only used for CFD pairs)
             var wf = new WindFieldScenario

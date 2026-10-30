@@ -155,6 +155,7 @@ namespace DisperSim3D.Core
                 AveragingTimeS = m.AveragingTimeS,
                 MixingHeightM = m.MixingHeightM,
                 ObukhovLengthM = m.ObukhovLengthM,
+                WindDirectionSigmaDeg = m.WindDirectionSigmaDeg,
                 WindMeasurementHeightM = m.WindMeasurementHeightM,
                 WindShearExponent = m.WindShearExponent,
                 IsUrbanTerrain = m.IsUrbanTerrain,

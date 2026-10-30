@@ -56,6 +56,10 @@ namespace DisperSim3D.Models
         public double ObukhovLengthM { get; set; }
 
         [Category("Wind")]
+        [Description("Measured standard deviation of the horizontal wind direction σ_θ (deg) over the averaging time, e.g. from a wind vane or sonic anemometer at the measurement height. 0 = not given.")]
+        public double WindDirectionSigmaDeg { get; set; }
+
+        [Category("Wind")]
         [Description("Reference height at which the wind speed was measured (m). Default = 10 m.")]
         public double WindMeasurementHeightM { get; set; }
 

@@ -103,6 +103,7 @@ namespace DisperSim3D.Validation
                     results.Add(Near("meteo: averaging time", m0.AveragingTimeS, m1.AveragingTimeS, 1e-9));
                     results.Add(Near("meteo: mixing height", m0.MixingHeightM, m1.MixingHeightM, 1e-9));
                     results.Add(Near("meteo: Obukhov length", m0.ObukhovLengthM, m1.ObukhovLengthM, 1e-9));
+                    results.Add(Near("meteo: wind direction sigma", m0.WindDirectionSigmaDeg, m1.WindDirectionSigmaDeg, 1e-9));
                     results.Add(Near("meteo: measurement height", m0.WindMeasurementHeightM, m1.WindMeasurementHeightM, 1e-9));
                     results.Add(Near("meteo: shear exponent", m0.WindShearExponent, m1.WindShearExponent, 1e-9));
                     results.Add(Same("meteo: urban terrain", m0.IsUrbanTerrain, m1.IsUrbanTerrain));
@@ -192,6 +193,7 @@ namespace DisperSim3D.Validation
                     AveragingTimeS = 18.75,
                     MixingHeightM = 650,
                     ObukhovLengthM = -37.5,
+                    WindDirectionSigmaDeg = 11.25,
                     WindMeasurementHeightM = 7.5,
                     WindShearExponent = 0.21,
                     IsUrbanTerrain = true,

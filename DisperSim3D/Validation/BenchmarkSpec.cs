@@ -277,6 +277,9 @@ namespace DisperSim3D.Validation
         /// <summary>Measured Monin-Obukhov length of the trial (m); omitted = estimated from the stability class.</summary>
         public double? ObukhovLengthM { get; set; }
 
+        /// <summary>Measured standard deviation of the wind direction over the averaging time (deg); omitted = not given.</summary>
+        public double? WindDirectionSigmaDeg { get; set; }
+
         /// <summary>Turbulent (eddy) diffusivity, m²/s, applied to the FluidX3D tracer. When
         /// omitted the runner derives one from the Pasquill class and wind speed
         /// (K = u·σy·σz/(2·x) at x = domain half-size); the legacy value was only the
