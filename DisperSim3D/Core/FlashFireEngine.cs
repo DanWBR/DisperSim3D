@@ -218,7 +218,8 @@ namespace DisperSim3D.Core
         /// obstacles out of the scene.
         /// </summary>
         public static double[,,] BuildViewField(Scene3D scene, View view,
-            double[,,] concentrationKgM3, GasProperties gas, double halfM)
+            double[,,] concentrationKgM3, GasProperties gas, double halfM,
+            double centerX = 0, double centerY = 0)
         {
             if (scene == null || view == null || concentrationKgM3 == null) return null;
 
@@ -230,7 +231,7 @@ namespace DisperSim3D.Core
             double cell = 2.0 * halfM / concentrationKgM3.GetLength(0);
 
             var result = Compute(concentrationKgM3, lfl, ufl, ignition,
-                -halfM, -halfM, 0, cell, cell, cell, CollectObstacles(scene));
+                centerX - halfM, centerY - halfM, 0, cell, cell, cell, CollectObstacles(scene));
 
             return view.FieldProperty == ViewFieldProperty.FlashFireArrivalS
                 ? result.ArrivalTimeS

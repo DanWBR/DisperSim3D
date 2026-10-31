@@ -3025,7 +3025,8 @@ void main() { }
                 // Flash fire: the concentration snapshot is the input, not the
                 // output — burn it and render the envelope or the arrival time.
                 if (FieldTransform.IsIgnitionDerived(view.FieldProperty))
-                    field = FlashFireEngine.BuildViewField(scene, view, field, gas, half);
+                    field = FlashFireEngine.BuildViewField(scene, view, field, gas, half,
+                        sim.SnapshotDomainCenterX, sim.SnapshotDomainCenterY);
             }
 
             return field;
@@ -3066,7 +3067,7 @@ void main() { }
 
             var isoResult = PortableMarchingCubes.GenerateIsosurface(
                 field, view.IsoValue,
-                -half, -half, 0,
+                sim.SnapshotDomainCenterX - half, sim.SnapshotDomainCenterY - half, 0,
                 cell, cell, cell);
 
             if (isoResult == null) return;
@@ -3115,7 +3116,8 @@ void main() { }
             var (verts, idx) = GlMeshBuffer.GenerateContourPlane(
                 view.Kind, view.PlanePosition, (float)half,
                 field, gridRes, view.ColorMap,
-                minV, maxV, alpha, res, view.ClipToRange && maxV > minV);
+                minV, maxV, alpha, res, view.ClipToRange && maxV > minV,
+                (float)sim.SnapshotDomainCenterX, (float)sim.SnapshotDomainCenterY);
             if (idx.Length == 0) return;
 
             var mesh = new GlMeshBuffer();
@@ -3219,20 +3221,26 @@ void main() { }
             public double[,,] Field { get; }
             public List<DispersionThreshold> Thresholds { get; }
             public double DomainHalf { get; }
+            public double CenterX { get; }
+            public double CenterY { get; }
 
             public DispersionFrameRequest(
-                double[,,] field, List<DispersionThreshold> thresholds, double domainHalf)
+                double[,,] field, List<DispersionThreshold> thresholds, double domainHalf,
+                double centerX, double centerY)
             {
                 Field = field;
                 Thresholds = thresholds;
                 DomainHalf = domainHalf;
+                CenterX = centerX;
+                CenterY = centerY;
             }
         }
 
         public void UpdateDispersionFrame(
-            double[,,] field, List<DispersionThreshold> thresholds, double domainHalf)
+            double[,,] field, List<DispersionThreshold> thresholds, double domainHalf,
+            double centerX = 0, double centerY = 0)
         {
-            _pendingDispersionFrame = new DispersionFrameRequest(field, thresholds, domainHalf);
+            _pendingDispersionFrame = new DispersionFrameRequest(field, thresholds, domainHalf, centerX, centerY);
             RequestNextFrameRendering();
         }
 
@@ -3268,7 +3276,7 @@ void main() { }
 
                 var isoResult = PortableMarchingCubes.GenerateIsosurface(
                     req.Field, th.ConcentrationValue,
-                    -req.DomainHalf, -req.DomainHalf, 0,
+                    req.CenterX - req.DomainHalf, req.CenterY - req.DomainHalf, 0,
                     cell, cell, cell);
 
                 if (isoResult == null) continue;

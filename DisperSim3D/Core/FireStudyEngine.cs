@@ -321,7 +321,8 @@ namespace DisperSim3D.Core
             double cell = 2.0 * half / concentration.GetLength(0);
 
             return FlashFireEngine.Compute(concentration, lfl, ufl, ignition,
-                -half, -half, 0, cell, cell, cell, SceneObstacles.Collect(scene));
+                sim.SnapshotDomainCenterX - half, sim.SnapshotDomainCenterY - half, 0, cell, cell, cell,
+                SceneObstacles.Collect(scene));
         }
 
         /// <summary>Gas attached to a simulation's snapshotted source — the library entry

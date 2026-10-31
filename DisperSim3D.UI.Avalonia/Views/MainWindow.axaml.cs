@@ -3025,7 +3025,8 @@ namespace DisperSim3D.UI.Avalonia.Views
             double half = _playbackSim.SnapshotDomainSizeM > 0
                 ? _playbackSim.SnapshotDomainSizeM : 200;
 
-            Viewport3D.UpdateDispersionFrame(field, _playbackEffectiveThresholds, half);
+            Viewport3D.UpdateDispersionFrame(field, _playbackEffectiveThresholds, half,
+                _playbackSim.SnapshotDomainCenterX, _playbackSim.SnapshotDomainCenterY);
             _lastRenderedStepT = bestT;
             _lastRenderedThresholds = _playbackEffectiveThresholds;
         }

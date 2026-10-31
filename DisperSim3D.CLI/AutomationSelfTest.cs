@@ -203,6 +203,16 @@ namespace DisperSim3D.CLI
                 Check((await Post(http, "camera", new { position = new[] { 1.0, 1, 1 }, target = new[] { 1.0, 1, 1 } })).StatusCode
                       == HttpStatusCode.BadRequest, "a camera looking at its own position is refused");
 
+                host.Scene.Simulations[0].SnapshotDomainCenterX = 12.5;
+                host.Scene.Simulations[0].SnapshotDomainCenterY = -7.25;
+                string centred = Path.Combine(work, "centred.dsproj");
+                await PostJson(http, "project/save", new { path = centred });
+                await PostJson(http, "project/open", new { path = centred });
+                JsonNode? reread = await GetJson(http, "simulations");
+                Check(reread?["simulations"]?[0]?["domainCenter"]?[0]?.GetValue<double>() == 12.5 &&
+                      reread?["simulations"]?[0]?["domainCenter"]?[1]?.GetValue<double>() == -7.25,
+                      "a result grid's centre survives saving and reopening the project", reread?["simulations"]?[0]?["domainCenter"]?.ToJsonString());
+
                 var missing = await Post(http, "project/open", new { path = Path.Combine(work, "missing.dsproj") });
                 Check(missing.StatusCode == HttpStatusCode.NotFound, "opening a missing file is 404");
                 var relative = await Post(http, "project/open", new { path = "relative.dsproj" });

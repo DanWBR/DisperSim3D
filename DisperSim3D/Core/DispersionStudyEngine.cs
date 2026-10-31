@@ -18,6 +18,9 @@ namespace DisperSim3D.Core
         public string SimulationName;
         public int Nx, Ny, Nz;
         public double DomainHalfM, DomainHeightM;
+
+        /// <summary>Centre of the snapshot's grid in x and y, m (the simulation's result grid centre).</summary>
+        public double CenterX, CenterY;
         public bool[] Mask;           // length Nx*Ny*Nz
         public int CloudCellCount;    // popcount of Mask
         public string Error;
@@ -42,11 +45,11 @@ namespace DisperSim3D.Core
                 for (int j = 0; j < Ny; j++)
                 {
                     int jBase = kBase + j * Nx;
-                    double y = -DomainHalfM + (j + 0.5) * dy;
+                    double y = CenterY - DomainHalfM + (j + 0.5) * dy;
                     for (int i = 0; i < Nx; i++)
                     {
                         if (!Mask[jBase + i]) continue;
-                        double x = -DomainHalfM + (i + 0.5) * dx;
+                        double x = CenterX - DomainHalfM + (i + 0.5) * dx;
                         if (x < xMin) xMin = x;
                         if (y < yMin) yMin = y;
                         if (z < zMin) zMin = z;
@@ -70,10 +73,10 @@ namespace DisperSim3D.Core
             double dy = 2.0 * DomainHalfM / Ny;
             double dz = DomainHeightM / Nz;
             // Restrict cell search to the AABB intersected with the sphere bbox.
-            int i0 = (int)Math.Floor((xSi - radiusM + DomainHalfM) / dx);
-            int i1 = (int)Math.Ceiling((xSi + radiusM + DomainHalfM) / dx);
-            int j0 = (int)Math.Floor((ySi - radiusM + DomainHalfM) / dy);
-            int j1 = (int)Math.Ceiling((ySi + radiusM + DomainHalfM) / dy);
+            int i0 = (int)Math.Floor((xSi - CenterX - radiusM + DomainHalfM) / dx);
+            int i1 = (int)Math.Ceiling((xSi - CenterX + radiusM + DomainHalfM) / dx);
+            int j0 = (int)Math.Floor((ySi - CenterY - radiusM + DomainHalfM) / dy);
+            int j1 = (int)Math.Ceiling((ySi - CenterY + radiusM + DomainHalfM) / dy);
             int k0 = (int)Math.Floor((zSi - radiusM) / dz);
             int k1 = (int)Math.Ceiling((zSi + radiusM) / dz);
             if (i0 < 0) i0 = 0; if (i1 >= Nx) i1 = Nx - 1;
@@ -88,7 +91,7 @@ namespace DisperSim3D.Core
                 int kBase = k * Ny * Nx;
                 for (int j = j0; j <= j1; j++)
                 {
-                    double yCell = -DomainHalfM + (j + 0.5) * dy;
+                    double yCell = CenterY - DomainHalfM + (j + 0.5) * dy;
                     double dyd = yCell - ySi;
                     double dyd2 = dyd * dyd;
                     if (dyd2 + dzd2 > r2) continue;
@@ -96,7 +99,7 @@ namespace DisperSim3D.Core
                     for (int i = i0; i <= i1; i++)
                     {
                         if (!Mask[jBase + i]) continue;
-                        double xCell = -DomainHalfM + (i + 0.5) * dx;
+                        double xCell = CenterX - DomainHalfM + (i + 0.5) * dx;
                         double dxd = xCell - xSi;
                         if (dxd * dxd + dyd2 + dzd2 <= r2) return true;
                     }
@@ -190,6 +193,8 @@ namespace DisperSim3D.Core
                 int fnx = qField.GetLength(0), fny = qField.GetLength(1), fnz = qField.GetLength(2);
                 snap.Nx = fnx; snap.Ny = fny; snap.Nz = fnz;
                 snap.DomainHalfM = half;
+                snap.CenterX = sim.SnapshotDomainCenterX;
+                snap.CenterY = sim.SnapshotDomainCenterY;
                 snap.DomainHeightM = half; // dispersion runners use height == half
                 var mask = new bool[fnx * fny * fnz];
                 int count = 0;

@@ -85,6 +85,14 @@ namespace DisperSim3D.Models
         public double SnapshotDomainSizeM { get; set; }
 
         [Category("Snapshot")]
+        [Description("Centre of the result grid in x, m: the grid spans SnapshotDomainSizeM either side of it. 0 for a run centred on the origin.")]
+        public double SnapshotDomainCenterX { get; set; }
+
+        [Category("Snapshot")]
+        [Description("Centre of the result grid in y, m.")]
+        public double SnapshotDomainCenterY { get; set; }
+
+        [Category("Snapshot")]
         [Description("Grid resolution per axis used by the run.")]
         public int SnapshotGridResolution { get; set; }
 

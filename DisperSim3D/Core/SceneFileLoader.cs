@@ -192,6 +192,8 @@ namespace DisperSim3D.Core
                     WindFieldId = (string)se.Attribute("WindFieldId") ?? "",
                     StatusMessage = (string)se.Attribute("StatusMessage") ?? "",
                     SnapshotDomainSizeM = double.Parse((string)se.Attribute("DomainSize") ?? "200", inv),
+                    SnapshotDomainCenterX = double.Parse((string)se.Attribute("DomainCenterX") ?? "0", inv),
+                    SnapshotDomainCenterY = double.Parse((string)se.Attribute("DomainCenterY") ?? "0", inv),
                     SnapshotGridResolution = int.Parse((string)se.Attribute("GridRes") ?? "40", inv),
                     SnapshotDurationS = double.Parse((string)se.Attribute("Duration") ?? "300", inv),
                     SnapshotTimeStepS = double.Parse((string)se.Attribute("TimeStep") ?? "0.5", inv),

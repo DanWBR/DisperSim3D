@@ -259,7 +259,7 @@ namespace DisperSim3D.Core
             // Prefer the in-memory result if the user has it open (faster, no disk I/O)
             var tag = sim.ResultTag as OpenFoamResult;
             if (tag != null && tag.IsLoaded && tag.TimeSteps.Count > 0)
-                return ToLoadedField(tag);
+                return ToLoadedField(tag, sim.SnapshotDomainCenterX, sim.SnapshotDomainCenterY);
 
             // Fallback: re-read from CasePath on disk
             if (string.IsNullOrEmpty(sim.CasePath) || !System.IO.Directory.Exists(sim.CasePath))
@@ -278,7 +278,7 @@ namespace DisperSim3D.Core
                 if (result.IsLoaded && result.TimeSteps.Count > 0)
                 {
                     sim.ResultTag = result; // cache on the sim for next time
-                    return ToLoadedField(result);
+                    return ToLoadedField(result, sim.SnapshotDomainCenterX, sim.SnapshotDomainCenterY);
                 }
             }
             catch { /* fall through */ }
@@ -295,7 +295,7 @@ namespace DisperSim3D.Core
                 : "T";
         }
 
-        private static LoadedField ToLoadedField(OpenFoamResult r)
+        private static LoadedField ToLoadedField(OpenFoamResult r, double centerX, double centerY)
         {
             var last = r.GetField(r.TimeSteps[r.TimeSteps.Count - 1]);
             if (last == null) return null;
@@ -306,8 +306,8 @@ namespace DisperSim3D.Core
             return new LoadedField
             {
                 Concentration = last,
-                XMin = r.DomainXMin, XMax = r.DomainXMax,
-                YMin = r.DomainYMin, YMax = r.DomainYMax,
+                XMin = r.DomainXMin + centerX, XMax = r.DomainXMax + centerX,
+                YMin = r.DomainYMin + centerY, YMax = r.DomainYMax + centerY,
                 ZMin = 0, ZMax = r.DomainZMax,
                 CellSizeX = dx, CellSizeY = dy, CellSizeZ = dz
             };

@@ -596,6 +596,7 @@ namespace DisperSim3D.Automation
                 durationS = sim.SnapshotDurationS,
                 timeStepS = sim.SnapshotTimeStepS,
                 domainSizeM = sim.SnapshotDomainSizeM,
+                domainCenter = new[] { sim.SnapshotDomainCenterX, sim.SnapshotDomainCenterY },
                 gridResolution = sim.SnapshotGridResolution,
                 snapshotCount = sim.SnapshotCount,
                 maxConcentration = sim.MaxConcentration,

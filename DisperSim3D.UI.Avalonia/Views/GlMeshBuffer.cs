@@ -1031,13 +1031,15 @@ namespace DisperSim3D.UI.Avalonia.Views
             ViewKind kind, double planePos, float halfSize,
             double[,,] field, int gridRes,
             ColorMapName colorMap, double minVal, double maxVal,
-            float opacity, int resolution = 80, bool clip = false)
+            float opacity, int resolution = 80, bool clip = false,
+            float centerX = 0, float centerY = 0)
         {
             int res = Math.Max(4, resolution);
             double range = Math.Max(maxVal - minVal, 1e-9);
 
-            // Wrap field for trilinear interpolation
-            var fld = new OpenFoamConcentrationField(field, halfSize, gridRes);
+            // Wrap field for trilinear interpolation; the grid spans halfSize either side of its centre.
+            var fld = new OpenFoamConcentrationField(field, centerX - halfSize, centerX + halfSize,
+                centerY - halfSize, centerY + halfSize, halfSize * 2.0 * field.GetLength(2) / Math.Max(1, gridRes));
 
             int vertCount = (res + 1) * (res + 1);
             int idxCount = res * res * 6;
@@ -1068,18 +1070,18 @@ namespace DisperSim3D.UI.Avalonia.Views
                     switch (kind)
                     {
                         case ViewKind.ContourXY:
-                            x = -halfSize + u * 2 * halfSize;
-                            y = +halfSize - v * 2 * halfSize;
+                            x = centerX - halfSize + u * 2 * halfSize;
+                            y = centerY + halfSize - v * 2 * halfSize;
                             z = planePos;
                             break;
                         case ViewKind.ContourXZ:
-                            x = -halfSize + u * 2 * halfSize;
+                            x = centerX - halfSize + u * 2 * halfSize;
                             y = planePos;
                             z = 2 * halfSize * (1 - v);
                             break;
                         case ViewKind.ContourYZ:
                             x = planePos;
-                            y = -halfSize + u * 2 * halfSize;
+                            y = centerY - halfSize + u * 2 * halfSize;
                             z = 2 * halfSize * (1 - v);
                             break;
                         default:

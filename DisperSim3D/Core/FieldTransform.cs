@@ -105,7 +105,8 @@ namespace DisperSim3D.Core
         /// <summary>Builds a thermal-radiation field (kW/m²) by summing the point-source
         /// model contribution of every active FireSource in the scene at each cell centre.
         /// Returns a fresh nx×ny×nz array.</summary>
-        public static double[,,] BuildRadiationField(Scene3D scene, int nx, int ny, int nz, double halfM)
+        public static double[,,] BuildRadiationField(Scene3D scene, int nx, int ny, int nz, double halfM,
+            double centerX = 0, double centerY = 0)
         {
             var output = new double[nx, ny, nz];
             if (scene?.FireScenario?.Sources == null || scene.FireScenario.Sources.Count == 0)
@@ -135,10 +136,10 @@ namespace DisperSim3D.Core
                 double z = (k + 0.5) * dz;
                 for (int j = 0; j < ny; j++)
                 {
-                    double y = -halfM + (j + 0.5) * dy;
+                    double y = centerY - halfM + (j + 0.5) * dy;
                     for (int i = 0; i < nx; i++)
                     {
-                        double x = -halfM + (i + 0.5) * dx;
+                        double x = centerX - halfM + (i + 0.5) * dx;
                         var receiver = new Geometry.Point3D(x, y, z);
 
                         // A cell inside solid geometry is not exposed at all.
@@ -212,7 +213,8 @@ namespace DisperSim3D.Core
         public static double[,,] BuildAnalyticField(Scene3D scene, ViewFieldProperty property,
             int nx, int ny, int nz, double halfM, Simulation sim = null)
         {
-            var radiation = StoredRadiationField(sim, halfM) ?? BuildRadiationField(scene, nx, ny, nz, halfM);
+            var radiation = StoredRadiationField(sim, halfM)
+                ?? BuildRadiationField(scene, nx, ny, nz, halfM, sim?.SnapshotDomainCenterX ?? 0, sim?.SnapshotDomainCenterY ?? 0);
             if (property == ViewFieldProperty.ThermalRadiationKwM2) return radiation;
 
             double exposure = scene?.FireScenario?.ExposureTimeS ?? 20.0;

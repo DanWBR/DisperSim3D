@@ -167,6 +167,9 @@ namespace DisperSim3D.UI.Avalonia.Views
             target.SnapshotDurationS      = (double)(NudDuration.Value ?? 300m);
             target.SnapshotTimeStepS      = (double)(NudTimeStep.Value ?? 0.5m);
             target.SnapshotDomainSizeM    = (double)(NudDomain.Value ?? 200m);
+            // A run the editor sets up writes a grid centred on the origin.
+            target.SnapshotDomainCenterX  = 0;
+            target.SnapshotDomainCenterY  = 0;
             target.SnapshotGridResolution = (int)(NudGrid.Value ?? 40m);
             target.SnapshotCount          = (int)(NudSnapCount.Value ?? 20m);
             Result = target;

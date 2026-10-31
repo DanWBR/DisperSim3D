@@ -320,6 +320,8 @@ namespace DisperSim3D.Core
                     new XAttribute("Status", s.Status.ToString()),
                     new XAttribute("StatusMessage", s.StatusMessage ?? ""),
                     new XAttribute("DomainSize", s.SnapshotDomainSizeM.ToString(inv)),
+                    s.SnapshotDomainCenterX == 0 ? null : new XAttribute("DomainCenterX", s.SnapshotDomainCenterX.ToString(inv)),
+                    s.SnapshotDomainCenterY == 0 ? null : new XAttribute("DomainCenterY", s.SnapshotDomainCenterY.ToString(inv)),
                     new XAttribute("GridRes", s.SnapshotGridResolution.ToString(inv)),
                     new XAttribute("Duration", s.SnapshotDurationS.ToString(inv)),
                     new XAttribute("TimeStep", s.SnapshotTimeStepS.ToString(inv)),
