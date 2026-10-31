@@ -16,7 +16,7 @@ namespace DisperSim3D.Automation
     /// it needs no URL reservation or administrator rights. One request per
     /// connection; JSON in, JSON (or a PNG) out. See <see cref="Routes"/>.
     /// </summary>
-    internal sealed class AutomationServer : IDisposable
+    internal sealed partial class AutomationServer : IDisposable
     {
         private const int MaxHeaderBytes = 64 * 1024;
         private const int MaxBodyBytes = 1024 * 1024;
@@ -44,6 +44,14 @@ namespace DisperSim3D.Automation
             "GET  /simulations/status?id=      where its latest run stands",
             "POST /simulations/cancel          {\"id\": \"...\"} cancels its latest run",
             "POST /simulations/show            {\"id\": \"...\", \"timeS\": 30} shows its result in the 3D view (timeS optional: last snapshot)",
+            "GET  /views                       the project's views (isosurfaces and contour planes)",
+            "POST /views                       {\"simulation\": \"...\", \"kind\": \"ContourXY\", \"field\": \"Temperature\", \"planePosition\": 8, \"minValue\": 300, \"maxValue\": 2000, \"clipToRange\": true, ...} adds a view",
+            "POST /views/update                {\"id\": \"...\", ...the fields to change}",
+            "POST /views/delete                {\"id\": \"...\"}",
+            "GET  /decorations                 the project's geometry: visibility, opacity, clip plane",
+            "POST /decorations/update          {\"id\": \"...\" (or \"name\"), \"visible\": true, \"opacity\": 0.3, \"clipEnabled\": true, \"clipAxis\": \"Z\", \"clipValue\": 11, \"clipAbove\": false}",
+            "GET  /camera                      the 3D view's camera: position and the point it looks at",
+            "POST /camera                      {\"position\": [x, y, z], \"target\": [x, y, z]} moves it",
             "GET  /log?after=N                 what the server did"
         };
 
@@ -331,6 +339,22 @@ namespace DisperSim3D.Automation
                     return await OnUiGateAsync(() => ShowSimulationResultAsync(r));
                 case "GET /simulations/status":
                     return RunStatusResponse(r);
+                case "GET /views":
+                    return JsonResponse(200, new { views = await ViewsAsync() });
+                case "POST /views":
+                    return await OnUiGateAsync(() => AddViewAsync(r));
+                case "POST /views/update":
+                    return await OnUiGateAsync(() => UpdateViewAsync(r));
+                case "POST /views/delete":
+                    return await OnUiGateAsync(() => DeleteViewAsync(r));
+                case "GET /decorations":
+                    return JsonResponse(200, new { decorations = await DecorationsAsync() });
+                case "POST /decorations/update":
+                    return await OnUiGateAsync(() => UpdateDecorationAsync(r));
+                case "GET /camera":
+                    return CameraResponse();
+                case "POST /camera":
+                    return await OnUiGateAsync(() => SetCameraAsync(r));
                 case "GET /log":
                     long after = r.Query.TryGetValue("after", out string? a) && long.TryParse(a, out long v) ? v : 0;
                     return JsonResponse(200, new { entries = _log.Since(after) });

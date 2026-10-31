@@ -2145,6 +2145,13 @@ namespace DisperSim3D.UI.Avalonia.Views
         /// <summary>Redraws the tree and the view after an extender changed the project.</summary>
         internal void RefreshProjectFromExtender() => MarkDirtyAndRefresh(StatusText.Text ?? "");
 
+        /// <summary>The 3D view's camera, as a preset; setting it moves the view.</summary>
+        internal CameraPreset ViewportCamera
+        {
+            get => Viewport3D.SaveCameraPreset("Camera");
+            set => Viewport3D.ApplyCameraPreset(value);
+        }
+
         /// <summary>Shows a completed simulation paused at the snapshot at or before <paramref name="timeS"/> (the last when null).</summary>
         internal string? ShowSimulationResult(string id, double? timeS)
         {

@@ -509,6 +509,14 @@ launch with environment variables:
 | `GET /simulations/status?id=` | state, progress and last log line of its latest run |
 | `POST /simulations/cancel` | `{"id": "..."}` — cancels its latest run |
 | `POST /simulations/show` | `{"id": "...", "timeS": 30}` — loads a completed result into the 3D view, paused at the snapshot at or before `timeS` (the last snapshot when omitted); capture it with `/viewport.png` |
+| `GET /views` | the project's views (isosurfaces and contour planes) |
+| `POST /views` | `{"simulation": "...", "kind": "ContourXY", "field": "Temperature", "planePosition": 8, "minValue": 300, "maxValue": 2000, "clipToRange": true, "colorMap": "Inferno"}` — adds a view; simulation by ID or name, and any of `name`, `timeMode`, `specificTimeS`, `visible`, `opacity`, `isoValue`, `isoColor`, `cloudAppearance`, `sampleResolution` |
+| `POST /views/update` | `{"id": "...", "visible": false}` — changes only the fields given |
+| `POST /views/delete` | `{"id": "..."}` |
+| `GET /decorations` | the project's geometry: visibility, opacity, clip plane |
+| `POST /decorations/update` | `{"name": "plant", "opacity": 0.4, "clipEnabled": true, "clipAxis": "Z", "clipValue": 11, "clipAbove": false}` — by ID or name; a clip plane cuts the model (here everything above 11 m, to see under a roof) |
+| `GET /camera` | the 3D view's camera: position and the point it looks at |
+| `POST /camera` | `{"position": [x, y, z], "target": [x, y, z]}` — moves it (Avalonia UI) |
 | `GET /log?after=N` | what the server did |
 
 ```bash

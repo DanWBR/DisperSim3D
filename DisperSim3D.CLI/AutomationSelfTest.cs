@@ -154,6 +154,55 @@ namespace DisperSim3D.CLI
                 await PostJson(http, "simulations/show", new { id = simId });
                 Check(host.Shown == (simId, (double?)null), "POST /simulations/show without timeS asks for the last snapshot");
 
+                int refreshesBefore = host.Refreshes;
+                JsonNode? view = await PostJson(http, "views", new
+                {
+                    simulation = "Plume", kind = "ContourXY", field = "Temperature",
+                    planePosition = 8, minValue = 300, maxValue = 2000, clipToRange = true, colorMap = "Inferno"
+                });
+                string? viewId = view?["view"]?["id"]?.GetValue<string>();
+                View? made = host.Scene.Views.FirstOrDefault(v => v.Id == viewId);
+                Check(view?["ok"]?.GetValue<bool>() == true && made != null && made.SimulationId == simId &&
+                      made.Kind == ViewKind.ContourXY && made.FieldProperty == ViewFieldProperty.Temperature &&
+                      made.PlanePosition == 8 && made.ClipToRange && made.ColorMap == ColorMapName.Inferno &&
+                      host.Refreshes > refreshesBefore,
+                      "POST /views adds a view by simulation name and redraws", view?.ToJsonString());
+                var badKind = await Post(http, "views", new { simulation = simId, kind = "Hologram" });
+                Check(badKind.StatusCode == HttpStatusCode.BadRequest, "an unknown view kind is 400");
+                var noSim = await Post(http, "views", new { simulation = "Nowhere" });
+                Check(noSim.StatusCode == HttpStatusCode.NotFound, "a view of an unknown simulation is 404");
+                JsonNode? updated = await PostJson(http, "views/update", new { id = viewId, visible = false, isoColor = "#FF8800" });
+                Check(updated?["ok"]?.GetValue<bool>() == true && made?.IsVisible == false && made.PlanePosition == 8,
+                      "POST /views/update changes only the fields given", updated?.ToJsonString());
+                JsonNode? views = await GetJson(http, "views");
+                Check(views?["views"]?[0]?["simulation"]?.GetValue<string>() == "Plume" &&
+                      views?["views"]?[0]?["clipToRange"]?.GetValue<bool>() == true, "GET /views lists the views", views?.ToJsonString());
+                JsonNode? deleted = await PostJson(http, "views/delete", new { id = viewId });
+                Check(deleted?["ok"]?.GetValue<bool>() == true && host.Scene.Views.Count == 0, "POST /views/delete removes it");
+                Check((await Post(http, "views/delete", new { id = viewId })).StatusCode == HttpStatusCode.NotFound,
+                      "deleting an unknown view is 404");
+
+                host.Scene.Decorations.Add(new Decoration3D { Name = "Plant", IsVisible = true, Opacity = 1 });
+                JsonNode? deco = await PostJson(http, "decorations/update",
+                    new { name = "plant", opacity = 0.4, clipEnabled = true, clipAxis = "Z", clipValue = 11, clipAbove = false });
+                Decoration3D plant = host.Scene.Decorations[0];
+                Check(deco?["ok"]?.GetValue<bool>() == true && plant.Opacity == 0.4 && plant.ClipEnabled &&
+                      plant.ClipAxis == ClipAxis.Z && plant.ClipValue == 11 && !plant.ClipAbove && plant.IsVisible,
+                      "POST /decorations/update sets opacity and the clip plane by name", deco?.ToJsonString());
+                JsonNode? decos = await GetJson(http, "decorations");
+                Check(decos?["decorations"]?[0]?["clipValue"]?.GetValue<double>() == 11, "GET /decorations lists them", decos?.ToJsonString());
+                Check((await Post(http, "decorations/update", new { name = "nothing" })).StatusCode == HttpStatusCode.NotFound,
+                      "an unknown decoration is 404");
+
+                JsonNode? camera = await GetJson(http, "camera");
+                Check(camera?["target"]?[0]?.GetValue<double>() == 0 && camera?["position"]?[2]?.GetValue<double>() == 50,
+                      "GET /camera reports the position and the target", camera?.ToJsonString());
+                JsonNode? moved = await PostJson(http, "camera", new { position = new[] { 10.0, 20, 30 }, target = new[] { 10.0, 0, 0 } });
+                Check(moved?["ok"]?.GetValue<bool>() == true && host.Camera.Position.Y == 20 && host.Camera.LookDirection.Y == -20 &&
+                      host.Camera.LookDirection.Z == -30, "POST /camera moves the camera", moved?.ToJsonString());
+                Check((await Post(http, "camera", new { position = new[] { 1.0, 1, 1 }, target = new[] { 1.0, 1, 1 } })).StatusCode
+                      == HttpStatusCode.BadRequest, "a camera looking at its own position is refused");
+
                 var missing = await Post(http, "project/open", new { path = Path.Combine(work, "missing.dsproj") });
                 Check(missing.StatusCode == HttpStatusCode.NotFound, "opening a missing file is 404");
                 var relative = await Post(http, "project/open", new { path = "relative.dsproj" });
@@ -271,7 +320,7 @@ namespace DisperSim3D.CLI
         /// through the engine as the UIs do, and the "view" is a generated gradient.
         /// Its dialogs must never be reached — the server answers them itself.
         /// </summary>
-        private sealed class ScriptedHost : IExtenderHost3
+        private sealed class ScriptedHost : IExtenderHost4
         {
             private readonly SemaphoreSlim _ui = new(1, 1);
 
@@ -319,6 +368,16 @@ namespace DisperSim3D.CLI
             }
 
             public (string Id, double? TimeS)? Shown { get; private set; }
+
+            public CameraPreset Camera { get; set; } = new()
+            {
+                Position = new Point3D(100, 0, 50),
+                LookDirection = new Vector3D(-100, 0, -50)
+            };
+
+            public CameraPreset GetCamera() => Camera;
+
+            public void SetCamera(CameraPreset camera) => Camera = camera;
 
             public void CompleteRun(string simulationId) =>
                 _runs[simulationId] = new ExtenderRunStatus("Completed", 1, "Completed", null);
