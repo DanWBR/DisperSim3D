@@ -36,6 +36,9 @@ namespace DisperSim3D.UI.Avalonia.Views
         private const int GL_BACK   = 0x0405;
 
         private readonly GlCamera _camera = new();
+
+        /// <summary>The scene the camera was last fitted to, so a rebuild of the same scene keeps the view.</summary>
+        private Scene3D? _cameraSetFor;
         private readonly GlGridRenderer _grid = new();
 
         // Scene objects — each is a (mesh, model-matrix) pair
@@ -2767,8 +2770,10 @@ void main() { }
                         for (int s = 0; s < texturedSubs.Count; s++)
                         {
                             var sub = texturedSubs[s];
+                            uint[] subIndices = ClipDecorationIndices(deco, sub.Indices, n => sub.Vertices[n].Position);
+                            if (subIndices.Length == 0) continue;
                             var mesh = new GlMeshBuffer();
-                            mesh.UploadTextured(gl, sub.Vertices, sub.Indices);
+                            mesh.UploadTextured(gl, sub.Vertices, subIndices);
 
                             string? texPath = overrideTex ?? sub.TexturePath;
                             int texId = 0;
@@ -2784,10 +2789,12 @@ void main() { }
                             if (texId == 0)
                                 texId = _whiteTexture;
 
+                            var tint = overrideTex != null ? Vector4.One : sub.DiffuseColor;
+                            tint.W *= (float)Math.Clamp(deco.Opacity, 0, 1);
                             var obj = new SceneObject(mesh, model, $"deco:{i}:{s}")
                             {
                                 TextureId = texId,
-                                Tint = overrideTex != null ? Vector4.One : sub.DiffuseColor
+                                Tint = tint
                             };
                             _sceneObjects.Add(obj);
                         }
@@ -2807,8 +2814,11 @@ void main() { }
                         DecorationBounds.SetLocalBox(deco,
                             ComputeBoundingBoxFromSolid(loaded.Value.verts));
 
+                    var solidVerts = loaded.Value.verts;
+                    uint[] solidIndices = ClipDecorationIndices(deco, loaded.Value.indices, n => solidVerts[n].Position);
+                    if (solidIndices.Length == 0) continue;
                     var solidMesh = new GlMeshBuffer();
-                    solidMesh.Upload(gl, loaded.Value.verts, loaded.Value.indices,
+                    solidMesh.Upload(gl, solidVerts, solidIndices,
                         keepCpuCopy: true);
 
                     _sceneObjects.Add(new SceneObject(
@@ -2902,15 +2912,20 @@ void main() { }
             }
 
             // ── Camera: apply preset, or zoom to fit scene content ───
-            if (scene.CameraPresets != null && scene.CameraPresets.Count > 0)
+            // Only for a newly loaded project: a rebuild after an edit keeps the view.
+            if (!ReferenceEquals(scene, _cameraSetFor))
             {
-                _camera.ApplyPreset(scene.CameraPresets[0]);
-            }
-            else
-            {
-                var (bbMin, bbMax) = ComputeSceneBounds(scene);
-                _camera.Reset();
-                _camera.ZoomToFit(bbMin, bbMax);
+                _cameraSetFor = scene;
+                if (scene.CameraPresets != null && scene.CameraPresets.Count > 0)
+                {
+                    _camera.ApplyPreset(scene.CameraPresets[0]);
+                }
+                else
+                {
+                    var (bbMin, bbMax) = ComputeSceneBounds(scene);
+                    _camera.Reset();
+                    _camera.ZoomToFit(bbMin, bbMax);
+                }
             }
 
             // ── Ghost preview for pick mode ──────────────────────────────
@@ -2964,8 +2979,10 @@ void main() { }
 
             OpenFoamResult? result = null;
 
-            // Check if simulation has a cached result
-            if (sim.ResultTag is OpenFoamResult cachedResult)
+            // The simulation's cached result is the species channel playback loads;
+            // a temperature view reads its own files rather than that cache.
+            bool wantTemp = view.FieldProperty == ViewFieldProperty.Temperature;
+            if (!wantTemp && sim.ResultTag is OpenFoamResult cachedResult)
             {
                 result = cachedResult;
             }
@@ -2978,14 +2995,11 @@ void main() { }
 
                 // Fall back to flat-bin (FluidX3D) layout
                 if (result == null || !result.IsLoaded || result.TimeSteps.Count == 0)
-                {
-                    bool wantTemp = view.FieldProperty == ViewFieldProperty.Temperature;
                     result = TryLoadFlatBinCase(
                         sim.CasePath, ref nx, ref ny, ref nz, half, wantTemp);
-                }
 
-                // Cache for next time
-                if (result != null && result.IsLoaded)
+                // Cache the species channel for next time
+                if (!wantTemp && result != null && result.IsLoaded)
                     sim.ResultTag = result;
             }
 
@@ -3015,6 +3029,31 @@ void main() { }
             }
 
             return field;
+        }
+
+        /// <summary>
+        /// The triangles of a clipped decoration that keep a corner on its kept side of
+        /// the clip plane, in model coordinates, as the solvers' DecorationSolids does;
+        /// all of them when it is not clipped.
+        /// </summary>
+        private static uint[] ClipDecorationIndices(Decoration3D deco, uint[] indices, Func<uint, Vector3> position)
+        {
+            if (!deco.ClipEnabled) return indices;
+            int axis = deco.ClipAxis == ClipAxis.X ? 0 : deco.ClipAxis == ClipAxis.Y ? 1 : 2;
+            float cut = (float)deco.ClipValue;
+            bool Kept(uint n)
+            {
+                Vector3 p = position(n);
+                float v = axis == 0 ? p.X : axis == 1 ? p.Y : p.Z;
+                return deco.ClipAbove ? v >= cut : v <= cut;
+            }
+            var kept = new List<uint>(indices.Length);
+            for (int t = 0; t + 2 < indices.Length; t += 3)
+            {
+                if (!Kept(indices[t]) && !Kept(indices[t + 1]) && !Kept(indices[t + 2])) continue;
+                kept.Add(indices[t]); kept.Add(indices[t + 1]); kept.Add(indices[t + 2]);
+            }
+            return kept.ToArray();
         }
 
         /// <summary>Build an isosurface mesh for the given View and upload it.</summary>
@@ -3076,7 +3115,8 @@ void main() { }
             var (verts, idx) = GlMeshBuffer.GenerateContourPlane(
                 view.Kind, view.PlanePosition, (float)half,
                 field, gridRes, view.ColorMap,
-                minV, maxV, alpha, res);
+                minV, maxV, alpha, res, view.ClipToRange && maxV > minV);
+            if (idx.Length == 0) return;
 
             var mesh = new GlMeshBuffer();
             mesh.Upload(gl, verts, idx);

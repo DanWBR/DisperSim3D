@@ -449,6 +449,7 @@ namespace DisperSim3D.Core
                 v.MinValue = double.Parse((string)ve.Attribute("MinValue") ?? "0", inv);
                 v.MaxValue = double.Parse((string)ve.Attribute("MaxValue") ?? "0", inv);
                 v.SampleResolution = int.Parse((string)ve.Attribute("SampleResolution") ?? "80", inv);
+                v.ClipToRange = bool.Parse((string)ve.Attribute("ClipToRange") ?? "False");
                 v.UseCloudAppearance = bool.Parse((string)ve.Attribute("CloudAppearance") ?? "False");
                 try { v.CloudColor = DisperSim3D.Geometry.Color.Parse((string)ve.Attribute("CloudColor") ?? "#FFC8C8D2"); }
                 catch { v.CloudColor = DisperSim3D.Geometry.Color.FromRgb(200, 200, 210); }

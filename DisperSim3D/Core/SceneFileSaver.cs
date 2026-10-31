@@ -358,7 +358,8 @@ namespace DisperSim3D.Core
                     new XAttribute("ColorMap", v.ColorMap.ToString()),
                     new XAttribute("MinValue", v.MinValue.ToString(inv)),
                     new XAttribute("MaxValue", v.MaxValue.ToString(inv)),
-                    new XAttribute("SampleResolution", v.SampleResolution.ToString(inv)))));
+                    new XAttribute("SampleResolution", v.SampleResolution.ToString(inv)),
+                    new XAttribute("ClipToRange", v.ClipToRange))));
         }
 
         private static XElement? SerializeDispersionStudies(Scene3D scene, CultureInfo inv)

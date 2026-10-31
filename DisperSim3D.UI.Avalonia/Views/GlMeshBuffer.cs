@@ -1026,11 +1026,12 @@ namespace DisperSim3D.UI.Avalonia.Views
         /// <param name="maxVal">Upper bound of the colour scale.</param>
         /// <param name="opacity">Alpha channel (0..1).</param>
         /// <param name="resolution">Number of subdivisions per axis for the quad.</param>
+        /// <param name="clip">Leave transparent where the value is outside [minVal, maxVal].</param>
         public static (SolidVertex[] verts, uint[] indices) GenerateContourPlane(
             ViewKind kind, double planePos, float halfSize,
             double[,,] field, int gridRes,
             ColorMapName colorMap, double minVal, double maxVal,
-            float opacity, int resolution = 80)
+            float opacity, int resolution = 80, bool clip = false)
         {
             int res = Math.Max(4, resolution);
             double range = Math.Max(maxVal - minVal, 1e-9);
@@ -1042,6 +1043,9 @@ namespace DisperSim3D.UI.Avalonia.Views
             int idxCount = res * res * 6;
             var verts = new SolidVertex[vertCount];
             var indices = new uint[idxCount];
+            // A clipped vertex is transparent, but a quad drawn with only such corners
+            // would still hide what lies behind it in the depth buffer, so it is left out.
+            var clippedAt = new bool[vertCount];
 
             // Determine plane normal
             Vector3 normal;
@@ -1091,7 +1095,9 @@ namespace DisperSim3D.UI.Avalonia.Views
                     t = Math.Max(0.0, Math.Min(1.0, t));
 
                     var c = ColorMapHelper.Sample(colorMap, t);
-                    var color = new Vector4(c.ScR, c.ScG, c.ScB, opacity);
+                    bool clipped = clip && (val < minVal || val > maxVal);
+                    if (clipped) clippedAt[vi] = true;
+                    var color = new Vector4(c.ScR, c.ScG, c.ScB, clipped ? 0f : opacity);
 
                     verts[vi++] = new SolidVertex(
                         new Vector3((float)x, (float)y, (float)z),
@@ -1110,11 +1116,13 @@ namespace DisperSim3D.UI.Avalonia.Views
                     uint c = (uint)((j + 1) * (res + 1) + i);
                     uint d = c + 1;
 
+                    if (clippedAt[a] && clippedAt[b] && clippedAt[c] && clippedAt[d]) continue;
                     indices[ii++] = a; indices[ii++] = b; indices[ii++] = c;
                     indices[ii++] = b; indices[ii++] = d; indices[ii++] = c;
                 }
             }
 
+            if (ii < indices.Length) Array.Resize(ref indices, ii);
             return (verts, indices);
         }
 

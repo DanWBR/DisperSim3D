@@ -165,6 +165,10 @@ namespace DisperSim3D.Models
         [Description("Pixels per axis for the contour bitmap (resolution of the slice texture).")]
         public int SampleResolution { get; set; }
 
+        [Category("Contour")]
+        [Description("Leave the plane transparent where the value is below MinValue or above MaxValue, so only that range shows. Needs MinValue < MaxValue.")]
+        public bool ClipToRange { get; set; }
+
         public View()
         {
             Id = Guid.NewGuid().ToString();
