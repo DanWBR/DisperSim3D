@@ -1043,9 +1043,7 @@ namespace DisperSim3D.UI.Avalonia.Views
             int idxCount = res * res * 6;
             var verts = new SolidVertex[vertCount];
             var indices = new uint[idxCount];
-            // A clipped vertex is transparent, but a quad drawn with only such corners
-            // would still hide what lies behind it in the depth buffer, so it is left out.
-            var clippedAt = new bool[vertCount];
+            var values = new double[vertCount];
 
             // Determine plane normal
             Vector3 normal;
@@ -1095,15 +1093,17 @@ namespace DisperSim3D.UI.Avalonia.Views
                     t = Math.Max(0.0, Math.Min(1.0, t));
 
                     var c = ColorMapHelper.Sample(colorMap, t);
-                    bool clipped = clip && (val < minVal || val > maxVal);
-                    if (clipped) clippedAt[vi] = true;
-                    var color = new Vector4(c.ScR, c.ScG, c.ScB, clipped ? 0f : opacity);
+                    var color = new Vector4(c.ScR, c.ScG, c.ScB, opacity);
 
+                    values[vi] = val;
                     verts[vi++] = new SolidVertex(
                         new Vector3((float)x, (float)y, (float)z),
                         normal, color);
                 }
             }
+
+            if (clip)
+                return ClipContour(verts, values, res, normal, colorMap, minVal, maxVal, opacity);
 
             // Generate triangle indices
             int ii = 0;
@@ -1116,14 +1116,77 @@ namespace DisperSim3D.UI.Avalonia.Views
                     uint c = (uint)((j + 1) * (res + 1) + i);
                     uint d = c + 1;
 
-                    if (clippedAt[a] && clippedAt[b] && clippedAt[c] && clippedAt[d]) continue;
                     indices[ii++] = a; indices[ii++] = b; indices[ii++] = c;
                     indices[ii++] = b; indices[ii++] = d; indices[ii++] = c;
                 }
             }
 
-            if (ii < indices.Length) Array.Resize(ref indices, ii);
             return (verts, indices);
+        }
+
+        /// <summary>
+        /// The part of a contour plane whose value lies in [minVal, maxVal]. The value is
+        /// linear over each triangle of the grid, so each triangle is cut where it crosses
+        /// either bound (Sutherland–Hodgman against the two half-planes) and the piece
+        /// inside is kept: the edge follows the contour line, not the grid's squares.
+        /// </summary>
+        private static (SolidVertex[] verts, uint[] indices) ClipContour(
+            SolidVertex[] grid, double[] values, int res, Vector3 normal,
+            ColorMapName colorMap, double minVal, double maxVal, float opacity)
+        {
+            double range = Math.Max(maxVal - minVal, 1e-9);
+            var outVerts = new List<SolidVertex>();
+            var outIdx = new List<uint>();
+            var poly = new List<(Vector3 P, double V)>(8);
+            var next = new List<(Vector3 P, double V)>(8);
+
+            void Cut(Func<double, double> inside)
+            {
+                next.Clear();
+                for (int e = 0; e < poly.Count; e++)
+                {
+                    var (p, pv) = poly[e];
+                    var (q, qv) = poly[(e + 1) % poly.Count];
+                    double gp = inside(pv), gq = inside(qv);
+                    if (gp >= 0) next.Add((p, pv));
+                    if ((gp >= 0) != (gq >= 0))
+                    {
+                        float t = (float)(gp / (gp - gq));
+                        next.Add((Vector3.Lerp(p, q, t), pv + (qv - pv) * t));
+                    }
+                }
+                (poly, next) = (next, poly);
+            }
+
+            void Triangle(int a, int b, int c)
+            {
+                double va = values[a], vb = values[b], vc = values[c];
+                if ((va < minVal && vb < minVal && vc < minVal) || (va > maxVal && vb > maxVal && vc > maxVal)) return;
+                poly.Clear();
+                poly.Add((grid[a].Position, va)); poly.Add((grid[b].Position, vb)); poly.Add((grid[c].Position, vc));
+                Cut(v => v - minVal);
+                if (poly.Count >= 3) Cut(v => maxVal - v);
+                if (poly.Count < 3) return;
+                uint first = (uint)outVerts.Count;
+                foreach (var (p, v) in poly)
+                {
+                    var col = ColorMapHelper.Sample(colorMap, Math.Clamp((v - minVal) / range, 0.0, 1.0));
+                    outVerts.Add(new SolidVertex(p, normal, new Vector4(col.ScR, col.ScG, col.ScB, opacity)));
+                }
+                for (int k = 1; k + 1 < poly.Count; k++)
+                {
+                    outIdx.Add(first); outIdx.Add(first + (uint)k); outIdx.Add(first + (uint)k + 1);
+                }
+            }
+
+            for (int j = 0; j < res; j++)
+                for (int i = 0; i < res; i++)
+                {
+                    int a = j * (res + 1) + i, b = a + 1, c = (j + 1) * (res + 1) + i, d = c + 1;
+                    Triangle(a, b, c);
+                    Triangle(b, d, c);
+                }
+            return (outVerts.ToArray(), outIdx.ToArray());
         }
 
         /// <summary>
