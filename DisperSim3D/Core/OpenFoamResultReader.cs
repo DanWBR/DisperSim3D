@@ -118,7 +118,8 @@ namespace DisperSim3D.Core
             => TryLoadFlatBinCase(caseDir, ref nx, ref ny, ref nz, half,
                 temperatureChannel ? TemperatureChannel : SpeciesChannel);
 
-        /// <summary>Channel suffix of the plain <c>{time}.bin</c> files: the species.</summary>
+        /// <summary>Channel suffix of the plain <c>{time}.bin</c> files: the species.
+        /// The channels are listed in <see cref="ResultChannels"/>.</summary>
         public const string SpeciesChannel = "";
         /// <summary>Channel suffix of <c>{time}_T.bin</c>: temperature, K.</summary>
         public const string TemperatureChannel = "T";
@@ -126,10 +127,15 @@ namespace DisperSim3D.Core
         /// solver that computes it rather than the analytic fire models.</summary>
         public const string RadiationChannel = "Q";
 
+        /// <summary>Reads one <see cref="ResultChannel"/> of a flat-bin case directory.</summary>
+        public static OpenFoamResult TryLoadFlatBinCase(string caseDir,
+            ref int nx, ref int ny, ref int nz, double half, ResultChannel channel)
+            => TryLoadFlatBinCase(caseDir, ref nx, ref ny, ref nz, half, channel?.Suffix ?? SpeciesChannel);
+
         /// <summary>
         /// Reads one channel of a flat-bin case directory: the plain <c>{time}.bin</c>
         /// files for <see cref="SpeciesChannel"/>, or the <c>{time}_&lt;channel&gt;.bin</c>
-        /// ones written alongside them.
+        /// ones written alongside them (<see cref="ResultChannels"/>).
         /// </summary>
         public static OpenFoamResult TryLoadFlatBinCase(string caseDir,
             ref int nx, ref int ny, ref int nz, double half, string channel)

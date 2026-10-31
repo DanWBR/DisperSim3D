@@ -185,7 +185,8 @@ namespace DisperSim3D.Core
                 var gas = ResolveGasForSimulation(sim, scene);
                 double[,,] qField;
                 if (FieldTransform.NeedsSpeciesField(study.DetectionQuantity))
-                    qField = FieldTransform.FromMassFraction(field, study.DetectionQuantity, gas);
+                    qField = FieldTransform.FromMassFraction(
+                        FieldTransform.SpeciesAsMassFraction(field, sim), study.DetectionQuantity, gas);
                 else
                     qField = field; // T / pressure / etc.: field is already in its unit
 
@@ -231,10 +232,10 @@ namespace DisperSim3D.Core
         {
             if (string.IsNullOrEmpty(caseDir) || !Directory.Exists(caseDir)) return null;
             if (File.Exists(Path.Combine(caseDir, "system", "controlDict"))) return null;
-            // Only the species/concentration channel — *_T.bin (fire temperature) excluded.
+            // Only the species channel, {time}.bin: every other channel carries a suffix.
             var binFiles = Directory.GetFiles(caseDir, "*.bin", SearchOption.TopDirectoryOnly)
-                .Where(p => !Path.GetFileNameWithoutExtension(p).EndsWith("_T",
-                    StringComparison.OrdinalIgnoreCase))
+                .Where(p => double.TryParse(Path.GetFileNameWithoutExtension(p),
+                    System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _))
                 .ToArray();
             if (binFiles.Length == 0) return null;
 

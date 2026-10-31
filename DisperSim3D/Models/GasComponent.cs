@@ -43,6 +43,24 @@ namespace DisperSim3D.Models
         /// Gets or sets the Immediately Dangerous to Life or Health concentration (kg/m³).
         /// </summary>
         public double IDLH { get; set; }
+
+        /// <summary>Net heat of complete combustion, J/kg; 0 = from the component name.</summary>
+        public double HeatOfCombustionJPerKg { get; set; }
+
+        /// <summary>Carbon atoms per molecule; 0 = from the component name.</summary>
+        public double CarbonAtoms { get; set; }
+
+        /// <summary>Hydrogen atoms per molecule; 0 = from the component name.</summary>
+        public double HydrogenAtoms { get; set; }
+
+        /// <summary>Soot yield, kg/kg of this component burnt; 0 = from the component name.</summary>
+        public double SootYield { get; set; }
+
+        /// <summary>CO yield, kg/kg of this component burnt; 0 = from the component name.</summary>
+        public double CoYield { get; set; }
+
+        /// <summary>Peak laminar burning velocity, m/s; 0 = from the component name.</summary>
+        public double LaminarBurningVelocityMPerS { get; set; }
     }
 
     /// <summary>

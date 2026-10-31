@@ -27,7 +27,7 @@ namespace DisperSim3D.Core
     public static class FireStudyEngine
     {
         /// <summary>What kind of fire a row scores.</summary>
-        public enum ScenarioKind { JetFire, PoolFire, FlashFire }
+        public enum ScenarioKind { JetFire, PoolFire, FlashFire, Fireball }
 
         public sealed class FireStudyRow
         {
@@ -146,7 +146,9 @@ namespace DisperSim3D.Core
             {
                 ScenarioId = source.Id,
                 Name = string.IsNullOrEmpty(source.Name) ? "(fire)" : source.Name,
-                Kind = source.IsPoolFire ? ScenarioKind.PoolFire : ScenarioKind.JetFire
+                Kind = source.Kind == FireKind.Pool ? ScenarioKind.PoolFire
+                     : source.Kind == FireKind.Fireball ? ScenarioKind.Fireball
+                     : ScenarioKind.JetFire
             };
 
             var risk = study.EnsureRiskFor(source.Id);
@@ -161,8 +163,18 @@ namespace DisperSim3D.Core
             else
             {
                 var probe = SingleSourceScene(scene, source);
-                var field = FieldTransform.BuildAnalyticField(probe, study.HarmQuantity, n, n, nz, half);
-                row.ConsequenceM3 = ThermalDose.FootprintVolumeM3(field, cellVolume, study.HarmThreshold);
+                var fireSim = StoredFireRun(scene, s => s.FireSourceId == source.Id);
+                if (fireSim != null)
+                {
+                    // A fire solver computed this fire: its own radiation replaces the models.
+                    row.ConsequenceM3 = StoredFootprintM3(probe, study, fireSim);
+                    row.Note = "from the radiation field simulation '" + fireSim.Name + "' stored";
+                }
+                else
+                {
+                    var field = FieldTransform.BuildAnalyticField(probe, study.HarmQuantity, n, n, nz, half);
+                    row.ConsequenceM3 = ThermalDose.FootprintVolumeM3(field, cellVolume, study.HarmThreshold);
+                }
                 row.ConsequenceIsAuto = true;
             }
 
@@ -177,7 +189,8 @@ namespace DisperSim3D.Core
             {
                 row.FrequencyPerYear = 0.0;
                 row.FrequencyIsAuto = true;
-                row.Note = "no leak frequency behind a hand-placed fire — set one manually "
+                row.Note = (string.IsNullOrEmpty(row.Note) ? "" : row.Note + "; ")
+                         + "no leak frequency behind a hand-placed fire — set one manually "
                          + "or model the release and ignite it instead";
             }
 
@@ -226,6 +239,20 @@ namespace DisperSim3D.Core
                 else
                 {
                     row.ConsequenceM3 = flash.EnvelopeVolumeM3;
+                    row.ConsequenceIsAuto = true;
+                }
+
+                // A fire solver ran this ignition: its radiation can harm beyond the burnt
+                // envelope, and the larger of the two footprints is the consequence.
+                var fireSim = StoredFireRun(scene, s => s.IgnitionId == ignition.Id);
+                if (fireSim != null)
+                {
+                    double stored = StoredFootprintM3(scene, study, fireSim);
+                    if (stored > row.ConsequenceM3)
+                    {
+                        row.ConsequenceM3 = stored;
+                        row.Note = "the radiation simulation '" + fireSim.Name + "' stored harms beyond the burnt envelope";
+                    }
                     row.ConsequenceIsAuto = true;
                 }
             }
@@ -280,6 +307,33 @@ namespace DisperSim3D.Core
             return probe;
         }
 
+        /// <summary>The latest completed fire simulation the predicate picks that stored a
+        /// radiation field, or null.</summary>
+        private static Simulation StoredFireRun(Scene3D scene, Func<Simulation, bool> pick)
+        {
+            if (scene?.Simulations == null) return null;
+            Simulation found = null;
+            foreach (var s in scene.Simulations)
+                if (s != null && s.Status == SimulationStatus.Completed && s.IsFireRun && pick(s)
+                    && StoredFields.Has(s, ResultChannels.Radiation)
+                    && (found == null || (s.CompletedAt ?? s.CreatedAt) > (found.CompletedAt ?? found.CreatedAt)))
+                    found = s;
+            return found;
+        }
+
+        /// <summary>The volume where the study's harm quantity, from the radiation the
+        /// simulation stored, crosses the harm threshold (m³), on the simulation's own
+        /// grid of cubic cells.</summary>
+        private static double StoredFootprintM3(Scene3D scene, FireStudy study, Simulation sim)
+        {
+            double half = StoredFields.Half(sim);
+            int nx = sim.SnapshotGridResolution > 0 ? sim.SnapshotGridResolution : 60;
+            var field = FieldTransform.BuildAnalyticField(scene, study.HarmQuantity, nx, nx, Math.Max(1, nx / 2), half, sim);
+            if (field == null) return 0;
+            double cell = 2.0 * half / field.GetLength(0);
+            return ThermalDose.FootprintVolumeM3(field, cell * cell * cell, study.HarmThreshold);
+        }
+
         /// <summary>Loads the simulation's concentration snapshot at the ignition instant
         /// and burns it. Null when no result can be read.</summary>
         private static FlashFireEngine.FlashFireResult BurnIgnition(
@@ -314,7 +368,7 @@ namespace DisperSim3D.Core
             if (raw == null) return null;
 
             var concentration = FieldTransform.FromMassFraction(
-                raw, ViewFieldProperty.ConcentrationKgM3, gas);
+                FieldTransform.SpeciesAsMassFraction(raw, sim), ViewFieldProperty.ConcentrationKgM3, gas);
 
             double lfl = gas != null && gas.LFL > 0 ? gas.LFL : 0.033;
             double ufl = gas != null && gas.UFL > 0 ? gas.UFL : 0;

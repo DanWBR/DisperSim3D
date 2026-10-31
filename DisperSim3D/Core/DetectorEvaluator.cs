@@ -74,6 +74,39 @@ namespace DisperSim3D.Core
         }
 
         /// <summary>
+        /// Replays a finished simulation through the detectors: each one's time series is
+        /// what <see cref="StoredFields.Measure"/> reads at its position from the fields the
+        /// simulation stored — a fire solver's temperature, radiation and smoke included —
+        /// and it triggers at the first sample past its threshold (below it, for oxygen and
+        /// visibility).
+        /// </summary>
+        public static DetectorEvaluationResult EvaluateSimulation(Scene3D scene, Simulation sim, List<GasDetector3D> detectors)
+        {
+            Reset(detectors);
+            var gas = FireStudyEngine.ResolveGas(sim, scene);
+            foreach (var det in detectors)
+            {
+                var series = StoredFields.Measure(scene, sim, det.MeasuredQuantity,
+                    det.Position.X, det.Position.Y, det.Position.Z, gas);
+                det.TimeSeries.AddRange(series);
+                double trigger = det.MeasuredQuantity == ViewFieldProperty.ConcentrationKgM3
+                    ? det.ThresholdKgM3
+                    : det.Threshold;
+                bool low = StoredFields.LowIsHazard(det.MeasuredQuantity);
+                foreach (var s in series)
+                {
+                    if (low ? s.Concentration <= trigger : s.Concentration >= trigger)
+                    {
+                        det.Detected = true;
+                        det.DetectionTimeS = s.TimeS;
+                        break;
+                    }
+                }
+            }
+            return ComputeResults(detectors);
+        }
+
+        /// <summary>
         /// Computes coverage statistics including total detectors, number triggered,
         /// and min/max/average detection times.
         /// </summary>

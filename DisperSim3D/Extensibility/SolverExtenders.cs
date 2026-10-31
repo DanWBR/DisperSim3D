@@ -7,6 +7,20 @@ using DisperSim3D.Models;
 
 namespace DisperSim3D.Extensibility
 {
+    /// <summary>What a solver extender can run.</summary>
+    [Flags]
+    public enum SolverCapabilities
+    {
+        /// <summary>A release from a source: the request's <see cref="SolverExtenderRequest.Scenario"/>.</summary>
+        Dispersion = 1,
+        /// <summary>
+        /// A fire: a <see cref="FireSource"/> of the scene's fire scenario, or an
+        /// <see cref="IgnitionEvent"/> on a finished dispersion simulation, named by the
+        /// request's <see cref="SolverExtenderRequest.Fire"/>.
+        /// </summary>
+        Fire = 2
+    }
+
     /// <summary>
     /// A dispersion solver shipped in an extender assembly. It shows up next to the
     /// built-in solvers as <see cref="CfdSolverType.Extender"/> with its
@@ -37,6 +51,13 @@ namespace DisperSim3D.Extensibility
         bool ReadsWindField => true;
 
         /// <summary>
+        /// What the solver can run. Dispersion only unless it says otherwise; a solver
+        /// that declares <see cref="SolverCapabilities.Fire"/> is offered for the scene's
+        /// fire sources and ignitions, and gets the fire in <see cref="SolverExtenderRequest.Fire"/>.
+        /// </summary>
+        SolverCapabilities Capabilities => SolverCapabilities.Dispersion;
+
+        /// <summary>
         /// Runs the scenario to completion on the calling thread. Reports progress through
         /// the request and stops when its cancellation token is set.
         /// </summary>
@@ -50,6 +71,41 @@ namespace DisperSim3D.Extensibility
     public interface ISolverExtenderCollection
     {
         IReadOnlyList<ISolverExtender> Solvers { get; }
+    }
+
+    /// <summary>
+    /// The fire a <see cref="SolverCapabilities.Fire"/> solver is asked to run: one fire
+    /// source, or one ignition of a finished dispersion simulation. Exactly one of
+    /// <see cref="Source"/> and <see cref="Ignition"/> is set.
+    /// </summary>
+    public sealed class SolverFireTarget
+    {
+        public SolverFireTarget(FireSource source)
+        {
+            Source = source ?? throw new ArgumentNullException(nameof(source));
+        }
+
+        public SolverFireTarget(IgnitionEvent ignition, Simulation ignitedSimulation)
+        {
+            Ignition = ignition ?? throw new ArgumentNullException(nameof(ignition));
+            IgnitedSimulation = ignitedSimulation ?? throw new ArgumentNullException(nameof(ignitedSimulation));
+        }
+
+        /// <summary>The jet, pool or fireball to burn (its <see cref="FireSource.Kind"/>).</summary>
+        public FireSource? Source { get; }
+
+        /// <summary>Where and when the cloud is ignited.</summary>
+        public IgnitionEvent? Ignition { get; }
+
+        /// <summary>
+        /// The completed dispersion simulation the ignition names. Its result folder
+        /// (<see cref="Simulation.CasePath"/>) holds the cloud in the flat-bin layout
+        /// (docs/file-format.md), on the grid its Snapshot fields describe.
+        /// </summary>
+        public Simulation? IgnitedSimulation { get; }
+
+        /// <summary>The gas that burns: the ignited release's, or null for a fire source (which carries its own fuel data).</summary>
+        public GasProperties? Gas { get; init; }
     }
 
     /// <summary>What a solver extender gets to run one scenario.</summary>
@@ -80,6 +136,24 @@ namespace DisperSim3D.Extensibility
         public Action<double, string>? Progress { get; }
 
         public CancellationToken Cancel { get; }
+
+        /// <summary>
+        /// The fire to run, for a solver that declares <see cref="SolverCapabilities.Fire"/>;
+        /// null for a dispersion run. The scenario then carries the meteorology, domain,
+        /// grid and duration, and its sources are empty.
+        /// </summary>
+        public SolverFireTarget? Fire { get; init; }
+
+        /// <summary>
+        /// Centre of the grid the host asks for, m: the scenario's DomainSizeM either side
+        /// of it in x and y. 0, 0 for a dispersion run; a fire run is centred on its fire
+        /// or on the ignited simulation's grid. A solver may use another grid and say so
+        /// through the bounds of the result it returns.
+        /// </summary>
+        public double DomainCenterX { get; init; }
+
+        /// <summary>See <see cref="DomainCenterX"/>.</summary>
+        public double DomainCenterY { get; init; }
     }
 
     /// <summary>The outcome of a solver extender run.</summary>
@@ -92,10 +166,19 @@ namespace DisperSim3D.Extensibility
         /// <summary>
         /// Concentration snapshots on the scenario's uniform grid — domain
         /// [−D, D]² × [0, height], kg/m³ — as the 3D view, monitors and detectors read them.
+        /// The grid may be centred away from the origin: its DomainXMin..DomainYMax say where.
+        /// A fire run may leave this null and write only <see cref="CasePath"/>.
         /// </summary>
         public OpenFoamResult? Result { get; set; }
 
-        /// <summary>Folder holding the run's files, if any.</summary>
+        /// <summary>
+        /// Folder holding the run's files, if any. Every result channel goes here in the
+        /// flat-bin layout of docs/file-format.md: <c>{t:F3}.bin</c> for the species and
+        /// <c>{t:F3}_{channel}.bin</c> for the channels of
+        /// <see cref="DisperSim3D.Core.ResultChannels"/> (T, Q, Soot, CO, CO2, O2, Vis), plus
+        /// <c>{t:F3}_surface.bin</c> for the heat load on the scene's decoration triangles.
+        /// A fire run must write at least one channel here.
+        /// </summary>
         public string? CasePath { get; set; }
 
         /// <summary>
@@ -160,6 +243,10 @@ namespace DisperSim3D.Extensibility
             if (_solvers!.Any(x => string.Equals(x.Id, s.Id, StringComparison.OrdinalIgnoreCase))) return;
             _solvers!.Add(s);
         }
+
+        /// <summary>The solvers that can run <paramref name="capability"/>.</summary>
+        public static IReadOnlyList<ISolverExtender> WithCapability(SolverCapabilities capability) =>
+            All.Where(s => (s.Capabilities & capability) == capability).ToList();
 
         /// <summary>The solver with this ID, or null.</summary>
         public static ISolverExtender? Find(string? id)

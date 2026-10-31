@@ -38,10 +38,17 @@ namespace DisperSim3D.Automation
             "POST /project/save                {\"path\": \"C:\\\\project.dsproj\"} (path optional)",
             "GET  /viewport.png?width=&height= the 3D view as a PNG",
             "POST /viewport/save               {\"path\": \"C:\\\\view.png\", \"width\": 0, \"height\": 0}",
+            "GET  /solvers                     the built-in solvers and the extender solvers with their capabilities",
             "GET  /simulations                 the project's simulations and their runs",
-            "POST /simulations                 {\"source\": \"Release 01\", \"solver\": \"GaussianPlume\" (or an extender solver's ID or code), \"windField\": \"...\", \"durationS\": 300, ...}",
+            "POST /simulations                 {\"source\": \"Release 01\", \"solver\": \"GaussianPlume\" (or an extender solver's ID or code), \"windField\": \"...\", \"durationS\": 300, ...}; or {\"fireSource\"|\"ignition\": \"...\", \"solver\": a fire solver} for a fire run",
             "POST /simulations/run             {\"id\": \"...\"} queues it as its Run command does",
             "GET  /simulations/status?id=      where its latest run stands",
+            "GET  /simulations/channels?id=    the result channels it stored (T, Q, Soot, CO, CO2, O2, Vis) and its surface heat load",
+            "POST /simulations/sensors         {\"id\": \"...\"} replays it through every monitor and detector from its stored fields",
+            "POST /fires                       {\"name\": \"...\", \"kind\": \"Jet|Pool|Fireball\", \"position\": [x, y, z], \"massFlowKgS\": 1, \"fireballMassKg\": 1000, ...} adds a fire source",
+            "POST /ignitions                   {\"simulation\": \"...\", \"position\": [x, y, z], \"timeS\": 30} adds an ignition of a dispersion simulation",
+            "POST /monitors                    {\"name\": \"...\", \"position\": [x, y, z], \"quantity\": \"Temperature\"} adds a point monitor",
+            "POST /detectors                   {\"name\": \"...\", \"position\": [x, y, z], \"quantity\": \"ThermalRadiationKwM2\", \"threshold\": 12.5} adds a detector",
             "POST /simulations/cancel          {\"id\": \"...\"} cancels its latest run",
             "POST /simulations/show            {\"id\": \"...\", \"timeS\": 30} shows its result in the 3D view (timeS optional: last snapshot)",
             "GET  /views                       the project's views (isosurfaces and contour planes)",
@@ -327,6 +334,8 @@ namespace DisperSim3D.Automation
                     return await OnUiGateAsync(() => ViewportPngAsync(r));
                 case "POST /viewport/save":
                     return await OnUiGateAsync(() => SaveViewportAsync(r));
+                case "GET /solvers":
+                    return JsonResponse(200, Solvers());
                 case "GET /simulations":
                     return JsonResponse(200, new { simulations = await SimulationsAsync() });
                 case "POST /simulations":
@@ -339,6 +348,18 @@ namespace DisperSim3D.Automation
                     return await OnUiGateAsync(() => ShowSimulationResultAsync(r));
                 case "GET /simulations/status":
                     return RunStatusResponse(r);
+                case "GET /simulations/channels":
+                    return await SimulationChannelsAsync(r);
+                case "POST /simulations/sensors":
+                    return await OnUiGateAsync(() => EvaluateSensorsAsync(r));
+                case "POST /fires":
+                    return await OnUiGateAsync(() => AddFireSourceAsync(r));
+                case "POST /ignitions":
+                    return await OnUiGateAsync(() => AddIgnitionAsync(r));
+                case "POST /monitors":
+                    return await OnUiGateAsync(() => AddMonitorAsync(r));
+                case "POST /detectors":
+                    return await OnUiGateAsync(() => AddDetectorAsync(r));
                 case "GET /views":
                     return JsonResponse(200, new { views = await ViewsAsync() });
                 case "POST /views":
@@ -587,6 +608,8 @@ namespace DisperSim3D.Automation
                 sim.Name,
                 solver = sim.SolverType.ToString(),
                 sim.ExtenderSolverId,
+                sim.FireSourceId,
+                sim.IgnitionId,
                 status = sim.Status.ToString(),
                 source = source?.Name,
                 sim.SourceId,
@@ -609,6 +632,8 @@ namespace DisperSim3D.Automation
         {
             var host = Host3;
             JsonObject body = ReadJson(r);
+            if (OptionalString(body, "fireSource") != null || OptionalString(body, "ignition") != null)
+                return await AddFireSimulationAsync(body);
             string sourceKey = RequiredString(body, "source");
             string solverText = RequiredString(body, "solver");
             // A built-in solver by its enum name, else an extender solver by its ID, code or alias.

@@ -69,6 +69,8 @@ namespace DisperSim3D.CLI
             bool calmWindSelftest = false;
             bool obstacleMaskSelftest = false;
             bool solverExtenderSelftest = false;
+            bool fireSolverSelftest = false;
+            bool fireballSelftest = false;
             bool exitVelocitySelftest = false;
             string automationExtenderDir = null;
             bool solidFlameSelftest = false;
@@ -169,6 +171,12 @@ namespace DisperSim3D.CLI
                     case "--solver-extender-selftest":
                         solverExtenderSelftest = true;
                         break;
+                    case "--fire-solver-selftest":
+                        fireSolverSelftest = true;
+                        break;
+                    case "--fireball-selftest":
+                        fireballSelftest = true;
+                        break;
                     case "--automation-selftest":
                         automationSelftest = true;
                         if (i + 1 < args.Length && !args[i + 1].StartsWith("-"))
@@ -242,6 +250,8 @@ namespace DisperSim3D.CLI
             if (calmWindSelftest) return DisperSim3D.Validation.CalmWindSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             if (obstacleMaskSelftest) return DisperSim3D.Validation.ObstacleMaskSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             if (solverExtenderSelftest) return DisperSim3D.Validation.SolverExtenderSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
+            if (fireSolverSelftest) return DisperSim3D.Validation.FireSolverExtenderSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
+            if (fireballSelftest) return DisperSim3D.Validation.FireballSelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             if (exitVelocitySelftest) return DisperSim3D.Validation.ExitVelocitySelfTest.RunAndPrint(Console.Out) ? 0 : 1;
             if (solidFlameSelftest) return RunSolidFlameSelfTest();
             if (flashFireSelftest) return RunFlashFireSelfTest();
@@ -251,7 +261,7 @@ namespace DisperSim3D.CLI
             if (inspectModelPath != null) return RunInspectModel(inspectModelPath);
             if (!string.IsNullOrEmpty(validateFirePath))
                 return DisperSim3D.Validation.FireBenchmarkRunner.RunAndPrint(
-                    validateFirePath, Console.Out) ? 0 : 1;
+                    validateFirePath, Console.Out, solver) ? 0 : 1;
             if (listIogpType != null) return RunListIogp(listIogpType);
             if (memoryEstimate) return RunMemoryEstimate(memSolverArg, memNxArg);
             if (twoPhaseTest) return RunTwoPhaseTest();
@@ -1927,6 +1937,10 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             meshes occupy, not their boxes; exit 0 on full pass.");
             Console.WriteLine("  --solver-extender-selftest Run a stand-in solver extender through the registry,");
             Console.WriteLine("                             project file, headless run and validation harness.");
+            Console.WriteLine("  --fire-solver-selftest     Run a stand-in fire solver extender: fire request,");
+            Console.WriteLine("                             result channels, surface heat load, sensors, studies.");
+            Console.WriteLine("  --fireball-selftest        Check the CCPS fireball against hand calculations and");
+            Console.WriteLine("                             its radiation, dose, fire study and fire bench.");
             Console.WriteLine("  --automation-selftest [dir]");
             Console.WriteLine("                             Start the automation extender (from dir, or the");
             Console.WriteLine("                             extender folders) against a host with no window");
@@ -1951,6 +1965,7 @@ namespace DisperSim3D.CLI
             Console.WriteLine("                             count, extent and the unit the importer would guess.");
             Console.WriteLine("  --validate-fire <file|dir> Run .fbench fire radiation benchmarks against the");
             Console.WriteLine("                             published flame geometry, emissive power and flux.");
+            Console.WriteLine("                             With -s <solver>, on that fire solver extender.");
             Console.WriteLine("  --list-iogp [type]         Dump IOGP leak-frequency table (one type or");
             Console.WriteLine("                             all 24). e.g. --list-iogp SteelProcessPipe");
             Console.WriteLine("  --memory-estimate <solver> <N>");

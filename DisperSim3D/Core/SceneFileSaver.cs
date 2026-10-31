@@ -217,7 +217,9 @@ namespace DisperSim3D.Core
                                         new XAttribute("MoleFrac", c.MoleFraction.ToString(inv)),
                                         new XAttribute("LFL", c.LFL.ToString(inv)),
                                         new XAttribute("UFL", c.UFL.ToString(inv)),
-                                        new XAttribute("IDLH", c.IDLH.ToString(inv))))));
+                                        new XAttribute("IDLH", c.IDLH.ToString(inv)),
+                                        CombustionAttributes(c.HeatOfCombustionJPerKg, c.CarbonAtoms, c.HydrogenAtoms,
+                                            c.SootYield, c.CoYield, c.LaminarBurningVelocityMPerS, inv)))));
                     }
                     var gp = g.PureGas ?? new GasProperties();
                     return new XElement("Gas",
@@ -230,8 +232,26 @@ namespace DisperSim3D.Core
                         new XAttribute("IDLH", gp.IDLH.ToString(inv)),
                         new XAttribute("ERPG1", gp.ERPG1.ToString(inv)),
                         new XAttribute("ERPG2", gp.ERPG2.ToString(inv)),
-                        new XAttribute("ERPG3", gp.ERPG3.ToString(inv)));
+                        new XAttribute("ERPG3", gp.ERPG3.ToString(inv)),
+                        CombustionAttributes(gp, inv));
                 }));
+        }
+
+        /// <summary>The combustion fields of a gas, each only when set. Read back by
+        /// <c>SceneFileLoader.ReadCombustion</c>.</summary>
+        internal static IEnumerable<XAttribute> CombustionAttributes(GasProperties g, CultureInfo inv) =>
+            CombustionAttributes(g.HeatOfCombustionJPerKg, g.CarbonAtoms, g.HydrogenAtoms,
+                g.SootYield, g.CoYield, g.LaminarBurningVelocityMPerS, inv);
+
+        private static IEnumerable<XAttribute> CombustionAttributes(double heat, double carbon, double hydrogen,
+            double soot, double co, double burningVelocity, CultureInfo inv)
+        {
+            if (heat > 0) yield return new XAttribute("HeatComb", heat.ToString(inv));
+            if (carbon > 0) yield return new XAttribute("CAtoms", carbon.ToString(inv));
+            if (hydrogen > 0) yield return new XAttribute("HAtoms", hydrogen.ToString(inv));
+            if (soot > 0) yield return new XAttribute("SootYield", soot.ToString(inv));
+            if (co > 0) yield return new XAttribute("CoYield", co.ToString(inv));
+            if (burningVelocity > 0) yield return new XAttribute("BurningVelocity", burningVelocity.ToString(inv));
         }
 
         private static XElement? SerializeTopLevelSources(Scene3D scene, CultureInfo inv)
@@ -298,6 +318,7 @@ namespace DisperSim3D.Core
                     new XAttribute("ERPG2", src.Gas.ERPG2.ToString(inv)),
                     new XAttribute("ERPG3", src.Gas.ERPG3.ToString(inv)),
                     new XAttribute("HalfLife", src.Gas.HalfLifeS.ToString(inv)),
+                    CombustionAttributes(src.Gas, inv),
                     new XAttribute("DryDep", src.Gas.DryDepositionVelocityMPerS.ToString(inv)),
                     new XAttribute("Cryo", src.Gas.IsCryogenic.ToString())) : null,
                 invEl,
@@ -317,6 +338,8 @@ namespace DisperSim3D.Core
                     new XAttribute("WindFieldId", s.WindFieldId ?? ""),
                     new XAttribute("SolverType", s.SolverType.ToString()),
                     string.IsNullOrEmpty(s.ExtenderSolverId) ? null : new XAttribute("ExtenderSolverId", s.ExtenderSolverId),
+                    string.IsNullOrEmpty(s.FireSourceId) ? null : new XAttribute("FireSourceId", s.FireSourceId),
+                    string.IsNullOrEmpty(s.IgnitionId) ? null : new XAttribute("IgnitionId", s.IgnitionId),
                     new XAttribute("Status", s.Status.ToString()),
                     new XAttribute("StatusMessage", s.StatusMessage ?? ""),
                     new XAttribute("DomainSize", s.SnapshotDomainSizeM.ToString(inv)),
@@ -571,6 +594,8 @@ namespace DisperSim3D.Core
                     ? new XElement("GasMixture",
                         sc.GasMixture.Components.Select(gc =>
                             new XElement("Component",
+                                CombustionAttributes(gc.HeatOfCombustionJPerKg, gc.CarbonAtoms, gc.HydrogenAtoms,
+                                    gc.SootYield, gc.CoYield, gc.LaminarBurningVelocityMPerS, inv),
                                 new XAttribute("Name", gc.Name ?? ""),
                                 new XAttribute("MolarMass", gc.MolarMass.ToString(inv)),
                                 new XAttribute("MoleFrac", gc.MoleFraction.ToString(inv)),
@@ -712,6 +737,8 @@ namespace DisperSim3D.Core
                             new XAttribute("HeatComb", f.HeatOfCombustionJKg.ToString(inv)),
                             new XAttribute("RadFrac", f.RadiativeFraction.ToString(inv)),
                             new XAttribute("IsPool", f.IsPoolFire),
+                            new XAttribute("Kind", f.Kind.ToString()),
+                            new XAttribute("FireballMass", f.FireballMassKg.ToString(inv)),
                             new XAttribute("PoolDia", f.PoolDiameterM.ToString(inv)),
                             new XAttribute("BurnRate", f.PoolBurnRateKgM2S.ToString(inv)),
                             new XAttribute("RadModel", f.RadiationModel.ToString()),

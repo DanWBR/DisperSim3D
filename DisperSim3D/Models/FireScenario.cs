@@ -32,8 +32,19 @@ namespace DisperSim3D.Models
         Vertical = 2
     }
 
+    /// <summary>What burns at a <see cref="FireSource"/>.</summary>
+    public enum FireKind
+    {
+        /// <summary>A pressurised release burning as a jet from the orifice.</summary>
+        Jet = 0,
+        /// <summary>A liquid pool burning at its surface.</summary>
+        Pool = 1,
+        /// <summary>A fuel mass released at once and burning as a rising fireball (BLEVE).</summary>
+        Fireball = 2
+    }
+
     /// <summary>
-    /// Represents a fire source (jet fire or pool fire) in the 3D scene for thermal radiation analysis.
+    /// Represents a fire source (jet fire, pool fire or fireball) in the 3D scene for thermal radiation analysis.
     /// </summary>
     public class FireSource
     {
@@ -86,9 +97,34 @@ namespace DisperSim3D.Models
         public double RadiativeFraction { get; set; } = 0.2;
 
         /// <summary>
-        /// Gets or sets a value indicating whether this source is a pool fire. If <c>false</c>, it is treated as a jet fire.
+        /// Gets or sets what burns here: a jet, a pool or a fireball. Jets and pools radiate
+        /// through <see cref="RadiationModel"/>; a fireball is always the CCPS sphere of
+        /// <see cref="DisperSim3D.Core.FireballModel"/>, sized by <see cref="FireballMassKg"/>.
+        /// A solver extender that declares
+        /// <see cref="DisperSim3D.Extensibility.SolverCapabilities.Fire"/> can run any of them.
         /// </summary>
-        public bool IsPoolFire { get; set; }
+        public FireKind Kind { get; set; } = FireKind.Jet;
+
+        /// <summary>
+        /// Gets or sets a value indicating whether this source is a pool fire. Backed by
+        /// <see cref="Kind"/>: true sets it to Pool, false turns a pool back into a jet and
+        /// leaves a fireball alone. Kept so older code and project files still read.
+        /// </summary>
+        [Browsable(false)]
+        [System.Xml.Serialization.XmlIgnore]
+        public bool IsPoolFire
+        {
+            get => Kind == FireKind.Pool;
+            set => Kind = value ? FireKind.Pool : (Kind == FireKind.Pool ? FireKind.Jet : Kind);
+        }
+
+        /// <summary>
+        /// Gets or sets the fuel mass that burns in a fireball (kg), used when
+        /// <see cref="Kind"/> is Fireball. Default 1000 kg. Its emissive power uses
+        /// <see cref="HeatOfCombustionJKg"/>, and <see cref="StagnationPressurePa"/> as the
+        /// vessel pressure before failure when set, else <see cref="RadiativeFraction"/>.
+        /// </summary>
+        public double FireballMassKg { get; set; } = 1000.0;
 
         /// <summary>
         /// Gets or sets the pool diameter in meters, used when <see cref="IsPoolFire"/> is <c>true</c>. Default is 5.0 m.

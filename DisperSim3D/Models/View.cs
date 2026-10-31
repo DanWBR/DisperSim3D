@@ -16,7 +16,10 @@ namespace DisperSim3D.Models
         /// <summary>2D contour plane parallel to the XZ plane at PlanePosition (y).</summary>
         ContourXZ = 2,
         /// <summary>2D contour plane parallel to the YZ plane at PlanePosition (x).</summary>
-        ContourYZ = 3
+        ContourYZ = 3,
+        /// <summary>The simulation's per-triangle heat load ({time}_surface.bin) coloured on
+        /// the imported geometry. Reads SurfaceIncidentRadiationKwM2 or SurfaceTotalHeatFluxKwM2.</summary>
+        Surface = 4
     }
 
     /// <summary>
@@ -67,7 +70,25 @@ namespace DisperSim3D.Models
         ThermalDose = 17,
         /// <summary>Probability of fatality (0–1) from the thermal dose, via the
         /// Eisenberg probit.</summary>
-        FatalityProbability = 18
+        FatalityProbability = 18,
+        /// <summary>Soot mass concentration (kg/m³), the simulation's {time}_Soot.bin.</summary>
+        SootDensityKgM3 = 19,
+        /// <summary>Carbon monoxide volume fraction, the simulation's {time}_CO.bin.</summary>
+        COVolumeFraction = 20,
+        /// <summary>Carbon dioxide volume fraction, the simulation's {time}_CO2.bin.</summary>
+        CO2VolumeFraction = 21,
+        /// <summary>Oxygen volume fraction, the simulation's {time}_O2.bin. Its peak over
+        /// time is the lowest value each cell reached.</summary>
+        O2VolumeFraction = 22,
+        /// <summary>Visibility through smoke (m), the simulation's {time}_Vis.bin. Its peak
+        /// over time is the lowest value each cell reached.</summary>
+        VisibilityM = 23,
+        /// <summary>Incident radiative heat flux on the plant surfaces (kW/m²), from the
+        /// simulation's {time}_surface.bin; drawn by a Surface view.</summary>
+        SurfaceIncidentRadiationKwM2 = 24,
+        /// <summary>Total (radiative + convective) heat flux into the plant surfaces
+        /// (kW/m²), from the simulation's {time}_surface.bin; drawn by a Surface view.</summary>
+        SurfaceTotalHeatFluxKwM2 = 25
     }
 
     /// <summary>How the View collapses transient timesteps to a single field.</summary>
@@ -194,5 +215,10 @@ namespace DisperSim3D.Models
         [Browsable(false)]
         public bool IsContourPlane =>
             Kind == ViewKind.ContourXY || Kind == ViewKind.ContourXZ || Kind == ViewKind.ContourYZ;
+
+        /// <summary>True when the view colours the plant surfaces rather than drawing a field in space.</summary>
+        [XmlIgnore]
+        [Browsable(false)]
+        public bool IsSurface => Kind == ViewKind.Surface || FieldTransform.IsSurface(FieldProperty);
     }
 }

@@ -24,6 +24,12 @@ namespace DisperSim3D.Core
 
         /// <summary>Exact release mass fraction at a point, when the solver offers one.</summary>
         public Func<double, double, double, double> MassFractionAt { get; set; }
+
+        /// <summary>
+        /// The result grid of an extender run — its bounds say where the solver put it;
+        /// see <see cref="FireRuns.ApplyResultGrid"/>.
+        /// </summary>
+        public OpenFoamResult ResultGrid { get; set; }
     }
 
     public class MonitorTimeSeries
@@ -333,6 +339,58 @@ namespace DisperSim3D.Core
         /// scenario's <see cref="DispersionScenario.ExtenderSolverId"/>, hands it the
         /// scenario and the decoration boxes, and returns its last snapshot.
         /// </summary>
+        /// <summary>
+        /// A fire simulation (<see cref="Simulation.IsFireRun"/>) on its fire solver
+        /// extender. The result carries the run's folder and grid; nothing is written back
+        /// to <paramref name="sim"/>.
+        /// </summary>
+        private static HeadlessResult RunFire(Scene3D scene, Simulation sim, Action<string> log, CancellationToken cancel)
+        {
+            var obstacles = new List<BoundingBox>();
+            if (scene.Decorations != null)
+                foreach (var d in scene.Decorations)
+                    if (d != null && d.BoundingBox != null) obstacles.Add(d.BoundingBox);
+
+            string lastStep = null;
+            var (request, error) = FireRuns.Prepare(scene, sim, sim.SnapshotCfdConfig ?? new CfdConfiguration(), obstacles,
+                (fraction, step) =>
+                {
+                    if (string.IsNullOrEmpty(step) || step == lastStep) return;
+                    lastStep = step;
+                    log?.Invoke("  " + step);
+                }, cancel);
+            if (request == null) return new HeadlessResult { Success = false, Error = error };
+
+            var solver = Extensibility.SolverExtenderRegistry.Find(sim.ExtenderSolverId);
+            log?.Invoke(string.Format("Running fire solver: [{0}] {1} on '{2}'", solver.Code, solver.DisplayName, sim.Name));
+            Extensibility.SolverExtenderResult run;
+            try
+            {
+                run = solver.Run(request);
+            }
+            catch (OperationCanceledException)
+            {
+                return new HeadlessResult { Success = false, Error = "Cancelled" };
+            }
+            catch (Exception ex)
+            {
+                return new HeadlessResult { Success = false, Error = solver.DisplayName + " failed: " + ex.Message };
+            }
+            if (run == null || !run.Success)
+                return new HeadlessResult { Success = false, Error = run?.Error ?? "The fire solver returned no result.", CasePath = run?.CasePath };
+
+            var grid = FireRuns.ResultOf(run, request);
+            if (grid == null)
+                return new HeadlessResult { Success = false, Error = solver.DisplayName + " wrote no result channel.", CasePath = run.CasePath };
+            return new HeadlessResult
+            {
+                Success = true,
+                CasePath = run.CasePath ?? grid.CaseDir,
+                TimeStepCount = grid.TimeSteps.Count,
+                ResultGrid = grid
+            };
+        }
+
         private static HeadlessResult RunExtender(Scene3D scene, DispersionScenario scenario,
             CfdConfiguration cfdConfig, Action<string> log, CancellationToken cancel)
         {
@@ -381,6 +439,7 @@ namespace DisperSim3D.Core
             {
                 Success = true,
                 CasePath = run.CasePath,
+                ResultGrid = run.Result,
                 TimeStepCount = run.Result?.TimeSteps.Count ?? 0,
                 ConcentrationAt = run.Concentration,
                 MassFractionAt = run.MassFraction
@@ -577,6 +636,8 @@ namespace DisperSim3D.Core
         {
             if (scene == null || sim == null)
                 return new HeadlessResult { Success = false, Error = "scene or simulation is null" };
+            if (sim.IsFireRun)
+                return RunFire(scene, sim, log, cancel);
 
             var src = sim.SnapshotSource
                       ?? scene.TopLevelSources.FirstOrDefault(s => s.Id == sim.SourceId);

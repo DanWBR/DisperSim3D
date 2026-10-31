@@ -326,6 +326,22 @@ Sources for the flame, emissive-power and harm models described in
 - **Buck, A. L.** (1981). *New equations for computing vapor pressure and
   enhancement factor*. Journal of Applied Meteorology, 20, 1527–1532.  - 
   saturation vapour pressure feeding the transmissivity.
+- **CCPS** (2000). *Guidelines for Chemical Process Quantitative Risk
+  Analysis*, 2nd ed., AIChE Center for Chemical Process Safety, §2.2.6.  -
+  fireball diameter, duration, lift-off height and emissive power.
+- **Roberts, A. F.** (1981/82). *Thermal radiation hazards from releases of
+  LPG from pressurised storage*. Fire Safety Journal, 4, 197–212.  -
+  fireball correlations and the radiative fraction `0.27·P^0.32`.
+- **Tewarson, A.** (2002). *Generation of heat and chemical compounds in
+  fires*. SFPE Handbook of Fire Protection Engineering, 3rd ed., §3-4,
+  Table 3-4.14.  -  heats of combustion and CO and soot yields of the
+  library gases.
+- **NFPA 68** (2018). *Standard on Explosion Protection by Deflagration
+  Venting*, Annex D.  -  fundamental burning velocities of the library
+  gases.
+- **Hayakawa, A. et al.** (2015). *Laminar burning velocity and Markstein
+  length of ammonia/air premixed flames at various pressures*. Fuel, 159,
+  98–106.  -  ammonia burning velocity.
 - **Eisenberg, N. A., Lynch, C. J., Breeding, R. J.** (1975).
   *Vulnerability Model: A Simulation System for Assessing Damage Resulting
   from Marine Spills*. US Coast Guard CG-D-136-75.  -  thermal dose

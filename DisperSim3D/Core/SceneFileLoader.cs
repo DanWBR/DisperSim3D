@@ -141,14 +141,17 @@ namespace DisperSim3D.Core
                     {
                         foreach (var ce in mxEl.Elements("Component"))
                         {
-                            item.Mixture.Components.Add(new GasComponent
+                            var component = new GasComponent
                             {
                                 Name = (string)ce.Attribute("Name") ?? "",
                                 MolarMass = double.Parse((string)ce.Attribute("MolarMass") ?? "0.016", inv),
                                 MoleFraction = double.Parse((string)ce.Attribute("MoleFrac") ?? "1", inv),
                                 LFL = double.Parse((string)ce.Attribute("LFL") ?? "0", inv),
+                                UFL = double.Parse((string)ce.Attribute("UFL") ?? "0", inv),
                                 IDLH = double.Parse((string)ce.Attribute("IDLH") ?? "0", inv)
-                            });
+                            };
+                            ReadCombustion(ce, inv, component);
+                            item.Mixture.Components.Add(component);
                         }
                     }
                 }
@@ -165,9 +168,32 @@ namespace DisperSim3D.Core
                         ERPG2 = double.Parse((string)ge.Attribute("ERPG2") ?? "0", inv),
                         ERPG3 = double.Parse((string)ge.Attribute("ERPG3") ?? "0", inv)
                     };
+                    ReadCombustion(ge, inv, item.PureGas);
                 }
                 scene.GasLibrary.Add(item);
             }
+        }
+
+        /// <summary>The combustion fields <c>SceneFileSaver.CombustionAttributes</c> wrote;
+        /// absent in older files, which leaves them at zero (resolved from the gas name).</summary>
+        private static void ReadCombustion(XElement el, CultureInfo inv, GasProperties gas)
+        {
+            gas.HeatOfCombustionJPerKg = AttrDouble(el, inv, 0, "HeatComb");
+            gas.CarbonAtoms = AttrDouble(el, inv, 0, "CAtoms");
+            gas.HydrogenAtoms = AttrDouble(el, inv, 0, "HAtoms");
+            gas.SootYield = AttrDouble(el, inv, 0, "SootYield");
+            gas.CoYield = AttrDouble(el, inv, 0, "CoYield");
+            gas.LaminarBurningVelocityMPerS = AttrDouble(el, inv, 0, "BurningVelocity");
+        }
+
+        private static void ReadCombustion(XElement el, CultureInfo inv, GasComponent c)
+        {
+            c.HeatOfCombustionJPerKg = AttrDouble(el, inv, 0, "HeatComb");
+            c.CarbonAtoms = AttrDouble(el, inv, 0, "CAtoms");
+            c.HydrogenAtoms = AttrDouble(el, inv, 0, "HAtoms");
+            c.SootYield = AttrDouble(el, inv, 0, "SootYield");
+            c.CoYield = AttrDouble(el, inv, 0, "CoYield");
+            c.LaminarBurningVelocityMPerS = AttrDouble(el, inv, 0, "BurningVelocity");
         }
 
         private static void DeserializeTopLevelSources(XElement root, CultureInfo inv, Scene3D scene)
@@ -205,6 +231,8 @@ namespace DisperSim3D.Core
                     (string)se.Attribute("SolverType") ?? "GaussianPuff",
                     CfdSolverType.GaussianPuff);
                 sim.ExtenderSolverId = (string)se.Attribute("ExtenderSolverId");
+                sim.FireSourceId = (string)se.Attribute("FireSourceId");
+                sim.IgnitionId = (string)se.Attribute("IgnitionId");
                 SimulationStatus statusVal;
                 if (Enum.TryParse((string)se.Attribute("Status") ?? "Configured", out statusVal))
                     sim.Status = statusVal;
@@ -322,6 +350,7 @@ namespace DisperSim3D.Core
                     HalfLifeS = double.Parse((string)gasEl.Attribute("HalfLife") ?? "0", inv),
                     DryDepositionVelocityMPerS = double.Parse((string)gasEl.Attribute("DryDep") ?? "0", inv)
                 };
+                ReadCombustion(gasEl, inv, s.Gas);
                 if (bool.TryParse((string)gasEl.Attribute("Cryo"), out bool cryo)) s.Gas.IsCryogenic = cryo;
             }
 
@@ -552,14 +581,16 @@ namespace DisperSim3D.Core
                 sc.GasMixture = new GasMixture();
                 foreach (var ce in gmEl.Elements("Component"))
                 {
-                    sc.GasMixture.Components.Add(new GasComponent
+                    var component = new GasComponent
                     {
                         Name = (string)ce.Attribute("Name") ?? "",
                         MolarMass = double.Parse((string)ce.Attribute("MolarMass") ?? "0.016", inv),
                         MoleFraction = double.Parse((string)ce.Attribute("MoleFrac") ?? "1", inv),
                         LFL = double.Parse((string)ce.Attribute("LFL") ?? "0", inv),
                         IDLH = double.Parse((string)ce.Attribute("IDLH") ?? "0", inv)
-                    });
+                    };
+                    ReadCombustion(ce, inv, component);
+                    sc.GasMixture.Components.Add(component);
                 }
             }
 
@@ -597,14 +628,19 @@ namespace DisperSim3D.Core
             if (monEl == null) return;
             foreach (var me in monEl.Elements("Monitor"))
             {
-                scene.MonitorPoints.Add(new MonitorPoint3D
+                var monitor = new MonitorPoint3D
                 {
                     Name = (string)me.Attribute("Name") ?? "",
                     Position = new Point3D(
                         double.Parse((string)me.Attribute("PosX") ?? "0", inv),
                         double.Parse((string)me.Attribute("PosY") ?? "0", inv),
-                        double.Parse((string)me.Attribute("PosZ") ?? "0", inv))
-                });
+                        double.Parse((string)me.Attribute("PosZ") ?? "0", inv)),
+                    Visible = AttrBool(me, true, "Visible")
+                };
+                if (!string.IsNullOrEmpty((string)me.Attribute("Id"))) monitor.Id = (string)me.Attribute("Id");
+                if (Enum.TryParse((string)me.Attribute("MeasuredQuantity"), out ViewFieldProperty quantity))
+                    monitor.MeasuredQuantity = quantity;
+                scene.MonitorPoints.Add(monitor);
             }
         }
 
@@ -678,8 +714,13 @@ namespace DisperSim3D.Core
                     StagnationPressurePa = AttrDouble(fe, inv, 0, "StagPressure"),
                     StagnationTemperatureK = AttrDouble(fe, inv, 288.15, "StagTemp"),
                     GasGamma = AttrDouble(fe, inv, 1.31, "Gamma"),
+                    FireballMassKg = AttrDouble(fe, inv, 1000.0, "FireballMass"),
                     IsVisible = AttrBool(fe, true, "IsVisible")
                 };
+
+                // Files written before fireballs carry only IsPool.
+                if (Enum.TryParse((string)fe.Attribute("Kind"), out FireKind kind))
+                    fire.Kind = kind;
 
                 // Files written before the solid-flame model carry no RadModel;
                 // they were computed as point sources, so that is what they reload as.
@@ -817,15 +858,21 @@ namespace DisperSim3D.Core
             if (detEl == null) return;
             foreach (var de in detEl.Elements("Detector"))
             {
-                scene.GasDetectors.Add(new GasDetector3D
+                var detector = new GasDetector3D
                 {
                     Name = (string)de.Attribute("Name") ?? "",
                     Position = new Point3D(
                         double.Parse((string)de.Attribute("PosX") ?? "0", inv),
                         double.Parse((string)de.Attribute("PosY") ?? "0", inv),
                         double.Parse((string)de.Attribute("PosZ") ?? "0", inv)),
-                    ThresholdKgM3 = double.Parse((string)de.Attribute("Threshold") ?? "0.033", inv)
-                });
+                    ThresholdKgM3 = double.Parse((string)de.Attribute("Threshold") ?? "0.033", inv),
+                    Visible = AttrBool(de, true, "Visible")
+                };
+                if (!string.IsNullOrEmpty((string)de.Attribute("Id"))) detector.Id = (string)de.Attribute("Id");
+                if (Enum.TryParse((string)de.Attribute("MeasuredQuantity"), out ViewFieldProperty quantity))
+                    detector.MeasuredQuantity = quantity;
+                detector.Threshold = AttrDouble(de, inv, detector.Threshold, "MeasuredThreshold");
+                scene.GasDetectors.Add(detector);
             }
         }
 
