@@ -46,6 +46,20 @@ namespace DisperSim3D.Models
             }
         }
 
+        /// <summary>Ratio of specific heats c_p/c_v of the ideal gas, from <see cref="EffectiveSpecificHeatJPerKgK"/>
+        /// and the molar mass (c_v = c_p − R/M); 1.4 without a molar mass.</summary>
+        [System.ComponentModel.Browsable(false)]
+        [System.Xml.Serialization.XmlIgnore]
+        public double EffectiveHeatCapacityRatio
+        {
+            get
+            {
+                if (!(MolarMass > 0)) return 1.4;
+                double cp = EffectiveSpecificHeatJPerKgK, cv = cp - 8.314462618 / MolarMass;
+                return cv > 0 ? Math.Max(1.01, Math.Min(1.67, cp / cv)) : 1.4;
+            }
+        }
+
         [Category("Combustion")]
         [Description("Net heat of complete combustion, J/kg. 0 = from the gas name (Tewarson, SFPE Handbook 2002).")]
         public double HeatOfCombustionJPerKg { get; set; }

@@ -115,10 +115,12 @@ namespace DisperSim3D.Models
             // by each component's mass (x_i·M_i), inerts counting as mass that releases and
             // yields nothing. The burning velocity is mole-weighted over the components
             // that have one — a first estimate, not a mixing rule for flame speeds.
-            double carbon = 0, hydrogen = 0, mass = 0, heat = 0, soot = 0, co = 0, sl = 0, slFrac = 0;
+            // The specific heat is mass-weighted, each component's from its name or molar mass.
+            double carbon = 0, hydrogen = 0, mass = 0, heat = 0, soot = 0, co = 0, sl = 0, slFrac = 0, cp = 0;
             foreach (var c in Mixture.Components)
             {
                 double x = c.MoleFraction, m = c.MoleFraction * c.MolarMass;
+                cp += m * new GasProperties { Name = c.Name, MolarMass = c.MolarMass }.EffectiveSpecificHeatJPerKgK;
                 carbon += x * FuelCombustionData.Resolve(c.CarbonAtoms, c.Name, d => d.CarbonAtoms);
                 hydrogen += x * FuelCombustionData.Resolve(c.HydrogenAtoms, c.Name, d => d.HydrogenAtoms);
                 mass += m;
@@ -129,12 +131,13 @@ namespace DisperSim3D.Models
                 if (s > 0) { sl += x * s; slFrac += x; }
             }
             if (totalFrac > 0) { carbon /= totalFrac; hydrogen /= totalFrac; }
-            if (mass > 0) { heat /= mass; soot /= mass; co /= mass; }
+            if (mass > 0) { heat /= mass; soot /= mass; co /= mass; cp /= mass; }
 
             return new GasProperties
             {
                 Name = Name,
                 MolarMass = mw,
+                SpecificHeatJPerKgK = cp,
                 LFL = lflMix,
                 UFL = uflMix,
                 IDLH = idlh,
