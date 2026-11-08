@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace DisperSim3D.Core
 {
@@ -99,6 +100,59 @@ namespace DisperSim3D.Core
             double dose = 1.0e4 * Math.Exp((probit + 14.9) / 2.56);
             double fluxWm2 = Math.Pow(dose / exposureS, 3.0 / 4.0);
             return fluxWm2 / 1000.0;
+        }
+
+        // ── Time series ─────────────────────────────────────────────────────
+
+        /// <summary>
+        /// The dose of a person who stays <paramref name="exposureS"/> seconds from each
+        /// stored time on: <c>∫ I(t)^(4/3) dt</c> over <c>[tₖ, tₖ + exposure]</c>, with
+        /// the dose rate <c>I^(4/3)</c> linear between stored times and held at its last
+        /// value after them (a fire still burning when the run ended keeps burning). A
+        /// single sample is held for the whole window, which is <see cref="Dose"/> itself.
+        /// </summary>
+        /// <param name="timesS">Stored times, ascending (s).</param>
+        /// <param name="fluxKwM2">Flux at each time (kW/m²).</param>
+        public static double[] ForwardWindowDoses(IReadOnlyList<double> timesS, IReadOnlyList<double> fluxKwM2, double exposureS)
+        {
+            int n = Math.Min(timesS?.Count ?? 0, fluxKwM2?.Count ?? 0);
+            var doses = new double[n];
+            if (n == 0 || exposureS <= 0) return doses;
+
+            // Dose rate and its running integral at each stored time.
+            var rate = new double[n];
+            var cumulative = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                rate[i] = Dose(fluxKwM2[i], 1.0);
+                if (i > 0) cumulative[i] = cumulative[i - 1] + 0.5 * (rate[i - 1] + rate[i]) * (timesS[i] - timesS[i - 1]);
+            }
+
+            // Integral from timesS[0] to x; the end of the window only moves forward.
+            int seg = 0;
+            double Integral(double x)
+            {
+                if (x >= timesS[n - 1]) return cumulative[n - 1] + rate[n - 1] * (x - timesS[n - 1]);
+                while (seg < n - 2 && x > timesS[seg + 1]) seg++;
+                double span = timesS[seg + 1] - timesS[seg];
+                double rx = span > 0 ? rate[seg] + (rate[seg + 1] - rate[seg]) * (x - timesS[seg]) / span : rate[seg];
+                return cumulative[seg] + 0.5 * (rate[seg] + rx) * (x - timesS[seg]);
+            }
+
+            for (int k = 0; k < n; k++)
+                doses[k] = Integral(timesS[k] + exposureS) - cumulative[k];
+            return doses;
+        }
+
+        /// <summary>
+        /// The worst of <see cref="ForwardWindowDoses"/>: the dose of the most harmful
+        /// exposure window that starts at a stored time.
+        /// </summary>
+        public static double WorstWindowDose(IReadOnlyList<double> timesS, IReadOnlyList<double> fluxKwM2, double exposureS)
+        {
+            double worst = 0;
+            foreach (double d in ForwardWindowDoses(timesS, fluxKwM2, exposureS)) worst = Math.Max(worst, d);
+            return worst;
         }
 
         // ── Fields ──────────────────────────────────────────────────────────

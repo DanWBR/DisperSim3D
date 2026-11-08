@@ -212,4 +212,17 @@ namespace DisperSim3D.Extensibility
         /// </summary>
         Task<string?> ShowSimulationResultAsync(string simulationId, double? timeS);
     }
+
+    /// <summary>
+    /// Fourth version of the host contract: the 3D view's camera. An extender checks
+    /// for it with <c>host is IExtenderHost4</c>.
+    /// </summary>
+    public interface IExtenderHost4 : IExtenderHost3
+    {
+        /// <summary>The 3D view's camera: where it stands and, as its look direction, the vector to the point it looks at.</summary>
+        CameraPreset GetCamera();
+
+        /// <summary>Moves the 3D view's camera to <paramref name="camera"/> and redraws.</summary>
+        void SetCamera(CameraPreset camera);
+    }
 }

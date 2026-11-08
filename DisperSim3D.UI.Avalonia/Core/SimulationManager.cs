@@ -46,6 +46,9 @@ namespace DisperSim3D.UI.Avalonia.Core
         public OpenFoamEnvironment? Environment { get; set; }
         public List<BoundingBox>? Obstacles { get; set; }
         public Dictionary<string, double[]>? HpLeakProfiles { get; set; }
+
+        /// <summary>The fire simulation this job runs on its fire solver extender; null for a release.</summary>
+        public Simulation? FireSimulation { get; set; }
     }
 
     public class SimulationManager
@@ -79,10 +82,10 @@ namespace DisperSim3D.UI.Avalonia.Core
         public SimulationJob Enqueue(DispersionScenario scenario, CfdSolverType solverType,
             CfdConfiguration config, Scene3D scene, OpenFoamEnvironment? env,
             List<BoundingBox>? obstacles = null, Dictionary<string, double[]>? hpLeakProfiles = null,
-            string? simulationId = null)
+            string? simulationId = null, Simulation? fireSimulation = null)
         {
-            string solverTag = DisperSim3D.Core.SolverCode.Of(solverType);
-            string solverLabel = DisperSim3D.Core.SolverCode.DisplayName(solverType);
+            string solverTag = DisperSim3D.Core.SolverCode.Of(solverType, scenario.ExtenderSolverId);
+            string solverLabel = DisperSim3D.Core.SolverCode.DisplayName(solverType, scenario.ExtenderSolverId);
 
             var job = new SimulationJob
             {
@@ -94,7 +97,8 @@ namespace DisperSim3D.UI.Avalonia.Core
                 Scene = scene,
                 Environment = env,
                 Obstacles = obstacles,
-                HpLeakProfiles = hpLeakProfiles
+                HpLeakProfiles = hpLeakProfiles,
+                FireSimulation = fireSimulation
             };
 
             lock (_lock) _allJobs.Add(job);
@@ -253,6 +257,9 @@ namespace DisperSim3D.UI.Avalonia.Core
                         break;
                     case CfdSolverType.FluidX3DDispersionSteady:
                         await RunFluidX3DSteadyAsync(job);
+                        break;
+                    case CfdSolverType.Extender:
+                        await RunExtenderAsync(job);
                         break;
                 }
 
@@ -636,6 +643,50 @@ namespace DisperSim3D.UI.Avalonia.Core
             return tcs.Task;
         }
 
+        /// <summary>Dispatch for <see cref="CfdSolverType.Extender"/>: runs the extender's
+        /// solver on a worker thread and keeps its snapshots as the result.</summary>
+        private async Task RunExtenderAsync(SimulationJob job)
+        {
+            var scenario = job.Scenario;
+            var solver = DisperSim3D.Extensibility.SolverExtenderRegistry.Find(scenario.ExtenderSolverId)
+                ?? throw new InvalidOperationException("Extender solver '" + scenario.ExtenderSolverId + "' is not installed.");
+            var config = job.CfdConfig ?? scenario.CfdConfig ?? new CfdConfiguration();
+            void Progress(double fraction, string step)
+            {
+                if (fraction >= 0) job.Progress = fraction;
+                if (step != null) { job.StatusText = step; job.LastLogLine = step; }
+                JobProgressUpdated?.Invoke(this, (job, new OpenFoamProgress { Fraction = fraction, Step = step, LogLine = step }));
+            }
+
+            DisperSim3D.Extensibility.SolverExtenderRequest request;
+            if (job.FireSimulation != null)
+            {
+                var (fireRequest, error) = FireRuns.Prepare(job.Scene, job.FireSimulation, config,
+                    job.Obstacles ?? new List<BoundingBox>(), Progress, job.Cts.Token);
+                request = fireRequest ?? throw new InvalidOperationException(error);
+            }
+            else
+                request = new DisperSim3D.Extensibility.SolverExtenderRequest(job.Scene, scenario, config,
+                    job.Obstacles ?? new List<BoundingBox>(), Progress, job.Cts.Token);
+
+            // The simulation's values of the solver's own options.
+            var sim = job.FireSimulation ?? job.Scene?.Simulations.FirstOrDefault(s => s.Id == job.SimulationId);
+            request.Options = DisperSim3D.Extensibility.SolverOptionValues.For(sim, solver);
+
+            var run = await Task.Run(() => solver.Run(request), job.Cts.Token);
+            job.Cts.Token.ThrowIfCancellationRequested();
+            // A fire run may write only its folder; the grid then comes from the channels it wrote.
+            var result = run != null && run.Success
+                ? (job.FireSimulation != null ? FireRuns.ResultOf(run, request) : run.Result)
+                : null;
+            if (run == null || !run.Success || result == null)
+                throw new InvalidOperationException(run?.Error ?? solver.DisplayName + " returned no result.");
+
+            var entry = BuildResultEntry(job, scenario, run.CasePath ?? result.CaseDir, result);
+            entry.Tag = result;
+            job.ResultEntry = entry;
+        }
+
         private Task RunFluidX3DFireAsync(SimulationJob job)
         {
             var tcs = new TaskCompletionSource<bool>();
@@ -725,9 +776,12 @@ namespace DisperSim3D.UI.Avalonia.Core
         private static CfdSimulationEntry BuildResultEntry(SimulationJob job,
             DispersionScenario scenario, string? casePath, OpenFoamResult result)
         {
-            string solverLabel = "[" + DisperSim3D.Core.SolverCode.Of(job.SolverType) + "] "
-                + DisperSim3D.Core.SolverCode.DisplayName(job.SolverType);
-            bool isSteady = job.SolverType == CfdSolverType.FluidX3DDispersionSteady;
+            string? extenderId = job.Scenario?.ExtenderSolverId;
+            string solverLabel = "[" + DisperSim3D.Core.SolverCode.Of(job.SolverType, extenderId) + "] "
+                + DisperSim3D.Core.SolverCode.DisplayName(job.SolverType, extenderId);
+            bool isSteady = job.SolverType == CfdSolverType.FluidX3DDispersionSteady
+                || (job.SolverType == CfdSolverType.Extender
+                    && DisperSim3D.Extensibility.SolverExtenderRegistry.Find(extenderId)?.IsSteady == true);
             return new CfdSimulationEntry
             {
                 Name = job.Name,

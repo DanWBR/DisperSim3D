@@ -100,6 +100,12 @@ namespace DisperSim3D.UI.Avalonia.Views
                 NudERPG1.Value = (decimal)Clamp(g.ERPG1, 0, 10);
                 NudERPG2.Value = (decimal)Clamp(g.ERPG2, 0, 10);
                 NudERPG3.Value = (decimal)Clamp(g.ERPG3, 0, 10);
+                NudHeatComb.Value = (decimal)Clamp(g.HeatOfCombustionJPerKg / 1e6, 0, 200);
+                NudCAtoms.Value = (decimal)Clamp(g.CarbonAtoms, 0, 40);
+                NudHAtoms.Value = (decimal)Clamp(g.HydrogenAtoms, 0, 80);
+                NudSootYield.Value = (decimal)Clamp(g.SootYield, 0, 1);
+                NudCoYield.Value = (decimal)Clamp(g.CoYield, 0, 1);
+                NudBurningVelocity.Value = (decimal)Clamp(g.LaminarBurningVelocityMPerS, 0, 20);
             }
             GasKind_Changed(null, new RoutedEventArgs());
         }
@@ -143,7 +149,13 @@ namespace DisperSim3D.UI.Avalonia.Views
                     IDLH = (double)(NudIDLH.Value ?? 0m),
                     ERPG1 = (double)(NudERPG1.Value ?? 0m),
                     ERPG2 = (double)(NudERPG2.Value ?? 0m),
-                    ERPG3 = (double)(NudERPG3.Value ?? 0m)
+                    ERPG3 = (double)(NudERPG3.Value ?? 0m),
+                    HeatOfCombustionJPerKg = (double)(NudHeatComb.Value ?? 0m) * 1e6,
+                    CarbonAtoms = (double)(NudCAtoms.Value ?? 0m),
+                    HydrogenAtoms = (double)(NudHAtoms.Value ?? 0m),
+                    SootYield = (double)(NudSootYield.Value ?? 0m),
+                    CoYield = (double)(NudCoYield.Value ?? 0m),
+                    LaminarBurningVelocityMPerS = (double)(NudBurningVelocity.Value ?? 0m)
                 };
             }
             Close(true);
@@ -156,7 +168,10 @@ namespace DisperSim3D.UI.Avalonia.Views
         private static GasComponent Clone(GasComponent c) => new GasComponent
         {
             Name = c.Name, MolarMass = c.MolarMass,
-            MoleFraction = c.MoleFraction, LFL = c.LFL, IDLH = c.IDLH
+            MoleFraction = c.MoleFraction, LFL = c.LFL, UFL = c.UFL, IDLH = c.IDLH,
+            HeatOfCombustionJPerKg = c.HeatOfCombustionJPerKg, CarbonAtoms = c.CarbonAtoms,
+            HydrogenAtoms = c.HydrogenAtoms, SootYield = c.SootYield, CoYield = c.CoYield,
+            LaminarBurningVelocityMPerS = c.LaminarBurningVelocityMPerS
         };
     }
 }

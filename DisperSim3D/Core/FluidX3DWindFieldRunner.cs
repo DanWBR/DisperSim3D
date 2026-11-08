@@ -41,9 +41,8 @@ namespace DisperSim3D.Core
             return Run(windScenario, obstacles, null, progress);
         }
 
-        /// <summary>Run with an optional GPU triangle bundle. When non-null and non-empty,
-        /// FluidX3D's GPU raycasting voxelizer is used; otherwise the per-triangle AABB
-        /// fallback runs on the CPU bridge.</summary>
+        /// <summary>Run with an optional triangle bundle. When non-null and non-empty,
+        /// the lattice nodes the meshes occupy become solid; otherwise the boxes do.</summary>
         public bool Run(WindFieldScenario windScenario, List<BoundingBox> obstacles,
             TriangleBundle triangles, Action<double, string> progress)
         {
@@ -81,7 +80,12 @@ namespace DisperSim3D.Core
                 double domain = windScenario.DomainSizeM;
                 double height = windScenario.DomainHeightM > 0 ? windScenario.DomainHeightM : domain;
 
-                var meteo = windScenario.Meteo;
+                // A calm case runs at the dispersion model's minimum, in its own
+                // direction, as the tracer it feeds assumes; 0 m/s would leave the
+                // field empty.
+                var meteo = CalmWind.AtLeast(windScenario.Meteo, CalmWind.FluidX3DMinimumMPerS);
+                string calm = CalmWind.Note(windScenario.Meteo, CalmWind.FluidX3DMinimumMPerS, "FluidX3D wind");
+                if (calm != null) progress?.Invoke(0.0, calm);
                 var wind = meteo.WindVector;
                 double speed = Math.Sqrt(wind.X * wind.X + wind.Y * wind.Y + wind.Z * wind.Z);
                 if (speed < 1e-3) speed = 1e-3;
@@ -128,15 +132,13 @@ namespace DisperSim3D.Core
                     int groundType = windScenario.FluidX3DGroundBC == FluidX3DGroundBC.FreeSlip ? 1 : 0;
                     FluidX3DBridge.fx3d_set_z_boundaries_ex(handle, groundType, uxLat, uyLat, uzLat);
 
-                    // Obstacles — prefer GPU-side triangle voxelization (FluidX3D
-                    // raycasts every cell against the mesh, accurate for curved
-                    // surfaces). Fall back to per-triangle AABB on the CPU bridge
-                    // when no triangle bundle was supplied.
+                    // Obstacles — the meshes cell by cell when there are triangles,
+                    // otherwise the boxes.
                     int obstacleBoxes;
                     if (triangles != null && triangles.TriangleCount > 0)
                     {
-                        obstacleBoxes = FluidX3DObstacleVoxelizer.VoxelizeTrianglesOnGpu(
-                            triangles, handle, units);
+                        obstacleBoxes = FluidX3DObstacleVoxelizer.VoxelizeTriangles(
+                            triangles, handle, units, nx, ny, nz, domain, height);
                     }
                     else
                     {

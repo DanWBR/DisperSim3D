@@ -129,18 +129,22 @@ namespace DisperSim3D.Core
                             0.0084 * tracerCellM * ws2 / 0.7);
                     }
 
+                    // The decorations' meshes block the tracer cell by cell; a decoration
+                    // whose mesh cannot be read blocks its bounding box.
+                    DecorationSolids solids = DecorationSolids.FromDecorations(scene?.Decorations);
+
                     DispersionTracerEngine passiveEngine = null;
                     BuoyantTracerEngine buoyantEngine = null;
 
                     if (useBuoyant)
                     {
                         buoyantEngine = new BuoyantTracerEngine(wind, domain, height, tnx, tny, tnz,
-                            diff, gasMW, ambientT, ambientP, 2.2e-5, decay, _obstacles);
+                            diff, gasMW, ambientT, ambientP, 2.2e-5, decay, _obstacles, solids);
                     }
                     else
                     {
                         passiveEngine = new DispersionTracerEngine(wind, domain, height, nx, ny, nz,
-                            diff, decay, _obstacles);
+                            diff, decay, _obstacles, solids);
                     }
 
                     if (src != null)

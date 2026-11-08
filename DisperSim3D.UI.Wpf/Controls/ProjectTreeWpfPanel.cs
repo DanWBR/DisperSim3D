@@ -134,7 +134,7 @@ namespace DisperSim3D.Controls
                     ?? sim.SnapshotSource?.Name ?? "?";
                 string wfName = _scene.WindFieldScenarios.FirstOrDefault(w => w.Id == sim.WindFieldId)?.Name
                     ?? "?";
-                string solverTag = DisperSim3D.Core.SolverCode.Of(sim.SolverType);
+                string solverTag = DisperSim3D.Core.SolverCode.Of(sim.SolverType, sim.ExtenderSolverId);
                 string label = string.Format("{0}  [{1}]  [{2} / {3}]", sim.Name, solverTag, srcName, wfName);
                 sims.Items.Add(MakeNode(label, NodeKind.SimulationItem, sim.Id,
                     glyph: "◉",

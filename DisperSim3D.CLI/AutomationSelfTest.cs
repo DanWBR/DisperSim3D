@@ -28,6 +28,24 @@ namespace DisperSim3D.CLI
     /// </summary>
     internal static class AutomationSelfTest
     {
+        /// <summary>A solver that only offers options, for the solver-options routes.</summary>
+        private sealed class OptionsStandIn : ISolverExtender, ISolverExtenderOptions
+        {
+            public const string SolverId = "SelfTestOptions";
+            public string Id => SolverId;
+            public string Code => "STOPTS";
+            public string DisplayName => "Self-test solver with options";
+            public IReadOnlyList<string> Aliases => new[] { "selftest-options" };
+            public bool IsSteady => true;
+            public SolverExtenderResult Run(SolverExtenderRequest request) => SolverExtenderResult.Fail("not a real solver");
+            public IReadOnlyList<SolverOption> Options => new[]
+            {
+                new SolverOption("iterations", "Iterations", SolverOptionKind.Integer, "8") { Minimum = 1, Maximum = 100 },
+                new SolverOption("gpu", "GPU", SolverOptionKind.Boolean, "false"),
+                new SolverOption("mode", "Mode", SolverOptionKind.Choice, "accurate") { Choices = new[] { "accurate", "fast" } },
+            };
+        }
+
         private const string CollectionId = "DisperSim3D.Automation";
 
         public static int Run(string? extenderDir, TextWriter output)
@@ -154,6 +172,108 @@ namespace DisperSim3D.CLI
                 await PostJson(http, "simulations/show", new { id = simId });
                 Check(host.Shown == (simId, (double?)null), "POST /simulations/show without timeS asks for the last snapshot");
 
+                // ── Solver options ───────────────────────────────────────
+                var optionsSolver = new OptionsStandIn();
+                SolverExtenderRegistry.Register(optionsSolver);
+                JsonNode? solvers = await GetJson(http, "solvers");
+                var listed = solvers?["extenders"]?.AsArray().FirstOrDefault(e => e?["id"]?.GetValue<string>() == OptionsStandIn.SolverId);
+                Check(listed?["options"]?.AsArray().Count == 3 && listed?["options"]?[0]?["kind"]?.GetValue<string>() == "Integer" &&
+                      listed?["options"]?[0]?["defaultValue"]?.GetValue<string>() == "8" && listed?["options"]?[2]?["choices"]?.AsArray().Count == 2,
+                      "GET /solvers lists an extender solver's options", listed?.ToJsonString());
+                JsonNode? withOptions = await PostJson(http, "simulations", new
+                {
+                    source = "S-1", solver = OptionsStandIn.SolverId, name = "With options",
+                    options = new Dictionary<string, object> { ["iterations"] = 12, ["gpu"] = true }
+                });
+                string? optId = withOptions?["simulation"]?["id"]?.GetValue<string>();
+                Check(withOptions?["simulation"]?["options"]?["iterations"]?.GetValue<string>() == "12" &&
+                      withOptions?["simulation"]?["options"]?["gpu"]?.GetValue<string>() == "true",
+                      "POST /simulations sets the solver's options", withOptions?.ToJsonString());
+                var outOfRange = await Post(http, "simulations", new { source = "S-1", solver = OptionsStandIn.SolverId, options = new { iterations = 500 } });
+                Check(outOfRange.StatusCode == HttpStatusCode.BadRequest, "an option value out of range is 400");
+                var unknownOption = await Post(http, "simulations/options", new { id = optId, options = new { nothing = 1 } });
+                Check(unknownOption.StatusCode == HttpStatusCode.BadRequest, "an option the solver does not offer is 400");
+                JsonNode? changed = await PostJson(http, "simulations/options", new
+                {
+                    id = optId, options = new Dictionary<string, object?> { ["iterations"] = null, ["mode"] = "Fast" }
+                });
+                Check(changed?["simulation"]?["options"]?["iterations"] == null && changed?["simulation"]?["options"]?["mode"]?.GetValue<string>() == "fast" &&
+                      changed?["simulation"]?["options"]?["gpu"]?.GetValue<string>() == "true",
+                      "POST /simulations/options sets one, clears another and keeps the rest", changed?.ToJsonString());
+                var halfBad = await Post(http, "simulations/options", new { id = optId, options = new Dictionary<string, object> { ["iterations"] = 5, ["mode"] = "bogus" } });
+                var optSim = host.Scene.Simulations.First(s => s.Id == optId);
+                Check(halfBad.StatusCode == HttpStatusCode.BadRequest && optSim.ExtenderOptions.All(o => o.Key != "iterations"),
+                      "a request with one bad value changes nothing");
+                var runOptions = SolverOptionValues.For(optSim, optionsSolver);
+                Check(runOptions.Count == 2 && runOptions["gpu"] == "true" && runOptions["mode"] == "fast",
+                      "a run gets the simulation's values of its solver's options", string.Join(", ", runOptions.Select(kv => kv.Key + "=" + kv.Value)));
+                string withOpts = Path.Combine(work, "options.dsproj");
+                await PostJson(http, "project/save", new { path = withOpts });
+                await PostJson(http, "project/open", new { path = withOpts });
+                JsonNode? reopened = await GetJson(http, "simulations");
+                var again = reopened?["simulations"]?.AsArray().FirstOrDefault(x => x?["name"]?.GetValue<string>() == "With options");
+                Check(again?["options"]?["mode"]?.GetValue<string>() == "fast" && again?["options"]?["gpu"]?.GetValue<string>() == "true",
+                      "a simulation's solver options survive saving and reopening the project", again?.ToJsonString());
+
+                int refreshesBefore = host.Refreshes;
+                JsonNode? view = await PostJson(http, "views", new
+                {
+                    simulation = "Plume", kind = "ContourXY", field = "Temperature",
+                    planePosition = 8, minValue = 300, maxValue = 2000, clipToRange = true, colorMap = "Inferno"
+                });
+                string? viewId = view?["view"]?["id"]?.GetValue<string>();
+                View? made = host.Scene.Views.FirstOrDefault(v => v.Id == viewId);
+                Check(view?["ok"]?.GetValue<bool>() == true && made != null && made.SimulationId == simId &&
+                      made.Kind == ViewKind.ContourXY && made.FieldProperty == ViewFieldProperty.Temperature &&
+                      made.PlanePosition == 8 && made.ClipToRange && made.ColorMap == ColorMapName.Inferno &&
+                      host.Refreshes > refreshesBefore,
+                      "POST /views adds a view by simulation name and redraws", view?.ToJsonString());
+                var badKind = await Post(http, "views", new { simulation = simId, kind = "Hologram" });
+                Check(badKind.StatusCode == HttpStatusCode.BadRequest, "an unknown view kind is 400");
+                var noSim = await Post(http, "views", new { simulation = "Nowhere" });
+                Check(noSim.StatusCode == HttpStatusCode.NotFound, "a view of an unknown simulation is 404");
+                JsonNode? updated = await PostJson(http, "views/update", new { id = viewId, visible = false, isoColor = "#FF8800" });
+                Check(updated?["ok"]?.GetValue<bool>() == true && made?.IsVisible == false && made.PlanePosition == 8,
+                      "POST /views/update changes only the fields given", updated?.ToJsonString());
+                JsonNode? views = await GetJson(http, "views");
+                Check(views?["views"]?[0]?["simulation"]?.GetValue<string>() == "Plume" &&
+                      views?["views"]?[0]?["clipToRange"]?.GetValue<bool>() == true, "GET /views lists the views", views?.ToJsonString());
+                JsonNode? deleted = await PostJson(http, "views/delete", new { id = viewId });
+                Check(deleted?["ok"]?.GetValue<bool>() == true && host.Scene.Views.Count == 0, "POST /views/delete removes it");
+                Check((await Post(http, "views/delete", new { id = viewId })).StatusCode == HttpStatusCode.NotFound,
+                      "deleting an unknown view is 404");
+
+                host.Scene.Decorations.Add(new Decoration3D { Name = "Plant", IsVisible = true, Opacity = 1 });
+                JsonNode? deco = await PostJson(http, "decorations/update",
+                    new { name = "plant", opacity = 0.4, clipEnabled = true, clipAxis = "Z", clipValue = 11, clipAbove = false });
+                Decoration3D plant = host.Scene.Decorations[0];
+                Check(deco?["ok"]?.GetValue<bool>() == true && plant.Opacity == 0.4 && plant.ClipEnabled &&
+                      plant.ClipAxis == ClipAxis.Z && plant.ClipValue == 11 && !plant.ClipAbove && plant.IsVisible,
+                      "POST /decorations/update sets opacity and the clip plane by name", deco?.ToJsonString());
+                JsonNode? decos = await GetJson(http, "decorations");
+                Check(decos?["decorations"]?[0]?["clipValue"]?.GetValue<double>() == 11, "GET /decorations lists them", decos?.ToJsonString());
+                Check((await Post(http, "decorations/update", new { name = "nothing" })).StatusCode == HttpStatusCode.NotFound,
+                      "an unknown decoration is 404");
+
+                JsonNode? camera = await GetJson(http, "camera");
+                Check(camera?["target"]?[0]?.GetValue<double>() == 0 && camera?["position"]?[2]?.GetValue<double>() == 50,
+                      "GET /camera reports the position and the target", camera?.ToJsonString());
+                JsonNode? moved = await PostJson(http, "camera", new { position = new[] { 10.0, 20, 30 }, target = new[] { 10.0, 0, 0 } });
+                Check(moved?["ok"]?.GetValue<bool>() == true && host.Camera.Position.Y == 20 && host.Camera.LookDirection.Y == -20 &&
+                      host.Camera.LookDirection.Z == -30, "POST /camera moves the camera", moved?.ToJsonString());
+                Check((await Post(http, "camera", new { position = new[] { 1.0, 1, 1 }, target = new[] { 1.0, 1, 1 } })).StatusCode
+                      == HttpStatusCode.BadRequest, "a camera looking at its own position is refused");
+
+                host.Scene.Simulations[0].SnapshotDomainCenterX = 12.5;
+                host.Scene.Simulations[0].SnapshotDomainCenterY = -7.25;
+                string centred = Path.Combine(work, "centred.dsproj");
+                await PostJson(http, "project/save", new { path = centred });
+                await PostJson(http, "project/open", new { path = centred });
+                JsonNode? reread = await GetJson(http, "simulations");
+                Check(reread?["simulations"]?[0]?["domainCenter"]?[0]?.GetValue<double>() == 12.5 &&
+                      reread?["simulations"]?[0]?["domainCenter"]?[1]?.GetValue<double>() == -7.25,
+                      "a result grid's centre survives saving and reopening the project", reread?["simulations"]?[0]?["domainCenter"]?.ToJsonString());
+
                 var missing = await Post(http, "project/open", new { path = Path.Combine(work, "missing.dsproj") });
                 Check(missing.StatusCode == HttpStatusCode.NotFound, "opening a missing file is 404");
                 var relative = await Post(http, "project/open", new { path = "relative.dsproj" });
@@ -271,7 +391,7 @@ namespace DisperSim3D.CLI
         /// through the engine as the UIs do, and the "view" is a generated gradient.
         /// Its dialogs must never be reached — the server answers them itself.
         /// </summary>
-        private sealed class ScriptedHost : IExtenderHost3
+        private sealed class ScriptedHost : IExtenderHost4
         {
             private readonly SemaphoreSlim _ui = new(1, 1);
 
@@ -319,6 +439,16 @@ namespace DisperSim3D.CLI
             }
 
             public (string Id, double? TimeS)? Shown { get; private set; }
+
+            public CameraPreset Camera { get; set; } = new()
+            {
+                Position = new Point3D(100, 0, 50),
+                LookDirection = new Vector3D(-100, 0, -50)
+            };
+
+            public CameraPreset GetCamera() => Camera;
+
+            public void SetCamera(CameraPreset camera) => Camera = camera;
 
             public void CompleteRun(string simulationId) =>
                 _runs[simulationId] = new ExtenderRunStatus("Completed", 1, "Completed", null);

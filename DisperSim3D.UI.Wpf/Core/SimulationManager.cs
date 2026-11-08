@@ -80,8 +80,8 @@ namespace DisperSim3D.Core
         {
             // Each solver gets a stable 6-char tag (SolverCode) prepended to the label
             // so the user can tell at a glance which solver produced a given simulation.
-            string solverTag = SolverCode.Of(solverType);
-            string solverLabel = SolverCode.DisplayName(solverType);
+            string solverTag = SolverCode.Of(solverType, scenario.ExtenderSolverId);
+            string solverLabel = SolverCode.DisplayName(solverType, scenario.ExtenderSolverId);
 
             var job = new SimulationJob
             {
@@ -263,6 +263,9 @@ namespace DisperSim3D.Core
                         break;
                     case CfdSolverType.FluidX3DDispersionSteady:
                         await RunFluidX3DSteadyAsync(job);
+                        break;
+                    case CfdSolverType.Extender:
+                        await RunExtenderAsync(job);
                         break;
                 }
 
@@ -644,6 +647,44 @@ namespace DisperSim3D.Core
 
             runner.RunAsync(scenario, config, job.Scene, job.Obstacles, job.SolverType);
             return tcs.Task;
+        }
+
+        /// <summary>Dispatch for <see cref="CfdSolverType.Extender"/>: runs the extender's
+        /// solver on a worker thread and keeps its snapshots as the result.</summary>
+        private async Task RunExtenderAsync(SimulationJob job)
+        {
+            var scenario = job.Scenario;
+            var solver = DisperSim3D.Extensibility.SolverExtenderRegistry.Find(scenario.ExtenderSolverId)
+                ?? throw new InvalidOperationException("Extender solver '" + scenario.ExtenderSolverId + "' is not installed.");
+            var config = job.CfdConfig ?? scenario.CfdConfig ?? new CfdConfiguration();
+            var request = new DisperSim3D.Extensibility.SolverExtenderRequest(job.Scene, scenario, config,
+                job.Obstacles ?? new List<BoundingBox>(), (fraction, step) =>
+                {
+                    if (fraction >= 0) job.Progress = fraction;
+                    if (step != null) { job.StatusText = step; job.LastLogLine = step; }
+                    JobProgressUpdated?.Invoke(this, (job, new OpenFoamProgress { Fraction = fraction, Step = step, LogLine = step }));
+                }, job.Cts.Token);
+
+            var run = await Task.Run(() => solver.Run(request), job.Cts.Token);
+            job.Cts.Token.ThrowIfCancellationRequested();
+            if (run == null || !run.Success || run.Result == null)
+                throw new InvalidOperationException(run?.Error ?? solver.DisplayName + " returned no result.");
+
+            var result = run.Result;
+            var entry = new CfdSimulationEntry
+            {
+                Name = job.Name,
+                ScenarioName = scenario.Name,
+                SolverType = "[" + solver.Code + "] " + solver.DisplayName,
+                CasePath = run.CasePath ?? "",
+                DurationS = solver.IsSteady ? 0 : scenario.SimulationDurationS,
+                TimeStepCount = result.TimeSteps.Count,
+                GridNx = result.GridNx, GridNy = result.GridNy, GridNz = result.GridNz,
+                DomainSizeM = result.DomainSizeM,
+                HasResults = result.IsLoaded
+            };
+            entry.Tag = result;
+            job.ResultEntry = entry;
         }
 
         /// <summary>Dispatch for <see cref="CfdSolverType.FluidX3DDispersionSteady"/>.

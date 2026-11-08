@@ -58,12 +58,34 @@ namespace DisperSim3D.Validation
             = new List<FireBenchmarkRadiometer>();
 
         public FireBenchmarkAcceptance Acceptance { get; set; } = new FireBenchmarkAcceptance();
+
+        /// <summary>
+        /// Optional: the ID, code or alias of a solver extender that declares
+        /// <c>SolverCapabilities.Fire</c>. The radiometers are then sampled from the
+        /// radiation field it computes instead of the analytic solid-flame model.
+        /// </summary>
+        public string Solver { get; set; }
+
+        /// <summary>The grid the solver extender runs on; ignored by the analytic model.</summary>
+        public FireBenchmarkDomain Domain { get; set; } = new FireBenchmarkDomain();
+    }
+
+    /// <summary>Grid and duration for a bench run on a fire solver extender.</summary>
+    public class FireBenchmarkDomain
+    {
+        /// <summary>Half-width of the square domain, m, centred on the origin.</summary>
+        public double SizeM { get; set; } = 50;
+
+        public int GridResolution { get; set; } = 40;
+
+        /// <summary>Simulated time, s; the radiometers read the peak over it.</summary>
+        public double DurationS { get; set; } = 60;
     }
 
     /// <summary>The fire as the source describes it.</summary>
     public class FireBenchmarkFire
     {
-        /// <summary>"pool" or "jet".</summary>
+        /// <summary>"pool", "jet" or "fireball".</summary>
         public string Kind { get; set; } = "pool";
 
         /// <summary>Fuel name, for the report only.</summary>
@@ -81,6 +103,9 @@ namespace DisperSim3D.Validation
 
         /// <summary>Orifice diameter (m). Jet fires only.</summary>
         public double OrificeDiameterM { get; set; }
+
+        /// <summary>Fuel mass of a fireball (kind "fireball"), kg.</summary>
+        public double FireballMassKg { get; set; }
 
         /// <summary>Heat of combustion (J/kg).</summary>
         public double HeatOfCombustionJKg { get; set; } = 50e6;
@@ -128,6 +153,9 @@ namespace DisperSim3D.Validation
         public double? LengthM { get; set; }
         public double? DiameterM { get; set; }
         public double? SurfaceEmissivePowerKwM2 { get; set; }
+
+        /// <summary>Burn duration of a fireball (s).</summary>
+        public double? DurationS { get; set; }
 
         /// <summary>Free-text note on how these were reported (mean over the flame, base
         /// value, range, and so on).</summary>

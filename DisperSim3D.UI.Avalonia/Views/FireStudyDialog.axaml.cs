@@ -45,7 +45,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                     LstFireSources.Items.Add(new ListBoxItem
                     {
                         Content = (string.IsNullOrEmpty(f.Name) ? "(fire)" : f.Name)
-                                + (f.IsPoolFire ? "  — pool" : "  — jet")
+                                + (f.Kind == FireKind.Pool ? "  — pool" : f.Kind == FireKind.Fireball ? "  — fireball" : "  — jet")
                     });
                 }
             }

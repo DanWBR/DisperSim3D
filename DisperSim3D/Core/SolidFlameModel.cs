@@ -515,6 +515,8 @@ namespace DisperSim3D.Core
             foreach (var s in sources)
             {
                 if (s == null || s.RadiationModel != RadiationModel.SolidFlame) continue;
+                // A fireball is a sphere, not a flame panel set: FireballModel.
+                if (s.Kind == FireKind.Fireball) continue;
                 var e = Prepare(s, windVector);
                 if (e.Panels.Length > 0) list.Add(e);
             }

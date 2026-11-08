@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using DisperSim3D.Core;
 using DisperSim3D.Models;
 
@@ -102,6 +103,8 @@ namespace DisperSim3D.Validation
                     results.Add(Near("meteo: humidity", m0.RelativeHumidity, m1.RelativeHumidity, 1e-9));
                     results.Add(Near("meteo: averaging time", m0.AveragingTimeS, m1.AveragingTimeS, 1e-9));
                     results.Add(Near("meteo: mixing height", m0.MixingHeightM, m1.MixingHeightM, 1e-9));
+                    results.Add(Near("meteo: Obukhov length", m0.ObukhovLengthM, m1.ObukhovLengthM, 1e-9));
+                    results.Add(Near("meteo: wind direction sigma", m0.WindDirectionSigmaDeg, m1.WindDirectionSigmaDeg, 1e-9));
                     results.Add(Near("meteo: measurement height", m0.WindMeasurementHeightM, m1.WindMeasurementHeightM, 1e-9));
                     results.Add(Near("meteo: shear exponent", m0.WindShearExponent, m1.WindShearExponent, 1e-9));
                     results.Add(Same("meteo: urban terrain", m0.IsUrbanTerrain, m1.IsUrbanTerrain));
@@ -190,6 +193,8 @@ namespace DisperSim3D.Validation
                     RelativeHumidity = 0.83,
                     AveragingTimeS = 18.75,
                     MixingHeightM = 650,
+                    ObukhovLengthM = -37.5,
+                    WindDirectionSigmaDeg = 11.25,
                     WindMeasurementHeightM = 7.5,
                     WindShearExponent = 0.21,
                     IsUrbanTerrain = true,
@@ -209,6 +214,12 @@ namespace DisperSim3D.Validation
             Position = new Geometry.Point3D(12.5, -3.25, 4.75),
             ReleaseRateKgPerS = 1.75,
             ReleaseDurationS = 420,
+            ReleaseRateProfile = new List<ReleaseRatePoint>
+            {
+                new ReleaseRatePoint { TimeS = 0, RateKgPerS = 1.75 },
+                new ReleaseRatePoint { TimeS = 37.5, RateKgPerS = 0.625 },
+                new ReleaseRatePoint { TimeS = 420, RateKgPerS = 0 }
+            },
             PuffIntervalS = 2.5,
             ReleaseHeightOffset = 1.25,
             ReleaseAzimuthDeg = 123.5,
@@ -271,6 +282,9 @@ namespace DisperSim3D.Validation
                                                    b.Position.X + b.Position.Y + b.Position.Z, 1e-9));
             results.Add(Near(prefix + "release rate", a.ReleaseRateKgPerS, b.ReleaseRateKgPerS, 1e-9));
             results.Add(Near(prefix + "release duration", a.ReleaseDurationS, b.ReleaseDurationS, 1e-9));
+            results.Add(Same(prefix + "rate profile",
+                string.Join(";", a.ReleaseRateProfile.Select(p => p.TimeS.ToString("R", CultureInfo.InvariantCulture) + "," + p.RateKgPerS.ToString("R", CultureInfo.InvariantCulture))),
+                string.Join(";", b.ReleaseRateProfile.Select(p => p.TimeS.ToString("R", CultureInfo.InvariantCulture) + "," + p.RateKgPerS.ToString("R", CultureInfo.InvariantCulture)))));
             results.Add(Near(prefix + "puff interval", a.PuffIntervalS, b.PuffIntervalS, 1e-9));
             results.Add(Near(prefix + "height offset", a.ReleaseHeightOffset, b.ReleaseHeightOffset, 1e-9));
             results.Add(Near(prefix + "azimuth", a.ReleaseAzimuthDeg, b.ReleaseAzimuthDeg, 1e-9));

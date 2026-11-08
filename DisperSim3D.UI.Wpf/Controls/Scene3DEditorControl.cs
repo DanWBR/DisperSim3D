@@ -1488,6 +1488,12 @@ namespace DisperSim3D.Controls
         {
             if (_cfdResult == null || !_cfdResult.IsLoaded || _cfdResult.TimeSteps.Count == 0) return;
 
+            // A project made only of Simulations has no legacy scenario; the
+            // renderer keeps its thresholds on one.
+            if (_scene.DispersionScenario == null)
+            {
+                _scene.DispersionScenario = new DispersionScenario();
+            }
             var scenario = _scene.DispersionScenario;
             _dispersionRenderer = new DispersionRenderer();
             _dispersionRenderer.Initialize(scenario);
@@ -2979,7 +2985,8 @@ namespace DisperSim3D.Controls
                     new System.Xml.Linq.XAttribute("MolarMass", src.Gas.MolarMass.ToString(inv)),
                     new System.Xml.Linq.XAttribute("LFL", src.Gas.LFL.ToString(inv)),
                     new System.Xml.Linq.XAttribute("IDLH", src.Gas.IDLH.ToString(inv))) : null,
-                invEl);
+                invEl,
+                ReleaseRateProfileXml.Write(src));
         }
 
         private System.Xml.Linq.XElement SerializeSimulations(System.Globalization.CultureInfo inv)
@@ -3597,6 +3604,7 @@ namespace DisperSim3D.Controls
                     IDLH = double.Parse((string)gasEl.Attribute("IDLH") ?? "0", inv)
                 };
             }
+            ReleaseRateProfileXml.Read(se, src);
             return src;
         }
 

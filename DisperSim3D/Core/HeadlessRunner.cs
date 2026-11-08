@@ -18,6 +18,18 @@ namespace DisperSim3D.Core
         public int TimeStepCount { get; set; }
         public List<MonitorTimeSeries> MonitorData { get; set; } = new List<MonitorTimeSeries>();
         public double[,,] ConcentrationField { get; set; }
+
+        /// <summary>Exact concentration (kg/m³) at a point, when the solver offers one beyond the grid.</summary>
+        public Func<double, double, double, double> ConcentrationAt { get; set; }
+
+        /// <summary>Exact release mass fraction at a point, when the solver offers one.</summary>
+        public Func<double, double, double, double> MassFractionAt { get; set; }
+
+        /// <summary>
+        /// The result grid of an extender run — its bounds say where the solver put it;
+        /// see <see cref="FireRuns.ApplyResultGrid"/>.
+        /// </summary>
+        public OpenFoamResult ResultGrid { get; set; }
     }
 
     public class MonitorTimeSeries
@@ -233,6 +245,10 @@ namespace DisperSim3D.Core
             if (solverType == CfdSolverType.UnifiedDispersion)
                 return RunUnifiedDispersion(scene, scenarioIndex, log);
 
+            // Extender solvers run in-process through their own entry point.
+            if (solverType == CfdSolverType.Extender)
+                return RunExtender(scene, scenario, cfdConfig, log, cancel);
+
             var env = new OpenFoamEnvironment();
             env.Configure(cfdConfig.OpenFoamPath, cfdConfig.DetectedEnvironment, cfdConfig.WslDistroName);
             if (!env.IsAvailable)
@@ -316,6 +332,138 @@ namespace DisperSim3D.Core
             }
 
             return result ?? new HeadlessResult { Success = false, Error = "Unknown error" };
+        }
+
+        /// <summary>
+        /// Headless driver for a solver provided by an extender: looks it up by the
+        /// scenario's <see cref="DispersionScenario.ExtenderSolverId"/>, hands it the
+        /// scenario and the decoration boxes, and returns its last snapshot.
+        /// </summary>
+        /// <summary>
+        /// A fire simulation (<see cref="Simulation.IsFireRun"/>) on its fire solver
+        /// extender. The result carries the run's folder and grid; nothing is written back
+        /// to <paramref name="sim"/>.
+        /// </summary>
+        private static HeadlessResult RunFire(Scene3D scene, Simulation sim, Action<string> log, CancellationToken cancel)
+        {
+            var obstacles = new List<BoundingBox>();
+            if (scene.Decorations != null)
+                foreach (var d in scene.Decorations)
+                    if (d != null && d.BoundingBox != null) obstacles.Add(d.BoundingBox);
+
+            string lastStep = null;
+            var (request, error) = FireRuns.Prepare(scene, sim, sim.SnapshotCfdConfig ?? new CfdConfiguration(), obstacles,
+                (fraction, step) =>
+                {
+                    if (string.IsNullOrEmpty(step) || step == lastStep) return;
+                    lastStep = step;
+                    log?.Invoke("  " + step);
+                }, cancel);
+            if (request == null) return new HeadlessResult { Success = false, Error = error };
+
+            var solver = Extensibility.SolverExtenderRegistry.Find(sim.ExtenderSolverId);
+            log?.Invoke(string.Format("Running fire solver: [{0}] {1} on '{2}'", solver.Code, solver.DisplayName, sim.Name));
+            Extensibility.SolverExtenderResult run;
+            try
+            {
+                run = solver.Run(request);
+            }
+            catch (OperationCanceledException)
+            {
+                return new HeadlessResult { Success = false, Error = "Cancelled" };
+            }
+            catch (Exception ex)
+            {
+                return new HeadlessResult { Success = false, Error = solver.DisplayName + " failed: " + ex.Message };
+            }
+            if (run == null || !run.Success)
+                return new HeadlessResult { Success = false, Error = run?.Error ?? "The fire solver returned no result.", CasePath = run?.CasePath };
+
+            var grid = FireRuns.ResultOf(run, request);
+            if (grid == null)
+                return new HeadlessResult { Success = false, Error = solver.DisplayName + " wrote no result channel.", CasePath = run.CasePath };
+            return new HeadlessResult
+            {
+                Success = true,
+                CasePath = run.CasePath ?? grid.CaseDir,
+                TimeStepCount = grid.TimeSteps.Count,
+                ResultGrid = grid
+            };
+        }
+
+        private static HeadlessResult RunExtender(Scene3D scene, DispersionScenario scenario,
+            CfdConfiguration cfdConfig, Action<string> log, CancellationToken cancel)
+        {
+            var solver = Extensibility.SolverExtenderRegistry.Find(scenario.ExtenderSolverId);
+            if (solver == null)
+                return new HeadlessResult
+                {
+                    Success = false,
+                    Error = "Extender solver '" + (scenario.ExtenderSolverId ?? "") + "' is not installed."
+                };
+
+            log?.Invoke(string.Format("Running extender solver: [{0}] {1}", solver.Code, solver.DisplayName));
+            log?.Invoke(string.Format("  Domain: {0}m, Grid: {1}", scenario.DomainSizeM, scenario.GridResolution));
+
+            var obstacles = new List<BoundingBox>();
+            if (scene.Decorations != null)
+                foreach (var d in scene.Decorations)
+                    if (d != null && d.BoundingBox != null) obstacles.Add(d.BoundingBox);
+
+            string lastStep = null;
+            var request = new Extensibility.SolverExtenderRequest(scene, scenario, cfdConfig ?? new CfdConfiguration(),
+                obstacles, (fraction, step) =>
+                {
+                    if (string.IsNullOrEmpty(step) || step == lastStep) return;
+                    lastStep = step;
+                    log?.Invoke("  " + step);
+                }, cancel);
+
+            Extensibility.SolverExtenderResult run;
+            try
+            {
+                run = solver.Run(request);
+            }
+            catch (OperationCanceledException)
+            {
+                return new HeadlessResult { Success = false, Error = "Cancelled" };
+            }
+            catch (Exception ex)
+            {
+                return new HeadlessResult { Success = false, Error = solver.DisplayName + " failed: " + ex.Message };
+            }
+            if (run == null || !run.Success)
+                return new HeadlessResult { Success = false, Error = run?.Error ?? "The extender solver returned no result.", CasePath = run?.CasePath };
+
+            var result = new HeadlessResult
+            {
+                Success = true,
+                CasePath = run.CasePath,
+                ResultGrid = run.Result,
+                TimeStepCount = run.Result?.TimeSteps.Count ?? 0,
+                ConcentrationAt = run.Concentration,
+                MassFractionAt = run.MassFraction
+            };
+            if (run.Result != null && run.Result.TimeSteps.Count > 0)
+            {
+                var last = run.Result.GetField(run.Result.TimeSteps[run.Result.TimeSteps.Count - 1]);
+                if (last != null)
+                {
+                    result.ConcentrationField = last;
+                    foreach (double c in last) if (c > result.MaxConcentration) result.MaxConcentration = c;
+                    log?.Invoke(string.Format(CultureInfo.InvariantCulture,
+                        "  Max concentration: {0:G6} kg/m³", result.MaxConcentration));
+                }
+            }
+            if (run.Concentration != null)
+                foreach (var mp in scene.MonitorPoints)
+                {
+                    double c = run.Concentration(mp.Position.X, mp.Position.Y, mp.Position.Z);
+                    var ts = new MonitorTimeSeries { Name = mp.Name, Position = mp.Position };
+                    ts.Times.Add(0); ts.Concentrations.Add(c);
+                    result.MonitorData.Add(ts);
+                }
+            return result;
         }
 
         /// <summary>True for the four GPU LBM runners that bypass OpenFOAM.</summary>
@@ -488,6 +636,8 @@ namespace DisperSim3D.Core
         {
             if (scene == null || sim == null)
                 return new HeadlessResult { Success = false, Error = "scene or simulation is null" };
+            if (sim.IsFireRun)
+                return RunFire(scene, sim, log, cancel);
 
             var src = sim.SnapshotSource
                       ?? scene.TopLevelSources.FirstOrDefault(s => s.Id == sim.SourceId);
@@ -520,6 +670,7 @@ namespace DisperSim3D.Core
                 DomainSizeM = sim.SnapshotDomainSizeM,
                 GridResolution = sim.SnapshotGridResolution,
                 SolverType = sim.SolverType,
+                ExtenderSolverId = sim.ExtenderSolverId,
                 CfdConfig = cfd,
                 WindFieldScenarioId = sim.WindFieldId
             };
@@ -614,11 +765,18 @@ namespace DisperSim3D.Core
                         break;
 
                     default:
-                        return new HeadlessResult
-                        {
-                            Success = false,
-                            Error = "Unknown solver: " + solverName
-                        };
+                    {
+                        var ext = Extensibility.SolverExtenderRegistry.FindByName(solver);
+                        if (ext == null)
+                            return new HeadlessResult
+                            {
+                                Success = false,
+                                Error = "Unknown solver: " + solverName
+                            };
+                        solverType = CfdSolverType.Extender;
+                        scenario.ExtenderSolverId = ext.Id;
+                        break;
+                    }
                 }
             }
 

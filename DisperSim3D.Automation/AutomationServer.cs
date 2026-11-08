@@ -16,7 +16,7 @@ namespace DisperSim3D.Automation
     /// it needs no URL reservation or administrator rights. One request per
     /// connection; JSON in, JSON (or a PNG) out. See <see cref="Routes"/>.
     /// </summary>
-    internal sealed class AutomationServer : IDisposable
+    internal sealed partial class AutomationServer : IDisposable
     {
         private const int MaxHeaderBytes = 64 * 1024;
         private const int MaxBodyBytes = 1024 * 1024;
@@ -38,12 +38,28 @@ namespace DisperSim3D.Automation
             "POST /project/save                {\"path\": \"C:\\\\project.dsproj\"} (path optional)",
             "GET  /viewport.png?width=&height= the 3D view as a PNG",
             "POST /viewport/save               {\"path\": \"C:\\\\view.png\", \"width\": 0, \"height\": 0}",
+            "GET  /solvers                     the built-in solvers and the extender solvers with their capabilities and options",
             "GET  /simulations                 the project's simulations and their runs",
-            "POST /simulations                 {\"source\": \"Release 01\", \"solver\": \"GaussianPlume\", \"windField\": \"...\", \"durationS\": 300, ...}",
+            "POST /simulations                 {\"source\": \"Release 01\", \"solver\": \"GaussianPlume\" (or an extender solver's ID or code), \"windField\": \"...\", \"durationS\": 300, ...}; or {\"fireSource\"|\"ignition\": \"...\", \"solver\": a fire solver} for a fire run; \"options\": {\"key\": value} sets the solver's options",
+            "POST /simulations/options         {\"id\": \"...\", \"options\": {\"key\": value, \"other\": null}} sets (null: clears) options of its extender solver",
             "POST /simulations/run             {\"id\": \"...\"} queues it as its Run command does",
             "GET  /simulations/status?id=      where its latest run stands",
+            "GET  /simulations/channels?id=    the result channels it stored (T, Q, Soot, CO, CO2, O2, Vis) and its surface heat load",
+            "POST /simulations/sensors         {\"id\": \"...\"} replays it through every monitor and detector from its stored fields",
+            "POST /fires                       {\"name\": \"...\", \"kind\": \"Jet|Pool|Fireball\", \"position\": [x, y, z], \"massFlowKgS\": 1, \"fireballMassKg\": 1000, ...} adds a fire source",
+            "POST /ignitions                   {\"simulation\": \"...\", \"position\": [x, y, z], \"timeS\": 30} adds an ignition of a dispersion simulation",
+            "POST /monitors                    {\"name\": \"...\", \"position\": [x, y, z], \"quantity\": \"Temperature\"} adds a point monitor",
+            "POST /detectors                   {\"name\": \"...\", \"position\": [x, y, z], \"quantity\": \"ThermalRadiationKwM2\", \"threshold\": 12.5} adds a detector",
             "POST /simulations/cancel          {\"id\": \"...\"} cancels its latest run",
             "POST /simulations/show            {\"id\": \"...\", \"timeS\": 30} shows its result in the 3D view (timeS optional: last snapshot)",
+            "GET  /views                       the project's views (isosurfaces and contour planes)",
+            "POST /views                       {\"simulation\": \"...\", \"kind\": \"ContourXY\", \"field\": \"Temperature\", \"planePosition\": 8, \"minValue\": 300, \"maxValue\": 2000, \"clipToRange\": true, ...} adds a view",
+            "POST /views/update                {\"id\": \"...\", ...the fields to change}",
+            "POST /views/delete                {\"id\": \"...\"}",
+            "GET  /decorations                 the project's geometry: visibility, opacity, clip plane",
+            "POST /decorations/update          {\"id\": \"...\" (or \"name\"), \"visible\": true, \"opacity\": 0.3, \"clipEnabled\": true, \"clipAxis\": \"Z\", \"clipValue\": 11, \"clipAbove\": false}",
+            "GET  /camera                      the 3D view's camera: position and the point it looks at",
+            "POST /camera                      {\"position\": [x, y, z], \"target\": [x, y, z]} moves it",
             "GET  /log?after=N                 what the server did"
         };
 
@@ -319,6 +335,8 @@ namespace DisperSim3D.Automation
                     return await OnUiGateAsync(() => ViewportPngAsync(r));
                 case "POST /viewport/save":
                     return await OnUiGateAsync(() => SaveViewportAsync(r));
+                case "GET /solvers":
+                    return JsonResponse(200, Solvers());
                 case "GET /simulations":
                     return JsonResponse(200, new { simulations = await SimulationsAsync() });
                 case "POST /simulations":
@@ -327,10 +345,40 @@ namespace DisperSim3D.Automation
                     return await OnUiGateAsync(() => RunSimulationAsync(r));
                 case "POST /simulations/cancel":
                     return await CancelSimulationAsync(r);
+                case "POST /simulations/options":
+                    return await OnUiGateAsync(() => SetSimulationOptionsAsync(r));
                 case "POST /simulations/show":
                     return await OnUiGateAsync(() => ShowSimulationResultAsync(r));
                 case "GET /simulations/status":
                     return RunStatusResponse(r);
+                case "GET /simulations/channels":
+                    return await SimulationChannelsAsync(r);
+                case "POST /simulations/sensors":
+                    return await OnUiGateAsync(() => EvaluateSensorsAsync(r));
+                case "POST /fires":
+                    return await OnUiGateAsync(() => AddFireSourceAsync(r));
+                case "POST /ignitions":
+                    return await OnUiGateAsync(() => AddIgnitionAsync(r));
+                case "POST /monitors":
+                    return await OnUiGateAsync(() => AddMonitorAsync(r));
+                case "POST /detectors":
+                    return await OnUiGateAsync(() => AddDetectorAsync(r));
+                case "GET /views":
+                    return JsonResponse(200, new { views = await ViewsAsync() });
+                case "POST /views":
+                    return await OnUiGateAsync(() => AddViewAsync(r));
+                case "POST /views/update":
+                    return await OnUiGateAsync(() => UpdateViewAsync(r));
+                case "POST /views/delete":
+                    return await OnUiGateAsync(() => DeleteViewAsync(r));
+                case "GET /decorations":
+                    return JsonResponse(200, new { decorations = await DecorationsAsync() });
+                case "POST /decorations/update":
+                    return await OnUiGateAsync(() => UpdateDecorationAsync(r));
+                case "GET /camera":
+                    return CameraResponse();
+                case "POST /camera":
+                    return await OnUiGateAsync(() => SetCameraAsync(r));
                 case "GET /log":
                     long after = r.Query.TryGetValue("after", out string? a) && long.TryParse(a, out long v) ? v : 0;
                     return JsonResponse(200, new { entries = _log.Since(after) });
@@ -562,6 +610,9 @@ namespace DisperSim3D.Automation
                 sim.Id,
                 sim.Name,
                 solver = sim.SolverType.ToString(),
+                sim.ExtenderSolverId,
+                sim.FireSourceId,
+                sim.IgnitionId,
                 status = sim.Status.ToString(),
                 source = source?.Name,
                 sim.SourceId,
@@ -571,8 +622,11 @@ namespace DisperSim3D.Automation
                 durationS = sim.SnapshotDurationS,
                 timeStepS = sim.SnapshotTimeStepS,
                 domainSizeM = sim.SnapshotDomainSizeM,
+                domainCenter = new[] { sim.SnapshotDomainCenterX, sim.SnapshotDomainCenterY },
                 gridResolution = sim.SnapshotGridResolution,
                 snapshotCount = sim.SnapshotCount,
+                options = (sim.ExtenderOptions ?? new List<SolverOptionValue>()).Where(o => o?.Key != null)
+                    .GroupBy(o => o.Key).ToDictionary(g => g.Key, g => g.Last().Value),
                 maxConcentration = sim.MaxConcentration,
                 run
             };
@@ -583,10 +637,21 @@ namespace DisperSim3D.Automation
         {
             var host = Host3;
             JsonObject body = ReadJson(r);
+            if (OptionalString(body, "fireSource") != null || OptionalString(body, "ignition") != null)
+                return await AddFireSimulationAsync(body);
             string sourceKey = RequiredString(body, "source");
             string solverText = RequiredString(body, "solver");
+            // A built-in solver by its enum name, else an extender solver by its ID, code or alias.
+            ISolverExtender? extenderSolver = null;
             if (!Enum.TryParse(solverText, ignoreCase: true, out CfdSolverType solver) || !Enum.IsDefined(solver))
-                throw new HttpError(400, "Unknown solver " + solverText + "; one of " + string.Join(", ", Enum.GetNames<CfdSolverType>()) + ".");
+            {
+                extenderSolver = SolverExtenderRegistry.FindByName(solverText)
+                    ?? throw new HttpError(400, "Unknown solver " + solverText + "; one of " + string.Join(", ", Enum.GetNames<CfdSolverType>())
+                        + (SolverExtenderRegistry.All.Count > 0 ? " or an extender solver: " + string.Join(", ", SolverExtenderRegistry.All.Select(s => s.Id)) : "") + ".");
+                solver = CfdSolverType.Extender;
+            }
+            else if (solver == CfdSolverType.Extender)
+                throw new HttpError(400, "Name the extender solver by its ID or code.");
             string? windKey = OptionalString(body, "windField");
 
             object? created = null;
@@ -612,6 +677,7 @@ namespace DisperSim3D.Automation
                     SourceId = source.Id,
                     WindFieldId = wind?.Id,
                     SolverType = solver,
+                    ExtenderSolverId = extenderSolver?.Id,
                     Status = SimulationStatus.Configured,
                     SnapshotDurationS = OptionalDouble(body, "durationS") ?? 300,
                     SnapshotTimeStepS = OptionalDouble(body, "timeStepS") ?? 0.5,
@@ -619,13 +685,15 @@ namespace DisperSim3D.Automation
                     SnapshotGridResolution = (int)(OptionalDouble(body, "gridResolution") ?? scene.GeneralSettings?.DefaultGridResolution ?? 40),
                     SnapshotCount = (int)(OptionalDouble(body, "snapshotCount") ?? 20)
                 };
+                error = ApplyOptions(sim, extenderSolver, body["options"] as JsonObject);
+                if (error != null) return Task.CompletedTask;
                 scene.Simulations.Add(sim);
                 host.RefreshProject();
                 created = DescribeSimulation(scene, sim, null);
                 return Task.CompletedTask;
             });
-            if (error != null) throw new HttpError(error.StartsWith("No project") ? 409 : 404, error);
-            _log.Add("added simulation " + solver + " for " + sourceKey);
+            if (error != null) throw new HttpError(error.StartsWith("No project") ? 409 : error.StartsWith("No ") ? 404 : 400, error);
+            _log.Add("added simulation " + (extenderSolver?.Id ?? solver.ToString()) + " for " + sourceKey);
             return JsonResponse(200, new { ok = true, simulation = created });
         }
 

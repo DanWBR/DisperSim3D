@@ -8,10 +8,10 @@ namespace DisperSim3D.UI.Avalonia.Views
 {
     /// <summary>
     /// Avalonia equivalent of the WPF / WinForms <c>FireSourceDialog</c>.
-    /// Edits a <see cref="FireSource"/>: jet/pool fire with flame length
-    /// drivers (mass flow, orifice, heat of combustion, radiative fraction)
-    /// and optional pool-fire-only fields (diameter, burn rate). The pool
-    /// fields are gated by the "Pool fire" checkbox. The second group picks the
+    /// Edits a <see cref="FireSource"/>: jet fire, pool fire or fireball, with
+    /// flame length drivers (mass flow, orifice, heat of combustion, radiative
+    /// fraction), the pool-only fields (diameter, burn rate) and the fireball
+    /// mass, each enabled by the Kind box. The second group picks the
     /// radiation model and its optional overrides — flame diameter and surface
     /// emissive power, both 0 meaning "derive from the correlations".
     /// </summary>
@@ -32,7 +32,8 @@ namespace DisperSim3D.UI.Avalonia.Views
                 NudOrifice.Value         = (decimal)existing.OrificeDiameterM;
                 NudHeatCombustion.Value  = (decimal)existing.HeatOfCombustionJKg;
                 NudRadFraction.Value     = (decimal)existing.RadiativeFraction;
-                ChkPoolFire.IsChecked    = existing.IsPoolFire;
+                CmbKind.SelectedIndex    = (int)existing.Kind;
+                NudFireballMass.Value    = (decimal)existing.FireballMassKg;
                 NudPoolDiameter.Value    = (decimal)existing.PoolDiameterM;
                 NudBurnRate.Value        = (decimal)existing.PoolBurnRateKgM2S;
                 CmbRadiationModel.SelectedIndex =
@@ -44,16 +45,24 @@ namespace DisperSim3D.UI.Avalonia.Views
             }
         }
 
-        private void ChkPoolFire_Changed(object? sender, RoutedEventArgs e)
+        private void CmbKind_Changed(object? sender, SelectionChangedEventArgs e)
             => UpdatePoolFieldsEnabled();
+
+        private FireKind SelectedKind => CmbKind?.SelectedIndex switch
+        {
+            1 => FireKind.Pool,
+            2 => FireKind.Fireball,
+            _ => FireKind.Jet
+        };
 
         private void UpdatePoolFieldsEnabled()
         {
-            bool pool = ChkPoolFire.IsChecked == true;
-            // NudPoolDiameter / NudBurnRate may not be wired up yet during
-            // the initial XAML load; guard for safety.
-            if (NudPoolDiameter != null) NudPoolDiameter.IsEnabled = pool;
-            if (NudBurnRate != null) NudBurnRate.IsEnabled = pool;
+            var kind = SelectedKind;
+            // The fields below the box may not be wired up yet during the
+            // initial XAML load; guard for safety.
+            if (NudPoolDiameter != null) NudPoolDiameter.IsEnabled = kind == FireKind.Pool;
+            if (NudBurnRate != null) NudBurnRate.IsEnabled = kind == FireKind.Pool;
+            if (NudFireballMass != null) NudFireballMass.IsEnabled = kind == FireKind.Fireball;
         }
 
         private void BtnCancel_Click(object? sender, RoutedEventArgs e) => Close(false);
@@ -67,7 +76,8 @@ namespace DisperSim3D.UI.Avalonia.Views
                 OrificeDiameterM     = (double)(NudOrifice.Value ?? 0.025m),
                 HeatOfCombustionJKg  = (double)(NudHeatCombustion.Value ?? 50_000_000m),
                 RadiativeFraction    = (double)(NudRadFraction.Value ?? 0.2m),
-                IsPoolFire           = ChkPoolFire.IsChecked == true,
+                Kind                 = SelectedKind,
+                FireballMassKg       = (double)(NudFireballMass.Value ?? 1000m),
                 PoolDiameterM        = (double)(NudPoolDiameter.Value ?? 5m),
                 PoolBurnRateKgM2S    = (double)(NudBurnRate.Value ?? 0.05m),
                 RadiationModel       = CmbRadiationModel.SelectedIndex == 1

@@ -85,6 +85,8 @@ Embedded sibling C++ project (`FluidX3D.dll`) compiled from [Moritz Lehmann's Fl
 - **FluidX3DDispersionSteady** (`FX3DDS`) — same tracer driven until cell-by-cell L2 delta drops below tolerance; result is a single converged frame, playback bar hidden
 - **FluidX3DFire** (`FX3DFR`) — buoyant fire plume via dual-tracer `FireTracerEngine` (smoke + temperature) with Boussinesq buoyancy `β·g·(T-T_amb)`
 
+The dispersion tracers block the cells the decorations' meshes occupy (`DecorationSolids`): the triangles of every STL, OBJ and RVM decoration, read from its file and placed as the 3D view places it, mark the cells they cross and the cells they enclose; surfaces at ground level, such as paving, block nothing. A decoration whose mesh cannot be read (a procedural primitive) blocks its bounding box. `--obstacle-mask-selftest` checks it.
+
 GPU selection (multi-GPU systems) and on-demand VRAM/RAM/disk sizing live under **Settings → GPU & Memory…**.
 
 **Atmospheric Boundary Layer treatment** is enabled by default (per-solver presets via `CfdConfigurationPresets`):
@@ -134,6 +136,9 @@ GPU selection (multi-GPU systems) and on-demand VRAM/RAM/disk sizing live under 
   capped by Mudan's soot correlation for pools and 350 kW/m² for jets, and both the
   flame diameter and the SEP can be overridden per source
 - **Point-source radiation** kept as the fast preview model, selectable per fire source
+- **Fireball** (BLEVE) — the CCPS sphere from the fuel mass: `D = 5.8·M^(1/3)`, burning
+  `0.45·M^(1/3)` s at `0.75·D`, emissive power from the energy balance with Roberts'
+  radiative fraction; its dose takes the burn duration instead of the escape time
 - **Obstacle shading** — plant geometry casts radiation shadows: a flame panel a wall
   hides contributes nothing, and a cell inside solid geometry is not exposed at all
 - Receiver orientation per scenario: worst case, horizontal, or vertical
@@ -468,6 +473,53 @@ features come through `IExtenderHost2` (save the project, read the status bar,
 capture the 3D view as a PNG, run code on the UI thread); check for it with
 `host is IExtenderHost2`.
 
+A collection that also implements `ISolverExtenderCollection` adds dispersion
+solvers. Each `ISolverExtender` (ID, six-letter code, display name, CLI aliases,
+`Run`) is listed after the built-in solvers in the Simulation Editor of both UIs,
+is saved as `SolverType="Extender"` plus its `ExtenderSolverId`, and runs through
+the same paths as the built-in ones: the simulation managers, `DisperSim3D.CLI
+<project> -s <alias>` and `--validate <bench> -s <alias>`. `Run` receives the
+scenario, the CFD settings and the obstacle boxes, and returns its snapshots as
+an `OpenFoamResult` on the scenario grid; it may also return a point evaluator,
+which the validation harness then samples instead of the grid.
+
+A solver that also implements `ISolverExtenderOptions` lists the settings it
+offers for its runs. Each `SolverOption` has:
+
+- a key and a label;
+- a kind: `Boolean`, `Integer`, `Number` or `Choice`;
+- a default;
+- optionally a range, the choices, a unit and a description.
+
+The Avalonia UI shows them in two places:
+
+- under **Solver Options** in the Simulation Editor, when the solver is picked;
+- in **Solver Options…** on the context menu of every simulation on the solver,
+  fire runs included.
+
+A value the user sets is saved on the simulation (`ExtenderOptions`, as text in the
+invariant culture); one left at its default is not stored. `Run` receives the values
+in `request.Options`, and the solver takes its own default for any option left out.
+The CLI and the validation harness pass none.
+
+A solver states what it runs through `Capabilities` (`Dispersion` unless it says
+otherwise). One that declares `SolverCapabilities.Fire` is offered on the context
+menu of every fire source and ignition (**Run CFD Fire on …**), and through
+`POST /simulations` with `fireSource` or `ignition`. The run is an Extender
+simulation that carries `FireSourceId` or `IgnitionId`; its request carries
+`Fire` — the `FireSource` (jet, pool or fireball, by its `Kind`), or the
+`IgnitionEvent` with the finished dispersion simulation it ignites and that
+simulation's gas — and the grid centre it asks for (`DomainCenterX/Y`). The solver
+writes its fields to its `CasePath` in the flat-bin layout of
+[docs/file-format.md](docs/file-format.md#result-files): temperature, radiation,
+soot, CO, CO2, O2, visibility, and the heat load on each decoration triangle. Views
+draw them (a Surface view colours the plant with the heat load); monitors,
+detectors (**Evaluate Monitors and Detectors** on a simulation), fire studies and
+`--validate-fire <bench> -s <alias>` read the stored radiation and temperature in
+place of the analytic fire models, and the dose from a stored radiation integrates
+it over the exposure window (docs/theory.md §6.8). `DisperSim3D.CLI --fire-solver-selftest` runs a
+stand-in fire solver through all of it.
+
 ### Automation server
 
 The installer puts one extender in `extenders\Automation\`: a small HTTP server
@@ -492,11 +544,27 @@ launch with environment variables:
 | `GET /viewport.png?width=&height=` | the 3D view as a PNG (the Avalonia UI captures at the on-screen size) |
 | `POST /viewport/save` | `{"path": "...", "width": 0, "height": 0}` |
 | `GET /simulations` | the project's simulations, each with its latest run |
-| `POST /simulations` | `{"source": "Release 01", "solver": "RhoReactingBuoyantFoam", "windField": "...", "durationS": 300, "timeStepS": 0.5, "domainSizeM": 200, "gridResolution": 40, "snapshotCount": 20}` — source and solver required, the rest default as in Add Simulation |
+| `GET /solvers` | the built-in solvers, and the extender solvers with their capabilities (`dispersion`, `fire`) and their options (key, label, kind, default, range, choices) |
+| `POST /simulations` | `{"source": "Release 01", "solver": "RhoReactingBuoyantFoam", "windField": "...", "durationS": 300, "timeStepS": 0.5, "domainSizeM": 200, "gridResolution": 40, "snapshotCount": 20}` — source and solver required (a built-in solver, or an extender solver by its ID or code), the rest default as in Add Simulation. For a fire run give `"fireSource"` or `"ignition"` (name or ID) instead of `source`, and a fire solver. `"options": {"key": value}` sets options of an extender solver; a value that is not one of the option's is 400 |
+| `POST /simulations/options` | `{"id": "...", "options": {"key": value, "other": null}}` — sets options of the simulation's extender solver, `null` clearing one back to the solver's default; all or none, an unknown key or a bad value is 400 |
 | `POST /simulations/run` | `{"id": "..."}` — queues it in the simulation manager, as its Run command does |
 | `GET /simulations/status?id=` | state, progress and last log line of its latest run |
+| `GET /simulations/channels?id=` | the result channels it stored, with times, grid and range, and its surface heat load against the scene's triangles |
+| `POST /simulations/sensors` | `{"id": "..."}` — replays it through every monitor and detector from its stored fields; returns each one's samples and whether it triggered |
+| `POST /fires` | `{"name": "Jet 01", "kind": "Jet", "position": [x, y, z], "direction": [1, 0, 0], "massFlowKgS": 3, "poolDiameterM": 5, "fireballMassKg": 1000}` — adds a fire source (kind `Jet`, `Pool` or `Fireball`) |
+| `POST /ignitions` | `{"simulation": "...", "position": [x, y, z], "timeS": 30, "flameSpeedMS": 10}` — adds an ignition of a dispersion simulation |
+| `POST /monitors` | `{"name": "...", "position": [x, y, z], "quantity": "Temperature"}` — adds a point monitor; `quantity` is any view field |
+| `POST /detectors` | `{"name": "...", "position": [x, y, z], "quantity": "ThermalRadiationKwM2", "threshold": 12.5}` — adds a detector |
 | `POST /simulations/cancel` | `{"id": "..."}` — cancels its latest run |
 | `POST /simulations/show` | `{"id": "...", "timeS": 30}` — loads a completed result into the 3D view, paused at the snapshot at or before `timeS` (the last snapshot when omitted); capture it with `/viewport.png` |
+| `GET /views` | the project's views (isosurfaces, contour planes and surface heat loads) |
+| `POST /views` | `{"simulation": "...", "kind": "ContourXY", "field": "Temperature", "planePosition": 8, "minValue": 300, "maxValue": 2000, "clipToRange": true, "colorMap": "Inferno"}` — adds a view; simulation by ID or name, and any of `name`, `timeMode`, `specificTimeS`, `visible`, `opacity`, `isoValue`, `isoColor`, `cloudAppearance`, `sampleResolution` |
+| `POST /views/update` | `{"id": "...", "visible": false}` — changes only the fields given |
+| `POST /views/delete` | `{"id": "..."}` |
+| `GET /decorations` | the project's geometry: visibility, opacity, clip plane |
+| `POST /decorations/update` | `{"name": "plant", "opacity": 0.4, "clipEnabled": true, "clipAxis": "Z", "clipValue": 11, "clipAbove": false}` — by ID or name; a clip plane cuts the model (here everything above 11 m, to see under a roof) |
+| `GET /camera` | the 3D view's camera: position and the point it looks at |
+| `POST /camera` | `{"position": [x, y, z], "target": [x, y, z]}` — moves it (Avalonia UI) |
 | `GET /log?after=N` | what the server did |
 
 ```bash

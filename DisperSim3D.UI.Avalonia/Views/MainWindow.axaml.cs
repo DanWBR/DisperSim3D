@@ -1463,12 +1463,14 @@ namespace DisperSim3D.UI.Avalonia.Views
                 case "fire":
                     AddItem("Edit Fire Source…", "mdi-pencil-outline",
                         (_, _) => _ = EditFireSourceAsync(node));
+                    AddFireSolverItems(node.Tag);
                     AddItem("Delete", "mdi-trash-can-outline",
                         (_, _) => DeleteFireSource(node));
                     return;
                 case "ignition":
                     AddItem("Edit Ignition…", "mdi-pencil-outline",
                         (_, _) => _ = EditIgnitionAsync(node));
+                    AddFireSolverItems(node.Tag);
                     AddItem("Delete", "mdi-trash-can-outline",
                         (_, _) => DeleteFromList(_scene!.Ignitions, node));
                     return;
@@ -1507,8 +1509,13 @@ namespace DisperSim3D.UI.Avalonia.Views
                         (_, _) => RunSimulation(node));
                     AddItem("Configure…", "mdi-pencil-outline",
                         (_, _) => _ = EditSimulationAsync(node));
+                    if (node.Tag is Simulation optSim && DisperSim3D.Extensibility.SolverOptionValues.Of(DisperSim3D.Extensibility.SolverExtenderRegistry.Find(optSim.ExtenderSolverId)).Count > 0)
+                        AddItem("Solver Options…", "mdi-tune-variant",
+                            (_, _) => _ = EditSolverOptionsAsync(node));
                     AddItem("Simulation Manager…", "mdi-playlist-play",
                         (_, _) => ShowSimulationManager());
+                    AddItem("Evaluate Monitors and Detectors", "mdi-gauge",
+                        (_, _) => _ = EvaluateSensorsAsync(node));
                     AddItem("Delete", "mdi-trash-can-outline",
                         (_, _) => DeleteFromList(_scene!.Simulations, node));
                     return;
@@ -1544,6 +1551,18 @@ namespace DisperSim3D.UI.Avalonia.Views
                     AddItem("Delete", "mdi-trash-can-outline",
                         (_, _) => DeleteFromList(_scene!.Decorations, node));
                     return;
+            }
+
+            // One entry per installed fire solver: run this fire source or ignition on it.
+            void AddFireSolverItems(object? fire)
+            {
+                foreach (var solver in DisperSim3D.Extensibility.SolverExtenderRegistry
+                             .WithCapability(DisperSim3D.Extensibility.SolverCapabilities.Fire))
+                {
+                    var s = solver;
+                    AddItem("Run CFD Fire on " + s.DisplayName, "mdi-fire",
+                        (_, _) => RunFireOn(fire, s));
+                }
             }
 
             void AddItem(string label, string iconName, EventHandler<RoutedEventArgs> handler)
@@ -1705,7 +1724,8 @@ namespace DisperSim3D.UI.Avalonia.Views
             fire.OrificeDiameterM    = dlg.Result.OrificeDiameterM;
             fire.HeatOfCombustionJKg = dlg.Result.HeatOfCombustionJKg;
             fire.RadiativeFraction   = dlg.Result.RadiativeFraction;
-            fire.IsPoolFire          = dlg.Result.IsPoolFire;
+            fire.Kind                = dlg.Result.Kind;
+            fire.FireballMassKg      = dlg.Result.FireballMassKg;
             fire.PoolDiameterM       = dlg.Result.PoolDiameterM;
             fire.PoolBurnRateKgM2S   = dlg.Result.PoolBurnRateKgM2S;
             MarkDirtyAndRefresh("Updated fire source: " + fire.Name);
@@ -1844,6 +1864,15 @@ namespace DisperSim3D.UI.Avalonia.Views
             if (!await dlg.ShowDialog<bool>(this) || dlg.Result is null) return;
             _scene.Simulations.Add(dlg.Result);
             MarkDirtyAndRefresh("Added simulation: " + dlg.Result.Name);
+        }
+
+        /// <summary>The options of a simulation's extender solver.</summary>
+        private async Task EditSolverOptionsAsync(ProjectTreeNode node)
+        {
+            if (_scene is null || node.Tag is not Simulation sim) return;
+            var dlg = new SolverOptionsDialog(sim, DisperSim3D.Extensibility.SolverExtenderRegistry.Find(sim.ExtenderSolverId));
+            if (!await dlg.ShowDialog<bool>(this)) return;
+            MarkDirtyAndRefresh("Updated solver options: " + sim.Name);
         }
 
         private async Task EditSimulationAsync(ProjectTreeNode node)
@@ -2040,10 +2069,76 @@ namespace DisperSim3D.UI.Avalonia.Views
             RunSimulation(sim);
         }
 
+        /// <summary>
+        /// Adds a fire simulation for a fire source or an ignition on a fire solver
+        /// extender and runs it; the result is an Extender simulation like any other.
+        /// </summary>
+        private void RunFireOn(object? fire, DisperSim3D.Extensibility.ISolverExtender solver)
+        {
+            if (_scene is null) return;
+            Simulation sim;
+            if (fire is FireSource source) sim = FireRuns.CreateFor(_scene, source, solver);
+            else if (fire is IgnitionEvent ignition) sim = FireRuns.CreateFor(_scene, ignition, solver);
+            else return;
+            _scene.Simulations.Add(sim);
+            MarkDirtyAndRefresh("Added fire simulation: " + sim.Name);
+            RunSimulation(sim);
+        }
+
+        /// <summary>
+        /// Queues a fire simulation on its fire solver extender; null when queued,
+        /// otherwise why it was not.
+        /// </summary>
+        private string? RunFireSimulation(Simulation sim)
+        {
+            var config = AppSettings.Instance.CreateCfdConfig(sim.SnapshotCfdConfig);
+            var obstacles = new List<BoundingBox>();
+            foreach (var deco in _scene!.Decorations)
+                if (deco.BoundingBox != null)
+                    obstacles.Add(deco.BoundingBox);
+
+            // Checked here so a missing fire or an unfinished dispersion run is refused
+            // at once; the manager prepares it again with the job's progress and cancel.
+            var (request, error) = FireRuns.Prepare(_scene, sim, config, obstacles, null, default);
+            if (request == null)
+            {
+                StatusText.Text = error ?? "Cannot run " + sim.Name + ".";
+                return StatusText.Text;
+            }
+
+            sim.Status = SimulationStatus.Queued;
+            SimulationManager.Enqueue(request.Scenario, CfdSolverType.Extender, config, _scene, null,
+                obstacles, null, sim.Id, fireSimulation: sim);
+            ShowSimulationManager();
+            StatusText.Text = $"Fire simulation enqueued: {sim.Name}";
+            return null;
+        }
+
+        /// <summary>
+        /// Replays a finished simulation through the project's monitors and detectors
+        /// from the fields it stored, and shows the detector results.
+        /// </summary>
+        private async Task EvaluateSensorsAsync(ProjectTreeNode node)
+        {
+            if (_scene is null || node.Tag is not Simulation sim) return;
+            if (sim.Status != SimulationStatus.Completed)
+            {
+                StatusText.Text = $"Run '{sim.Name}' first.";
+                return;
+            }
+            var detectors = DetectorEvaluator.EvaluateSimulation(_scene, sim, _scene.GasDetectors);
+            MonitorEvaluator.EvaluateSimulation(_scene, sim, _scene.MonitorPoints);
+            StatusText.Text = $"'{sim.Name}': {detectors.DetectorsTriggered}/{detectors.TotalDetectors} detectors triggered, "
+                + $"{_scene.MonitorPoints.Count(m => m.TimeSeries.Count > 0)}/{_scene.MonitorPoints.Count} monitors read";
+            if (_scene.GasDetectors.Count > 0)
+                await new DetectorResultsDialog(detectors, _scene.GasDetectors).ShowDialog(this);
+        }
+
         /// <summary>Queues <paramref name="sim"/>; null when queued, otherwise why it was not.</summary>
         internal string? RunSimulation(Simulation sim)
         {
             if (_scene is null) return "No project is open.";
+            if (sim.IsFireRun) return RunFireSimulation(sim);
 
             // The simulation names its own source and wind field; run those in a
             // scenario of its own, as the WinForms shell and the headless runner
@@ -2066,6 +2161,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 Name = sim.Name,
                 Meteo = meteo,
                 SolverType = sim.SolverType,
+                ExtenderSolverId = sim.ExtenderSolverId,
                 CfdConfig = config,
                 WindFieldScenarioId = string.IsNullOrEmpty(sim.WindFieldId) ? null : sim.WindFieldId
             };
@@ -2144,6 +2240,13 @@ namespace DisperSim3D.UI.Avalonia.Views
         /// <summary>Redraws the tree and the view after an extender changed the project.</summary>
         internal void RefreshProjectFromExtender() => MarkDirtyAndRefresh(StatusText.Text ?? "");
 
+        /// <summary>The 3D view's camera, as a preset; setting it moves the view.</summary>
+        internal CameraPreset ViewportCamera
+        {
+            get => Viewport3D.SaveCameraPreset("Camera");
+            set => Viewport3D.ApplyCameraPreset(value);
+        }
+
         /// <summary>Shows a completed simulation paused at the snapshot at or before <paramref name="timeS"/> (the last when null).</summary>
         internal string? ShowSimulationResult(string id, double? timeS)
         {
@@ -2218,7 +2321,13 @@ namespace DisperSim3D.UI.Avalonia.Views
                             sim.ResultTag = job.ResultEntry.Tag;
                             sim.CasePath = job.ResultEntry.CasePath ?? "";
                             sim.TimeStepCount = job.ResultEntry.TimeStepCount;
-                            if (job.ResultEntry.Tag is OpenFoamResult ofr && ofr.TimeSteps.Count > 0)
+                            // An extender says where its grid is; a fire run's playback
+                            // cache is its species channel, which it may not have written.
+                            if (sim.SolverType == CfdSolverType.Extender)
+                                FireRuns.ApplyResultGrid(sim, job.ResultEntry.Tag as OpenFoamResult);
+                            if (sim.IsFireRun)
+                                sim.ResultTag = StoredFields.Load(sim, ResultChannels.Species);
+                            if (sim.ResultTag is OpenFoamResult ofr && ofr.TimeSteps.Count > 0)
                             {
                                 var lastField = ofr.GetField(ofr.TimeSteps[ofr.TimeSteps.Count - 1]);
                                 if (lastField != null)
@@ -3017,7 +3126,8 @@ namespace DisperSim3D.UI.Avalonia.Views
             double half = _playbackSim.SnapshotDomainSizeM > 0
                 ? _playbackSim.SnapshotDomainSizeM : 200;
 
-            Viewport3D.UpdateDispersionFrame(field, _playbackEffectiveThresholds, half);
+            Viewport3D.UpdateDispersionFrame(field, _playbackEffectiveThresholds, half,
+                _playbackSim.SnapshotDomainCenterX, _playbackSim.SnapshotDomainCenterY);
             _lastRenderedStepT = bestT;
             _lastRenderedThresholds = _playbackEffectiveThresholds;
         }

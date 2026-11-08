@@ -33,7 +33,9 @@ namespace DisperSim3D.Core
                 log?.Invoke(sim.StatusMessage);
                 return false;
             }
-            if (wf.Status != WindFieldStatus.Ready)
+            bool readsWindField = sim.SolverType != CfdSolverType.Extender
+                || DisperSim3D.Extensibility.SolverExtenderRegistry.Find(sim.ExtenderSolverId)?.ReadsWindField != false;
+            if (readsWindField && wf.Status != WindFieldStatus.Ready)
             {
                 sim.Status = SimulationStatus.Failed;
                 sim.StatusMessage = "Wind field '" + wf.Name + "' is not Ready (status: " + wf.Status + ")";
@@ -67,6 +69,7 @@ namespace DisperSim3D.Core
                 DomainSizeM = sim.SnapshotDomainSizeM,
                 GridResolution = sim.SnapshotGridResolution,
                 SolverType = sim.SolverType,
+                ExtenderSolverId = sim.ExtenderSolverId,
                 CfdConfig = sim.SnapshotCfdConfig,
                 WindFieldScenarioId = sim.WindFieldId
             };
@@ -133,6 +136,8 @@ namespace DisperSim3D.Core
                 ExitVelocityMPerS = src.ExitVelocityMPerS,
                 ExitTemperatureK = src.ExitTemperatureK,
                 ReleaseDurationS = src.ReleaseDurationS,
+                ReleaseRateProfile = src.ReleaseRateProfile?.Select(p => new ReleaseRatePoint { TimeS = p.TimeS, RateKgPerS = p.RateKgPerS }).ToList()
+                    ?? new System.Collections.Generic.List<ReleaseRatePoint>(),
                 UseJetTransition = src.UseJetTransition,
                 CarryAerosol = src.CarryAerosol,
                 AerosolCompound = src.AerosolCompound,
@@ -153,6 +158,8 @@ namespace DisperSim3D.Core
                 RelativeHumidity = m.RelativeHumidity,
                 AveragingTimeS = m.AveragingTimeS,
                 MixingHeightM = m.MixingHeightM,
+                ObukhovLengthM = m.ObukhovLengthM,
+                WindDirectionSigmaDeg = m.WindDirectionSigmaDeg,
                 WindMeasurementHeightM = m.WindMeasurementHeightM,
                 WindShearExponent = m.WindShearExponent,
                 IsUrbanTerrain = m.IsUrbanTerrain,

@@ -48,7 +48,8 @@ namespace DisperSim3D.Core
             double ambientPressurePa = 101325.0,
             double thermalDiffusivityM2PerS = 2.2e-5,
             IList<BoundingBox> obstacles = null,
-            int deviceId = -1)
+            int deviceId = -1,
+            DecorationSolids solids = null)
         {
             if (wind == null) throw new ArgumentNullException(nameof(wind));
             Nx = nx; Ny = ny; Nz = nz;
@@ -95,23 +96,14 @@ namespace DisperSim3D.Core
             }
             FluidX3DBridge.fx3d_tracer_set_wind(_handle, ux, uy, uz);
 
-            if (obstacles != null && obstacles.Count > 0)
+            if ((obstacles != null && obstacles.Count > 0) || solids != null)
             {
+                bool[,,] mask = DecorationSolids.ObstacleMask(obstacles, solids, domainHalfM, domainHeightM, nx, ny, nz);
                 var blocked = new byte[_n];
-                foreach (var bb in obstacles)
-                {
-                    if (bb == null) continue;
-                    int i0 = Math.Max(0, (int)Math.Floor((bb.Min.X + domainHalfM) / DxM));
-                    int i1 = Math.Min(nx - 1, (int)Math.Ceiling((bb.Max.X + domainHalfM) / DxM));
-                    int j0 = Math.Max(0, (int)Math.Floor((bb.Min.Y + domainHalfM) / DyM));
-                    int j1 = Math.Min(ny - 1, (int)Math.Ceiling((bb.Max.Y + domainHalfM) / DyM));
-                    int k0 = Math.Max(0, (int)Math.Floor(Math.Max(0, bb.Min.Z) / DzM));
-                    int k1 = Math.Min(nz - 1, (int)Math.Ceiling(Math.Max(0, bb.Max.Z) / DzM));
-                    for (int k = k0; k <= k1; k++)
-                        for (int j = j0; j <= j1; j++)
-                            for (int i = i0; i <= i1; i++)
-                                blocked[i + nx * (j + ny * k)] = 1;
-                }
+                for (int k = 0; k < nz; k++)
+                    for (int j = 0; j < ny; j++)
+                        for (int i = 0; i < nx; i++)
+                            if (mask[i, j, k]) blocked[i + nx * (j + ny * k)] = 1;
                 FluidX3DBridge.fx3d_tracer_set_obstacles(_handle, blocked);
             }
         }

@@ -120,6 +120,13 @@ namespace DisperSim3D.Core
                             0.0084 * tracerCellM * ws2 / 0.7);
                     }
 
+                    // The decorations' meshes block the tracer cell by cell; a decoration
+                    // whose mesh cannot be read blocks its bounding box.
+                    DecorationSolids solids = DecorationSolids.FromDecorations(scene?.Decorations);
+                    if (solids.MeshCount > 0)
+                        Report(0.05, string.Format("FluidX3D obstacles: {0:N0} triangles from {1} mesh(es), {2} box(es)",
+                            solids.Triangles.TriangleCount, solids.MeshCount, solids.Boxes.Count));
+
                     DispersionTracerEngine passiveEngine = null;
                     IBuoyantTracerEngine buoyantEngine = null;
 
@@ -130,7 +137,7 @@ namespace DisperSim3D.Core
                         if (useGpu)
                         {
                             buoyantEngine = new BuoyantTracerEngineGpu(wind, domain, height, tnx, tny, tnz,
-                                diff, gasMW, ambientT, ambientP, 2.2e-5, _obstacles);
+                                diff, gasMW, ambientT, ambientP, 2.2e-5, _obstacles, solids: solids);
                             Report(0.05, string.Format(
                                 "FluidX3D buoyant tracer [GPU]: MW={0:F4} kg/mol, Texit={1:F1} K, Tamb={2:F1} K, grid={3}x{4}x{5} cell={6:F1}m",
                                 gasMW, exitT, ambientT, tnx, tny, tnz, tracerCellM));
@@ -138,7 +145,7 @@ namespace DisperSim3D.Core
                         else
                         {
                             buoyantEngine = new BuoyantTracerEngine(wind, domain, height, tnx, tny, tnz,
-                                diff, gasMW, ambientT, ambientP, 2.2e-5, decay, _obstacles);
+                                diff, gasMW, ambientT, ambientP, 2.2e-5, decay, _obstacles, solids);
                             Report(0.05, string.Format(
                                 "FluidX3D buoyant tracer [CPU]: MW={0:F4} kg/mol, Texit={1:F1} K, Tamb={2:F1} K, grid={3}x{4}x{5} cell={6:F1}m",
                                 gasMW, exitT, ambientT, tnx, tny, tnz, tracerCellM));
@@ -147,7 +154,7 @@ namespace DisperSim3D.Core
                     else
                     {
                         passiveEngine = new DispersionTracerEngine(wind, domain, height, nx, ny, nz,
-                            diff, decay, _obstacles);
+                            diff, decay, _obstacles, solids);
                     }
 
                     if (src != null)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using DisperSim3D.Models;
 
 namespace DisperSim3D.Core
@@ -43,6 +44,66 @@ namespace DisperSim3D.Core
                     return false;
             }
         }
+
+        /// <summary>True when the property is the per-triangle heat load on the plant
+        /// surfaces ({time}_surface.bin), which a Surface view draws.</summary>
+        public static bool IsSurface(ViewFieldProperty p)
+            => p == ViewFieldProperty.SurfaceIncidentRadiationKwM2
+            || p == ViewFieldProperty.SurfaceTotalHeatFluxKwM2;
+
+        /// <summary>True when the property is a combustion product or smoke field the
+        /// simulation stored itself (soot, CO, CO2, O2, visibility); there is no analytic
+        /// fallback for these.</summary>
+        public static bool IsStoredOnly(ViewFieldProperty p)
+            => p == ViewFieldProperty.SootDensityKgM3
+            || p == ViewFieldProperty.COVolumeFraction
+            || p == ViewFieldProperty.CO2VolumeFraction
+            || p == ViewFieldProperty.O2VolumeFraction
+            || p == ViewFieldProperty.VisibilityM;
+
+        /// <summary>
+        /// True when a simulation's species snapshots ({time}.bin, or OpenFOAM's field) are
+        /// a concentration in kg/m³ rather than a mass fraction: the extender contract
+        /// (<see cref="Extensibility.SolverExtenderResult.Result"/>, which imported results
+        /// follow too) and the analytic engines (Gaussian puff and plume, the unified model)
+        /// write kg/m³; OpenFOAM and the FluidX3D tracers write the mass fraction.
+        /// </summary>
+        public static bool StoresSpeciesAsKgPerM3(Simulation sim)
+        {
+            if (sim == null) return false;
+            switch (sim.SolverType)
+            {
+                case CfdSolverType.GaussianPuff:
+                case CfdSolverType.GaussianPlume:
+                case CfdSolverType.UnifiedDispersion:
+                case CfdSolverType.Extender:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// A simulation's species snapshot as the mass fraction the transforms here take:
+        /// kg/m³ divided by the ambient air density for solvers that store kg/m³
+        /// (<see cref="StoresSpeciesAsKgPerM3"/>), unchanged otherwise. Returns a new array
+        /// when it converts.
+        /// </summary>
+        public static double[,,] SpeciesAsMassFraction(double[,,] raw, Simulation sim)
+        {
+            if (raw == null || !StoresSpeciesAsKgPerM3(sim)) return raw;
+            int nx = raw.GetLength(0), ny = raw.GetLength(1), nz = raw.GetLength(2);
+            var y = new double[nx, ny, nz];
+            for (int i = 0; i < nx; i++)
+                for (int j = 0; j < ny; j++)
+                    for (int k = 0; k < nz; k++)
+                        y[i, j, k] = raw[i, j, k] / RhoAir;
+            return y;
+        }
+
+        /// <summary>The scalar form of <see cref="SpeciesAsMassFraction(double[,,], Simulation)"/>.</summary>
+        public static double SpeciesAsMassFraction(double raw, Simulation sim)
+            => StoresSpeciesAsKgPerM3(sim) ? raw / RhoAir : raw;
 
         /// <summary>True when the property is computed analytically from the scene,
         /// not sampled from the CFD result (e.g. thermal radiation from FireSources).</summary>
@@ -105,14 +166,19 @@ namespace DisperSim3D.Core
         /// <summary>Builds a thermal-radiation field (kW/m²) by summing the point-source
         /// model contribution of every active FireSource in the scene at each cell centre.
         /// Returns a fresh nx×ny×nz array.</summary>
-        public static double[,,] BuildRadiationField(Scene3D scene, int nx, int ny, int nz, double halfM)
+        public static double[,,] BuildRadiationField(Scene3D scene, int nx, int ny, int nz, double halfM,
+            double centerX = 0, double centerY = 0)
+            => BuildRadiationField(scene, scene?.FireScenario?.Sources, nx, ny, nz, halfM, centerX, centerY);
+
+        /// <summary>The same for some of the scene's fire sources only.</summary>
+        private static double[,,] BuildRadiationField(Scene3D scene, IList<FireSource> sources,
+            int nx, int ny, int nz, double halfM, double centerX, double centerY)
         {
             var output = new double[nx, ny, nz];
-            if (scene?.FireScenario?.Sources == null || scene.FireScenario.Sources.Count == 0)
+            if (sources == null || sources.Count == 0)
                 return output;
             double dx = 2 * halfM / nx, dy = 2 * halfM / ny;
             double dz = halfM > 0 ? halfM / nz * 2.0 : 1.0; // matches BuildVisual's z scaling
-            var sources = scene.FireScenario.Sources;
 
             var meteo = ResolveMeteo(scene);
             double ambientT = meteo.AmbientTemperature;
@@ -135,10 +201,10 @@ namespace DisperSim3D.Core
                 double z = (k + 0.5) * dz;
                 for (int j = 0; j < ny; j++)
                 {
-                    double y = -halfM + (j + 0.5) * dy;
+                    double y = centerY - halfM + (j + 0.5) * dy;
                     for (int i = 0; i < nx; i++)
                     {
-                        double x = -halfM + (i + 0.5) * dx;
+                        double x = centerX - halfM + (i + 0.5) * dx;
                         var receiver = new Geometry.Point3D(x, y, z);
 
                         // A cell inside solid geometry is not exposed at all.
@@ -152,7 +218,14 @@ namespace DisperSim3D.Core
 
                         foreach (var src in sources)
                         {
-                            if (src == null || src.RadiationModel != RadiationModel.PointSource) continue;
+                            if (src == null) continue;
+                            // A fireball is its own sphere whatever the radiation model.
+                            if (src.Kind == FireKind.Fireball)
+                            {
+                                sumKwM2 += FireballModel.FluxKwM2(src, receiver, receiverMode, ambientT, humidity, occluder);
+                                continue;
+                            }
+                            if (src.RadiationModel != RadiationModel.PointSource) continue;
                             // The point source has one ray to block, from the source itself.
                             if (occluder != null && occluder.Blocks(receiver, src.Position)) continue;
                             double dxp = x - src.Position.X;
@@ -177,32 +250,131 @@ namespace DisperSim3D.Core
         }
 
         /// <summary>
+        /// The thermal radiation a simulation computed itself, kW/m²: the per-cell
+        /// maximum over its <c>{time}_Q.bin</c> files. Null when it wrote none.
+        /// </summary>
+        public static double[,,] StoredRadiationField(Simulation sim, double halfM)
+        {
+            if (sim == null || string.IsNullOrEmpty(sim.CasePath)) return null;
+            int nx = sim.SnapshotGridResolution > 0 ? sim.SnapshotGridResolution : 60, ny = nx, nz = Math.Max(1, nx / 2);
+            var result = OpenFoamResultReader.TryLoadFlatBinCase(sim.CasePath, ref nx, ref ny, ref nz, halfM,
+                OpenFoamResultReader.RadiationChannel);
+            if (result == null || !result.IsLoaded) return null;
+
+            double[,,] peak = null;
+            foreach (double t in result.TimeSteps)
+            {
+                var field = result.GetField(t);
+                if (field == null) continue;
+                if (peak == null) { peak = field; continue; }
+                for (int i = 0; i < nx; i++)
+                    for (int j = 0; j < ny; j++)
+                        for (int k = 0; k < nz; k++)
+                            peak[i, j, k] = Math.Max(peak[i, j, k], field[i, j, k]);
+            }
+            return peak;
+        }
+
+        /// <summary>
         /// Builds whichever analytic field the property asks for. Radiation is the
-        /// base; dose applies the scenario's exposure time to it, and the fatality
-        /// probability runs the dose through the Eisenberg probit.
+        /// base: the field <paramref name="sim"/> computed itself when it wrote one
+        /// (<see cref="StoredRadiationField"/>), else the analytic one from the scene's
+        /// fire sources. Dose applies the scenario's exposure time to it, and the
+        /// fatality probability runs the dose through the Eisenberg probit.
         /// </summary>
         public static double[,,] BuildAnalyticField(Scene3D scene, ViewFieldProperty property,
-            int nx, int ny, int nz, double halfM)
+            int nx, int ny, int nz, double halfM, Simulation sim = null)
         {
-            var radiation = BuildRadiationField(scene, nx, ny, nz, halfM);
-            if (property == ViewFieldProperty.ThermalRadiationKwM2) return radiation;
-
+            double cx = sim?.SnapshotDomainCenterX ?? 0, cy = sim?.SnapshotDomainCenterY ?? 0;
             double exposure = scene?.FireScenario?.ExposureTimeS ?? 20.0;
-            var dose = ThermalDose.BuildDoseField(radiation, exposure);
+            var stored = StoredRadiationField(sim, halfM);
+            if (property == ViewFieldProperty.ThermalRadiationKwM2)
+                return stored ?? BuildRadiationField(scene, nx, ny, nz, halfM, cx, cy);
+
+            double[,,] dose;
+            if (stored != null)
+                dose = StoredDoseField(sim, halfM, exposure);
+            else
+            {
+                // A jet or pool burns for as long as the people stay; a fireball only for
+                // its duration, so its dose takes the shorter of the two.
+                var sources = scene?.FireScenario?.Sources ?? new List<FireSource>();
+                var steady = sources.Where(s => s != null && s.Kind != FireKind.Fireball).ToList();
+                dose = ThermalDose.BuildDoseField(BuildRadiationField(scene, steady, nx, ny, nz, halfM, cx, cy), exposure);
+                foreach (var fireball in sources.Where(s => s != null && s.Kind == FireKind.Fireball))
+                {
+                    var flux = BuildRadiationField(scene, new[] { fireball }, nx, ny, nz, halfM, cx, cy);
+                    var add = ThermalDose.BuildDoseField(flux, FireExposureS(fireball, exposure));
+                    for (int i = 0; i < nx; i++)
+                        for (int j = 0; j < ny; j++)
+                            for (int k = 0; k < nz; k++)
+                                dose[i, j, k] += add[i, j, k];
+                }
+            }
             return property == ViewFieldProperty.ThermalDose
                 ? dose
                 : ThermalDose.BuildFatalityField(dose);
+        }
+
+        /// <summary>
+        /// How long a person is exposed to one fire source: the scene's escape time, cut
+        /// to the burn duration for a fireball (<see cref="FireballModel.DurationS"/>).
+        /// </summary>
+        public static double FireExposureS(FireSource source, double escapeTimeS)
+            => source != null && source.Kind == FireKind.Fireball
+                ? Math.Min(escapeTimeS, FireballModel.DurationS(source.FireballMassKg))
+                : escapeTimeS;
+
+        /// <summary>
+        /// The thermal dose from the radiation a simulation stored, per cell: the worst
+        /// exposure window of the scene's length that starts at a stored time
+        /// (<see cref="ThermalDose.WorstWindowDose"/>). A single snapshot is held for the
+        /// whole window, as a steady fire is.
+        /// </summary>
+        public static double[,,] StoredDoseField(Simulation sim, double halfM, double exposureS)
+        {
+            if (sim == null || string.IsNullOrEmpty(sim.CasePath)) return null;
+            int nx = sim.SnapshotGridResolution > 0 ? sim.SnapshotGridResolution : 60, ny = nx, nz = Math.Max(1, nx / 2);
+            var result = OpenFoamResultReader.TryLoadFlatBinCase(sim.CasePath, ref nx, ref ny, ref nz, halfM,
+                OpenFoamResultReader.RadiationChannel);
+            if (result == null || !result.IsLoaded) return null;
+
+            var times = new List<double>();
+            var fields = new List<double[,,]>();
+            foreach (double t in result.TimeSteps)
+            {
+                var f = result.GetField(t);
+                if (f == null) continue;
+                times.Add(t);
+                fields.Add(f);
+            }
+            if (fields.Count == 0) return null;
+
+            var dose = new double[nx, ny, nz];
+            System.Threading.Tasks.Parallel.For(0, nx, i =>
+            {
+                var flux = new double[fields.Count];
+                for (int j = 0; j < ny; j++)
+                    for (int k = 0; k < nz; k++)
+                    {
+                        for (int n = 0; n < fields.Count; n++) flux[n] = fields[n][i, j, k];
+                        dose[i, j, k] = ThermalDose.WorstWindowDose(times, flux, exposureS);
+                    }
+            });
+            return dose;
         }
 
         /// <summary>Point sample of an analytic field, for monitors and detectors.</summary>
         public static double AnalyticAtPoint(Scene3D scene, ViewFieldProperty property,
             double x, double y, double z)
         {
-            double radiation = RadiationAtPoint(scene, x, y, z);
-            if (property == ViewFieldProperty.ThermalRadiationKwM2) return radiation;
+            if (property == ViewFieldProperty.ThermalRadiationKwM2) return RadiationAtPoint(scene, x, y, z);
 
             double exposure = scene?.FireScenario?.ExposureTimeS ?? 20.0;
-            double dose = ThermalDose.Dose(radiation, exposure);
+            double dose = 0;
+            foreach (var src in scene?.FireScenario?.Sources ?? new List<FireSource>())
+                if (src != null)
+                    dose += ThermalDose.Dose(RadiationAtPoint(scene, new[] { src }, x, y, z), FireExposureS(src, exposure));
             return property == ViewFieldProperty.ThermalDose
                 ? dose
                 : ThermalDose.ProbitToProbability(ThermalDose.FatalityProbit(dose));
@@ -251,8 +423,12 @@ namespace DisperSim3D.Core
         /// <summary>Computes thermal radiation flux (kW/m²) at a single world-space
         /// point by summing every FireSource's point-model contribution.</summary>
         public static double RadiationAtPoint(Scene3D scene, double x, double y, double z)
+            => RadiationAtPoint(scene, scene?.FireScenario?.Sources, x, y, z);
+
+        /// <summary>The same for some of the scene's fire sources only.</summary>
+        private static double RadiationAtPoint(Scene3D scene, IList<FireSource> sources, double x, double y, double z)
         {
-            if (scene?.FireScenario?.Sources == null || scene.FireScenario.Sources.Count == 0)
+            if (sources == null || sources.Count == 0)
                 return 0;
 
             var meteo = ResolveMeteo(scene);
@@ -263,9 +439,15 @@ namespace DisperSim3D.Core
 
             double sumKwM2 = 0;
 
-            foreach (var src in scene.FireScenario.Sources)
+            foreach (var src in sources)
             {
                 if (src == null) continue;
+                if (src.Kind == FireKind.Fireball)
+                {
+                    sumKwM2 += FireballModel.FluxKwM2(src, receiver, receiverMode,
+                        meteo.AmbientTemperature, meteo.RelativeHumidity, occluder);
+                    continue;
+                }
 
                 if (src.RadiationModel == RadiationModel.SolidFlame)
                 {
@@ -316,6 +498,13 @@ namespace DisperSim3D.Core
                 case ViewFieldProperty.FlashFireEnvelope:    return "Flash fire — hazard envelope (iso 0.5)";
                 case ViewFieldProperty.ThermalDose:          return "Thermal dose — fire sources";
                 case ViewFieldProperty.FatalityProbability:  return "Fatality probability — fire sources";
+                case ViewFieldProperty.SootDensityKgM3:      return "Soot (kg/m³)";
+                case ViewFieldProperty.COVolumeFraction:     return "CO (volume fraction)";
+                case ViewFieldProperty.CO2VolumeFraction:    return "CO2 (volume fraction)";
+                case ViewFieldProperty.O2VolumeFraction:     return "O2 (volume fraction)";
+                case ViewFieldProperty.VisibilityM:          return "Visibility (m)";
+                case ViewFieldProperty.SurfaceIncidentRadiationKwM2: return "Surface — incident radiation (kW/m²)";
+                case ViewFieldProperty.SurfaceTotalHeatFluxKwM2:     return "Surface — total heat flux (kW/m²)";
                 default:                                     return p.ToString();
             }
         }
@@ -345,6 +534,13 @@ namespace DisperSim3D.Core
                 case ViewFieldProperty.FlashFireEnvelope:    return "";
                 case ViewFieldProperty.ThermalDose:          return "(W/m²)^4/3·s";
                 case ViewFieldProperty.FatalityProbability:  return "";
+                case ViewFieldProperty.SootDensityKgM3:      return "kg/m³";
+                case ViewFieldProperty.COVolumeFraction:
+                case ViewFieldProperty.CO2VolumeFraction:
+                case ViewFieldProperty.O2VolumeFraction:     return "mol/mol";
+                case ViewFieldProperty.VisibilityM:          return "m";
+                case ViewFieldProperty.SurfaceIncidentRadiationKwM2:
+                case ViewFieldProperty.SurfaceTotalHeatFluxKwM2: return "kW/m²";
                 default:                                     return "";
             }
         }
