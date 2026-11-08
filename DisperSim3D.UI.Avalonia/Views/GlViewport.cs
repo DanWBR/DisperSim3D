@@ -36,6 +36,9 @@ namespace DisperSim3D.UI.Avalonia.Views
         private const int GL_BACK   = 0x0405;
 
         private readonly GlCamera _camera = new();
+
+        /// <summary>The scene the camera was last fitted to, so a rebuild of the same scene keeps the view.</summary>
+        private Scene3D? _cameraSetFor;
         private readonly GlGridRenderer _grid = new();
 
         // Scene objects — each is a (mesh, model-matrix) pair
@@ -129,6 +132,7 @@ namespace DisperSim3D.UI.Avalonia.Views
         private delegate void D_glUniform2f(int loc, float v0, float v1);
         private delegate void D_glUniform1f(int loc, float v0);
         private delegate void D_glBlendFunc(int sfactor, int dfactor);
+        private delegate void D_glReadPixels(int x, int y, int width, int height, int format, int type, IntPtr data);
         private delegate void D_glCullFace(int mode);
         private delegate void D_glPolygonOffset(float factor, float units);
         private unsafe delegate void D_glUniformMatrix3fv(
@@ -143,6 +147,10 @@ namespace DisperSim3D.UI.Avalonia.Views
         private D_glUniform3fv? _glUniform3fv;
         private D_glUniform1fv? _glUniform1fv;
         private D_glBlendFunc? _glBlendFunc;
+        private D_glReadPixels? _glReadPixels;
+
+        // A pending request for the next frame as a PNG (see CaptureFrameAsync).
+        private System.Threading.Tasks.TaskCompletionSource<byte[]?>? _captureRequest;
         private D_glCullFace? _glCullFace;
         private D_glPolygonOffset? _glPolygonOffset;
         private D_glUniformMatrix3fv? _glUniformMatrix3fv;
@@ -1275,6 +1283,9 @@ void main() { }
                 var p2 = gl.GetProcAddress("glBlendFunc");
                 if (p2 != IntPtr.Zero)
                     _glBlendFunc = Marshal.GetDelegateForFunctionPointer<D_glBlendFunc>(p2);
+                var pRP = gl.GetProcAddress("glReadPixels");
+                if (pRP != IntPtr.Zero)
+                    _glReadPixels = Marshal.GetDelegateForFunctionPointer<D_glReadPixels>(pRP);
                 var p3 = gl.GetProcAddress("glCullFace");
                 if (p3 != IntPtr.Zero)
                     _glCullFace = Marshal.GetDelegateForFunctionPointer<D_glCullFace>(p3);
@@ -1470,6 +1481,20 @@ void main() { }
                     "[GlViewport] OpenGL init failed: " + ex.Message);
                 _initOk = false;
             }
+        }
+
+        /// <summary>
+        /// The next frame this view renders, as a PNG at its on-screen pixel size.
+        /// Completes from the render callback, so it never completes while the view
+        /// is not being drawn — callers should not wait on it without a timeout.
+        /// </summary>
+        public System.Threading.Tasks.Task<byte[]?> CaptureFrameAsync()
+        {
+            var request = new System.Threading.Tasks.TaskCompletionSource<byte[]?>(
+                System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously);
+            System.Threading.Interlocked.Exchange(ref _captureRequest, request)?.TrySetCanceled();
+            RequestNextFrameRendering();
+            return request.Task;
         }
 
         protected override unsafe void OnOpenGlRender(GlInterface gl, int fb)
@@ -2246,6 +2271,36 @@ void main() { }
             // ── Cleanup state ───────────────────────────────────────────
             gl.UseProgram(0);
 
+            // ── Frame capture (automation) ──────────────────────────────
+            // Read back what was just drawn, before the compositor takes it: the
+            // only way to get the GL view as an image, since a render-target bitmap
+            // of the window does not include OpenGL content.
+            var capture = System.Threading.Interlocked.Exchange(ref _captureRequest, null);
+            if (capture != null)
+            {
+                try
+                {
+                    if (_glReadPixels == null)
+                    {
+                        capture.TrySetResult(null);
+                    }
+                    else
+                    {
+                        var pixels = new byte[w * h * 4];
+                        fixed (byte* p = pixels)
+                            _glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, (IntPtr)p);
+                        // Blended surfaces leave alpha below 1 in the framebuffer;
+                        // the picture on screen is opaque, so the PNG is too.
+                        for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
+                        capture.TrySetResult(DisperSim3D.Core.PngWriter.EncodeRgba(pixels, w, h, flipVertically: true));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    capture.TrySetException(ex);
+                }
+            }
+
             _frameCount++;
             _fpsAccumulator += _animClock.Elapsed.TotalSeconds - _lastFrameTime;
             if (_fpsAccumulator >= 0.5)
@@ -2589,6 +2644,19 @@ void main() { }
                     var pos = fire.Position;
                     float x = (float)pos.X, y = (float)pos.Y, z = (float)pos.Z;
 
+                    if (fire.Kind == FireKind.Fireball)
+                    {
+                        // The sphere the radiation model uses: CCPS diameter, centre lifted to 0.75·D.
+                        float d = (float)FireballModel.DiameterM(Math.Max(1.0, fire.FireballMassKg));
+                        float h = (float)FireballModel.CentreHeightM(Math.Max(1.0, fire.FireballMassKg));
+                        var (bv, bi) = GlMeshBuffer.GenerateSphere(
+                            new Vector3(x, y, z + h), 0.5f * d, FireColor);
+                        var ballMesh = new GlMeshBuffer();
+                        ballMesh.Upload(gl, bv, bi);
+                        _sceneObjects.Add(new SceneObject(ballMesh, Matrix4x4.Identity, "fire:" + i));
+                        continue;
+                    }
+
                     float baseR, flameH;
                     if (fire.IsPoolFire)
                     {
@@ -2715,8 +2783,10 @@ void main() { }
                         for (int s = 0; s < texturedSubs.Count; s++)
                         {
                             var sub = texturedSubs[s];
+                            uint[] subIndices = ClipDecorationIndices(deco, sub.Indices, n => sub.Vertices[n].Position);
+                            if (subIndices.Length == 0) continue;
                             var mesh = new GlMeshBuffer();
-                            mesh.UploadTextured(gl, sub.Vertices, sub.Indices);
+                            mesh.UploadTextured(gl, sub.Vertices, subIndices);
 
                             string? texPath = overrideTex ?? sub.TexturePath;
                             int texId = 0;
@@ -2732,10 +2802,12 @@ void main() { }
                             if (texId == 0)
                                 texId = _whiteTexture;
 
+                            var tint = overrideTex != null ? Vector4.One : sub.DiffuseColor;
+                            tint.W *= (float)Math.Clamp(deco.Opacity, 0, 1);
                             var obj = new SceneObject(mesh, model, $"deco:{i}:{s}")
                             {
                                 TextureId = texId,
-                                Tint = overrideTex != null ? Vector4.One : sub.DiffuseColor
+                                Tint = tint
                             };
                             _sceneObjects.Add(obj);
                         }
@@ -2755,8 +2827,11 @@ void main() { }
                         DecorationBounds.SetLocalBox(deco,
                             ComputeBoundingBoxFromSolid(loaded.Value.verts));
 
+                    var solidVerts = loaded.Value.verts;
+                    uint[] solidIndices = ClipDecorationIndices(deco, loaded.Value.indices, n => solidVerts[n].Position);
+                    if (solidIndices.Length == 0) continue;
                     var solidMesh = new GlMeshBuffer();
-                    solidMesh.Upload(gl, loaded.Value.verts, loaded.Value.indices,
+                    solidMesh.Upload(gl, solidVerts, solidIndices,
                         keepCpuCopy: true);
 
                     _sceneObjects.Add(new SceneObject(
@@ -2829,6 +2904,12 @@ void main() { }
 
                     try
                     {
+                        if (view.IsSurface)
+                        {
+                            BuildSurfaceView(gl, view, sim, scene);
+                            continue;
+                        }
+
                         var field = LoadViewField(view, sim, scene);
                         if (field == null) continue;
 
@@ -2850,15 +2931,20 @@ void main() { }
             }
 
             // ── Camera: apply preset, or zoom to fit scene content ───
-            if (scene.CameraPresets != null && scene.CameraPresets.Count > 0)
+            // Only for a newly loaded project: a rebuild after an edit keeps the view.
+            if (!ReferenceEquals(scene, _cameraSetFor))
             {
-                _camera.ApplyPreset(scene.CameraPresets[0]);
-            }
-            else
-            {
-                var (bbMin, bbMax) = ComputeSceneBounds(scene);
-                _camera.Reset();
-                _camera.ZoomToFit(bbMin, bbMax);
+                _cameraSetFor = scene;
+                if (scene.CameraPresets != null && scene.CameraPresets.Count > 0)
+                {
+                    _camera.ApplyPreset(scene.CameraPresets[0]);
+                }
+                else
+                {
+                    var (bbMin, bbMax) = ComputeSceneBounds(scene);
+                    _camera.Reset();
+                    _camera.ZoomToFit(bbMin, bbMax);
+                }
             }
 
             // ── Ghost preview for pick mode ──────────────────────────────
@@ -2902,18 +2988,30 @@ void main() { }
             int nz = Math.Max(1, nx / 2);
             double half = sim.SnapshotDomainSizeM > 0 ? sim.SnapshotDomainSizeM : 200;
 
-            // Try analytic fields first (thermal radiation, dose, fatality)
+            // Try analytic fields first (thermal radiation, dose, fatality) — the
+            // simulation's own {time}_Q.bin when it stored one.
             if (FieldTransform.IsAnalytic(view.FieldProperty))
                 return FieldTransform.BuildAnalyticField(
-                    scene, view.FieldProperty, nx, ny, nz, half);
+                    scene, view.FieldProperty, nx, ny, nz, half, sim);
+
+            // A channel the simulation stored beside its species: temperature, soot,
+            // CO, CO2, O2, visibility.
+            var channel = ResultChannels.For(view.FieldProperty);
+            if (channel != null)
+            {
+                var stored = StoredFields.Load(sim, channel);
+                return stored == null ? null
+                    : StoredFields.Collapse(stored, channel, view.TimeMode, view.SpecificTimeS);
+            }
 
             // Resolve OpenFOAM field name from the view property
             string? fieldName = ResolveFieldName(view.FieldProperty, sim);
 
             OpenFoamResult? result = null;
 
-            // Check if simulation has a cached result
-            if (sim.ResultTag is OpenFoamResult cachedResult)
+            // The simulation's cached result is the species channel playback loads.
+            bool species = FieldTransform.NeedsSpeciesField(view.FieldProperty);
+            if (species && sim.ResultTag is OpenFoamResult cachedResult)
             {
                 result = cachedResult;
             }
@@ -2924,16 +3022,13 @@ void main() { }
                     sim.CasePath, nx, ny, nz, half,
                     scalarFieldName: fieldName);
 
-                // Fall back to flat-bin (FluidX3D) layout
-                if (result == null || !result.IsLoaded || result.TimeSteps.Count == 0)
-                {
-                    bool wantTemp = view.FieldProperty == ViewFieldProperty.Temperature;
+                // Fall back to flat-bin (FluidX3D) layout, which holds only the species
+                if (species && (result == null || !result.IsLoaded || result.TimeSteps.Count == 0))
                     result = TryLoadFlatBinCase(
-                        sim.CasePath, ref nx, ref ny, ref nz, half, wantTemp);
-                }
+                        sim.CasePath, ref nx, ref ny, ref nz, half, false);
 
-                // Cache for next time
-                if (result != null && result.IsLoaded)
+                // Cache the species channel for next time
+                if (species && result != null && result.IsLoaded)
                     sim.ResultTag = result;
             }
 
@@ -2954,15 +3049,129 @@ void main() { }
             if (FieldTransform.NeedsSpeciesField(view.FieldProperty))
             {
                 var gas = ResolveGasForSimulation(sim, scene);
-                field = FieldTransform.FromMassFraction(field, view.FieldProperty, gas);
+                field = FieldTransform.FromMassFraction(
+                    FieldTransform.SpeciesAsMassFraction(field, sim), view.FieldProperty, gas);
 
                 // Flash fire: the concentration snapshot is the input, not the
                 // output — burn it and render the envelope or the arrival time.
                 if (FieldTransform.IsIgnitionDerived(view.FieldProperty))
-                    field = FlashFireEngine.BuildViewField(scene, view, field, gas, half);
+                    field = FlashFireEngine.BuildViewField(scene, view, field, gas, half,
+                        sim.SnapshotDomainCenterX, sim.SnapshotDomainCenterY);
             }
 
             return field;
+        }
+
+        private static string? _surfaceTrianglesKey;
+        private static TriangleBundle? _surfaceTriangles;
+
+        /// <summary>
+        /// The scene's merged decoration mesh as the solvers read it — the triangle order
+        /// a {time}_surface.bin follows — kept while the decorations stay put.
+        /// </summary>
+        private static TriangleBundle SurfaceTriangles(Scene3D scene)
+        {
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            string key = string.Join("|", scene.Decorations.Select(d => string.Join(";",
+                d.FilePath, d.Position.X.ToString(inv), d.Position.Y.ToString(inv), d.Position.Z.ToString(inv),
+                d.Rotation.X.ToString(inv), d.Rotation.Y.ToString(inv), d.Rotation.Z.ToString(inv),
+                d.Scale.ToString(inv), d.ClipEnabled, d.ClipAxis, d.ClipValue.ToString(inv), d.ClipAbove)));
+            if (_surfaceTriangles == null || key != _surfaceTrianglesKey)
+            {
+                _surfaceTriangles = DecorationSolids.FromDecorations(scene.Decorations).Triangles;
+                _surfaceTrianglesKey = key;
+            }
+            return _surfaceTriangles;
+        }
+
+        /// <summary>
+        /// A Surface view: the simulation's per-triangle heat load coloured on the
+        /// imported geometry. Each triangle is drawn twice, a couple of centimetres off
+        /// either face, so it shows over the decoration whichever way its normal points.
+        /// </summary>
+        private void BuildSurfaceView(GlInterface gl, View view, Simulation sim, Scene3D scene)
+        {
+            var load = SurfaceHeatLoad.Of(sim);
+            if (load == null) return;
+            bool total = view.FieldProperty != ViewFieldProperty.SurfaceIncidentRadiationKwM2;
+            var values = load.Collapse(total, view.TimeMode, view.SpecificTimeS);
+            var tris = SurfaceTriangles(scene);
+            if (values == null || values.Length != tris.TriangleCount)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[GlViewport] Surface view '{view.Name}': {values?.Length ?? 0} values for {tris.TriangleCount} triangles");
+                return;
+            }
+
+            double minV = view.MinValue, maxV = view.MaxValue;
+            if (minV == 0 && maxV == 0)
+            {
+                minV = double.MaxValue; maxV = double.MinValue;
+                foreach (double v in values) { minV = Math.Min(minV, v); maxV = Math.Max(maxV, v); }
+            }
+            double span = maxV > minV ? maxV - minV : 1;
+            bool clip = view.ClipToRange && maxV > minV;
+            float alpha = (float)Math.Max(0, Math.Min(1, view.Opacity));
+            const float lift = 0.02f;
+
+            var verts = new List<SolidVertex>(values.Length * 6);
+            var idx = new List<uint>(values.Length * 6);
+            for (int t = 0; t < values.Length; t++)
+            {
+                double v = values[t];
+                if (clip && (v < minV || v > maxV)) continue;
+                var p0 = new Vector3(tris.P0[3 * t], tris.P0[3 * t + 1], tris.P0[3 * t + 2]);
+                var p1 = new Vector3(tris.P1[3 * t], tris.P1[3 * t + 1], tris.P1[3 * t + 2]);
+                var p2 = new Vector3(tris.P2[3 * t], tris.P2[3 * t + 1], tris.P2[3 * t + 2]);
+                var n = Vector3.Cross(p1 - p0, p2 - p0);
+                if (n.LengthSquared() < 1e-20f) continue;
+                n = Vector3.Normalize(n);
+                var c = ColorMapHelper.Sample(view.ColorMap, Math.Clamp((v - minV) / span, 0, 1));
+                var color = new Vector4(c.ScR, c.ScG, c.ScB, alpha);
+
+                uint b = (uint)verts.Count;
+                verts.Add(new SolidVertex(p0 + n * lift, n, color));
+                verts.Add(new SolidVertex(p1 + n * lift, n, color));
+                verts.Add(new SolidVertex(p2 + n * lift, n, color));
+                verts.Add(new SolidVertex(p0 - n * lift, -n, color));
+                verts.Add(new SolidVertex(p2 - n * lift, -n, color));
+                verts.Add(new SolidVertex(p1 - n * lift, -n, color));
+                idx.Add(b); idx.Add(b + 1); idx.Add(b + 2);
+                idx.Add(b + 3); idx.Add(b + 4); idx.Add(b + 5);
+            }
+            if (idx.Count == 0) return;
+
+            var mesh = new GlMeshBuffer();
+            mesh.Upload(gl, verts.ToArray(), idx.ToArray());
+            _sceneObjects.Add(new SceneObject(mesh, Matrix4x4.Identity, $"view:surface:{view.Id}"));
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[GlViewport] Surface '{view.Name}': {idx.Count / 6} of {values.Length} triangles, {minV:G3}–{maxV:G3} kW/m²");
+        }
+
+        /// <summary>
+        /// The triangles of a clipped decoration that keep a corner on its kept side of
+        /// the clip plane, in model coordinates, as the solvers' DecorationSolids does;
+        /// all of them when it is not clipped.
+        /// </summary>
+        private static uint[] ClipDecorationIndices(Decoration3D deco, uint[] indices, Func<uint, Vector3> position)
+        {
+            if (!deco.ClipEnabled) return indices;
+            int axis = deco.ClipAxis == ClipAxis.X ? 0 : deco.ClipAxis == ClipAxis.Y ? 1 : 2;
+            float cut = (float)deco.ClipValue;
+            bool Kept(uint n)
+            {
+                Vector3 p = position(n);
+                float v = axis == 0 ? p.X : axis == 1 ? p.Y : p.Z;
+                return deco.ClipAbove ? v >= cut : v <= cut;
+            }
+            var kept = new List<uint>(indices.Length);
+            for (int t = 0; t + 2 < indices.Length; t += 3)
+            {
+                if (!Kept(indices[t]) && !Kept(indices[t + 1]) && !Kept(indices[t + 2])) continue;
+                kept.Add(indices[t]); kept.Add(indices[t + 1]); kept.Add(indices[t + 2]);
+            }
+            return kept.ToArray();
         }
 
         /// <summary>Build an isosurface mesh for the given View and upload it.</summary>
@@ -2975,7 +3184,7 @@ void main() { }
 
             var isoResult = PortableMarchingCubes.GenerateIsosurface(
                 field, view.IsoValue,
-                -half, -half, 0,
+                sim.SnapshotDomainCenterX - half, sim.SnapshotDomainCenterY - half, 0,
                 cell, cell, cell);
 
             if (isoResult == null) return;
@@ -3024,7 +3233,9 @@ void main() { }
             var (verts, idx) = GlMeshBuffer.GenerateContourPlane(
                 view.Kind, view.PlanePosition, (float)half,
                 field, gridRes, view.ColorMap,
-                minV, maxV, alpha, res);
+                minV, maxV, alpha, res, view.ClipToRange && maxV > minV,
+                (float)sim.SnapshotDomainCenterX, (float)sim.SnapshotDomainCenterY);
+            if (idx.Length == 0) return;
 
             var mesh = new GlMeshBuffer();
             mesh.Upload(gl, verts, idx);
@@ -3127,20 +3338,26 @@ void main() { }
             public double[,,] Field { get; }
             public List<DispersionThreshold> Thresholds { get; }
             public double DomainHalf { get; }
+            public double CenterX { get; }
+            public double CenterY { get; }
 
             public DispersionFrameRequest(
-                double[,,] field, List<DispersionThreshold> thresholds, double domainHalf)
+                double[,,] field, List<DispersionThreshold> thresholds, double domainHalf,
+                double centerX, double centerY)
             {
                 Field = field;
                 Thresholds = thresholds;
                 DomainHalf = domainHalf;
+                CenterX = centerX;
+                CenterY = centerY;
             }
         }
 
         public void UpdateDispersionFrame(
-            double[,,] field, List<DispersionThreshold> thresholds, double domainHalf)
+            double[,,] field, List<DispersionThreshold> thresholds, double domainHalf,
+            double centerX = 0, double centerY = 0)
         {
-            _pendingDispersionFrame = new DispersionFrameRequest(field, thresholds, domainHalf);
+            _pendingDispersionFrame = new DispersionFrameRequest(field, thresholds, domainHalf, centerX, centerY);
             RequestNextFrameRendering();
         }
 
@@ -3176,7 +3393,7 @@ void main() { }
 
                 var isoResult = PortableMarchingCubes.GenerateIsosurface(
                     req.Field, th.ConcentrationValue,
-                    -req.DomainHalf, -req.DomainHalf, 0,
+                    req.CenterX - req.DomainHalf, req.CenterY - req.DomainHalf, 0,
                     cell, cell, cell);
 
                 if (isoResult == null) continue;
@@ -3779,7 +3996,9 @@ void main() { }
                     colBuf[count * 3 + 2] = 0.18f * intensity;
                     // Radius drives the falloff envelope. For a jet use the
                     // orifice, for a pool use the diameter.
-                    double r = fire.IsPoolFire
+                    double r = fire.Kind == FireKind.Fireball
+                        ? 0.5 * FireballModel.DiameterM(Math.Max(1.0, fire.FireballMassKg))
+                        : fire.IsPoolFire
                         ? Math.Max(0.5, fire.PoolDiameterM * 0.5)
                         : Math.Max(0.25, fire.OrificeDiameterM * 6.0);
                     radBuf[count] = (float)r;

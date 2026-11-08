@@ -14,6 +14,17 @@ namespace DisperSim3D.Models
         Failed
     }
 
+    /// <summary>One value of an extender solver's option on a simulation, as text in the invariant culture.</summary>
+    public class SolverOptionValue
+    {
+        public string Key { get; set; }
+        public string Value { get; set; }
+
+        public SolverOptionValue() { }
+
+        public SolverOptionValue(string key, string value) { Key = key; Value = value; }
+    }
+
     /// <summary>
     /// A runnable dispersion simulation: a snapshot of (Source × WindField × Meteo × CfdConfig)
     /// captured at Run time. Simulations are first-class items inside a project.
@@ -49,6 +60,27 @@ namespace DisperSim3D.Models
         public CfdSolverType SolverType { get; set; }
 
         [Category("Solver")]
+        [Description("ID of the extender solver when the solver type is Extender.")]
+        public string ExtenderSolverId { get; set; }
+
+        [Category("References")]
+        [Description("ID of the fire source this simulation burns, when it is a fire run on a fire solver extender.")]
+        public string FireSourceId { get; set; }
+
+        [Category("References")]
+        [Description("ID of the ignition event this simulation burns, when it is a fire run on a fire solver extender: the ignition names the dispersion simulation whose cloud burns.")]
+        public string IgnitionId { get; set; }
+
+        /// <summary>True when this simulation runs a fire (a fire source or an ignition) rather than a release.</summary>
+        [Browsable(false)]
+        [XmlIgnore]
+        public bool IsFireRun => !string.IsNullOrEmpty(FireSourceId) || !string.IsNullOrEmpty(IgnitionId);
+
+        [Category("Solver")]
+        [Description("Values of the extender solver's own options, by key; an option left out runs with the solver's default.")]
+        public List<SolverOptionValue> ExtenderOptions { get; set; } = new List<SolverOptionValue>();
+
+        [Category("Solver")]
         [Description("Current state: Configured, Queued, Running, Completed or Failed.")]
         public SimulationStatus Status { get; set; }
 
@@ -79,6 +111,14 @@ namespace DisperSim3D.Models
         [Category("Snapshot")]
         [Description("Half-extent of the simulation box used by the run (m).")]
         public double SnapshotDomainSizeM { get; set; }
+
+        [Category("Snapshot")]
+        [Description("Centre of the result grid in x, m: the grid spans SnapshotDomainSizeM either side of it. 0 for a run centred on the origin.")]
+        public double SnapshotDomainCenterX { get; set; }
+
+        [Category("Snapshot")]
+        [Description("Centre of the result grid in y, m.")]
+        public double SnapshotDomainCenterY { get; set; }
 
         [Category("Snapshot")]
         [Description("Grid resolution per axis used by the run.")]

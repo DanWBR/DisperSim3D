@@ -6,7 +6,7 @@
         x:Class="DisperSim3D.UI.Avalonia.Views.GasLibraryItemDialog"
         Title="Edit Gas"
         Icon="/Assets/Air.ico"
-        Width="640" Height="540" MinWidth="500" MinHeight="420"
+        Width="640" Height="720" MinWidth="500" MinHeight="420"
         WindowStartupLocation="CenterOwner">
 
   <Window.Styles>
@@ -41,7 +41,7 @@
 
     <!-- Pure panel — 6 numeric properties -->
     <Border x:Name="PnlPure">
-      <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
+      <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
             ColumnDefinitions="180,*" RowSpacing="6">
         <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Molar Mass (kg/mol):" />
         <NumericUpDown Grid.Row="0" Grid.Column="1" x:Name="NudMolarMass"
@@ -72,6 +72,39 @@
         <NumericUpDown Grid.Row="5" Grid.Column="1" x:Name="NudERPG3"
                        Minimum="0" Maximum="10" Value="0"
                        FormatString="0.0000" Increment="0.001" />
+
+        <TextBlock Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,8,0,0" FontWeight="SemiBold"
+                   Text="Combustion (0 = from the gas name: Tewarson, SFPE Handbook 2002; NFPA 68)" />
+
+        <TextBlock Grid.Row="7" Grid.Column="0" Classes="field" Text="Heat of Combustion (MJ/kg):" />
+        <NumericUpDown Grid.Row="7" Grid.Column="1" x:Name="NudHeatComb"
+                       Minimum="0" Maximum="200" Value="0"
+                       FormatString="0.00" Increment="0.5" />
+
+        <TextBlock Grid.Row="8" Grid.Column="0" Classes="field" Text="C atoms per molecule:" />
+        <NumericUpDown Grid.Row="8" Grid.Column="1" x:Name="NudCAtoms"
+                       Minimum="0" Maximum="40" Value="0"
+                       FormatString="0.###" Increment="1" />
+
+        <TextBlock Grid.Row="9" Grid.Column="0" Classes="field" Text="H atoms per molecule:" />
+        <NumericUpDown Grid.Row="9" Grid.Column="1" x:Name="NudHAtoms"
+                       Minimum="0" Maximum="80" Value="0"
+                       FormatString="0.###" Increment="1" />
+
+        <TextBlock Grid.Row="10" Grid.Column="0" Classes="field" Text="Soot Yield (kg/kg):" />
+        <NumericUpDown Grid.Row="10" Grid.Column="1" x:Name="NudSootYield"
+                       Minimum="0" Maximum="1" Value="0"
+                       FormatString="0.000" Increment="0.001" />
+
+        <TextBlock Grid.Row="11" Grid.Column="0" Classes="field" Text="CO Yield (kg/kg):" />
+        <NumericUpDown Grid.Row="11" Grid.Column="1" x:Name="NudCoYield"
+                       Minimum="0" Maximum="1" Value="0"
+                       FormatString="0.000" Increment="0.001" />
+
+        <TextBlock Grid.Row="12" Grid.Column="0" Classes="field" Text="Burning Velocity (m/s):" />
+        <NumericUpDown Grid.Row="12" Grid.Column="1" x:Name="NudBurningVelocity"
+                       Minimum="0" Maximum="20" Value="0"
+                       FormatString="0.00" Increment="0.01" />
       </Grid>
     </Border>
 

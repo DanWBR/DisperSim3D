@@ -51,6 +51,27 @@ namespace DisperSim3D.Models
         public double ReleaseDurationS { get; set; }
 
         [Category("Release")]
+        [Description("Mass release rate against time from the start of the release (s, kg/s), linear between points and held at the end values outside them. Empty = ReleaseRateKgPerS throughout. Solvers that do not support a varying rate use ReleaseRateKgPerS.")]
+        public List<ReleaseRatePoint> ReleaseRateProfile { get; set; } = new List<ReleaseRatePoint>();
+
+        /// <summary>Mass release rate at <paramref name="timeS"/> from the start of the release, kg/s:
+        /// the profile when it has points, else <see cref="EffectiveReleaseRateKgPerS"/>.</summary>
+        public double RateAt(double timeS)
+        {
+            var p = ReleaseRateProfile;
+            if (p == null || p.Count == 0) return EffectiveReleaseRateKgPerS;
+            if (timeS <= p[0].TimeS) return p[0].RateKgPerS;
+            for (int i = 1; i < p.Count; i++)
+                if (timeS <= p[i].TimeS)
+                {
+                    double span = p[i].TimeS - p[i - 1].TimeS;
+                    double w = span > 0 ? (timeS - p[i - 1].TimeS) / span : 1;
+                    return p[i - 1].RateKgPerS + w * (p[i].RateKgPerS - p[i - 1].RateKgPerS);
+                }
+            return p[p.Count - 1].RateKgPerS;
+        }
+
+        [Category("Release")]
         [Description("Time interval between consecutive puff emissions (s) — Gaussian Puff only.")]
         public double PuffIntervalS { get; set; }
 
@@ -276,8 +297,19 @@ namespace DisperSim3D.Models
 
                 double areaSimple = Math.PI * 0.25 * diam * diam;
                 double molarMass = Gas != null && Gas.MolarMass > 0 ? Gas.MolarMass : 0.029;
-                double rhoSimple = 101325.0 * molarMass / (8.314 * ExitTemperatureK);
-                return effRate / (rhoSimple * areaSimple);
+                double exitT = ExitTemperatureK > 0 ? ExitTemperatureK : 293.15;
+                double rhoSimple = 101325.0 * molarMass / (8.314 * exitT);
+                double velocity = effRate / (rhoSimple * areaSimple);
+
+                // Past the speed of sound the orifice is choked: the gas leaves at the
+                // sonic throat velocity, denser than at 1 atm, not faster. The same
+                // limit as the choked branch above.
+                double cp = Gas != null ? Gas.EffectiveSpecificHeatJPerKgK : 1005.0;
+                double rSpecific = 8.314 / molarMass;
+                double gammaSimple = cp > rSpecific ? cp / (cp - rSpecific) : 1.4;
+                gammaSimple = Math.Max(1.05, Math.Min(1.67, gammaSimple));
+                double sonic = Math.Sqrt(gammaSimple * rSpecific * exitT * (2.0 / (gammaSimple + 1)));
+                return Math.Min(velocity, sonic);
             }
         }
 
@@ -313,5 +345,17 @@ namespace DisperSim3D.Models
             ReleaseAzimuthDeg = 0;
             ReleaseElevationDeg = 0;
         }
+    }
+
+    /// <summary>One point of <see cref="ReleaseSource3D.ReleaseRateProfile"/>.</summary>
+    public class ReleaseRatePoint
+    {
+        [Description("Time from the start of the release (s).")]
+        public double TimeS { get; set; }
+
+        [Description("Mass release rate at that time (kg/s).")]
+        public double RateKgPerS { get; set; }
+
+        public override string ToString() => TimeS + " s: " + RateKgPerS + " kg/s";
     }
 }

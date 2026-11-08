@@ -158,7 +158,7 @@ namespace DisperSim3D.Dialogs
                 string wfName = _scene.WindFieldScenarios.FirstOrDefault(w => w.Id == s.WindFieldId)?.Name
                     ?? "(?)";
                 var lvi = new ListViewItem(s.Name ?? "(unnamed)") { Tag = s.Id };
-                lvi.SubItems.Add(SolverCode.Of(s.SolverType));
+                lvi.SubItems.Add(SolverCode.Of(s.SolverType, s.ExtenderSolverId));
                 lvi.SubItems.Add(srcName);
                 lvi.SubItems.Add(wfName);
                 lvi.SubItems.Add(s.Status.ToString());

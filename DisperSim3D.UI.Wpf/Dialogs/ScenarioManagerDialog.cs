@@ -215,7 +215,7 @@ namespace DisperSim3D.Dialogs
 
             AddSectionHeader(propsTable, row++, "Meteorology");
 
-            nudWindSpeed = MakeNud(0.1m, 100m, 3m, 1);
+            nudWindSpeed = MakeNud(0m, 100m, 3m, 1); // 0 = calm
             AddRow(propsTable, ref row, "Wind Speed (m/s):", nudWindSpeed,
                 "Mean wind magnitude at reference height (10 m).");
 

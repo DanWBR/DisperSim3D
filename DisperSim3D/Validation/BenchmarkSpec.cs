@@ -123,7 +123,15 @@ namespace DisperSim3D.Validation
         {
             CfdSolverType t;
             if (System.Enum.TryParse(Solver ?? "GaussianPlume", ignoreCase: true, out t)) return t;
+            if (ResolveExtenderSolverId() != null) return CfdSolverType.Extender;
             return CfdSolverType.GaussianPlume;
+        }
+
+        /// <summary>ID of the extender solver <see cref="Solver"/> names, or null when it names a built-in one.</summary>
+        public string ResolveExtenderSolverId()
+        {
+            if (string.IsNullOrWhiteSpace(Solver) || System.Enum.TryParse(Solver, ignoreCase: true, out CfdSolverType _)) return null;
+            return Extensibility.SolverExtenderRegistry.FindByName(Solver)?.Id;
         }
     }
 
@@ -262,6 +270,15 @@ namespace DisperSim3D.Validation
 
         /// <summary>Averaging time of the measured concentrations (s); the unified model widens the passive plume by (t/600)^0.2. Default 600 s (Pasquill-Gifford basis).</summary>
         public double AveragingTimeS { get; set; } = 600;
+
+        /// <summary>Mixing height of the trial (m); omitted = the model default.</summary>
+        public double? MixingHeightM { get; set; }
+
+        /// <summary>Measured Monin-Obukhov length of the trial (m); omitted = estimated from the stability class.</summary>
+        public double? ObukhovLengthM { get; set; }
+
+        /// <summary>Measured standard deviation of the wind direction over the averaging time (deg); omitted = not given.</summary>
+        public double? WindDirectionSigmaDeg { get; set; }
 
         /// <summary>Turbulent (eddy) diffusivity, m²/s, applied to the FluidX3D tracer. When
         /// omitted the runner derives one from the Pasquill class and wind speed

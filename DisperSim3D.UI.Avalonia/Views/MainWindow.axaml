@@ -25,7 +25,7 @@
          MenuItem.Icon takes any Control; we feed it Projektanker's i:Icon
          which the Fluent MenuItem template renders left of the header. -->
     <Menu DockPanel.Dock="Top">
-      <MenuItem Header="_File">
+      <MenuItem Header="_File" x:Name="MenuFile">
         <MenuItem Header="_New Project" x:Name="MenuFileNew" Click="MenuFileNew_Click">
           <MenuItem.Icon><i:Icon Value="mdi-file-plus-outline" /></MenuItem.Icon>
         </MenuItem>

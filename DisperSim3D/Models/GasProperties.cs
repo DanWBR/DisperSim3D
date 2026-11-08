@@ -46,6 +46,69 @@ namespace DisperSim3D.Models
             }
         }
 
+        /// <summary>Ratio of specific heats c_p/c_v of the ideal gas, from <see cref="EffectiveSpecificHeatJPerKgK"/>
+        /// and the molar mass (c_v = c_p − R/M); 1.4 without a molar mass.</summary>
+        [System.ComponentModel.Browsable(false)]
+        [System.Xml.Serialization.XmlIgnore]
+        public double EffectiveHeatCapacityRatio
+        {
+            get
+            {
+                if (!(MolarMass > 0)) return 1.4;
+                double cp = EffectiveSpecificHeatJPerKgK, cv = cp - 8.314462618 / MolarMass;
+                return cv > 0 ? Math.Max(1.01, Math.Min(1.67, cp / cv)) : 1.4;
+            }
+        }
+
+        [Category("Combustion")]
+        [Description("Net heat of complete combustion, J/kg. 0 = from the gas name (Tewarson, SFPE Handbook 2002).")]
+        public double HeatOfCombustionJPerKg { get; set; }
+
+        [Category("Combustion")]
+        [Description("Carbon atoms per molecule (mole-weighted for a mixture). 0 = from the gas name.")]
+        public double CarbonAtoms { get; set; }
+
+        [Category("Combustion")]
+        [Description("Hydrogen atoms per molecule (mole-weighted for a mixture). 0 = from the gas name.")]
+        public double HydrogenAtoms { get; set; }
+
+        [Category("Combustion")]
+        [Description("Soot yield, kg of soot per kg of fuel burnt, well-ventilated. 0 = from the gas name (Tewarson, SFPE Handbook 2002).")]
+        public double SootYield { get; set; }
+
+        [Category("Combustion")]
+        [Description("CO yield, kg of CO per kg of fuel burnt, well-ventilated. 0 = from the gas name (Tewarson, SFPE Handbook 2002).")]
+        public double CoYield { get; set; }
+
+        [Category("Combustion")]
+        [Description("Peak laminar burning velocity in air at 25 °C, 1 atm, m/s. 0 = from the gas name (NFPA 68).")]
+        public double LaminarBurningVelocityMPerS { get; set; }
+
+        /// <summary>Heat of combustion to use: the explicit value, or the table's for the gas name.</summary>
+        [Browsable(false)]
+        [System.Xml.Serialization.XmlIgnore]
+        public double EffectiveHeatOfCombustionJPerKg => FuelCombustionData.Resolve(HeatOfCombustionJPerKg, Name, d => d.HeatOfCombustionJPerKg);
+
+        [Browsable(false)]
+        [System.Xml.Serialization.XmlIgnore]
+        public double EffectiveCarbonAtoms => FuelCombustionData.Resolve(CarbonAtoms, Name, d => d.CarbonAtoms);
+
+        [Browsable(false)]
+        [System.Xml.Serialization.XmlIgnore]
+        public double EffectiveHydrogenAtoms => FuelCombustionData.Resolve(HydrogenAtoms, Name, d => d.HydrogenAtoms);
+
+        [Browsable(false)]
+        [System.Xml.Serialization.XmlIgnore]
+        public double EffectiveSootYield => FuelCombustionData.Resolve(SootYield, Name, d => d.SootYield);
+
+        [Browsable(false)]
+        [System.Xml.Serialization.XmlIgnore]
+        public double EffectiveCoYield => FuelCombustionData.Resolve(CoYield, Name, d => d.CoYield);
+
+        [Browsable(false)]
+        [System.Xml.Serialization.XmlIgnore]
+        public double EffectiveLaminarBurningVelocityMPerS => FuelCombustionData.Resolve(LaminarBurningVelocityMPerS, Name, d => d.LaminarBurningVelocityMPerS);
+
         [Category("Flammability")]
         [Description("Lower Flammability Limit (kg/m³). Concentration above this in air can ignite.")]
         public double LFL { get; set; }
@@ -103,6 +166,10 @@ namespace DisperSim3D.Models
             {
                 Name = "Methane",
                 MolarMass = 0.01604,
+                HeatOfCombustionJPerKg = FuelCombustionData.Methane.HeatOfCombustionJPerKg,
+                CarbonAtoms = 1,
+                HydrogenAtoms = 4,
+                LaminarBurningVelocityMPerS = FuelCombustionData.Methane.LaminarBurningVelocityMPerS,
                 LFL = 0.033,    // 5% v/v at NTP
                 UFL = 0.099,    // 15% v/v at NTP
                 IDLH = 0.0,
@@ -122,6 +189,8 @@ namespace DisperSim3D.Models
             {
                 Name = "Hydrogen Sulfide",
                 MolarMass = 0.03408,
+                HeatOfCombustionJPerKg = FuelCombustionData.HydrogenSulfide.HeatOfCombustionJPerKg,
+                HydrogenAtoms = 2,
                 LFL = 0.043,
                 IDLH = 0.0696,
                 ERPG1 = 0.0014,
@@ -140,6 +209,9 @@ namespace DisperSim3D.Models
             {
                 Name = "Ammonia",
                 MolarMass = 0.01703,
+                HeatOfCombustionJPerKg = FuelCombustionData.Ammonia.HeatOfCombustionJPerKg,
+                HydrogenAtoms = 3,
+                LaminarBurningVelocityMPerS = FuelCombustionData.Ammonia.LaminarBurningVelocityMPerS,
                 LFL = 0.150,
                 IDLH = 0.2108,
                 ERPG1 = 0.0175,

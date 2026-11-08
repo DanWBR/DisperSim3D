@@ -51,6 +51,14 @@ namespace DisperSim3D.Models
         [Description("Atmospheric mixing height — vertical extent above which dispersion is bounded (m).")]
         public double MixingHeightM { get; set; }
 
+        [Category("Stability")]
+        [Description("Measured Monin-Obukhov length (m), e.g. from wind and temperature profiles or eddy covariance; negative = unstable, positive = stable. 0 = not given: solvers that model the surface layer estimate it from the stability class and the roughness length.")]
+        public double ObukhovLengthM { get; set; }
+
+        [Category("Wind")]
+        [Description("Measured standard deviation of the horizontal wind direction σ_θ (deg) over the averaging time, e.g. from a wind vane or sonic anemometer at the measurement height. 0 = not given.")]
+        public double WindDirectionSigmaDeg { get; set; }
+
         [Category("Wind")]
         [Description("Reference height at which the wind speed was measured (m). Default = 10 m.")]
         public double WindMeasurementHeightM { get; set; }
@@ -83,6 +91,9 @@ namespace DisperSim3D.Models
                     0);
             }
         }
+
+        /// <summary>A copy of these conditions; every member is a value.</summary>
+        public MeteorologicalConditions Clone() => (MeteorologicalConditions)MemberwiseClone();
 
         /// <summary>
         /// Computes the wind speed at a given height using the power-law wind profile.

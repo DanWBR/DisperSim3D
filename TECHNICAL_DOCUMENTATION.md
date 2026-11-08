@@ -220,6 +220,8 @@ d_pseudo = √(4 · A_pseudo / π)
 
 `HighPressureLeakModel.ComputeExpandedSource(p, 100, 293.15)` returns `(d_pseudo, V_target, T_amb)`.
 
+γ is the leak's own. `GasProperties.EffectiveHeatCapacityRatio` gives a gas's ideal-gas value, `c_p/(c_p − R/M)`, from its specific heat and molar mass; a mixture's specific heat (`GasLibraryItem.AsGasProperties`) is the mass-weighted mean of its components'.
+
 `ReleaseSource3D.ExpandedDiameterForCfdM` and `ExpandedVelocityForCfdMS` are the CFD-facing accessors. They return the physical orifice diameter and `ComputedExitVelocity` for non-choked flow, falling back to the Birch values only when the leak is sonic. Used inside `OpenFoamCaseGenerator.WriteSetFieldsDict`, `WriteJetSetFieldsDict`, `WriteReactingSetFieldsDict`, and the `dt` sizing inside `Generate`.
 
 ### 3.5 Flammable cloud volume

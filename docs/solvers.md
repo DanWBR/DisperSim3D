@@ -105,6 +105,12 @@ with $V_{\mathrm{target}} \approx 100\ \mathrm{m/s}$.
 physical orifice values for non-choked flow and fall back to Birch only when
 the leak is sonic.
 
+The ratio of specific heats γ in the choked rate is the leak's own.
+`GasProperties.EffectiveHeatCapacityRatio` gives a gas's ideal-gas value,
+c_p/(c_p − R/M), from its specific heat and molar mass; a mixture's specific
+heat is the mass-weighted mean of its components'. The in:Flux importer sets
+each leak's γ this way.
+
 ## Unified integral model
 
 `CfdSolverType.UnifiedDispersion` integrates one set of ordinary differential

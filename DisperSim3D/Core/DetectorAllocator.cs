@@ -345,7 +345,9 @@ namespace DisperSim3D.Core
         private static CandidateBundle BuildCandidates(DetectorAllocation cfg,
             List<CloudSnapshot> validClouds, IList<BoundingBox> obstacles, double domainHalfM)
         {
-            double half = domainHalfM > 0 ? domainHalfM : validClouds.Max(c => c.DomainHalfM);
+            // Candidates cover every cloud's grid, which may be centred away from the origin.
+            double half = domainHalfM > 0 ? domainHalfM
+                : validClouds.Max(c => c.DomainHalfM + Math.Max(Math.Abs(c.CenterX), Math.Abs(c.CenterY)));
             double minZ = Math.Max(0, cfg.MinZ);
             double maxZ = Math.Max(minZ + 0.1, cfg.MaxZ);
 

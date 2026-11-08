@@ -217,7 +217,9 @@ namespace DisperSim3D.Core
                                         new XAttribute("MoleFrac", c.MoleFraction.ToString(inv)),
                                         new XAttribute("LFL", c.LFL.ToString(inv)),
                                         new XAttribute("UFL", c.UFL.ToString(inv)),
-                                        new XAttribute("IDLH", c.IDLH.ToString(inv))))));
+                                        new XAttribute("IDLH", c.IDLH.ToString(inv)),
+                                        CombustionAttributes(c.HeatOfCombustionJPerKg, c.CarbonAtoms, c.HydrogenAtoms,
+                                            c.SootYield, c.CoYield, c.LaminarBurningVelocityMPerS, inv)))));
                     }
                     var gp = g.PureGas ?? new GasProperties();
                     return new XElement("Gas",
@@ -230,8 +232,26 @@ namespace DisperSim3D.Core
                         new XAttribute("IDLH", gp.IDLH.ToString(inv)),
                         new XAttribute("ERPG1", gp.ERPG1.ToString(inv)),
                         new XAttribute("ERPG2", gp.ERPG2.ToString(inv)),
-                        new XAttribute("ERPG3", gp.ERPG3.ToString(inv)));
+                        new XAttribute("ERPG3", gp.ERPG3.ToString(inv)),
+                        CombustionAttributes(gp, inv));
                 }));
+        }
+
+        /// <summary>The combustion fields of a gas, each only when set. Read back by
+        /// <c>SceneFileLoader.ReadCombustion</c>.</summary>
+        internal static IEnumerable<XAttribute> CombustionAttributes(GasProperties g, CultureInfo inv) =>
+            CombustionAttributes(g.HeatOfCombustionJPerKg, g.CarbonAtoms, g.HydrogenAtoms,
+                g.SootYield, g.CoYield, g.LaminarBurningVelocityMPerS, inv);
+
+        private static IEnumerable<XAttribute> CombustionAttributes(double heat, double carbon, double hydrogen,
+            double soot, double co, double burningVelocity, CultureInfo inv)
+        {
+            if (heat > 0) yield return new XAttribute("HeatComb", heat.ToString(inv));
+            if (carbon > 0) yield return new XAttribute("CAtoms", carbon.ToString(inv));
+            if (hydrogen > 0) yield return new XAttribute("HAtoms", hydrogen.ToString(inv));
+            if (soot > 0) yield return new XAttribute("SootYield", soot.ToString(inv));
+            if (co > 0) yield return new XAttribute("CoYield", co.ToString(inv));
+            if (burningVelocity > 0) yield return new XAttribute("BurningVelocity", burningVelocity.ToString(inv));
         }
 
         private static XElement? SerializeTopLevelSources(Scene3D scene, CultureInfo inv)
@@ -298,9 +318,11 @@ namespace DisperSim3D.Core
                     new XAttribute("ERPG2", src.Gas.ERPG2.ToString(inv)),
                     new XAttribute("ERPG3", src.Gas.ERPG3.ToString(inv)),
                     new XAttribute("HalfLife", src.Gas.HalfLifeS.ToString(inv)),
+                    CombustionAttributes(src.Gas, inv),
                     new XAttribute("DryDep", src.Gas.DryDepositionVelocityMPerS.ToString(inv)),
                     new XAttribute("Cryo", src.Gas.IsCryogenic.ToString())) : null,
-                invEl);
+                invEl,
+                ReleaseRateProfileXml.Write(src));
         }
 
         private static XElement? SerializeSimulations(Scene3D scene, CultureInfo inv)
@@ -315,9 +337,14 @@ namespace DisperSim3D.Core
                     new XAttribute("SourceId", s.SourceId ?? ""),
                     new XAttribute("WindFieldId", s.WindFieldId ?? ""),
                     new XAttribute("SolverType", s.SolverType.ToString()),
+                    string.IsNullOrEmpty(s.ExtenderSolverId) ? null : new XAttribute("ExtenderSolverId", s.ExtenderSolverId),
+                    string.IsNullOrEmpty(s.FireSourceId) ? null : new XAttribute("FireSourceId", s.FireSourceId),
+                    string.IsNullOrEmpty(s.IgnitionId) ? null : new XAttribute("IgnitionId", s.IgnitionId),
                     new XAttribute("Status", s.Status.ToString()),
                     new XAttribute("StatusMessage", s.StatusMessage ?? ""),
                     new XAttribute("DomainSize", s.SnapshotDomainSizeM.ToString(inv)),
+                    s.SnapshotDomainCenterX == 0 ? null : new XAttribute("DomainCenterX", s.SnapshotDomainCenterX.ToString(inv)),
+                    s.SnapshotDomainCenterY == 0 ? null : new XAttribute("DomainCenterY", s.SnapshotDomainCenterY.ToString(inv)),
                     new XAttribute("GridRes", s.SnapshotGridResolution.ToString(inv)),
                     new XAttribute("Duration", s.SnapshotDurationS.ToString(inv)),
                     new XAttribute("TimeStep", s.SnapshotTimeStepS.ToString(inv)),
@@ -331,7 +358,10 @@ namespace DisperSim3D.Core
                             SerializeSourceCommon(s.SnapshotSource, inv).Elements())
                         : null,
                     SerializeMeteo("SnapshotMeteo", s.SnapshotMeteo, inv),
-                    SerializeAtmosphericCfd(s.SnapshotCfdConfig, inv))));
+                    SerializeAtmosphericCfd(s.SnapshotCfdConfig, inv),
+                    s.ExtenderOptions == null || s.ExtenderOptions.Count == 0 ? null
+                        : new XElement("ExtenderOptions", s.ExtenderOptions.Where(o => !string.IsNullOrEmpty(o?.Key))
+                            .Select(o => new XElement("Option", new XAttribute("Key", o.Key), new XAttribute("Value", o.Value ?? "")))))));
         }
 
         private static XElement? SerializeViews(Scene3D scene, CultureInfo inv)
@@ -356,7 +386,8 @@ namespace DisperSim3D.Core
                     new XAttribute("ColorMap", v.ColorMap.ToString()),
                     new XAttribute("MinValue", v.MinValue.ToString(inv)),
                     new XAttribute("MaxValue", v.MaxValue.ToString(inv)),
-                    new XAttribute("SampleResolution", v.SampleResolution.ToString(inv)))));
+                    new XAttribute("SampleResolution", v.SampleResolution.ToString(inv)),
+                    new XAttribute("ClipToRange", v.ClipToRange))));
         }
 
         private static XElement? SerializeDispersionStudies(Scene3D scene, CultureInfo inv)
@@ -520,6 +551,7 @@ namespace DisperSim3D.Core
                 new XAttribute("DomainSize", sc.DomainSizeM.ToString(inv)),
                 new XAttribute("GridRes", sc.GridResolution.ToString(inv)),
                 new XAttribute("SolverType", sc.SolverType.ToString()),
+                string.IsNullOrEmpty(sc.ExtenderSolverId) ? null : new XAttribute("ExtenderSolverId", sc.ExtenderSolverId),
                 new XAttribute("WindFieldId", sc.WindFieldScenarioId ?? ""),
 
                 SerializeMeteo("Meteo", sc.Meteo, inv),
@@ -565,6 +597,8 @@ namespace DisperSim3D.Core
                     ? new XElement("GasMixture",
                         sc.GasMixture.Components.Select(gc =>
                             new XElement("Component",
+                                CombustionAttributes(gc.HeatOfCombustionJPerKg, gc.CarbonAtoms, gc.HydrogenAtoms,
+                                    gc.SootYield, gc.CoYield, gc.LaminarBurningVelocityMPerS, inv),
                                 new XAttribute("Name", gc.Name ?? ""),
                                 new XAttribute("MolarMass", gc.MolarMass.ToString(inv)),
                                 new XAttribute("MoleFrac", gc.MoleFraction.ToString(inv)),
@@ -618,7 +652,15 @@ namespace DisperSim3D.Core
                 new XAttribute("Temp", meteo.AmbientTemperature.ToString(inv)),
                 new XAttribute("Pressure", meteo.AmbientPressure.ToString(inv)),
                 new XAttribute("Humidity", meteo.RelativeHumidity.ToString(inv)),
-                new XAttribute("Roughness", meteo.RoughnessLengthM.ToString(inv)));
+                new XAttribute("Roughness", meteo.RoughnessLengthM.ToString(inv)),
+                new XAttribute("StabilityIndex", meteo.StabilityIndex.ToString(inv)),
+                new XAttribute("AveragingTime", meteo.AveragingTimeS.ToString(inv)),
+                new XAttribute("MixingHeight", meteo.MixingHeightM.ToString(inv)),
+                new XAttribute("ObukhovLength", meteo.ObukhovLengthM.ToString(inv)),
+                new XAttribute("WindDirectionSigma", meteo.WindDirectionSigmaDeg.ToString(inv)),
+                new XAttribute("MeasurementHeight", meteo.WindMeasurementHeightM.ToString(inv)),
+                new XAttribute("ShearExponent", meteo.WindShearExponent.ToString(inv)),
+                new XAttribute("Urban", meteo.IsUrbanTerrain));
         }
 
         /// <summary>Fire studies. Read back by
@@ -698,6 +740,8 @@ namespace DisperSim3D.Core
                             new XAttribute("HeatComb", f.HeatOfCombustionJKg.ToString(inv)),
                             new XAttribute("RadFrac", f.RadiativeFraction.ToString(inv)),
                             new XAttribute("IsPool", f.IsPoolFire),
+                            new XAttribute("Kind", f.Kind.ToString()),
+                            new XAttribute("FireballMass", f.FireballMassKg.ToString(inv)),
                             new XAttribute("PoolDia", f.PoolDiameterM.ToString(inv)),
                             new XAttribute("BurnRate", f.PoolBurnRateKgM2S.ToString(inv)),
                             new XAttribute("RadModel", f.RadiationModel.ToString()),

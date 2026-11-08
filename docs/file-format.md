@@ -33,7 +33,8 @@ into `Simulation` snapshots (idempotent  -  safe to load and re-save).
   <GeneralSettings>...</GeneralSettings>
   <GasLibrary>
     <Gas Kind="Pure" Id="..." Name="Methane"
-         MolarMass="0.01604" LFL="0.033" UFL="0.17" IDLH="0" />
+         MolarMass="0.01604" LFL="0.033" UFL="0.17" IDLH="0"
+         HeatComb="50100000" CAtoms="1" HAtoms="4" BurningVelocity="0.4" />
     <Gas Kind="Mixture" Id="..." Name="Sour Gas">
       <Mixture>
         <Component Name="CH4" MolarMass="0.016" MoleFrac="0.8"
@@ -71,6 +72,7 @@ into `Simulation` snapshots (idempotent  -  safe to load and re-save).
   <Simulations>
     <Simulation Id="..." Name="Sim 1"
                 SourceId="..." WindFieldId="..." SolverType="GaussianPuff"
+                FireSourceId="..." IgnitionId="..."
                 Status="Completed"
                 DomainSize="200" GridRes="40" Duration="300" TimeStep="0.5"
                 CasePath="..." MaxC="...">
@@ -92,6 +94,74 @@ into `Simulation` snapshots (idempotent  -  safe to load and re-save).
 
 Numeric values use `InvariantCulture` (decimal point, no thousands
 separator).
+
+Fields added for fires, all optional, so older files load unchanged:
+
+- **Gas combustion data:** on a library `Gas`, a source's `Gas` and a mixture
+  `Component`: `HeatComb` (net heat of complete combustion, J/kg), `CAtoms`,
+  `HAtoms` (atoms per molecule), `SootYield` and `CoYield` (kg per kg of fuel
+  burnt) and `BurningVelocity` (peak laminar burning velocity, m/s). Written only
+  when set; a missing one is resolved from the gas name (Tewarson, SFPE Handbook
+  3rd ed. 2002, for the heat of combustion and the yields; NFPA 68 for the burning
+  velocity). A mixture weighs the atoms by mole fraction and the heat of
+  combustion and yields by mass.
+- **Fire source kind:** `<Fire Kind="Jet|Pool|Fireball" FireballMass="1000">`.
+  `IsPool` is still written; a file without `Kind` reads it.
+- **Fire simulations:** a `Simulation` with `FireSourceId` or `IgnitionId` runs
+  that fire source, or that ignition of a finished dispersion simulation, on a
+  solver extender that declares the Fire capability (`SolverType="Extender"`).
+- **Monitors and detectors** keep `MeasuredQuantity` (and a detector its
+  `MeasuredThreshold`); any `ViewFieldProperty` name, including `Temperature`,
+  `ThermalRadiationKwM2`, `SootDensityKgM3`, `COVolumeFraction`,
+  `CO2VolumeFraction`, `O2VolumeFraction` and `VisibilityM`.
+
+## Result files
+
+A simulation's `CasePath` holds its results. Every solver that does not write an
+OpenFOAM case uses the flat-bin layout: one file per channel and written time,
+at the folder's top level.
+
+### Field channels: `{t:F3}[_{channel}].bin`
+
+`t` is the simulated time in seconds with three decimals and a decimal point
+(`12.500`). Each file is `nx·ny·nz` little-endian IEEE doubles with no header,
+`i` (x) outermost and `k` (z) innermost — what
+`OpenFoamResult.SaveBinaryField` writes. The grid is `nx = ny = n`,
+`nz = max(8, n/2)`: the reader infers `n` from the file size. Cells are cubes of
+side `2·D/n` covering `[cx − D, cx + D] × [cy − D, cy + D] × [0, nz·2D/n]`, where
+`D` is the simulation's `DomainSize` and `(cx, cy)` its `DomainCenterX/Y`
+(an extender reports them through the bounds of the `OpenFoamResult` it returns,
+or gets the ones its request asked for).
+
+| Channel | File | Quantity | Unit |
+|---|---|---|---|
+| (species) | `{t}.bin` | released species | kg/m³ for extenders, imported results and the Gaussian and unified models; mass fraction for OpenFOAM and FluidX3D |
+| `T` | `{t}_T.bin` | temperature | K |
+| `Q` | `{t}_Q.bin` | incident thermal radiation | kW/m² |
+| `Soot` | `{t}_Soot.bin` | soot mass concentration | kg/m³ |
+| `CO` | `{t}_CO.bin` | carbon monoxide | volume fraction |
+| `CO2` | `{t}_CO2.bin` | carbon dioxide | volume fraction |
+| `O2` | `{t}_O2.bin` | oxygen (0.2095 in clean air) | volume fraction |
+| `Vis` | `{t}_Vis.bin` | visibility through smoke | m (the solver's cap in clean air) |
+
+A solver writes the channels it computes. A stored `Q` replaces the analytic fire
+models in radiation, dose and fatality views, monitors, detectors and fire studies;
+the other channels have no analytic fallback. For `O2` and `Vis` the hazard is a low
+value, so their "peak over time" is the per-cell minimum. `ResultChannels.Register`
+adds a channel beyond these.
+
+### Surface heat load: `{t:F3}_surface.bin`
+
+The heat load on the plant. For each triangle of the scene's merged decoration
+mesh, in the order `DecorationSolids.FromDecorations(scene.Decorations).Triangles`
+lists them (every decoration whose STL, OBJ or RVM mesh can be read, in world
+coordinates), two little-endian doubles:
+
+1. incident radiative heat flux, kW/m²;
+2. total heat flux into the surface, radiative plus convective, kW/m².
+
+Sixteen bytes per triangle, no header; the file size divided by 16 must equal the
+triangle count. A Surface view colours the geometry with either value.
 
 ## Migration rules
 

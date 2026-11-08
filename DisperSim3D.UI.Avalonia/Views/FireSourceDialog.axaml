@@ -30,7 +30,7 @@
       </StackPanel>
     </Border>
 
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
           ColumnDefinitions="180,*" RowSpacing="6">
       <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Name:" />
       <TextBox    Grid.Row="0" Grid.Column="1" x:Name="TxtName" Text="JetFire1" />
@@ -55,10 +55,15 @@
                      Minimum="0.05" Maximum="0.5" Value="0.2"
                      FormatString="0.00" Increment="0.05" />
 
-      <CheckBox Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" x:Name="ChkPoolFire"
-                Content="Pool fire (uncheck for jet/flare fire)"
-                Margin="0,6,0,2"
-                IsCheckedChanged="ChkPoolFire_Changed" />
+      <TextBlock Grid.Row="5" Grid.Column="0" Classes="field" Text="Kind:" />
+      <ComboBox Grid.Row="5" Grid.Column="1" x:Name="CmbKind"
+                HorizontalAlignment="Stretch" SelectedIndex="0"
+                SelectionChanged="CmbKind_Changed"
+                ToolTip.Tip="Jet and pool fires use the radiation model below. A fireball is the&#10;CCPS sphere: D = 5.8·M^(1/3), burning 0.45·M^(1/3) s, from its mass,&#10;heat of combustion and radiative fraction.">
+        <ComboBoxItem Content="Jet fire" />
+        <ComboBoxItem Content="Pool fire" />
+        <ComboBoxItem Content="Fireball" />
+      </ComboBox>
 
       <TextBlock Grid.Row="6" Grid.Column="0" Classes="field" Text="Pool Diameter (m):" />
       <NumericUpDown Grid.Row="6" Grid.Column="1" x:Name="NudPoolDiameter"
@@ -69,6 +74,11 @@
       <NumericUpDown Grid.Row="7" Grid.Column="1" x:Name="NudBurnRate"
                      Minimum="0.001" Maximum="1.0" Value="0.05"
                      FormatString="0.000" Increment="0.005" IsEnabled="False" />
+
+      <TextBlock Grid.Row="13" Grid.Column="0" Classes="field" Text="Fireball Mass (kg):" />
+      <NumericUpDown Grid.Row="13" Grid.Column="1" x:Name="NudFireballMass"
+                     Minimum="1" Maximum="10000000" Value="1000"
+                     FormatString="0" Increment="100" IsEnabled="False" />
 
       <Separator Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,8,0,4" />
 

@@ -68,7 +68,7 @@ namespace DisperSim3D.Dialogs
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(180 * dpi)));
 
             int row = 0;
-            nudWindSpeed = MakeNud(0.1m, 50m, 5m, 1);
+            nudWindSpeed = MakeNud(0m, 50m, 5m, 1); // 0 = calm
             DialogHelpers.AddRowWithHelp(table, ref row, "Wind Speed (m/s):", nudWindSpeed,
                 "Mean wind magnitude at the 10 m reference height.");
 

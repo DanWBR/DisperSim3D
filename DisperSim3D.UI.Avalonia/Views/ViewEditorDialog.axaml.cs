@@ -92,6 +92,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 1 => ViewKind.ContourXY,
                 2 => ViewKind.ContourXZ,
                 3 => ViewKind.ContourYZ,
+                4 => ViewKind.Surface,
                 _ => ViewKind.Isosurface
             };
             int fieldIndex = Math.Max(0, CmbField.SelectedIndex);
@@ -99,6 +100,9 @@ namespace DisperSim3D.UI.Avalonia.Views
                 ? _fields[fieldIndex]
                 : ViewFieldProperty.Concentration;
             ViewTimeMode timeMode = (ViewTimeMode)Math.Max(0, CmbTimeMode.SelectedIndex);
+            // A surface view draws only the surface heat load.
+            if (kind == ViewKind.Surface && !DisperSim3D.Core.FieldTransform.IsSurface(field))
+                field = ViewFieldProperty.SurfaceTotalHeatFluxKwM2;
 
             Result = new View
             {

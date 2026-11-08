@@ -47,6 +47,7 @@
         <ComboBoxItem Content="Contour XY (horizontal slice at z = PlanePosition)" />
         <ComboBoxItem Content="Contour XZ (vertical slice at y = PlanePosition)" />
         <ComboBoxItem Content="Contour YZ (vertical slice at x = PlanePosition)" />
+        <ComboBoxItem Content="Surface (heat load coloured on the geometry)" />
       </ComboBox>
 
       <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="Simulation:" />

@@ -5,6 +5,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using DisperSim3D.Core;
+using DisperSim3D.Extensibility;
 using DisperSim3D.Geometry;
 using DisperSim3D.Models;
 
@@ -92,8 +93,18 @@ namespace DisperSim3D.Validation
             return JsonSerializer.Deserialize<FireBenchmarkSpec>(File.ReadAllText(path), JsonOptions);
         }
 
-        public static FireBenchmarkResult Run(FireBenchmarkSpec spec)
+        public static FireBenchmarkResult Run(FireBenchmarkSpec spec) => Run(spec, null);
+
+        /// <summary>
+        /// Runs the bench on the analytic models, or on the fire solver extender that
+        /// <paramref name="solverOverride"/> or the bench's <see cref="FireBenchmarkSpec.Solver"/> names.
+        /// </summary>
+        public static FireBenchmarkResult Run(FireBenchmarkSpec spec, string solverOverride)
         {
+            string solverName = !string.IsNullOrWhiteSpace(solverOverride) ? solverOverride : spec?.Solver;
+            if (!string.IsNullOrWhiteSpace(solverName) && spec?.Fire != null)
+                return RunOnExtender(spec, solverName);
+
             var result = new FireBenchmarkResult
             {
                 Name = spec?.Name ?? "(unnamed)",
@@ -118,21 +129,29 @@ namespace DisperSim3D.Validation
                 RelativeHumidity = ambient.RelativeHumidity
             }.WindVector;
 
-            var emitter = SolidFlameModel.Prepare(source, wind);
+            bool fireball = source.Kind == FireKind.Fireball;
+            var emitter = fireball ? null : SolidFlameModel.Prepare(source, wind);
 
             // ── Flame geometry and emissive power ───────────────────────────
             var expected = spec.ExpectedFlame;
-            if (expected?.LengthM is double length && length > 0)
+            if (expected?.LengthM is double length && length > 0 && !fireball)
                 result.Checks.Add(Ratio("flame length", emitter.FlameLengthM, length, "m",
                     accept.FlameLengthRatioMin, accept.FlameLengthRatioMax));
 
             if (expected?.DiameterM is double diameter && diameter > 0)
-                result.Checks.Add(Ratio("flame diameter", emitter.FlameDiameterM, diameter, "m",
+                result.Checks.Add(Ratio(fireball ? "fireball diameter" : "flame diameter",
+                    fireball ? FireballModel.DiameterM(source.FireballMassKg) : emitter.FlameDiameterM, diameter, "m",
                     accept.FlameDiameterRatioMin, accept.FlameDiameterRatioMax));
 
             if (expected?.SurfaceEmissivePowerKwM2 is double sep && sep > 0)
-                result.Checks.Add(Ratio("surface emissive power", emitter.SepKwM2, sep, "kW/m²",
+                result.Checks.Add(Ratio("surface emissive power",
+                    fireball ? FireballModel.SepKwM2(source) : emitter.SepKwM2, sep, "kW/m²",
                     accept.SepRatioMin, accept.SepRatioMax));
+
+            // The length band is the closest one a duration has.
+            if (fireball && expected?.DurationS is double duration && duration > 0)
+                result.Checks.Add(Ratio("fireball duration", FireballModel.DurationS(source.FireballMassKg), duration, "s",
+                    accept.FlameLengthRatioMin, accept.FlameLengthRatioMax));
 
             if (!string.IsNullOrEmpty(expected?.Note)) result.Notes.Add(expected.Note);
 
@@ -145,8 +164,10 @@ namespace DisperSim3D.Validation
                     if (r == null || !(r.MeasuredKwM2 > 0)) continue;
                     var position = ToPoint(r.Position);
                     var mode = ParseReceiverMode(r.ReceiverMode);
-                    double predicted = SolidFlameModel.FluxKwM2(emitter, position, mode,
-                        ambient.AmbientTemperatureK, ambient.RelativeHumidity);
+                    double predicted = fireball
+                        ? FireballModel.FluxKwM2(source, position, mode, ambient.AmbientTemperatureK, ambient.RelativeHumidity)
+                        : SolidFlameModel.FluxKwM2(emitter, position, mode,
+                            ambient.AmbientTemperatureK, ambient.RelativeHumidity);
 
                     var check = Ratio("flux @ " + (r.Name ?? "radiometer"),
                         predicted, r.MeasuredKwM2, "kW/m²",
@@ -186,9 +207,142 @@ namespace DisperSim3D.Validation
             return result;
         }
 
+        /// <summary>
+        /// Runs the bench's fire on a solver extender that declares
+        /// <see cref="SolverCapabilities.Fire"/> and scores the radiometers against the
+        /// peak of the radiation field it stored (<c>_Q</c>). The flame-geometry checks
+        /// need the analytic flame and are not run; the report says so.
+        /// </summary>
+        private static FireBenchmarkResult RunOnExtender(FireBenchmarkSpec spec, string solverName)
+        {
+            var result = new FireBenchmarkResult
+            {
+                Name = (spec.Name ?? "(unnamed)") + " [" + solverName + "]",
+                Citation = spec.Citation ?? "(no citation)",
+                DataConfidence = spec.DataConfidence ?? "Unverified"
+            };
+            var solver = SolverExtenderRegistry.FindByName(solverName);
+            if (solver == null)
+            {
+                result.Notes.Add("no solver extender " + solverName + " is installed");
+                return result;
+            }
+            if ((solver.Capabilities & SolverCapabilities.Fire) == 0)
+            {
+                result.Notes.Add(solver.DisplayName + " does not declare the Fire capability");
+                return result;
+            }
+
+            var accept = spec.Acceptance ?? new FireBenchmarkAcceptance();
+            var ambient = spec.Ambient ?? new FireBenchmarkAmbient();
+            var domain = spec.Domain ?? new FireBenchmarkDomain();
+            var meteo = new MeteorologicalConditions
+            {
+                WindSpeed = ambient.WindSpeed,
+                WindDirectionDeg = ambient.WindDirectionDeg,
+                AmbientTemperature = ambient.AmbientTemperatureK,
+                AmbientPressure = ambient.AmbientPressurePa,
+                RelativeHumidity = ambient.RelativeHumidity
+            };
+            var source = BuildFireSource(spec.Fire);
+            var scene = new Scene3D();
+            scene.FireScenario.Sources.Add(source);
+            scene.WindFieldScenarios.Add(new WindFieldScenario { Name = "bench", Meteo = meteo });
+            var scenario = new DispersionScenario
+            {
+                Name = result.Name,
+                Meteo = meteo,
+                SolverType = CfdSolverType.Extender,
+                ExtenderSolverId = solver.Id,
+                DomainSizeM = domain.SizeM,
+                GridResolution = domain.GridResolution,
+                SimulationDurationS = domain.DurationS
+            };
+            var request = new SolverExtenderRequest(scene, scenario, new CfdConfiguration(), new List<BoundingBox>(), null,
+                System.Threading.CancellationToken.None)
+            {
+                Fire = new SolverFireTarget(source)
+            };
+
+            SolverExtenderResult run;
+            try { run = solver.Run(request); }
+            catch (Exception ex) { run = SolverExtenderResult.Fail(ex.GetType().Name + ": " + ex.Message); }
+            if (run == null || !run.Success)
+            {
+                result.Notes.Add(solver.DisplayName + " failed: " + (run?.Error ?? "no result"));
+                return result;
+            }
+
+            var sim = SimulationOfRun(run, scenario, solver.Id);
+            var radiation = StoredFields.Load(sim, ResultChannels.Radiation);
+            if (radiation == null)
+            {
+                result.Notes.Add(solver.DisplayName + " stored no radiation field (_Q) at " + run.CasePath);
+                return result;
+            }
+            var sampler = StoredFields.Sampler(StoredFields.Collapse(radiation, ResultChannels.Radiation, ViewTimeMode.PeakOverTime), sim);
+
+            int fluxChecks = 0, fluxPassed = 0;
+            foreach (var r in spec.Radiometers ?? new List<FireBenchmarkRadiometer>())
+            {
+                if (r == null || !(r.MeasuredKwM2 > 0)) continue;
+                var p = ToPoint(r.Position);
+                var check = Ratio("flux @ " + (r.Name ?? "radiometer"), sampler.EvaluateConcentration(p.X, p.Y, p.Z),
+                    r.MeasuredKwM2, "kW/m²", accept.FluxRatioMin, accept.FluxRatioMax);
+                result.Checks.Add(check);
+                fluxChecks++;
+                if (check.Passed) fluxPassed++;
+            }
+            result.Notes.Add("radiometers sampled from the peak of " + solver.DisplayName + "'s stored radiation; "
+                           + "the flame length, diameter and emissive power checks need the analytic flame and were not run");
+            if (fluxChecks == 0)
+            {
+                result.Notes.Add("no radiometer data — nothing to score on a solver extender");
+                return result;
+            }
+            double fraction = (double)fluxPassed / fluxChecks;
+            result.ChecksPassed = fraction >= accept.MinFluxFac2Fraction;
+            if (fraction < 1.0)
+                result.Notes.Add(string.Format(CultureInfo.InvariantCulture,
+                    "{0} of {1} radiometers inside the band ({2:P0}, {3:P0} required)",
+                    fluxPassed, fluxChecks, fraction, accept.MinFluxFac2Fraction));
+            return result;
+        }
+
+        /// <summary>
+        /// A completed simulation standing for an extender's run, so its stored fields
+        /// read through <see cref="StoredFields"/>: the result's grid and centre when it
+        /// returned one, else the scenario's.
+        /// </summary>
+        internal static Simulation SimulationOfRun(SolverExtenderResult run, DispersionScenario scenario, string solverId)
+        {
+            var sim = new Simulation
+            {
+                Name = scenario.Name,
+                SolverType = CfdSolverType.Extender,
+                ExtenderSolverId = solverId,
+                Status = SimulationStatus.Completed,
+                CasePath = run.CasePath ?? run.Result?.CaseDir,
+                SnapshotDomainSizeM = scenario.DomainSizeM,
+                SnapshotGridResolution = scenario.GridResolution
+            };
+            var r = run.Result;
+            if (r != null && r.DomainXMax > r.DomainXMin)
+            {
+                sim.SnapshotDomainSizeM = (r.DomainXMax - r.DomainXMin) / 2;
+                sim.SnapshotDomainCenterX = (r.DomainXMax + r.DomainXMin) / 2;
+                sim.SnapshotDomainCenterY = (r.DomainYMax + r.DomainYMin) / 2;
+                if (r.GridNx > 0) sim.SnapshotGridResolution = r.GridNx;
+            }
+            return sim;
+        }
+
         /// <summary>Runs every <c>.fbench</c> under a file or directory and prints a
         /// report. Returns true when every counted bench passed.</summary>
-        public static bool RunAndPrint(string path, TextWriter writer)
+        public static bool RunAndPrint(string path, TextWriter writer) => RunAndPrint(path, writer, null);
+
+        /// <summary>The same, every bench on the solver extender <paramref name="solverOverride"/> names when given.</summary>
+        public static bool RunAndPrint(string path, TextWriter writer, string solverOverride)
         {
             var files = new List<string>();
             if (Directory.Exists(path))
@@ -209,7 +363,7 @@ namespace DisperSim3D.Validation
                 FireBenchmarkResult r;
                 try
                 {
-                    r = Run(Load(f));
+                    r = Run(Load(f), solverOverride);
                 }
                 catch (Exception ex)
                 {
@@ -263,9 +417,12 @@ namespace DisperSim3D.Validation
                 Name = fire.Fuel ?? "benchmark fire",
                 Position = ToPoint(fire.Position),
                 Direction = ToVector(fire.Direction),
-                IsPoolFire = isPool,
+                Kind = isPool ? FireKind.Pool
+                     : string.Equals(fire.Kind, "fireball", StringComparison.OrdinalIgnoreCase) ? FireKind.Fireball
+                     : FireKind.Jet,
                 PoolDiameterM = fire.PoolDiameterM,
                 PoolBurnRateKgM2S = fire.BurnRateKgM2S,
+                FireballMassKg = fire.FireballMassKg > 0 ? fire.FireballMassKg : 1000.0,
                 MassFlowRateKgS = massFlow,
                 OrificeDiameterM = fire.OrificeDiameterM > 0 ? fire.OrificeDiameterM : 0.025,
                 HeatOfCombustionJKg = fire.HeatOfCombustionJKg,

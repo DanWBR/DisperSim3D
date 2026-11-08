@@ -55,7 +55,8 @@ namespace DisperSim3D.UI.Avalonia.Views
                 Minimum = 1,
                 Maximum = Environment.ProcessorCount,
                 Value = Math.Min(_manager.MaxParallelJobs, Environment.ProcessorCount),
-                Width = 70,
+                // Fluent's two spinner buttons take ~64px; leave room for the number.
+                Width = 100,
                 FontSize = 11,
                 VerticalAlignment = VerticalAlignment.Center
             };

@@ -9,7 +9,7 @@ namespace DisperSim3D.Core
     /// WPF-coupled companion of <see cref="FluidX3DObstacleVoxelizer"/>. Walks
     /// <c>Model3DGroup</c> trees on the UI thread and produces value-typed
     /// <see cref="TriangleBundle"/> / <see cref="BoundingBox"/> outputs that
-    /// the engine voxelizer (<see cref="FluidX3DObstacleVoxelizer.VoxelizeTrianglesOnGpu"/>,
+    /// the engine voxelizer (<see cref="FluidX3DObstacleVoxelizer.VoxelizeTriangles"/>,
     /// <see cref="FluidX3DObstacleVoxelizer.VoxelizeBoxes"/>) can consume from a
     /// background worker.
     /// </summary>
@@ -17,7 +17,7 @@ namespace DisperSim3D.Core
     {
         /// <summary>UI-THREAD ONLY. Walks every decoration's Model3D tree and collects
         /// all triangle vertices in world space. The result is a flat triple of float
-        /// arrays ready for <see cref="VoxelizeTrianglesOnGpu"/> on a background thread.
+        /// arrays ready for <see cref="FluidX3DObstacleVoxelizer.VoxelizeTriangles"/> on a background thread.
         /// Coordinates are in SI metres; the caller converts to lattice with
         /// <see cref="FluidX3DUnits.SiToLatticeF"/>.</summary>
         public static TriangleBundle ExtractWorldTriangles(IEnumerable<Decoration3D> decos)

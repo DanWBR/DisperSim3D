@@ -672,6 +672,33 @@ so a shaded receiver reads lower than reality next to a hot wall.
 
 **File**: `Core/RayBoxIntersector.cs`
 
+### 6.6a Fireball
+
+A fire source of kind `Fireball` is the BLEVE fireball of the CCPS
+consequence guidelines (CCPS 2000, §2.2.6, after Roberts): a sphere that
+radiates at a uniform emissive power for the duration of the burn. From the
+fuel mass M (kg):
+
+```
+D = 5.8 · M^{1/3}                      maximum diameter (m)
+t = 0.45 · M^{1/3}     (M < 30 000 kg)  duration (s)
+t = 2.6 · M^{1/6}      (M ≥ 30 000 kg)
+H = 0.75 · D                           centre height above the release (m)
+E = F_rad · M · ΔH_c / (π · D² · t)    emissive power
+F_rad = 0.27 · P^{0.32}                P = vessel pressure before failure (MPa)
+```
+
+`F_rad` falls back to the source's radiative fraction when no vessel pressure
+is given, and a set emissive power overrides the energy balance. A receiver at
+distance L from the centre sees the sphere with view factor `(D/2)²/L²` face-on,
+times `cos θ` for a horizontal or vertical receiver (θ between its normal and
+the line to the centre — exact while the whole sphere is above the receiver's
+plane), so `I = τ · E · F` with the Pietersen transmissivity over `L − D/2`.
+Inside the sphere the receiver gets `E`. A fireball shades like a point source:
+one ray, to its centre.
+
+**File**: `Core/FireballModel.cs`
+
 ### 6.7 Flash fire
 
 Ignition of a drifting cloud burns the region between the flammability
@@ -717,6 +744,27 @@ Anchors worth remembering, and asserted in the self-test: 20 s at about
 no protection credit for clothing, shelter or escape, and the exposure time
 is an input the user supplies rather than something the model derives from
 an escape model.
+
+**Exposure per fire.** A jet or pool fire burns for as long as people stay, so
+its dose takes the scenario's exposure time. A fireball burns only for its
+duration `t`, so its dose takes `min(exposure, t)`. With several fires the doses
+add, each with its own exposure.
+
+**Stored radiation.** When a simulation stored its own radiation (`{time}_Q.bin`
+from a fire solver extender), the dose is the integral of the dose rate over the
+exposure window rather than the peak flux times the exposure:
+
+```
+V(t_k) = ∫_{t_k}^{t_k + t_exp} I(t)^{4/3} dt
+```
+
+with `I^{4/3}` linear between stored times and held at its last value after them
+(a fire still burning when the run ended keeps burning). A view or a study takes,
+per cell, the worst window starting at a stored time; a monitor or detector
+reports `V(t_k)` at each stored time. One stored snapshot — a steady fire — is
+held for the whole window, which is `t_exp · I^{4/3}` again.
+
+**File**: `Core/ThermalDose.cs` (`ForwardWindowDoses`, `WorstWindowDose`)
 
 **File**: `Core/ThermalDose.cs`
 

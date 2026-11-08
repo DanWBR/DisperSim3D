@@ -1,0 +1,543 @@
+#nullable enable
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Threading;
+using System.Threading.Tasks;
+using DisperSim3D.Core;
+using DisperSim3D.Extensibility;
+using DisperSim3D.Geometry;
+using DisperSim3D.Models;
+
+namespace DisperSim3D.CLI
+{
+    /// <summary>
+    /// Loads the automation extender the way the desktop UIs do, starts it against
+    /// a scripted host with no window, and drives every endpoint over HTTP. When
+    /// DISPERSIM3D_AUTOMATION_TEST_IFX names an in:Flux project and the importer is
+    /// installed, it also runs the importer through the server with its dialog
+    /// answered.
+    /// </summary>
+    internal static class AutomationSelfTest
+    {
+        /// <summary>A solver that only offers options, for the solver-options routes.</summary>
+        private sealed class OptionsStandIn : ISolverExtender, ISolverExtenderOptions
+        {
+            public const string SolverId = "SelfTestOptions";
+            public string Id => SolverId;
+            public string Code => "STOPTS";
+            public string DisplayName => "Self-test solver with options";
+            public IReadOnlyList<string> Aliases => new[] { "selftest-options" };
+            public bool IsSteady => true;
+            public SolverExtenderResult Run(SolverExtenderRequest request) => SolverExtenderResult.Fail("not a real solver");
+            public IReadOnlyList<SolverOption> Options => new[]
+            {
+                new SolverOption("iterations", "Iterations", SolverOptionKind.Integer, "8") { Minimum = 1, Maximum = 100 },
+                new SolverOption("gpu", "GPU", SolverOptionKind.Boolean, "false"),
+                new SolverOption("mode", "Mode", SolverOptionKind.Choice, "accurate") { Choices = new[] { "accurate", "fast" } },
+            };
+        }
+
+        private const string CollectionId = "DisperSim3D.Automation";
+
+        public static int Run(string? extenderDir, TextWriter output)
+        {
+            return RunAsync(extenderDir, output).GetAwaiter().GetResult();
+        }
+
+        private static async Task<int> RunAsync(string? extenderDir, TextWriter output)
+        {
+            int passed = 0, failed = 0;
+            void Check(bool ok, string what, string? detail = null)
+            {
+                if (ok) passed++; else failed++;
+                output.WriteLine((ok ? "  PASS  " : "  FAIL  ") + what + (ok || detail == null ? "" : "  — " + detail));
+            }
+
+            if (!string.IsNullOrWhiteSpace(extenderDir))
+            {
+                string existing = Environment.GetEnvironmentVariable("DISPERSIM3D_EXTENDERS") ?? "";
+                Environment.SetEnvironmentVariable("DISPERSIM3D_EXTENDERS",
+                    Path.GetFullPath(extenderDir) + (existing.Length > 0 ? Path.PathSeparator + existing : ""));
+            }
+
+            int port = FreePort();
+            string token = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
+            Environment.SetEnvironmentVariable("DISPERSIM3D_AUTOMATION", "1");
+            Environment.SetEnvironmentVariable("DISPERSIM3D_AUTOMATION_PORT", port.ToString());
+            Environment.SetEnvironmentVariable("DISPERSIM3D_AUTOMATION_TOKEN", token);
+
+            var loaded = ExtenderLoader.LoadAll();
+            var automation = loaded.Collections.FirstOrDefault(c => c.ID == CollectionId);
+            Check(automation is IExtenderStartup, "automation extender loads and starts with the host",
+                  string.Join("; ", loaded.Messages));
+            if (automation is not IExtenderStartup startup) return 1;
+
+            string work = Path.Combine(Path.GetTempPath(), "dispersim3d-automation-selftest-" + Environment.ProcessId);
+            Directory.CreateDirectory(work);
+            var host = new ScriptedHost();
+            try
+            {
+                startup.OnHostStarted(host);
+                Check(host.StatusText.Contains("listening on http://127.0.0.1:" + port), "server starts from DISPERSIM3D_AUTOMATION", host.StatusText);
+
+                using var http = new HttpClient { BaseAddress = new Uri("http://127.0.0.1:" + port + "/"), Timeout = TimeSpan.FromMinutes(5) };
+                http.DefaultRequestHeaders.Add("X-Automation-Token", token);
+
+                // ── Callers ──────────────────────────────────────────────
+                using (var bare = new HttpClient { BaseAddress = http.BaseAddress })
+                {
+                    var r = await bare.GetAsync("status");
+                    Check(r.StatusCode == HttpStatusCode.Unauthorized, "a request without the token is refused", ((int)r.StatusCode).ToString());
+                }
+                var withOrigin = new HttpRequestMessage(HttpMethod.Get, "status");
+                withOrigin.Headers.Add("Origin", "http://example.com");
+                Check((await http.SendAsync(withOrigin)).StatusCode == HttpStatusCode.Forbidden, "a request from a web page (Origin) is refused");
+                var rebound = new HttpRequestMessage(HttpMethod.Get, "status");
+                rebound.Headers.Host = "attacker.example:" + port;
+                Check((await http.SendAsync(rebound)).StatusCode == HttpStatusCode.Forbidden, "a request for another host name is refused");
+
+                // ── Discovery ────────────────────────────────────────────
+                JsonNode? index = await GetJson(http, "");
+                Check(index?["endpoints"] is JsonArray { Count: > 5 }, "GET / lists the endpoints");
+                Check((await http.GetAsync("nothing-here")).StatusCode == HttpStatusCode.NotFound, "an unknown path is 404");
+                Check((await http.DeleteAsync("status")).StatusCode == HttpStatusCode.MethodNotAllowed, "a wrong method is 405");
+
+                JsonNode? status = await GetJson(http, "status");
+                Check(status?["host"]?.GetValue<string>() == "SelfTest", "GET /status names the host", status?.ToJsonString());
+
+                JsonNode? commands = await GetJson(http, "commands");
+                var ids = (commands?["commands"] as JsonArray ?? new JsonArray()).Select(c => c?["id"]?.GetValue<string>()).ToList();
+                Check(ids.Contains(CollectionId + ".Start") && ids.Contains(CollectionId + ".Stop"), "GET /commands lists the extender commands",
+                      string.Join(", ", ids));
+
+                // ── Project ──────────────────────────────────────────────
+                string saved = Path.Combine(work, "selftest.dsproj");
+                JsonNode? save = await PostJson(http, "project/save", new { path = saved });
+                Check(save?["ok"]?.GetValue<bool>() == true && File.Exists(saved), "POST /project/save writes the project", save?.ToJsonString());
+
+                host.Scene = new Scene3D { Name = "Something else" };
+                JsonNode? open = await PostJson(http, "project/open", new { path = saved });
+                Check(open?["ok"]?.GetValue<bool>() == true && open?["projectName"]?.GetValue<string>() == "Automation self-test",
+                      "POST /project/open loads it back", open?.ToJsonString());
+
+                JsonNode? scene = await GetJson(http, "scene");
+                Check(scene?["name"]?.GetValue<string>() == "Automation self-test" &&
+                      scene?["counts"]?["gasDetectors"]?.GetValue<int>() == 1 &&
+                      scene?["gasDetectors"]?[0]?["position"]?[2]?.GetValue<double>() == 1.5,
+                      "GET /scene describes the project", scene?.ToJsonString());
+
+                // ── Simulations ──────────────────────────────────────────
+                var badSolver = await Post(http, "simulations", new { source = "S-1", solver = "NoSuchSolver" });
+                Check(badSolver.StatusCode == HttpStatusCode.BadRequest, "an unknown solver is 400");
+                var noSource = await Post(http, "simulations", new { source = "Nowhere", solver = "GaussianPlume" });
+                Check(noSource.StatusCode == HttpStatusCode.NotFound, "an unknown source is 404");
+                JsonNode? added = await PostJson(http, "simulations",
+                    new { source = "s-1", solver = "gaussianplume", name = "Plume", durationS = 120, gridResolution = 30 });
+                string? simId = added?["simulation"]?["id"]?.GetValue<string>();
+                Check(added?["ok"]?.GetValue<bool>() == true && simId != null &&
+                      added?["simulation"]?["solver"]?.GetValue<string>() == "GaussianPlume" &&
+                      added?["simulation"]?["windField"]?.GetValue<string>() == "W-1" &&
+                      added?["simulation"]?["gridResolution"]?.GetValue<int>() == 30 &&
+                      host.Scene.Simulations.Count == 1 && host.Refreshes == 1,
+                      "POST /simulations adds one, by source name, with the first wind field", added?.ToJsonString());
+                JsonNode? sims = await GetJson(http, "simulations");
+                Check(sims?["simulations"]?[0]?["source"]?.GetValue<string>() == "S-1" && sims?["simulations"]?[0]?["run"] == null,
+                      "GET /simulations lists it, not yet run", sims?.ToJsonString());
+                var runMissing = await Post(http, "simulations/run", new { id = "nope" });
+                Check(runMissing.StatusCode == HttpStatusCode.Conflict, "running an unknown simulation is refused");
+                JsonNode? ran = await PostJson(http, "simulations/run", new { id = simId });
+                Check(ran?["ok"]?.GetValue<bool>() == true && ran?["run"]?["state"]?.GetValue<string>() == "Queued" &&
+                      host.RunRequests.Contains(simId!), "POST /simulations/run queues it in the host", ran?.ToJsonString());
+                JsonNode? runStatus = await GetJson(http, "simulations/status?id=" + simId);
+                Check(runStatus?["run"]?["state"]?.GetValue<string>() == "Queued", "GET /simulations/status reports the run");
+                JsonNode? cancelledRun = await PostJson(http, "simulations/cancel", new { id = simId });
+                Check(cancelledRun?["run"]?["state"]?.GetValue<string>() == "Cancelled", "POST /simulations/cancel cancels it", cancelledRun?.ToJsonString());
+                var cancelAgain = await Post(http, "simulations/cancel", new { id = simId });
+                Check(cancelAgain.StatusCode == HttpStatusCode.Conflict, "cancelling a finished run is refused");
+                var showCancelled = await Post(http, "simulations/show", new { id = simId });
+                Check(showCancelled.StatusCode == HttpStatusCode.Conflict, "showing a simulation without results is refused");
+                host.CompleteRun(simId!);
+                JsonNode? shown = await PostJson(http, "simulations/show", new { id = simId, timeS = 30 });
+                Check(shown?["ok"]?.GetValue<bool>() == true && host.Shown == (simId, 30.0),
+                      "POST /simulations/show shows the result at the given time", shown?.ToJsonString());
+                await PostJson(http, "simulations/show", new { id = simId });
+                Check(host.Shown == (simId, (double?)null), "POST /simulations/show without timeS asks for the last snapshot");
+
+                // ── Solver options ───────────────────────────────────────
+                var optionsSolver = new OptionsStandIn();
+                SolverExtenderRegistry.Register(optionsSolver);
+                JsonNode? solvers = await GetJson(http, "solvers");
+                var listed = solvers?["extenders"]?.AsArray().FirstOrDefault(e => e?["id"]?.GetValue<string>() == OptionsStandIn.SolverId);
+                Check(listed?["options"]?.AsArray().Count == 3 && listed?["options"]?[0]?["kind"]?.GetValue<string>() == "Integer" &&
+                      listed?["options"]?[0]?["defaultValue"]?.GetValue<string>() == "8" && listed?["options"]?[2]?["choices"]?.AsArray().Count == 2,
+                      "GET /solvers lists an extender solver's options", listed?.ToJsonString());
+                JsonNode? withOptions = await PostJson(http, "simulations", new
+                {
+                    source = "S-1", solver = OptionsStandIn.SolverId, name = "With options",
+                    options = new Dictionary<string, object> { ["iterations"] = 12, ["gpu"] = true }
+                });
+                string? optId = withOptions?["simulation"]?["id"]?.GetValue<string>();
+                Check(withOptions?["simulation"]?["options"]?["iterations"]?.GetValue<string>() == "12" &&
+                      withOptions?["simulation"]?["options"]?["gpu"]?.GetValue<string>() == "true",
+                      "POST /simulations sets the solver's options", withOptions?.ToJsonString());
+                var outOfRange = await Post(http, "simulations", new { source = "S-1", solver = OptionsStandIn.SolverId, options = new { iterations = 500 } });
+                Check(outOfRange.StatusCode == HttpStatusCode.BadRequest, "an option value out of range is 400");
+                var unknownOption = await Post(http, "simulations/options", new { id = optId, options = new { nothing = 1 } });
+                Check(unknownOption.StatusCode == HttpStatusCode.BadRequest, "an option the solver does not offer is 400");
+                JsonNode? changed = await PostJson(http, "simulations/options", new
+                {
+                    id = optId, options = new Dictionary<string, object?> { ["iterations"] = null, ["mode"] = "Fast" }
+                });
+                Check(changed?["simulation"]?["options"]?["iterations"] == null && changed?["simulation"]?["options"]?["mode"]?.GetValue<string>() == "fast" &&
+                      changed?["simulation"]?["options"]?["gpu"]?.GetValue<string>() == "true",
+                      "POST /simulations/options sets one, clears another and keeps the rest", changed?.ToJsonString());
+                var halfBad = await Post(http, "simulations/options", new { id = optId, options = new Dictionary<string, object> { ["iterations"] = 5, ["mode"] = "bogus" } });
+                var optSim = host.Scene.Simulations.First(s => s.Id == optId);
+                Check(halfBad.StatusCode == HttpStatusCode.BadRequest && optSim.ExtenderOptions.All(o => o.Key != "iterations"),
+                      "a request with one bad value changes nothing");
+                var runOptions = SolverOptionValues.For(optSim, optionsSolver);
+                Check(runOptions.Count == 2 && runOptions["gpu"] == "true" && runOptions["mode"] == "fast",
+                      "a run gets the simulation's values of its solver's options", string.Join(", ", runOptions.Select(kv => kv.Key + "=" + kv.Value)));
+                string withOpts = Path.Combine(work, "options.dsproj");
+                await PostJson(http, "project/save", new { path = withOpts });
+                await PostJson(http, "project/open", new { path = withOpts });
+                JsonNode? reopened = await GetJson(http, "simulations");
+                var again = reopened?["simulations"]?.AsArray().FirstOrDefault(x => x?["name"]?.GetValue<string>() == "With options");
+                Check(again?["options"]?["mode"]?.GetValue<string>() == "fast" && again?["options"]?["gpu"]?.GetValue<string>() == "true",
+                      "a simulation's solver options survive saving and reopening the project", again?.ToJsonString());
+
+                int refreshesBefore = host.Refreshes;
+                JsonNode? view = await PostJson(http, "views", new
+                {
+                    simulation = "Plume", kind = "ContourXY", field = "Temperature",
+                    planePosition = 8, minValue = 300, maxValue = 2000, clipToRange = true, colorMap = "Inferno"
+                });
+                string? viewId = view?["view"]?["id"]?.GetValue<string>();
+                View? made = host.Scene.Views.FirstOrDefault(v => v.Id == viewId);
+                Check(view?["ok"]?.GetValue<bool>() == true && made != null && made.SimulationId == simId &&
+                      made.Kind == ViewKind.ContourXY && made.FieldProperty == ViewFieldProperty.Temperature &&
+                      made.PlanePosition == 8 && made.ClipToRange && made.ColorMap == ColorMapName.Inferno &&
+                      host.Refreshes > refreshesBefore,
+                      "POST /views adds a view by simulation name and redraws", view?.ToJsonString());
+                var badKind = await Post(http, "views", new { simulation = simId, kind = "Hologram" });
+                Check(badKind.StatusCode == HttpStatusCode.BadRequest, "an unknown view kind is 400");
+                var noSim = await Post(http, "views", new { simulation = "Nowhere" });
+                Check(noSim.StatusCode == HttpStatusCode.NotFound, "a view of an unknown simulation is 404");
+                JsonNode? updated = await PostJson(http, "views/update", new { id = viewId, visible = false, isoColor = "#FF8800" });
+                Check(updated?["ok"]?.GetValue<bool>() == true && made?.IsVisible == false && made.PlanePosition == 8,
+                      "POST /views/update changes only the fields given", updated?.ToJsonString());
+                JsonNode? views = await GetJson(http, "views");
+                Check(views?["views"]?[0]?["simulation"]?.GetValue<string>() == "Plume" &&
+                      views?["views"]?[0]?["clipToRange"]?.GetValue<bool>() == true, "GET /views lists the views", views?.ToJsonString());
+                JsonNode? deleted = await PostJson(http, "views/delete", new { id = viewId });
+                Check(deleted?["ok"]?.GetValue<bool>() == true && host.Scene.Views.Count == 0, "POST /views/delete removes it");
+                Check((await Post(http, "views/delete", new { id = viewId })).StatusCode == HttpStatusCode.NotFound,
+                      "deleting an unknown view is 404");
+
+                host.Scene.Decorations.Add(new Decoration3D { Name = "Plant", IsVisible = true, Opacity = 1 });
+                JsonNode? deco = await PostJson(http, "decorations/update",
+                    new { name = "plant", opacity = 0.4, clipEnabled = true, clipAxis = "Z", clipValue = 11, clipAbove = false });
+                Decoration3D plant = host.Scene.Decorations[0];
+                Check(deco?["ok"]?.GetValue<bool>() == true && plant.Opacity == 0.4 && plant.ClipEnabled &&
+                      plant.ClipAxis == ClipAxis.Z && plant.ClipValue == 11 && !plant.ClipAbove && plant.IsVisible,
+                      "POST /decorations/update sets opacity and the clip plane by name", deco?.ToJsonString());
+                JsonNode? decos = await GetJson(http, "decorations");
+                Check(decos?["decorations"]?[0]?["clipValue"]?.GetValue<double>() == 11, "GET /decorations lists them", decos?.ToJsonString());
+                Check((await Post(http, "decorations/update", new { name = "nothing" })).StatusCode == HttpStatusCode.NotFound,
+                      "an unknown decoration is 404");
+
+                JsonNode? camera = await GetJson(http, "camera");
+                Check(camera?["target"]?[0]?.GetValue<double>() == 0 && camera?["position"]?[2]?.GetValue<double>() == 50,
+                      "GET /camera reports the position and the target", camera?.ToJsonString());
+                JsonNode? moved = await PostJson(http, "camera", new { position = new[] { 10.0, 20, 30 }, target = new[] { 10.0, 0, 0 } });
+                Check(moved?["ok"]?.GetValue<bool>() == true && host.Camera.Position.Y == 20 && host.Camera.LookDirection.Y == -20 &&
+                      host.Camera.LookDirection.Z == -30, "POST /camera moves the camera", moved?.ToJsonString());
+                Check((await Post(http, "camera", new { position = new[] { 1.0, 1, 1 }, target = new[] { 1.0, 1, 1 } })).StatusCode
+                      == HttpStatusCode.BadRequest, "a camera looking at its own position is refused");
+
+                host.Scene.Simulations[0].SnapshotDomainCenterX = 12.5;
+                host.Scene.Simulations[0].SnapshotDomainCenterY = -7.25;
+                string centred = Path.Combine(work, "centred.dsproj");
+                await PostJson(http, "project/save", new { path = centred });
+                await PostJson(http, "project/open", new { path = centred });
+                JsonNode? reread = await GetJson(http, "simulations");
+                Check(reread?["simulations"]?[0]?["domainCenter"]?[0]?.GetValue<double>() == 12.5 &&
+                      reread?["simulations"]?[0]?["domainCenter"]?[1]?.GetValue<double>() == -7.25,
+                      "a result grid's centre survives saving and reopening the project", reread?["simulations"]?[0]?["domainCenter"]?.ToJsonString());
+
+                var missing = await Post(http, "project/open", new { path = Path.Combine(work, "missing.dsproj") });
+                Check(missing.StatusCode == HttpStatusCode.NotFound, "opening a missing file is 404");
+                var relative = await Post(http, "project/open", new { path = "relative.dsproj" });
+                Check(relative.StatusCode == HttpStatusCode.BadRequest, "a relative path is refused");
+                var badJson = await http.PostAsync("project/open", new StringContent("{not json", Encoding.UTF8, "application/json"));
+                Check(badJson.StatusCode == HttpStatusCode.BadRequest, "malformed JSON is 400");
+
+                // ── Viewport ─────────────────────────────────────────────
+                var png = await http.GetAsync("viewport.png?width=64&height=48");
+                byte[] pngBytes = await png.Content.ReadAsByteArrayAsync();
+                Check(png.Content.Headers.ContentType?.MediaType == "image/png" && PngWriter.IsPng(pngBytes) && PngSize(pngBytes) == (64, 48),
+                      "GET /viewport.png returns the view at the requested size");
+                string shot = Path.Combine(work, "shots", "view.png");
+                JsonNode? saveShot = await PostJson(http, "viewport/save", new { path = shot, width = 32, height = 24 });
+                Check(saveShot?["ok"]?.GetValue<bool>() == true && PngWriter.IsPng(File.ReadAllBytes(shot)), "POST /viewport/save writes a PNG");
+                host.ViewAvailable = false;
+                Check((await http.GetAsync("viewport.png")).StatusCode == HttpStatusCode.ServiceUnavailable, "no view is 503");
+                host.ViewAvailable = true;
+
+                // ── Commands ─────────────────────────────────────────────
+                var own = await Post(http, "commands/run", new { id = CollectionId + ".Stop" });
+                Check(own.StatusCode == HttpStatusCode.BadRequest, "the server's own commands cannot be run remotely");
+                var unknown = await Post(http, "commands/run", new { id = "No.Such.Command" });
+                Check(unknown.StatusCode == HttpStatusCode.NotFound, "an unknown command is 404");
+
+                string? ifx = Environment.GetEnvironmentVariable("DISPERSIM3D_AUTOMATION_TEST_IFX");
+                const string importId = "DisperSim3D.InFlux.Import";
+                if (!ids.Contains(importId))
+                {
+                    output.WriteLine("  skip  in:Flux import: the importer is not installed");
+                }
+                else
+                {
+                    JsonNode? cancelled = await PostJson(http, "commands/run", new { id = importId, answers = Array.Empty<string>() });
+                    Check(cancelled?["ok"]?.GetValue<bool>() == true && cancelled?["dialogs"]?[0]?["answer"] == null,
+                          "a command whose dialog gets no answer sees it cancelled", cancelled?.ToJsonString());
+
+                    if (string.IsNullOrWhiteSpace(ifx) || !File.Exists(ifx))
+                    {
+                        output.WriteLine("  skip  in:Flux import: set DISPERSIM3D_AUTOMATION_TEST_IFX to an .ifx file");
+                    }
+                    else
+                    {
+                        JsonNode? import = await PostJson(http, "commands/run", new { id = importId, answers = new[] { ifx } });
+                        string? path = import?["projectPath"]?.GetValue<string>();
+                        Check(import?["ok"]?.GetValue<bool>() == true && path != null && path.EndsWith(".dsproj") && File.Exists(path) &&
+                              import?["dialogs"]?[0]?["answer"]?.GetValue<string>() == ifx,
+                              "the in:Flux importer runs with its dialog answered", import?.ToJsonString());
+                        JsonNode? imported = await GetJson(http, "scene");
+                        output.WriteLine("        imported: " + imported?["name"] + ", " + imported?["counts"]?.ToJsonString(new JsonSerializerOptions()));
+                    }
+                }
+
+                JsonNode? log = await GetJson(http, "log");
+                Check(log?["entries"] is JsonArray { Count: > 0 }, "GET /log reports what the server did");
+
+                // ── Stop ─────────────────────────────────────────────────
+                await automation.Collection.First(c => c.ID == CollectionId + ".Stop").RunAsync(host);
+                bool refused;
+                try
+                {
+                    await http.GetAsync("status");
+                    refused = false;
+                }
+                catch (HttpRequestException)
+                {
+                    refused = true;
+                }
+                Check(refused && host.StatusText.Contains("stopped"), "the Stop command closes the port", host.StatusText);
+            }
+            catch (Exception ex)
+            {
+                Check(false, "self-test ran to the end", ex.ToString());
+            }
+            finally
+            {
+                try { Directory.Delete(work, recursive: true); } catch { /* best effort */ }
+            }
+
+            Check(host.UnexpectedCalls.Count == 0, "the server never opened a real dialog", string.Join("; ", host.UnexpectedCalls));
+            output.WriteLine();
+            output.WriteLine(passed + " passed, " + failed + " failed");
+            return failed == 0 ? 0 : 1;
+        }
+
+        private static int FreePort()
+        {
+            var probe = new TcpListener(IPAddress.Loopback, 0);
+            probe.Start();
+            int port = ((IPEndPoint)probe.LocalEndpoint).Port;
+            probe.Stop();
+            return port;
+        }
+
+        private static async Task<JsonNode?> GetJson(HttpClient http, string path)
+        {
+            var r = await http.GetAsync(path);
+            return JsonNode.Parse(await r.Content.ReadAsStringAsync());
+        }
+
+        private static Task<HttpResponseMessage> Post(HttpClient http, string path, object body) =>
+            http.PostAsync(path, new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"));
+
+        private static async Task<JsonNode?> PostJson(HttpClient http, string path, object body)
+        {
+            var r = await Post(http, path, body);
+            return JsonNode.Parse(await r.Content.ReadAsStringAsync());
+        }
+
+        private static (int, int) PngSize(byte[] png) =>
+            (png[16] << 24 | png[17] << 16 | png[18] << 8 | png[19], png[20] << 24 | png[21] << 16 | png[22] << 8 | png[23]);
+
+        /// <summary>
+        /// A host with no window: the project lives in memory, saving and opening go
+        /// through the engine as the UIs do, and the "view" is a generated gradient.
+        /// Its dialogs must never be reached — the server answers them itself.
+        /// </summary>
+        private sealed class ScriptedHost : IExtenderHost4
+        {
+            private readonly SemaphoreSlim _ui = new(1, 1);
+
+            public ScriptedHost()
+            {
+                Scene = new Scene3D { Name = "Automation self-test" };
+                Scene.GasDetectors.Add(new GasDetector3D { Name = "GD-1", Position = new Point3D(10, 20, 1.5) });
+                Scene.TopLevelSources.Add(new ReleaseSource3D { Name = "S-1", Position = new Point3D(0, 0, 0) });
+                Scene.WindFieldScenarios.Add(new WindFieldScenario { Name = "W-1" });
+            }
+
+            public Scene3D Scene { get; set; }
+
+            public bool ViewAvailable { get; set; } = true;
+
+            public List<string> UnexpectedCalls { get; } = new();
+
+            public int Refreshes { get; private set; }
+
+            public List<string> RunRequests { get; } = new();
+
+            private readonly Dictionary<string, ExtenderRunStatus> _runs = new();
+
+            public void RefreshProject() => Refreshes++;
+
+            /// <summary>Records the request as a queued run, as a host's simulation manager would.</summary>
+            public Task<string?> RunSimulationAsync(string simulationId)
+            {
+                if (!Scene.Simulations.Exists(s => s.Id == simulationId))
+                    return Task.FromResult<string?>("No simulation " + simulationId + " in the project.");
+                RunRequests.Add(simulationId);
+                _runs[simulationId] = new ExtenderRunStatus("Queued", 0, "Queued", null);
+                return Task.FromResult<string?>(null);
+            }
+
+            public ExtenderRunStatus? GetSimulationRunStatus(string simulationId) =>
+                _runs.TryGetValue(simulationId, out var run) ? run : null;
+
+            public Task<string?> CancelSimulationAsync(string simulationId)
+            {
+                if (!_runs.TryGetValue(simulationId, out var run)) return Task.FromResult<string?>("Not run.");
+                if (run.State != "Queued" && run.State != "Running") return Task.FromResult<string?>("Already " + run.State + ".");
+                _runs[simulationId] = new ExtenderRunStatus("Cancelled", run.Progress, "Cancelled", null);
+                return Task.FromResult<string?>(null);
+            }
+
+            public (string Id, double? TimeS)? Shown { get; private set; }
+
+            public CameraPreset Camera { get; set; } = new()
+            {
+                Position = new Point3D(100, 0, 50),
+                LookDirection = new Vector3D(-100, 0, -50)
+            };
+
+            public CameraPreset GetCamera() => Camera;
+
+            public void SetCamera(CameraPreset camera) => Camera = camera;
+
+            public void CompleteRun(string simulationId) =>
+                _runs[simulationId] = new ExtenderRunStatus("Completed", 1, "Completed", null);
+
+            public Task<string?> ShowSimulationResultAsync(string simulationId, double? timeS)
+            {
+                if (!_runs.TryGetValue(simulationId, out var run) || run.State != "Completed")
+                    return Task.FromResult<string?>("No results yet.");
+                Shown = (simulationId, timeS);
+                StatusText = "Showing results";
+                return Task.FromResult<string?>(null);
+            }
+
+            public string HostName => "SelfTest";
+
+            public object? MainWindow => null;
+
+            public Scene3D? CurrentScene => Scene;
+
+            public string? CurrentProjectPath { get; private set; }
+
+            public string StatusText { get; private set; } = "";
+
+            public Task<string?> PickOpenFileAsync(string title, IReadOnlyList<ExtenderFileFilter> filters)
+            {
+                UnexpectedCalls.Add("open dialog " + title);
+                return Task.FromResult<string?>(null);
+            }
+
+            public Task<string?> PickSaveFileAsync(string title, string suggestedFileName, IReadOnlyList<ExtenderFileFilter> filters)
+            {
+                UnexpectedCalls.Add("save dialog " + title);
+                return Task.FromResult<string?>(null);
+            }
+
+            public Task ShowMessageAsync(string title, string message, bool isError = false)
+            {
+                UnexpectedCalls.Add("message " + title + ": " + message);
+                return Task.CompletedTask;
+            }
+
+            public async Task OpenProjectAsync(string path)
+            {
+                Scene = await Task.Run(() => SceneFileLoader.Load(path));
+                CurrentProjectPath = path;
+                StatusText = "Opened " + Path.GetFileName(path);
+            }
+
+            public async Task SaveProjectAsync(string path)
+            {
+                Scene3D scene = Scene;
+                await Task.Run(() => SceneFileSaver.Save(scene, path,
+                    bundleWriter: (p, sc, doc, prog) => ProjectBundle.Save(p, sc, doc, prog)));
+                CurrentProjectPath = path;
+                StatusText = "Saved " + Path.GetFileName(path);
+            }
+
+            public void SetStatus(string text) => StatusText = text;
+
+            public Task<byte[]?> CaptureViewportPngAsync(int width, int height)
+            {
+                if (!ViewAvailable) return Task.FromResult<byte[]?>(null);
+                if (width <= 0 || height <= 0) { width = 80; height = 60; }
+                var rgba = new byte[width * height * 4];
+                for (int y = 0; y < height; y++)
+                    for (int x = 0; x < width; x++)
+                    {
+                        int i = (y * width + x) * 4;
+                        rgba[i] = (byte)(255 * x / width);
+                        rgba[i + 1] = (byte)(255 * y / height);
+                        rgba[i + 2] = 128;
+                        rgba[i + 3] = 255;
+                    }
+                return Task.FromResult<byte[]?>(PngWriter.EncodeRgba(rgba, width, height));
+            }
+
+            /// <summary>One action at a time, as on a UI thread.</summary>
+            public async Task RunOnUiThreadAsync(Func<Task> action)
+            {
+                await _ui.WaitAsync();
+                try
+                {
+                    await action();
+                }
+                finally
+                {
+                    _ui.Release();
+                }
+            }
+        }
+    }
+}

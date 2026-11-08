@@ -310,6 +310,9 @@ namespace DisperSim3D.Validation
                 AveragingTimeS = spec.Meteo.AveragingTimeS,
                 StabilityIndex = ParseStabilityIndex(spec.Meteo.Stability)
             };
+            if (spec.Meteo.MixingHeightM > 0) meteo.MixingHeightM = spec.Meteo.MixingHeightM.Value;
+            if (spec.Meteo.ObukhovLengthM.HasValue) meteo.ObukhovLengthM = spec.Meteo.ObukhovLengthM.Value;
+            if (spec.Meteo.WindDirectionSigmaDeg > 0) meteo.WindDirectionSigmaDeg = spec.Meteo.WindDirectionSigmaDeg.Value;
 
             // Wind field (acts as the meteo carrier; only used for CFD pairs)
             var wf = new WindFieldScenario
@@ -333,6 +336,7 @@ namespace DisperSim3D.Validation
                 SourceId = src.Id,
                 WindFieldId = wf.Id,
                 SolverType = spec.ResolveSolverType(),
+                ExtenderSolverId = spec.ResolveExtenderSolverId(),
                 SnapshotSource = src,
                 SnapshotMeteo = meteo,
                 SnapshotGas = gasItem,
@@ -485,6 +489,13 @@ namespace DisperSim3D.Validation
 
             bool peakKind = string.Equals(spec.ConcentrationKind, "PeakOverTime",
                 StringComparison.OrdinalIgnoreCase);
+
+            // A solver that evaluates its own field at a point (an extender on a
+            // grid finer than the scenario's) is sampled exactly, in the unit of the bench.
+            bool massFraction = string.Equals(spec.Unit, "MassFraction", StringComparison.OrdinalIgnoreCase);
+            var exact = massFraction ? cfdResult.MassFractionAt : cfdResult.ConcentrationAt;
+            if (exact != null)
+                return SamplePoints(spec, (x, y, z) => exact(x, y, z));
 
             // FluidX3D runners populate ConcentrationField in-memory (no OpenFOAM
             // case directory). Use it directly when available.

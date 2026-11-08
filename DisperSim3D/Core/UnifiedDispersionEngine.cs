@@ -142,7 +142,7 @@ namespace DisperSim3D.Core
             _path.Clear();
             _spread = SpreadMode.Circular; _xTr = double.NaN; _prevRyCirc = double.NaN; _prevS = double.NaN; _segments = null; _upwind = false;
             _pool = false; _pointPassive = false;
-            _meteo = scenario.Meteo;
+            _meteo = CalmWind.AtLeast(scenario.Meteo, CalmWind.UnifiedMinimumMPerS);
             _tAir = _meteo.AmbientTemperature > 0 ? _meteo.AmbientTemperature : 293.15;
             _pAir = _meteo.AmbientPressure > 0 ? _meteo.AmbientPressure : 101325.0;
             _rhoAir = _pAir * MwAir / (R * _tAir);
@@ -155,7 +155,7 @@ namespace DisperSim3D.Core
             _nBase = _clsIndex > 0 ? Interp(_clsIndex, 2.0, 2.0, 2.0, 2.0, 2.25, 2.5)
                    : ((_cls == PasquillStabilityClass.E) ? 2.25 : (_cls == PasquillStabilityClass.F ? 2.5 : 2.0));
             double zref = _meteo.WindMeasurementHeightM > 0 ? _meteo.WindMeasurementHeightM : 10.0;
-            double uref = Math.Max(_meteo.WindSpeed, 0.3);
+            double uref = CalmWind.AtLeast(_meteo.WindSpeed, CalmWind.UnifiedMinimumMPerS);
             _ustar = Kappa * uref / (Math.Log((zref + _z0) / _z0) - Psi(zref));
             _tav = AveragingTimeS > 0 ? AveragingTimeS : (_meteo.AveragingTimeS > 0 ? _meteo.AveragingTimeS : 600.0);
             InitConvective();
