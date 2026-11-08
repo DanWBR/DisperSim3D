@@ -358,7 +358,10 @@ namespace DisperSim3D.Core
                             SerializeSourceCommon(s.SnapshotSource, inv).Elements())
                         : null,
                     SerializeMeteo("SnapshotMeteo", s.SnapshotMeteo, inv),
-                    SerializeAtmosphericCfd(s.SnapshotCfdConfig, inv))));
+                    SerializeAtmosphericCfd(s.SnapshotCfdConfig, inv),
+                    s.ExtenderOptions == null || s.ExtenderOptions.Count == 0 ? null
+                        : new XElement("ExtenderOptions", s.ExtenderOptions.Where(o => !string.IsNullOrEmpty(o?.Key))
+                            .Select(o => new XElement("Option", new XAttribute("Key", o.Key), new XAttribute("Value", o.Value ?? "")))))));
         }
 
         private static XElement? SerializeViews(Scene3D scene, CultureInfo inv)

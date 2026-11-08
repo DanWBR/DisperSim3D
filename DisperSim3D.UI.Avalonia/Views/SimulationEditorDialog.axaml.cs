@@ -23,6 +23,7 @@ namespace DisperSim3D.UI.Avalonia.Views
         private readonly List<DisperSim3D.Extensibility.ISolverExtender> _extenderSolvers =
             new List<DisperSim3D.Extensibility.ISolverExtender>(DisperSim3D.Extensibility.SolverExtenderRegistry.All);
         private const int BuiltInSolverCount = 8;
+        private readonly SolverOptionsPanel _options = new SolverOptionsPanel();
 
         public Simulation? Result { get; private set; }
 
@@ -44,6 +45,25 @@ namespace DisperSim3D.UI.Avalonia.Views
             NudGrid.Value   = defaultGrid;
 
             PopulateLists(preselectedSourceId);
+            OptionsHost.Children.Add(_options);
+            CmbSolver.SelectionChanged += (_, _) => ShowOptions();
+            ShowOptions();
+        }
+
+        private DisperSim3D.Extensibility.ISolverExtender? SelectedExtender()
+        {
+            int ext = CmbSolver.SelectedIndex - BuiltInSolverCount;
+            return ext >= 0 && ext < _extenderSolvers.Count ? _extenderSolvers[ext] : null;
+        }
+
+        /// <summary>The selected solver's options, with the edited simulation's values when it already runs on that solver.</summary>
+        private void ShowOptions()
+        {
+            var solver = SelectedExtender();
+            bool same = _editingSim != null && solver != null
+                && string.Equals(_editingSim.ExtenderSolverId, solver.Id, StringComparison.OrdinalIgnoreCase);
+            _options.Show(solver, same ? _editingSim!.ExtenderOptions : null);
+            OptionsSection.IsVisible = _options.Count > 0;
         }
 
         /// <summary>Edits an existing Simulation in place: dialog is pre-populated
@@ -76,6 +96,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                     NudGrid.Value = (decimal)Math.Max(10, Math.Min(500, sim.SnapshotGridResolution));
                 if (sim.SnapshotCount > 0)
                     NudSnapCount.Value = (decimal)Math.Max(2, Math.Min(1000, sim.SnapshotCount));
+                ShowOptions();
             }
         }
 
@@ -147,6 +168,13 @@ namespace DisperSim3D.UI.Avalonia.Views
                 7 => CfdSolverType.UnifiedDispersion,
                 _ => CfdSolverType.GaussianPuff
             };
+            string? optionError = _options.Validate();
+            if (optionError != null)
+            {
+                ErrorText.Text = optionError;
+                ErrorBanner.IsVisible = true;
+                return;
+            }
             string? extenderSolverId = null;
             int ext = CmbSolver.SelectedIndex - BuiltInSolverCount;
             if (ext >= 0 && ext < _extenderSolvers.Count)
@@ -172,6 +200,7 @@ namespace DisperSim3D.UI.Avalonia.Views
             target.SnapshotDomainCenterY  = 0;
             target.SnapshotGridResolution = (int)(NudGrid.Value ?? 40m);
             target.SnapshotCount          = (int)(NudSnapCount.Value ?? 20m);
+            target.ExtenderOptions        = _options.Values();
             Result = target;
 
             Close(true);

@@ -101,6 +101,14 @@
                          FormatString="F0" HorizontalAlignment="Left" Width="160" />
         </Grid>
 
+        <Border x:Name="OptionsSection" IsVisible="False" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+                Margin="0,8,0,0" Padding="0,6,0,0">
+          <StackPanel x:Name="OptionsHost" Spacing="2">
+            <TextBlock Text="Solver Options" FontWeight="SemiBold" />
+            <TextBlock Classes="hint" Text="Settings the selected solver offers for this simulation's runs." />
+          </StackPanel>
+        </Border>
+
       </StackPanel>
     </ScrollViewer>
   </DockPanel>

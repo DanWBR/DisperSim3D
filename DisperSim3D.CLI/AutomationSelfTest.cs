@@ -28,6 +28,24 @@ namespace DisperSim3D.CLI
     /// </summary>
     internal static class AutomationSelfTest
     {
+        /// <summary>A solver that only offers options, for the solver-options routes.</summary>
+        private sealed class OptionsStandIn : ISolverExtender, ISolverExtenderOptions
+        {
+            public const string SolverId = "SelfTestOptions";
+            public string Id => SolverId;
+            public string Code => "STOPTS";
+            public string DisplayName => "Self-test solver with options";
+            public IReadOnlyList<string> Aliases => new[] { "selftest-options" };
+            public bool IsSteady => true;
+            public SolverExtenderResult Run(SolverExtenderRequest request) => SolverExtenderResult.Fail("not a real solver");
+            public IReadOnlyList<SolverOption> Options => new[]
+            {
+                new SolverOption("iterations", "Iterations", SolverOptionKind.Integer, "8") { Minimum = 1, Maximum = 100 },
+                new SolverOption("gpu", "GPU", SolverOptionKind.Boolean, "false"),
+                new SolverOption("mode", "Mode", SolverOptionKind.Choice, "accurate") { Choices = new[] { "accurate", "fast" } },
+            };
+        }
+
         private const string CollectionId = "DisperSim3D.Automation";
 
         public static int Run(string? extenderDir, TextWriter output)
@@ -153,6 +171,49 @@ namespace DisperSim3D.CLI
                       "POST /simulations/show shows the result at the given time", shown?.ToJsonString());
                 await PostJson(http, "simulations/show", new { id = simId });
                 Check(host.Shown == (simId, (double?)null), "POST /simulations/show without timeS asks for the last snapshot");
+
+                // ── Solver options ───────────────────────────────────────
+                var optionsSolver = new OptionsStandIn();
+                SolverExtenderRegistry.Register(optionsSolver);
+                JsonNode? solvers = await GetJson(http, "solvers");
+                var listed = solvers?["extenders"]?.AsArray().FirstOrDefault(e => e?["id"]?.GetValue<string>() == OptionsStandIn.SolverId);
+                Check(listed?["options"]?.AsArray().Count == 3 && listed?["options"]?[0]?["kind"]?.GetValue<string>() == "Integer" &&
+                      listed?["options"]?[0]?["defaultValue"]?.GetValue<string>() == "8" && listed?["options"]?[2]?["choices"]?.AsArray().Count == 2,
+                      "GET /solvers lists an extender solver's options", listed?.ToJsonString());
+                JsonNode? withOptions = await PostJson(http, "simulations", new
+                {
+                    source = "S-1", solver = OptionsStandIn.SolverId, name = "With options",
+                    options = new Dictionary<string, object> { ["iterations"] = 12, ["gpu"] = true }
+                });
+                string? optId = withOptions?["simulation"]?["id"]?.GetValue<string>();
+                Check(withOptions?["simulation"]?["options"]?["iterations"]?.GetValue<string>() == "12" &&
+                      withOptions?["simulation"]?["options"]?["gpu"]?.GetValue<string>() == "true",
+                      "POST /simulations sets the solver's options", withOptions?.ToJsonString());
+                var outOfRange = await Post(http, "simulations", new { source = "S-1", solver = OptionsStandIn.SolverId, options = new { iterations = 500 } });
+                Check(outOfRange.StatusCode == HttpStatusCode.BadRequest, "an option value out of range is 400");
+                var unknownOption = await Post(http, "simulations/options", new { id = optId, options = new { nothing = 1 } });
+                Check(unknownOption.StatusCode == HttpStatusCode.BadRequest, "an option the solver does not offer is 400");
+                JsonNode? changed = await PostJson(http, "simulations/options", new
+                {
+                    id = optId, options = new Dictionary<string, object?> { ["iterations"] = null, ["mode"] = "Fast" }
+                });
+                Check(changed?["simulation"]?["options"]?["iterations"] == null && changed?["simulation"]?["options"]?["mode"]?.GetValue<string>() == "fast" &&
+                      changed?["simulation"]?["options"]?["gpu"]?.GetValue<string>() == "true",
+                      "POST /simulations/options sets one, clears another and keeps the rest", changed?.ToJsonString());
+                var halfBad = await Post(http, "simulations/options", new { id = optId, options = new Dictionary<string, object> { ["iterations"] = 5, ["mode"] = "bogus" } });
+                var optSim = host.Scene.Simulations.First(s => s.Id == optId);
+                Check(halfBad.StatusCode == HttpStatusCode.BadRequest && optSim.ExtenderOptions.All(o => o.Key != "iterations"),
+                      "a request with one bad value changes nothing");
+                var runOptions = SolverOptionValues.For(optSim, optionsSolver);
+                Check(runOptions.Count == 2 && runOptions["gpu"] == "true" && runOptions["mode"] == "fast",
+                      "a run gets the simulation's values of its solver's options", string.Join(", ", runOptions.Select(kv => kv.Key + "=" + kv.Value)));
+                string withOpts = Path.Combine(work, "options.dsproj");
+                await PostJson(http, "project/save", new { path = withOpts });
+                await PostJson(http, "project/open", new { path = withOpts });
+                JsonNode? reopened = await GetJson(http, "simulations");
+                var again = reopened?["simulations"]?.AsArray().FirstOrDefault(x => x?["name"]?.GetValue<string>() == "With options");
+                Check(again?["options"]?["mode"]?.GetValue<string>() == "fast" && again?["options"]?["gpu"]?.GetValue<string>() == "true",
+                      "a simulation's solver options survive saving and reopening the project", again?.ToJsonString());
 
                 int refreshesBefore = host.Refreshes;
                 JsonNode? view = await PostJson(http, "views", new

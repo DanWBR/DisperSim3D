@@ -14,6 +14,17 @@ namespace DisperSim3D.Models
         Failed
     }
 
+    /// <summary>One value of an extender solver's option on a simulation, as text in the invariant culture.</summary>
+    public class SolverOptionValue
+    {
+        public string Key { get; set; }
+        public string Value { get; set; }
+
+        public SolverOptionValue() { }
+
+        public SolverOptionValue(string key, string value) { Key = key; Value = value; }
+    }
+
     /// <summary>
     /// A runnable dispersion simulation: a snapshot of (Source × WindField × Meteo × CfdConfig)
     /// captured at Run time. Simulations are first-class items inside a project.
@@ -64,6 +75,10 @@ namespace DisperSim3D.Models
         [Browsable(false)]
         [XmlIgnore]
         public bool IsFireRun => !string.IsNullOrEmpty(FireSourceId) || !string.IsNullOrEmpty(IgnitionId);
+
+        [Category("Solver")]
+        [Description("Values of the extender solver's own options, by key; an option left out runs with the solver's default.")]
+        public List<SolverOptionValue> ExtenderOptions { get; set; } = new List<SolverOptionValue>();
 
         [Category("Solver")]
         [Description("Current state: Configured, Queued, Running, Completed or Failed.")]

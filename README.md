@@ -483,6 +483,25 @@ scenario, the CFD settings and the obstacle boxes, and returns its snapshots as
 an `OpenFoamResult` on the scenario grid; it may also return a point evaluator,
 which the validation harness then samples instead of the grid.
 
+A solver that also implements `ISolverExtenderOptions` lists the settings it
+offers for its runs. Each `SolverOption` has:
+
+- a key and a label;
+- a kind: `Boolean`, `Integer`, `Number` or `Choice`;
+- a default;
+- optionally a range, the choices, a unit and a description.
+
+The Avalonia UI shows them in two places:
+
+- under **Solver Options** in the Simulation Editor, when the solver is picked;
+- in **Solver Options…** on the context menu of every simulation on the solver,
+  fire runs included.
+
+A value the user sets is saved on the simulation (`ExtenderOptions`, as text in the
+invariant culture); one left at its default is not stored. `Run` receives the values
+in `request.Options`, and the solver takes its own default for any option left out.
+The CLI and the validation harness pass none.
+
 A solver states what it runs through `Capabilities` (`Dispersion` unless it says
 otherwise). One that declares `SolverCapabilities.Fire` is offered on the context
 menu of every fire source and ignition (**Run CFD Fire on …**), and through
@@ -525,8 +544,9 @@ launch with environment variables:
 | `GET /viewport.png?width=&height=` | the 3D view as a PNG (the Avalonia UI captures at the on-screen size) |
 | `POST /viewport/save` | `{"path": "...", "width": 0, "height": 0}` |
 | `GET /simulations` | the project's simulations, each with its latest run |
-| `GET /solvers` | the built-in solvers, and the extender solvers with their capabilities (`dispersion`, `fire`) |
-| `POST /simulations` | `{"source": "Release 01", "solver": "RhoReactingBuoyantFoam", "windField": "...", "durationS": 300, "timeStepS": 0.5, "domainSizeM": 200, "gridResolution": 40, "snapshotCount": 20}` — source and solver required (a built-in solver, or an extender solver by its ID or code), the rest default as in Add Simulation. For a fire run give `"fireSource"` or `"ignition"` (name or ID) instead of `source`, and a fire solver |
+| `GET /solvers` | the built-in solvers, and the extender solvers with their capabilities (`dispersion`, `fire`) and their options (key, label, kind, default, range, choices) |
+| `POST /simulations` | `{"source": "Release 01", "solver": "RhoReactingBuoyantFoam", "windField": "...", "durationS": 300, "timeStepS": 0.5, "domainSizeM": 200, "gridResolution": 40, "snapshotCount": 20}` — source and solver required (a built-in solver, or an extender solver by its ID or code), the rest default as in Add Simulation. For a fire run give `"fireSource"` or `"ignition"` (name or ID) instead of `source`, and a fire solver. `"options": {"key": value}` sets options of an extender solver; a value that is not one of the option's is 400 |
+| `POST /simulations/options` | `{"id": "...", "options": {"key": value, "other": null}}` — sets options of the simulation's extender solver, `null` clearing one back to the solver's default; all or none, an unknown key or a bad value is 400 |
 | `POST /simulations/run` | `{"id": "..."}` — queues it in the simulation manager, as its Run command does |
 | `GET /simulations/status?id=` | state, progress and last log line of its latest run |
 | `GET /simulations/channels?id=` | the result channels it stored, with times, grid and range, and its surface heat load against the scene's triangles |

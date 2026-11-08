@@ -26,7 +26,19 @@ namespace DisperSim3D.Automation
                 s.IsSteady,
                 capabilities = s.Capabilities.ToString(),
                 dispersion = (s.Capabilities & SolverCapabilities.Dispersion) != 0,
-                fire = (s.Capabilities & SolverCapabilities.Fire) != 0
+                fire = (s.Capabilities & SolverCapabilities.Fire) != 0,
+                options = SolverOptionValues.Of(s).Select(o => new
+                {
+                    o.Key,
+                    o.Label,
+                    o.Description,
+                    kind = o.Kind.ToString(),
+                    defaultValue = o.DefaultValue,
+                    o.Minimum,
+                    o.Maximum,
+                    o.Choices,
+                    o.Unit
+                })
             })
         };
 
@@ -153,12 +165,14 @@ namespace DisperSim3D.Automation
                 if (OptionalDouble(body, "domainSizeM") is { } size) sim.SnapshotDomainSizeM = size;
                 if (OptionalDouble(body, "gridResolution") is { } grid) sim.SnapshotGridResolution = (int)grid;
                 if (OptionalDouble(body, "snapshotCount") is { } count) sim.SnapshotCount = (int)count;
+                error = ApplyOptions(sim, solver, body["options"] as JsonObject);
+                if (error != null) return Task.CompletedTask;
                 scene.Simulations.Add(sim);
                 host.RefreshProject();
                 created = DescribeSimulation(scene, sim, null);
                 return Task.CompletedTask;
             });
-            if (error != null) throw new HttpError(error.StartsWith("No project") ? 409 : 404, error);
+            if (error != null) throw new HttpError(error.StartsWith("No project") ? 409 : error.StartsWith("No ") ? 404 : 400, error);
             _log.Add("added fire simulation on " + solver.Id + " for " + (fireKey ?? ignitionKey));
             return JsonResponse(200, new { ok = true, simulation = created });
         }
@@ -343,6 +357,53 @@ namespace DisperSim3D.Automation
                 channels,
                 surface
             });
+        }
+
+        /// <summary>Sets the options in <paramref name="options"/> (a value of null clears one); returns the first error.</summary>
+        private static string? ApplyOptions(Simulation sim, ISolverExtender? solver, JsonObject? options)
+        {
+            if (options == null) return null;
+            foreach (var (key, node) in options)
+            {
+                string? text = node == null ? null
+                    : node.GetValueKind() == System.Text.Json.JsonValueKind.String ? node.GetValue<string>()
+                    : node.ToJsonString();
+                string? e = SolverOptionValues.Set(sim, solver, key, text);
+                if (e != null) return e;
+            }
+            return null;
+        }
+
+        /// <summary>Sets options of a simulation's extender solver.</summary>
+        private async Task<Response> SetSimulationOptionsAsync(Request r)
+        {
+            var host = Host3;
+            JsonObject body = ReadJson(r);
+            string key = RequiredString(body, "id");
+            var options = body["options"] as JsonObject ?? throw new HttpError(400, "Give the values as \"options\": {\"key\": value}.");
+            object? described = null;
+            string? error = null;
+            int status = 400;
+            await _host.RunOnUiThreadAsync(() =>
+            {
+                Scene3D? scene = _host.CurrentScene;
+                if (scene == null) { error = "No project is open."; status = 409; return Task.CompletedTask; }
+                var sim = FindSimulation(scene, key);
+                if (sim == null) { error = "No simulation " + key + " in the project."; status = 404; return Task.CompletedTask; }
+                var solver = SolverExtenderRegistry.Find(sim.ExtenderSolverId);
+                if (solver == null) { error = "Simulation " + sim.Name + " does not run on an extender solver."; return Task.CompletedTask; }
+                // All or none: the values are checked on a copy first.
+                var trial = new Simulation { ExtenderOptions = new List<SolverOptionValue>(sim.ExtenderOptions ?? new List<SolverOptionValue>()) };
+                error = ApplyOptions(trial, solver, options);
+                if (error != null) return Task.CompletedTask;
+                sim.ExtenderOptions = trial.ExtenderOptions;
+                host.RefreshProject();
+                described = DescribeSimulation(scene, sim, host.GetSimulationRunStatus(sim.Id));
+                return Task.CompletedTask;
+            });
+            if (error != null) throw new HttpError(status, error);
+            _log.Add("set solver options of simulation " + key);
+            return JsonResponse(200, new { ok = true, simulation = described });
         }
 
         private static Simulation? FindSimulation(Scene3D scene, string key) =>

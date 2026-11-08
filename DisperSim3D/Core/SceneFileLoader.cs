@@ -243,6 +243,13 @@ namespace DisperSim3D.Core
                 if (snapSrcEl != null) sim.SnapshotSource = ParseSource(snapSrcEl, inv);
 
                 sim.SnapshotCfdConfig = ParseAtmosphericCfd(se, inv);
+                var optionsEl = se.Element("ExtenderOptions");
+                if (optionsEl != null)
+                    foreach (var o in optionsEl.Elements("Option"))
+                    {
+                        string key = (string)o.Attribute("Key");
+                        if (!string.IsNullOrEmpty(key)) sim.ExtenderOptions.Add(new SolverOptionValue(key, (string)o.Attribute("Value") ?? ""));
+                    }
                 scene.Simulations.Add(sim);
             }
         }

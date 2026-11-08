@@ -669,6 +669,10 @@ namespace DisperSim3D.UI.Avalonia.Core
                 request = new DisperSim3D.Extensibility.SolverExtenderRequest(job.Scene, scenario, config,
                     job.Obstacles ?? new List<BoundingBox>(), Progress, job.Cts.Token);
 
+            // The simulation's values of the solver's own options.
+            var sim = job.FireSimulation ?? job.Scene?.Simulations.FirstOrDefault(s => s.Id == job.SimulationId);
+            request.Options = DisperSim3D.Extensibility.SolverOptionValues.For(sim, solver);
+
             var run = await Task.Run(() => solver.Run(request), job.Cts.Token);
             job.Cts.Token.ThrowIfCancellationRequested();
             // A fire run may write only its folder; the grid then comes from the channels it wrote.

@@ -38,9 +38,10 @@ namespace DisperSim3D.Automation
             "POST /project/save                {\"path\": \"C:\\\\project.dsproj\"} (path optional)",
             "GET  /viewport.png?width=&height= the 3D view as a PNG",
             "POST /viewport/save               {\"path\": \"C:\\\\view.png\", \"width\": 0, \"height\": 0}",
-            "GET  /solvers                     the built-in solvers and the extender solvers with their capabilities",
+            "GET  /solvers                     the built-in solvers and the extender solvers with their capabilities and options",
             "GET  /simulations                 the project's simulations and their runs",
-            "POST /simulations                 {\"source\": \"Release 01\", \"solver\": \"GaussianPlume\" (or an extender solver's ID or code), \"windField\": \"...\", \"durationS\": 300, ...}; or {\"fireSource\"|\"ignition\": \"...\", \"solver\": a fire solver} for a fire run",
+            "POST /simulations                 {\"source\": \"Release 01\", \"solver\": \"GaussianPlume\" (or an extender solver's ID or code), \"windField\": \"...\", \"durationS\": 300, ...}; or {\"fireSource\"|\"ignition\": \"...\", \"solver\": a fire solver} for a fire run; \"options\": {\"key\": value} sets the solver's options",
+            "POST /simulations/options         {\"id\": \"...\", \"options\": {\"key\": value, \"other\": null}} sets (null: clears) options of its extender solver",
             "POST /simulations/run             {\"id\": \"...\"} queues it as its Run command does",
             "GET  /simulations/status?id=      where its latest run stands",
             "GET  /simulations/channels?id=    the result channels it stored (T, Q, Soot, CO, CO2, O2, Vis) and its surface heat load",
@@ -344,6 +345,8 @@ namespace DisperSim3D.Automation
                     return await OnUiGateAsync(() => RunSimulationAsync(r));
                 case "POST /simulations/cancel":
                     return await CancelSimulationAsync(r);
+                case "POST /simulations/options":
+                    return await OnUiGateAsync(() => SetSimulationOptionsAsync(r));
                 case "POST /simulations/show":
                     return await OnUiGateAsync(() => ShowSimulationResultAsync(r));
                 case "GET /simulations/status":
@@ -622,6 +625,8 @@ namespace DisperSim3D.Automation
                 domainCenter = new[] { sim.SnapshotDomainCenterX, sim.SnapshotDomainCenterY },
                 gridResolution = sim.SnapshotGridResolution,
                 snapshotCount = sim.SnapshotCount,
+                options = (sim.ExtenderOptions ?? new List<SolverOptionValue>()).Where(o => o?.Key != null)
+                    .GroupBy(o => o.Key).ToDictionary(g => g.Key, g => g.Last().Value),
                 maxConcentration = sim.MaxConcentration,
                 run
             };
@@ -680,12 +685,14 @@ namespace DisperSim3D.Automation
                     SnapshotGridResolution = (int)(OptionalDouble(body, "gridResolution") ?? scene.GeneralSettings?.DefaultGridResolution ?? 40),
                     SnapshotCount = (int)(OptionalDouble(body, "snapshotCount") ?? 20)
                 };
+                error = ApplyOptions(sim, extenderSolver, body["options"] as JsonObject);
+                if (error != null) return Task.CompletedTask;
                 scene.Simulations.Add(sim);
                 host.RefreshProject();
                 created = DescribeSimulation(scene, sim, null);
                 return Task.CompletedTask;
             });
-            if (error != null) throw new HttpError(error.StartsWith("No project") ? 409 : 404, error);
+            if (error != null) throw new HttpError(error.StartsWith("No project") ? 409 : error.StartsWith("No ") ? 404 : 400, error);
             _log.Add("added simulation " + (extenderSolver?.Id ?? solver.ToString()) + " for " + sourceKey);
             return JsonResponse(200, new { ok = true, simulation = created });
         }

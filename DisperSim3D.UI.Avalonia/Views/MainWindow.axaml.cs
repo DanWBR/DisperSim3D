@@ -1509,6 +1509,9 @@ namespace DisperSim3D.UI.Avalonia.Views
                         (_, _) => RunSimulation(node));
                     AddItem("Configure…", "mdi-pencil-outline",
                         (_, _) => _ = EditSimulationAsync(node));
+                    if (node.Tag is Simulation optSim && DisperSim3D.Extensibility.SolverOptionValues.Of(DisperSim3D.Extensibility.SolverExtenderRegistry.Find(optSim.ExtenderSolverId)).Count > 0)
+                        AddItem("Solver Options…", "mdi-tune-variant",
+                            (_, _) => _ = EditSolverOptionsAsync(node));
                     AddItem("Simulation Manager…", "mdi-playlist-play",
                         (_, _) => ShowSimulationManager());
                     AddItem("Evaluate Monitors and Detectors", "mdi-gauge",
@@ -1861,6 +1864,15 @@ namespace DisperSim3D.UI.Avalonia.Views
             if (!await dlg.ShowDialog<bool>(this) || dlg.Result is null) return;
             _scene.Simulations.Add(dlg.Result);
             MarkDirtyAndRefresh("Added simulation: " + dlg.Result.Name);
+        }
+
+        /// <summary>The options of a simulation's extender solver.</summary>
+        private async Task EditSolverOptionsAsync(ProjectTreeNode node)
+        {
+            if (_scene is null || node.Tag is not Simulation sim) return;
+            var dlg = new SolverOptionsDialog(sim, DisperSim3D.Extensibility.SolverExtenderRegistry.Find(sim.ExtenderSolverId));
+            if (!await dlg.ShowDialog<bool>(this)) return;
+            MarkDirtyAndRefresh("Updated solver options: " + sim.Name);
         }
 
         private async Task EditSimulationAsync(ProjectTreeNode node)

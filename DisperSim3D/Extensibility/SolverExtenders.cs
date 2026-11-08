@@ -64,6 +64,153 @@ namespace DisperSim3D.Extensibility
         SolverExtenderResult Run(SolverExtenderRequest request);
     }
 
+    /// <summary>The kind of value a <see cref="SolverOption"/> takes.</summary>
+    public enum SolverOptionKind
+    {
+        /// <summary>"true" or "false".</summary>
+        Boolean,
+        /// <summary>A whole number.</summary>
+        Integer,
+        /// <summary>A real number (invariant culture).</summary>
+        Number,
+        /// <summary>One of <see cref="SolverOption.Choices"/>.</summary>
+        Choice
+    }
+
+    /// <summary>
+    /// A setting a solver extender offers for its runs. Its value is kept on the simulation as
+    /// text in the invariant culture (<see cref="Models.Simulation.ExtenderOptions"/>), edited
+    /// in the simulation's solver options and passed to the run in
+    /// <see cref="SolverExtenderRequest.Options"/>. A simulation that leaves it unset runs
+    /// with the solver's own default.
+    /// </summary>
+    public sealed class SolverOption
+    {
+        public SolverOption(string key, string label, SolverOptionKind kind, string defaultValue)
+        {
+            Key = key ?? throw new ArgumentNullException(nameof(key));
+            Label = label ?? key;
+            Kind = kind;
+            DefaultValue = defaultValue ?? "";
+        }
+
+        /// <summary>Stable identifier, saved in project files; never rename it.</summary>
+        public string Key { get; }
+
+        /// <summary>Name shown next to the control.</summary>
+        public string Label { get; }
+
+        /// <summary>One or two sentences shown under the control.</summary>
+        public string? Description { get; init; }
+
+        public SolverOptionKind Kind { get; }
+
+        /// <summary>The value when the simulation sets none, as text in the invariant culture.</summary>
+        public string DefaultValue { get; }
+
+        /// <summary>Smallest value of an Integer or Number option.</summary>
+        public double? Minimum { get; init; }
+
+        /// <summary>Largest value of an Integer or Number option.</summary>
+        public double? Maximum { get; init; }
+
+        /// <summary>The values of a Choice option.</summary>
+        public IReadOnlyList<string>? Choices { get; init; }
+
+        /// <summary>Unit shown after the value, if any.</summary>
+        public string? Unit { get; init; }
+
+        /// <summary>
+        /// <paramref name="text"/> as this option's value in the invariant culture, or null when it
+        /// is not one: not a number, out of range, not a choice.
+        /// </summary>
+        public string? Normalise(string? text)
+        {
+            if (text == null) return null;
+            text = text.Trim();
+            var inv = System.Globalization.CultureInfo.InvariantCulture;
+            switch (Kind)
+            {
+                case SolverOptionKind.Boolean:
+                    return bool.TryParse(text, out bool b) ? (b ? "true" : "false") : text == "1" ? "true" : text == "0" ? "false" : null;
+                case SolverOptionKind.Integer:
+                    if (!long.TryParse(text, System.Globalization.NumberStyles.Integer, inv, out long l)) return null;
+                    if ((Minimum.HasValue && l < Minimum.Value) || (Maximum.HasValue && l > Maximum.Value)) return null;
+                    return l.ToString(inv);
+                case SolverOptionKind.Number:
+                    if (!double.TryParse(text, System.Globalization.NumberStyles.Float, inv, out double d) || double.IsNaN(d) || double.IsInfinity(d)) return null;
+                    if ((Minimum.HasValue && d < Minimum.Value) || (Maximum.HasValue && d > Maximum.Value)) return null;
+                    return d.ToString("R", inv);
+                default:
+                    return Choices?.FirstOrDefault(c => string.Equals(c, text, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Optional, on an <see cref="ISolverExtender"/>: the settings it offers for its runs, shown
+    /// in the simulation's solver options and listed by the automation API.
+    /// </summary>
+    public interface ISolverExtenderOptions
+    {
+        IReadOnlyList<SolverOption> Options { get; }
+    }
+
+    /// <summary>The option values of a simulation against what its solver offers.</summary>
+    public static class SolverOptionValues
+    {
+        /// <summary>The options <paramref name="solver"/> offers; empty when it offers none.</summary>
+        public static IReadOnlyList<SolverOption> Of(ISolverExtender? solver)
+            => (solver as ISolverExtenderOptions)?.Options ?? Array.Empty<SolverOption>();
+
+        /// <summary>
+        /// The simulation's values of the options its solver offers, normalised, by key; values of
+        /// options the solver does not offer, or that are not valid, are left out.
+        /// </summary>
+        public static Dictionary<string, string> For(Simulation? sim, ISolverExtender? solver)
+        {
+            var result = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (sim?.ExtenderOptions == null) return result;
+            foreach (var option in Of(solver))
+            {
+                var v = sim.ExtenderOptions.LastOrDefault(o => o != null && o.Key == option.Key);
+                string? n = option.Normalise(v?.Value);
+                if (n != null) result[option.Key] = n;
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Sets option <paramref name="key"/> of <paramref name="sim"/> to <paramref name="text"/> (null
+        /// clears it, back to the solver's default). Returns an error, or null when it is set.
+        /// </summary>
+        public static string? Set(Simulation sim, ISolverExtender? solver, string key, string? text)
+        {
+            var option = Of(solver).FirstOrDefault(o => o.Key == key);
+            if (option == null)
+                return "The solver " + (solver?.Id ?? "(none)") + " has no option " + key + "; it has " +
+                    (Of(solver).Count == 0 ? "none" : string.Join(", ", Of(solver).Select(o => o.Key))) + ".";
+            sim.ExtenderOptions ??= new List<SolverOptionValue>();
+            sim.ExtenderOptions.RemoveAll(o => o == null || o.Key == key);
+            if (text == null) return null;
+            string? n = option.Normalise(text);
+            if (n == null)
+                return "Not a value of " + key + ": " + text + Range(option) + ".";
+            sim.ExtenderOptions.Add(new SolverOptionValue(key, n));
+            return null;
+        }
+
+        private static string Range(SolverOption o) => o.Kind switch
+        {
+            SolverOptionKind.Boolean => " (true or false)",
+            SolverOptionKind.Choice => " (one of " + string.Join(", ", o.Choices ?? Array.Empty<string>()) + ")",
+            _ => o.Minimum.HasValue || o.Maximum.HasValue
+                ? " (" + (o.Kind == SolverOptionKind.Integer ? "a whole number " : "a number ") + "from " + (o.Minimum?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "−∞")
+                  + " to " + (o.Maximum?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "∞") + ")"
+                : o.Kind == SolverOptionKind.Integer ? " (a whole number)" : " (a number)"
+        };
+    }
+
     /// <summary>
     /// Optional, on an <see cref="IExtenderCollection"/>: the solvers the assembly provides.
     /// A collection may have no menu commands and only solvers.
@@ -154,6 +301,14 @@ namespace DisperSim3D.Extensibility
 
         /// <summary>See <see cref="DomainCenterX"/>.</summary>
         public double DomainCenterY { get; init; }
+
+        /// <summary>
+        /// The simulation's values of the solver's <see cref="ISolverExtenderOptions.Options"/>, by
+        /// key, as text in the invariant culture. Only the options the simulation sets are here; the
+        /// solver takes its own default for the others. Empty outside a project's simulation (the
+        /// CLI, the validation harness).
+        /// </summary>
+        public IReadOnlyDictionary<string, string> Options { get; set; } = new Dictionary<string, string>();
     }
 
     /// <summary>The outcome of a solver extender run.</summary>
