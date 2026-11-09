@@ -47,8 +47,8 @@ namespace DisperSim3D.UI.Avalonia.Core
         public List<BoundingBox>? Obstacles { get; set; }
         public Dictionary<string, double[]>? HpLeakProfiles { get; set; }
 
-        /// <summary>The fire simulation this job runs on its fire solver extender; null for a release.</summary>
-        public Simulation? FireSimulation { get; set; }
+        /// <summary>The fire or explosion simulation this job runs on its solver extender; null for a release.</summary>
+        public Simulation? EventSimulation { get; set; }
     }
 
     public class SimulationManager
@@ -82,7 +82,7 @@ namespace DisperSim3D.UI.Avalonia.Core
         public SimulationJob Enqueue(DispersionScenario scenario, CfdSolverType solverType,
             CfdConfiguration config, Scene3D scene, OpenFoamEnvironment? env,
             List<BoundingBox>? obstacles = null, Dictionary<string, double[]>? hpLeakProfiles = null,
-            string? simulationId = null, Simulation? fireSimulation = null)
+            string? simulationId = null, Simulation? eventSimulation = null)
         {
             string solverTag = DisperSim3D.Core.SolverCode.Of(solverType, scenario.ExtenderSolverId);
             string solverLabel = DisperSim3D.Core.SolverCode.DisplayName(solverType, scenario.ExtenderSolverId);
@@ -98,7 +98,7 @@ namespace DisperSim3D.UI.Avalonia.Core
                 Environment = env,
                 Obstacles = obstacles,
                 HpLeakProfiles = hpLeakProfiles,
-                FireSimulation = fireSimulation
+                EventSimulation = eventSimulation
             };
 
             lock (_lock) _allJobs.Add(job);
@@ -659,25 +659,28 @@ namespace DisperSim3D.UI.Avalonia.Core
             }
 
             DisperSim3D.Extensibility.SolverExtenderRequest request;
-            if (job.FireSimulation != null)
+            var ev = job.EventSimulation;
+            if (ev != null)
             {
-                var (fireRequest, error) = FireRuns.Prepare(job.Scene, job.FireSimulation, config,
-                    job.Obstacles ?? new List<BoundingBox>(), Progress, job.Cts.Token);
-                request = fireRequest ?? throw new InvalidOperationException(error);
+                var (eventRequest, error) = ev.IsExplosionRun
+                    ? ExplosionRuns.Prepare(job.Scene, ev, config, job.Obstacles ?? new List<BoundingBox>(), Progress, job.Cts.Token)
+                    : FireRuns.Prepare(job.Scene, ev, config, job.Obstacles ?? new List<BoundingBox>(), Progress, job.Cts.Token);
+                request = eventRequest ?? throw new InvalidOperationException(error);
             }
             else
                 request = new DisperSim3D.Extensibility.SolverExtenderRequest(job.Scene, scenario, config,
                     job.Obstacles ?? new List<BoundingBox>(), Progress, job.Cts.Token);
 
             // The simulation's values of the solver's own options.
-            var sim = job.FireSimulation ?? job.Scene?.Simulations.FirstOrDefault(s => s.Id == job.SimulationId);
+            var sim = ev ?? job.Scene?.Simulations.FirstOrDefault(s => s.Id == job.SimulationId);
             request.Options = DisperSim3D.Extensibility.SolverOptionValues.For(sim, solver);
 
             var run = await Task.Run(() => solver.Run(request), job.Cts.Token);
             job.Cts.Token.ThrowIfCancellationRequested();
-            // A fire run may write only its folder; the grid then comes from the channels it wrote.
+            // A fire or explosion run may write only its folder; the grid then comes from the
+            // channels it wrote.
             var result = run != null && run.Success
-                ? (job.FireSimulation != null ? FireRuns.ResultOf(run, request) : run.Result)
+                ? (ev == null ? run.Result : ev.IsExplosionRun ? ExplosionRuns.ResultOf(run, request) : FireRuns.ResultOf(run, request))
                 : null;
             if (run == null || !run.Success || result == null)
                 throw new InvalidOperationException(run?.Error ?? solver.DisplayName + " returned no result.");

@@ -353,6 +353,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 case Decoration3D deco: deco.IsVisible = visible; break;
                 case WindFieldScenario wfs: wfs.IsVisible = visible; break;
                 case FireSource fire: fire.IsVisible = visible; break;
+                case ExplosionEvent explosion: explosion.IsVisible = visible; break;
             }
         }
 
@@ -977,6 +978,9 @@ namespace DisperSim3D.UI.Avalonia.Views
         private async void MenuToolsAddIgnition_Click(object? sender, RoutedEventArgs e)
             => await AddIgnitionAsync();
 
+        private async void MenuToolsAddExplosion_Click(object? sender, RoutedEventArgs e)
+            => await AddExplosionAsync();
+
         private async void MenuToolsAddView_Click(object? sender, RoutedEventArgs e)
             => await AddViewAsync();
 
@@ -1321,6 +1325,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 case "mon":  _ = EditMonitorAsync(node); break;
                 case "fire": _ = EditFireSourceAsync(node); break;
                 case "ignition": _ = EditIgnitionAsync(node); break;
+                case "explosion": _ = EditExplosionAsync(node); break;
                 case "firestudy": _ = EditFireStudyAsync(node); break;
                 case "src":  _ = EditHighPressureAsync(node); break;
                 case "sim":  _ = EditSimulationAsync(node); break;
@@ -1353,6 +1358,10 @@ namespace DisperSim3D.UI.Avalonia.Views
                 case "ignitions":
                     AddItem("Ignite Cloud…", "mdi-flare",
                         (_, _) => _ = AddIgnitionAsync());
+                    return;
+                case "explosions":
+                    AddItem("Add Explosion…", "mdi-flash-alert",
+                        (_, _) => _ = AddExplosionAsync());
                     return;
                 case "firestudies":
                     AddItem("Add Fire Study…", "mdi-fire",
@@ -1474,6 +1483,19 @@ namespace DisperSim3D.UI.Avalonia.Views
                     AddItem("Delete", "mdi-trash-can-outline",
                         (_, _) => DeleteFromList(_scene!.Ignitions, node));
                     return;
+                case "explosion":
+                    AddItem("Edit Explosion…", "mdi-pencil-outline",
+                        (_, _) => _ = EditExplosionAsync(node));
+                    foreach (var solver in DisperSim3D.Extensibility.SolverExtenderRegistry
+                                 .WithCapability(DisperSim3D.Extensibility.SolverCapabilities.Explosion))
+                    {
+                        var s = solver;
+                        AddItem("Run Explosion on " + s.DisplayName, "mdi-flash-alert",
+                            (_, _) => RunExplosionOn(node.Tag as ExplosionEvent, s));
+                    }
+                    AddItem("Delete", "mdi-trash-can-outline",
+                        (_, _) => DeleteFromList(_scene!.Explosions, node));
+                    return;
                 case "firestudy":
                     AddItem("Edit Fire Study…", "mdi-pencil-outline",
                         (_, _) => _ = EditFireStudyAsync(node));
@@ -1516,6 +1538,9 @@ namespace DisperSim3D.UI.Avalonia.Views
                         (_, _) => ShowSimulationManager());
                     AddItem("Evaluate Monitors and Detectors", "mdi-gauge",
                         (_, _) => _ = EvaluateSensorsAsync(node));
+                    if (node.Tag is Simulation expSim && expSim.IsExplosionRun)
+                        AddItem("Probe Pressures…", "mdi-chart-line",
+                            (_, _) => _ = ShowProbePressuresAsync(expSim));
                     AddItem("Delete", "mdi-trash-can-outline",
                         (_, _) => DeleteFromList(_scene!.Simulations, node));
                     return;
@@ -1767,6 +1792,46 @@ namespace DisperSim3D.UI.Avalonia.Views
             ignition.EnvelopeFraction = dlg.Result.EnvelopeFraction;
             ignition.FlameSpeedMS     = dlg.Result.FlameSpeedMS;
             MarkDirtyAndRefresh("Updated ignition: " + ignition.Name);
+        }
+
+        // ── Explosions ───────────────────────────────────────────────────────
+        private async Task AddExplosionAsync()
+        {
+            if (_scene is null) { StatusText.Text = "Open or create a project first."; return; }
+            _scene.Explosions ??= new List<ExplosionEvent>();
+
+            var dlg = new ExplosionDialog(_scene, null);
+            if (!await dlg.ShowDialog<bool>(this)) return;
+            _scene.Explosions.Add(dlg.Result);
+            MarkDirtyAndRefresh("Added explosion: " + dlg.Result.Name);
+        }
+
+        private async Task EditExplosionAsync(ProjectTreeNode node)
+        {
+            if (_scene is null || node.Tag is not ExplosionEvent explosion) return;
+            var dlg = new ExplosionDialog(_scene, explosion);
+            if (!await dlg.ShowDialog<bool>(this)) return;
+            // Copied back into the event so the simulations that name it keep it.
+            var r = dlg.Result;
+            explosion.Name = r.Name;
+            explosion.SimulationId = r.SimulationId;
+            explosion.Cloud = r.Cloud;
+            explosion.Position = r.Position;
+            explosion.TimeS = r.TimeS;
+            explosion.BoxMin = r.BoxMin;
+            explosion.BoxMax = r.BoxMax;
+            explosion.CellSizeM = r.CellSizeM;
+            explosion.Congestion = r.Congestion;
+            MarkDirtyAndRefresh("Updated explosion: " + explosion.Name);
+        }
+
+        /// <summary>The overpressure an explosion simulation recorded at its probes.</summary>
+        private async Task ShowProbePressuresAsync(Simulation sim)
+        {
+            ProbeSeries? series = null;
+            try { series = ProbeSeries.Of(sim); }
+            catch (Exception ex) { StatusText.Text = "Cannot read the probes of '" + sim.Name + "': " + ex.Message; }
+            await new ProbePressureDialog(series, sim.Name ?? "").ShowDialog(this);
         }
 
         // ── Fire studies ─────────────────────────────────────────────────────
@@ -2086,10 +2151,23 @@ namespace DisperSim3D.UI.Avalonia.Views
         }
 
         /// <summary>
-        /// Queues a fire simulation on its fire solver extender; null when queued,
+        /// Adds an explosion simulation for an explosion on an explosion solver extender and
+        /// runs it; the result is an Extender simulation like any other.
+        /// </summary>
+        private void RunExplosionOn(ExplosionEvent? explosion, DisperSim3D.Extensibility.ISolverExtender solver)
+        {
+            if (_scene is null || explosion is null) return;
+            var sim = ExplosionRuns.CreateFor(_scene, explosion, solver);
+            _scene.Simulations.Add(sim);
+            MarkDirtyAndRefresh("Added explosion simulation: " + sim.Name);
+            RunSimulation(sim);
+        }
+
+        /// <summary>
+        /// Queues a fire or explosion simulation on its solver extender; null when queued,
         /// otherwise why it was not.
         /// </summary>
-        private string? RunFireSimulation(Simulation sim)
+        private string? RunEventSimulation(Simulation sim)
         {
             var config = AppSettings.Instance.CreateCfdConfig(sim.SnapshotCfdConfig);
             var obstacles = new List<BoundingBox>();
@@ -2097,9 +2175,11 @@ namespace DisperSim3D.UI.Avalonia.Views
                 if (deco.BoundingBox != null)
                     obstacles.Add(deco.BoundingBox);
 
-            // Checked here so a missing fire or an unfinished dispersion run is refused
-            // at once; the manager prepares it again with the job's progress and cancel.
-            var (request, error) = FireRuns.Prepare(_scene, sim, config, obstacles, null, default);
+            // Checked here so a missing fire or explosion, or an unfinished dispersion run, is
+            // refused at once; the manager prepares it again with the job's progress and cancel.
+            var (request, error) = sim.IsExplosionRun
+                ? ExplosionRuns.Prepare(_scene, sim, config, obstacles, null, default)
+                : FireRuns.Prepare(_scene, sim, config, obstacles, null, default);
             if (request == null)
             {
                 StatusText.Text = error ?? "Cannot run " + sim.Name + ".";
@@ -2108,9 +2188,9 @@ namespace DisperSim3D.UI.Avalonia.Views
 
             sim.Status = SimulationStatus.Queued;
             SimulationManager.Enqueue(request.Scenario, CfdSolverType.Extender, config, _scene, null,
-                obstacles, null, sim.Id, fireSimulation: sim);
+                obstacles, null, sim.Id, eventSimulation: sim);
             ShowSimulationManager();
-            StatusText.Text = $"Fire simulation enqueued: {sim.Name}";
+            StatusText.Text = (sim.IsExplosionRun ? "Explosion" : "Fire") + " simulation enqueued: " + sim.Name;
             return null;
         }
 
@@ -2138,7 +2218,7 @@ namespace DisperSim3D.UI.Avalonia.Views
         internal string? RunSimulation(Simulation sim)
         {
             if (_scene is null) return "No project is open.";
-            if (sim.IsFireRun) return RunFireSimulation(sim);
+            if (sim.IsFireRun || sim.IsExplosionRun) return RunEventSimulation(sim);
 
             // The simulation names its own source and wind field; run those in a
             // scenario of its own, as the WinForms shell and the headless runner
@@ -2321,11 +2401,11 @@ namespace DisperSim3D.UI.Avalonia.Views
                             sim.ResultTag = job.ResultEntry.Tag;
                             sim.CasePath = job.ResultEntry.CasePath ?? "";
                             sim.TimeStepCount = job.ResultEntry.TimeStepCount;
-                            // An extender says where its grid is; a fire run's playback
-                            // cache is its species channel, which it may not have written.
+                            // An extender says where its grid is; a fire or explosion run's
+                            // playback cache is its species channel, which it may not have written.
                             if (sim.SolverType == CfdSolverType.Extender)
                                 FireRuns.ApplyResultGrid(sim, job.ResultEntry.Tag as OpenFoamResult);
-                            if (sim.IsFireRun)
+                            if (sim.IsFireRun || sim.IsExplosionRun)
                                 sim.ResultTag = StoredFields.Load(sim, ResultChannels.Species);
                             if (sim.ResultTag is OpenFoamResult ofr && ofr.TimeSteps.Count > 0)
                             {

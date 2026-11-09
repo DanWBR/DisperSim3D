@@ -340,29 +340,36 @@ namespace DisperSim3D.Core
         /// scenario and the decoration boxes, and returns its last snapshot.
         /// </summary>
         /// <summary>
-        /// A fire simulation (<see cref="Simulation.IsFireRun"/>) on its fire solver
-        /// extender. The result carries the run's folder and grid; nothing is written back
-        /// to <paramref name="sim"/>.
+        /// A fire or explosion simulation (<see cref="Simulation.IsFireRun"/>,
+        /// <see cref="Simulation.IsExplosionRun"/>) on its solver extender, with the
+        /// simulation's solver options. The result carries the run's folder and grid; nothing
+        /// is written back to <paramref name="sim"/>.
         /// </summary>
         private static HeadlessResult RunFire(Scene3D scene, Simulation sim, Action<string> log, CancellationToken cancel)
         {
+            bool explosion = sim.IsExplosionRun;
+            string what = explosion ? "explosion" : "fire";
             var obstacles = new List<BoundingBox>();
             if (scene.Decorations != null)
                 foreach (var d in scene.Decorations)
                     if (d != null && d.BoundingBox != null) obstacles.Add(d.BoundingBox);
 
             string lastStep = null;
-            var (request, error) = FireRuns.Prepare(scene, sim, sim.SnapshotCfdConfig ?? new CfdConfiguration(), obstacles,
-                (fraction, step) =>
-                {
-                    if (string.IsNullOrEmpty(step) || step == lastStep) return;
-                    lastStep = step;
-                    log?.Invoke("  " + step);
-                }, cancel);
+            Action<double, string> progress = (fraction, step) =>
+            {
+                if (string.IsNullOrEmpty(step) || step == lastStep) return;
+                lastStep = step;
+                log?.Invoke("  " + step);
+            };
+            var config = sim.SnapshotCfdConfig ?? new CfdConfiguration();
+            var (request, error) = explosion
+                ? ExplosionRuns.Prepare(scene, sim, config, obstacles, progress, cancel)
+                : FireRuns.Prepare(scene, sim, config, obstacles, progress, cancel);
             if (request == null) return new HeadlessResult { Success = false, Error = error };
 
             var solver = Extensibility.SolverExtenderRegistry.Find(sim.ExtenderSolverId);
-            log?.Invoke(string.Format("Running fire solver: [{0}] {1} on '{2}'", solver.Code, solver.DisplayName, sim.Name));
+            request.Options = Extensibility.SolverOptionValues.For(sim, solver);
+            log?.Invoke(string.Format("Running {0} solver: [{1}] {2} on '{3}'", what, solver.Code, solver.DisplayName, sim.Name));
             Extensibility.SolverExtenderResult run;
             try
             {
@@ -377,9 +384,9 @@ namespace DisperSim3D.Core
                 return new HeadlessResult { Success = false, Error = solver.DisplayName + " failed: " + ex.Message };
             }
             if (run == null || !run.Success)
-                return new HeadlessResult { Success = false, Error = run?.Error ?? "The fire solver returned no result.", CasePath = run?.CasePath };
+                return new HeadlessResult { Success = false, Error = run?.Error ?? "The " + what + " solver returned no result.", CasePath = run?.CasePath };
 
-            var grid = FireRuns.ResultOf(run, request);
+            var grid = explosion ? ExplosionRuns.ResultOf(run, request) : FireRuns.ResultOf(run, request);
             if (grid == null)
                 return new HeadlessResult { Success = false, Error = solver.DisplayName + " wrote no result channel.", CasePath = run.CasePath };
             return new HeadlessResult
@@ -636,7 +643,7 @@ namespace DisperSim3D.Core
         {
             if (scene == null || sim == null)
                 return new HeadlessResult { Success = false, Error = "scene or simulation is null" };
-            if (sim.IsFireRun)
+            if (sim.IsFireRun || sim.IsExplosionRun)
                 return RunFire(scene, sim, log, cancel);
 
             var src = sim.SnapshotSource

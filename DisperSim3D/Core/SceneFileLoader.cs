@@ -90,6 +90,7 @@ namespace DisperSim3D.Core
             DeserializeMonitorPoints(root, inv, scene);
             DeserializeFireScenario(root, inv, scene);
             DeserializeIgnitions(root, inv, scene);
+            DeserializeExplosions(root, inv, scene);
             DeserializeFireStudies(root, inv, scene);
             DeserializeGasDetectors(root, inv, scene);
             DeserializeDecorations(root, inv, scene);
@@ -233,6 +234,7 @@ namespace DisperSim3D.Core
                 sim.ExtenderSolverId = (string)se.Attribute("ExtenderSolverId");
                 sim.FireSourceId = (string)se.Attribute("FireSourceId");
                 sim.IgnitionId = (string)se.Attribute("IgnitionId");
+                sim.ExplosionId = (string)se.Attribute("ExplosionId");
                 SimulationStatus statusVal;
                 if (Enum.TryParse((string)se.Attribute("Status") ?? "Configured", out statusVal))
                     sim.Status = statusVal;
@@ -830,6 +832,42 @@ namespace DisperSim3D.Core
                 if (!string.IsNullOrEmpty(id)) ignition.Id = id;
 
                 scene.Ignitions.Add(ignition);
+            }
+        }
+
+        /// <summary>The explosions written by <c>SceneFileSaver.SerializeExplosions</c>; absent in
+        /// files from before explosions, which load without any.</summary>
+        private static void DeserializeExplosions(XElement root, CultureInfo inv, Scene3D scene)
+        {
+            var el = root.Element("Explosions");
+            if (el == null) return;
+            Point3D P(XElement e, string prefix) => new Point3D(
+                AttrDouble(e, inv, 0, prefix + "X"), AttrDouble(e, inv, 0, prefix + "Y"), AttrDouble(e, inv, 0, prefix + "Z"));
+            foreach (var xe in el.Elements("Explosion"))
+            {
+                var e = new ExplosionEvent
+                {
+                    Name = (string)xe.Attribute("Name") ?? "Explosion",
+                    SimulationId = (string)xe.Attribute("SimulationId") ?? "",
+                    Cloud = Enum.TryParse((string)xe.Attribute("Cloud"), out ExplosionCloud cloud) ? cloud : ExplosionCloud.Dispersed,
+                    Position = P(xe, "Pos"),
+                    TimeS = AttrDouble(xe, inv, 0, "TimeS"),
+                    BoxMin = P(xe, "BoxMin"),
+                    BoxMax = P(xe, "BoxMax"),
+                    CellSizeM = AttrDouble(xe, inv, 0, "CellSize"),
+                    IsVisible = AttrBool(xe, true, "IsVisible"),
+                };
+                string id = (string)xe.Attribute("Id");
+                if (!string.IsNullOrEmpty(id)) e.Id = id;
+                foreach (var ce in xe.Elements("Congestion"))
+                    e.Congestion.Add(new CongestionRegion
+                    {
+                        Name = (string)ce.Attribute("Name") ?? "Congestion",
+                        Min = P(ce, "Min"), Max = P(ce, "Max"),
+                        PipeDiameterM = AttrDouble(ce, inv, 0.15, "PipeDiameter"),
+                        AreaPerVolume = AttrDouble(ce, inv, 1.0, "AreaPerVolume"),
+                    });
+                scene.Explosions.Add(e);
             }
         }
 

@@ -49,7 +49,12 @@ namespace DisperSim3D.Core
         /// surfaces ({time}_surface.bin), which a Surface view draws.</summary>
         public static bool IsSurface(ViewFieldProperty p)
             => p == ViewFieldProperty.SurfaceIncidentRadiationKwM2
-            || p == ViewFieldProperty.SurfaceTotalHeatFluxKwM2;
+            || p == ViewFieldProperty.SurfaceTotalHeatFluxKwM2
+            || IsBlastSurface(p);
+
+        /// <summary>True when the property is the per-triangle blast load ({time}_blast.bin).</summary>
+        public static bool IsBlastSurface(ViewFieldProperty p)
+            => p == ViewFieldProperty.SurfacePeakOverpressurePa || p == ViewFieldProperty.SurfaceImpulsePaS;
 
         /// <summary>True when the property is a combustion product or smoke field the
         /// simulation stored itself (soot, CO, CO2, O2, visibility); there is no analytic
@@ -505,6 +510,12 @@ namespace DisperSim3D.Core
                 case ViewFieldProperty.VisibilityM:          return "Visibility (m)";
                 case ViewFieldProperty.SurfaceIncidentRadiationKwM2: return "Surface — incident radiation (kW/m²)";
                 case ViewFieldProperty.SurfaceTotalHeatFluxKwM2:     return "Surface — total heat flux (kW/m²)";
+                case ViewFieldProperty.OverpressurePa:       return "Explosion — overpressure (Pa)";
+                case ViewFieldProperty.PeakOverpressurePa:   return "Explosion — peak overpressure (Pa)";
+                case ViewFieldProperty.ImpulsePaS:           return "Explosion — impulse (Pa·s)";
+                case ViewFieldProperty.FlameArrivalS:        return "Explosion — flame arrival time (s)";
+                case ViewFieldProperty.SurfacePeakOverpressurePa: return "Surface — peak overpressure (Pa)";
+                case ViewFieldProperty.SurfaceImpulsePaS:    return "Surface — impulse (Pa·s)";
                 default:                                     return p.ToString();
             }
         }
@@ -541,6 +552,12 @@ namespace DisperSim3D.Core
                 case ViewFieldProperty.VisibilityM:          return "m";
                 case ViewFieldProperty.SurfaceIncidentRadiationKwM2:
                 case ViewFieldProperty.SurfaceTotalHeatFluxKwM2: return "kW/m²";
+                case ViewFieldProperty.OverpressurePa:
+                case ViewFieldProperty.PeakOverpressurePa:
+                case ViewFieldProperty.SurfacePeakOverpressurePa: return "Pa";
+                case ViewFieldProperty.ImpulsePaS:
+                case ViewFieldProperty.SurfaceImpulsePaS:    return "Pa·s";
+                case ViewFieldProperty.FlameArrivalS:        return "s";
                 default:                                     return "";
             }
         }

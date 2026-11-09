@@ -18,7 +18,12 @@ namespace DisperSim3D.Extensibility
         /// <see cref="IgnitionEvent"/> on a finished dispersion simulation, named by the
         /// request's <see cref="SolverExtenderRequest.Fire"/>.
         /// </summary>
-        Fire = 2
+        Fire = 2,
+        /// <summary>
+        /// A gas explosion: an <see cref="ExplosionEvent"/> named by the request's
+        /// <see cref="SolverExtenderRequest.Explosion"/>.
+        /// </summary>
+        Explosion = 4
     }
 
     /// <summary>
@@ -255,6 +260,36 @@ namespace DisperSim3D.Extensibility
         public GasProperties? Gas { get; init; }
     }
 
+    /// <summary>
+    /// What an explosion solver burns: the <see cref="ExplosionEvent"/>, the finished
+    /// dispersion simulation whose cloud (or gas) it names, that gas, and the points at which
+    /// to record the pressure over time (the scene's point monitors).
+    /// </summary>
+    public sealed class SolverExplosionTarget
+    {
+        public SolverExplosionTarget(ExplosionEvent explosion, Simulation dispersion)
+        {
+            Explosion = explosion ?? throw new ArgumentNullException(nameof(explosion));
+            Dispersion = dispersion ?? throw new ArgumentNullException(nameof(dispersion));
+        }
+
+        public ExplosionEvent Explosion { get; }
+
+        /// <summary>
+        /// The completed dispersion simulation: its result folder holds the cloud in the flat-bin
+        /// layout on the grid its Snapshot fields describe (<see cref="ExplosionCloud.Dispersed"/>),
+        /// and its release names the gas.
+        /// </summary>
+        public Simulation Dispersion { get; }
+
+        /// <summary>The gas that burns.</summary>
+        public GasProperties? Gas { get; init; }
+
+        /// <summary>Where to record the pressure over time: name and position, m. The solver writes
+        /// them to <c>probes.bin</c> (<see cref="Core.ProbeSeries"/>).</summary>
+        public IReadOnlyList<(string Name, Geometry.Point3D Position)> Probes { get; init; } = Array.Empty<(string, Geometry.Point3D)>();
+    }
+
     /// <summary>What a solver extender gets to run one scenario.</summary>
     public sealed class SolverExtenderRequest
     {
@@ -290,6 +325,13 @@ namespace DisperSim3D.Extensibility
         /// grid and duration, and its sources are empty.
         /// </summary>
         public SolverFireTarget? Fire { get; init; }
+
+        /// <summary>
+        /// The explosion to run, for a solver that declares <see cref="SolverCapabilities.Explosion"/>;
+        /// null otherwise. The scenario carries the meteorology, duration and snapshot count, and
+        /// its sources are empty.
+        /// </summary>
+        public SolverExplosionTarget? Explosion { get; init; }
 
         /// <summary>
         /// Centre of the grid the host asks for, m: the scenario's DomainSizeM either side

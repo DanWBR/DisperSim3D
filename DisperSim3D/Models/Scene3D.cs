@@ -137,6 +137,9 @@ namespace DisperSim3D.Models
         /// </summary>
         public List<IgnitionEvent> Ignitions { get; set; }
 
+        /// <summary>Gas explosions to run on an explosion solver extender.</summary>
+        public List<ExplosionEvent> Explosions { get; set; }
+
         /// <summary>
         /// Curated collections of completed simulations whose final-snapshot cloud
         /// volumes are treated as detection targets for downstream
@@ -191,6 +194,7 @@ namespace DisperSim3D.Models
             Simulations = new List<Simulation>();
             Views = new List<View>();
             Ignitions = new List<IgnitionEvent>();
+            Explosions = new List<ExplosionEvent>();
             DispersionStudies = new List<DispersionStudy>();
             FireStudies = new List<FireStudy>();
             DetectorAllocations = new List<DetectorAllocation>();

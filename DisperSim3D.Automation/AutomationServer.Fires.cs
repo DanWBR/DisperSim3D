@@ -27,6 +27,7 @@ namespace DisperSim3D.Automation
                 capabilities = s.Capabilities.ToString(),
                 dispersion = (s.Capabilities & SolverCapabilities.Dispersion) != 0,
                 fire = (s.Capabilities & SolverCapabilities.Fire) != 0,
+                explosion = (s.Capabilities & SolverCapabilities.Explosion) != 0,
                 options = SolverOptionValues.Of(s).Select(o => new
                 {
                     o.Key,
@@ -355,7 +356,8 @@ namespace DisperSim3D.Automation
                 gridResolution = sim.SnapshotGridResolution,
                 speciesUnit = FieldTransform.StoresSpeciesAsKgPerM3(sim) ? "kg/m³" : "mass fraction",
                 channels,
-                surface
+                surface,
+                blast = DescribeBlastLoad(scene, sim)
             });
         }
 

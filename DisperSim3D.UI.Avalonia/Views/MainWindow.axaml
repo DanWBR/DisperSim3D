@@ -67,6 +67,11 @@
             <i:Icon Value="mdi-flare" />
           </MenuItem.Icon>
         </MenuItem>
+        <MenuItem Header="Add E_xplosion..." x:Name="MenuToolsAddExplosion" Click="MenuToolsAddExplosion_Click">
+          <MenuItem.Icon>
+            <i:Icon Value="mdi-flash-alert" />
+          </MenuItem.Icon>
+        </MenuItem>
         <MenuItem Header="Add _Fire Source..." x:Name="MenuToolsAddFire" Click="MenuToolsAddFire_Click">
           <MenuItem.Icon><i:Icon Value="mdi-fire" /></MenuItem.Icon>
         </MenuItem>

@@ -122,6 +122,7 @@ namespace DisperSim3D.Core
                     SerializeWindRose(scene, inv),
                     SerializeFireScenario(scene, inv),
                 SerializeIgnitions(scene, inv),
+                SerializeExplosions(scene, inv),
                 SerializeFireStudies(scene, inv),
                     SerializeGasDetectors(scene, inv),
                     SerializeCfdSimulations(scene, inv, filePath)
@@ -340,6 +341,7 @@ namespace DisperSim3D.Core
                     string.IsNullOrEmpty(s.ExtenderSolverId) ? null : new XAttribute("ExtenderSolverId", s.ExtenderSolverId),
                     string.IsNullOrEmpty(s.FireSourceId) ? null : new XAttribute("FireSourceId", s.FireSourceId),
                     string.IsNullOrEmpty(s.IgnitionId) ? null : new XAttribute("IgnitionId", s.IgnitionId),
+                    string.IsNullOrEmpty(s.ExplosionId) ? null : new XAttribute("ExplosionId", s.ExplosionId),
                     new XAttribute("Status", s.Status.ToString()),
                     new XAttribute("StatusMessage", s.StatusMessage ?? ""),
                     new XAttribute("DomainSize", s.SnapshotDomainSizeM.ToString(inv)),
@@ -712,6 +714,35 @@ namespace DisperSim3D.Core
                         new XAttribute("EnvelopeFraction", g.EnvelopeFraction.ToString(inv)),
                         new XAttribute("FlameSpeed", g.FlameSpeedMS.ToString(inv)),
                         new XAttribute("IsVisible", g.IsVisible))));
+        }
+
+        /// <summary>The explosions and their congestion regions; read back by
+        /// <c>SceneFileLoader.DeserializeExplosions</c> — keep the two in step.</summary>
+        private static XElement? SerializeExplosions(Scene3D scene, CultureInfo inv)
+        {
+            if (scene.Explosions == null || scene.Explosions.Count == 0) return null;
+            XAttribute[] P(string prefix, DisperSim3D.Geometry.Point3D p) => new[]
+            {
+                new XAttribute(prefix + "X", p.X.ToString(inv)), new XAttribute(prefix + "Y", p.Y.ToString(inv)), new XAttribute(prefix + "Z", p.Z.ToString(inv))
+            };
+            return new XElement("Explosions",
+                scene.Explosions.Select(e =>
+                    new XElement("Explosion",
+                        new XAttribute("Id", e.Id),
+                        new XAttribute("Name", e.Name ?? ""),
+                        new XAttribute("SimulationId", e.SimulationId ?? ""),
+                        new XAttribute("Cloud", e.Cloud.ToString()),
+                        P("Pos", e.Position),
+                        new XAttribute("TimeS", e.TimeS.ToString(inv)),
+                        P("BoxMin", e.BoxMin), P("BoxMax", e.BoxMax),
+                        new XAttribute("CellSize", e.CellSizeM.ToString(inv)),
+                        new XAttribute("IsVisible", e.IsVisible),
+                        (e.Congestion ?? new System.Collections.Generic.List<CongestionRegion>()).Select(c =>
+                            new XElement("Congestion",
+                                new XAttribute("Name", c.Name ?? ""),
+                                P("Min", c.Min), P("Max", c.Max),
+                                new XAttribute("PipeDiameter", c.PipeDiameterM.ToString(inv)),
+                                new XAttribute("AreaPerVolume", c.AreaPerVolume.ToString(inv)))))));
         }
 
         private static XElement? SerializeFireScenario(Scene3D scene, CultureInfo inv)

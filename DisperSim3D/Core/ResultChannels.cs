@@ -75,13 +75,27 @@ namespace DisperSim3D.Core
         /// <summary><c>{t:F3}_Vis.bin</c>: visibility through smoke, m — the solver's cap in clean air.</summary>
         public static readonly ResultChannel Visibility = new ResultChannel("Vis", "Visibility", "m", lowIsHazard: true);
 
+        /// <summary><c>{t}_P.bin</c>: overpressure of an explosion, Pa.</summary>
+        public static readonly ResultChannel Overpressure = new ResultChannel("P", "Overpressure", "Pa");
+
+        /// <summary><c>{t}_Pmax.bin</c>: peak overpressure each cell reached up to t, Pa.</summary>
+        public static readonly ResultChannel PeakOverpressure = new ResultChannel("Pmax", "Peak overpressure", "Pa");
+
+        /// <summary><c>{t}_Imp.bin</c>: positive-phase impulse up to t, Pa·s.</summary>
+        public static readonly ResultChannel Impulse = new ResultChannel("Imp", "Impulse", "Pa·s");
+
+        /// <summary><c>{t}_Arr.bin</c>: time the flame reached each cell, s (the solver's end time
+        /// where it never did); low is the hazard.</summary>
+        public static readonly ResultChannel FlameArrival = new ResultChannel("Arr", "Flame arrival", "s", lowIsHazard: true);
+
         /// <summary>Suffix of the per-triangle heat load, <c>{t:F3}_surface.bin</c>; see <see cref="SurfaceHeatLoad"/>.</summary>
         public const string SurfaceSuffix = "surface";
 
         private static readonly object Gate = new object();
         private static readonly List<ResultChannel> Registered = new List<ResultChannel>
         {
-            Species, Temperature, Radiation, Soot, CarbonMonoxide, CarbonDioxide, Oxygen, Visibility
+            Species, Temperature, Radiation, Soot, CarbonMonoxide, CarbonDioxide, Oxygen, Visibility,
+            Overpressure, PeakOverpressure, Impulse, FlameArrival
         };
 
         /// <summary>Every known channel, the built-in ones first.</summary>
@@ -123,6 +137,10 @@ namespace DisperSim3D.Core
                 case ViewFieldProperty.CO2VolumeFraction: return CarbonDioxide;
                 case ViewFieldProperty.O2VolumeFraction: return Oxygen;
                 case ViewFieldProperty.VisibilityM: return Visibility;
+                case ViewFieldProperty.OverpressurePa: return Overpressure;
+                case ViewFieldProperty.PeakOverpressurePa: return PeakOverpressure;
+                case ViewFieldProperty.ImpulsePaS: return Impulse;
+                case ViewFieldProperty.FlameArrivalS: return FlameArrival;
                 default: return null;
             }
         }
