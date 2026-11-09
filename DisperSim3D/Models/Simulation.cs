@@ -71,6 +71,15 @@ namespace DisperSim3D.Models
         [Description("ID of the ignition event this simulation burns, when it is a fire run on a fire solver extender: the ignition names the dispersion simulation whose cloud burns.")]
         public string IgnitionId { get; set; }
 
+        [Category("References")]
+        [Description("ID of the explosion event this simulation runs, when it is an explosion run on an explosion solver extender.")]
+        public string ExplosionId { get; set; }
+
+        /// <summary>True when this simulation runs an explosion.</summary>
+        [Browsable(false)]
+        [XmlIgnore]
+        public bool IsExplosionRun => !string.IsNullOrEmpty(ExplosionId);
+
         /// <summary>True when this simulation runs a fire (a fire source or an ignition) rather than a release.</summary>
         [Browsable(false)]
         [XmlIgnore]

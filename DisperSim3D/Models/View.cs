@@ -88,7 +88,22 @@ namespace DisperSim3D.Models
         SurfaceIncidentRadiationKwM2 = 24,
         /// <summary>Total (radiative + convective) heat flux into the plant surfaces
         /// (kW/m²), from the simulation's {time}_surface.bin; drawn by a Surface view.</summary>
-        SurfaceTotalHeatFluxKwM2 = 25
+        SurfaceTotalHeatFluxKwM2 = 25,
+        /// <summary>Overpressure of an explosion (Pa), the simulation's {time}_P.bin.</summary>
+        OverpressurePa = 26,
+        /// <summary>Peak overpressure an explosion reached in each cell (Pa), the simulation's {time}_Pmax.bin.</summary>
+        PeakOverpressurePa = 27,
+        /// <summary>Positive-phase impulse of an explosion (Pa·s), the simulation's {time}_Imp.bin.</summary>
+        ImpulsePaS = 28,
+        /// <summary>Time the explosion's flame reached each cell (s), the simulation's {time}_Arr.bin.
+        /// Its peak over time is the earliest arrival.</summary>
+        FlameArrivalS = 29,
+        /// <summary>Peak overpressure on the plant surfaces (Pa), from the simulation's
+        /// {time}_blast.bin; drawn by a Surface view.</summary>
+        SurfacePeakOverpressurePa = 30,
+        /// <summary>Positive-phase impulse on the plant surfaces (Pa·s), from the simulation's
+        /// {time}_blast.bin; drawn by a Surface view.</summary>
+        SurfaceImpulsePaS = 31
     }
 
     /// <summary>How the View collapses transient timesteps to a single field.</summary>

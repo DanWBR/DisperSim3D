@@ -2395,6 +2395,7 @@ void main() { }
         private static readonly Vector4 MonitorColor  = new(0.25f, 0.55f, 0.95f, 0.9f); // blue
         private static readonly Vector4 DetectorColor = new(0.20f, 0.80f, 0.35f, 0.9f); // green
         private static readonly Vector4 IgnitionColor = new(1.00f, 0.84f, 0.32f, 0.95f); // amber
+        private static readonly Vector4 ExplosionColor = new(0.86f, 0.15f, 0.15f, 0.95f); // red
 
         /// <summary>
         /// Rebuild only environment geometry (sky dome, textures, ground, grass)
@@ -2698,6 +2699,26 @@ void main() { }
                     mesh.Upload(gl, verts, idx);
                     _sceneObjects.Add(new SceneObject(
                         mesh, Matrix4x4.Identity, "ignition:" + i));
+                }
+            }
+
+            // ── Explosions → red diamonds at their ignition points ─────
+            if (scene.Explosions != null)
+            {
+                for (int i = 0; i < scene.Explosions.Count; i++)
+                {
+                    var explosion = scene.Explosions[i];
+                    if (!explosion.IsVisible) continue;
+                    var pos = explosion.Position;
+
+                    var (verts, idx) = GlMeshBuffer.GenerateDiamond(
+                        new Vector3((float)pos.X, (float)pos.Y, (float)pos.Z),
+                        1.0f, 3.0f, ExplosionColor);
+
+                    var mesh = new GlMeshBuffer();
+                    mesh.Upload(gl, verts, idx);
+                    _sceneObjects.Add(new SceneObject(
+                        mesh, Matrix4x4.Identity, "explosion:" + i));
                 }
             }
 
@@ -3085,16 +3106,27 @@ void main() { }
         }
 
         /// <summary>
-        /// A Surface view: the simulation's per-triangle heat load coloured on the
-        /// imported geometry. Each triangle is drawn twice, a couple of centimetres off
-        /// either face, so it shows over the decoration whichever way its normal points.
+        /// A Surface view: the simulation's per-triangle heat load, or an explosion's
+        /// per-triangle peak overpressure or impulse, coloured on the imported geometry.
+        /// Each triangle is drawn twice, a couple of centimetres off either face, so it
+        /// shows over the decoration whichever way its normal points.
         /// </summary>
         private void BuildSurfaceView(GlInterface gl, View view, Simulation sim, Scene3D scene)
         {
-            var load = SurfaceHeatLoad.Of(sim);
-            if (load == null) return;
-            bool total = view.FieldProperty != ViewFieldProperty.SurfaceIncidentRadiationKwM2;
-            var values = load.Collapse(total, view.TimeMode, view.SpecificTimeS);
+            double[]? values;
+            if (FieldTransform.IsBlastSurface(view.FieldProperty))
+            {
+                var blast = SurfaceBlastLoad.Of(sim);
+                if (blast == null) return;
+                values = blast.Collapse(view.FieldProperty == ViewFieldProperty.SurfaceImpulsePaS, view.TimeMode, view.SpecificTimeS);
+            }
+            else
+            {
+                var load = SurfaceHeatLoad.Of(sim);
+                if (load == null) return;
+                bool total = view.FieldProperty != ViewFieldProperty.SurfaceIncidentRadiationKwM2;
+                values = load.Collapse(total, view.TimeMode, view.SpecificTimeS);
+            }
             var tris = SurfaceTriangles(scene);
             if (values == null || values.Length != tris.TriangleCount)
             {
@@ -3146,7 +3178,7 @@ void main() { }
             _sceneObjects.Add(new SceneObject(mesh, Matrix4x4.Identity, $"view:surface:{view.Id}"));
 
             System.Diagnostics.Debug.WriteLine(
-                $"[GlViewport] Surface '{view.Name}': {idx.Count / 6} of {values.Length} triangles, {minV:G3}–{maxV:G3} kW/m²");
+                $"[GlViewport] Surface '{view.Name}': {idx.Count / 6} of {values.Length} triangles, {minV:G3}–{maxV:G3} {FieldTransform.UnitFor(view.FieldProperty)}");
         }
 
         /// <summary>

@@ -72,7 +72,7 @@ into `Simulation` snapshots (idempotent  -  safe to load and re-save).
   <Simulations>
     <Simulation Id="..." Name="Sim 1"
                 SourceId="..." WindFieldId="..." SolverType="GaussianPuff"
-                FireSourceId="..." IgnitionId="..."
+                FireSourceId="..." IgnitionId="..." ExplosionId="..."
                 Status="Completed"
                 DomainSize="200" GridRes="40" Duration="300" TimeStep="0.5"
                 CasePath="..." MaxC="...">
@@ -89,6 +89,15 @@ into `Simulation` snapshots (idempotent  -  safe to load and re-save).
   <DispersionStudies>...</DispersionStudies>
   <DetectorAllocations>...</DetectorAllocations>
   <FireScenario>...</FireScenario>
+  <Explosions>
+    <Explosion Id="..." Name="Module A" SimulationId="..." Cloud="EquivalentBox"
+               PosX="0" PosY="0" PosZ="0.5" TimeS="0"
+               BoxMinX="-5" BoxMinY="-5" BoxMinZ="0" BoxMaxX="5" BoxMaxY="5" BoxMaxZ="3"
+               CellSize="0" IsVisible="true">
+      <Congestion Name="Pipe rack" MinX="-5" MinY="-5" MinZ="0" MaxX="5" MaxY="5" MaxZ="3"
+                  PipeDiameter="0.15" AreaPerVolume="1" />
+    </Explosion>
+  </Explosions>
 </Project>
 ```
 
@@ -110,6 +119,14 @@ Fields added for fires, all optional, so older files load unchanged:
 - **Fire simulations:** a `Simulation` with `FireSourceId` or `IgnitionId` runs
   that fire source, or that ignition of a finished dispersion simulation, on a
   solver extender that declares the Fire capability (`SolverType="Extender"`).
+- **Explosions:** an `Explosion` lights the cloud of a finished dispersion
+  simulation (`Cloud="Dispersed"`, the snapshot nearest `TimeS`) or a quiescent
+  stoichiometric box of its gas (`Cloud="EquivalentBox"`, between `BoxMin` and
+  `BoxMax`) at its position. `CellSize` is the grid spacing over the cloud (0: the
+  solver chooses). Each `Congestion` is a region of clutter the geometry leaves
+  out, as pipes of `PipeDiameter` (m) at `AreaPerVolume` (m²/m³). A `Simulation`
+  with `ExplosionId` runs it on a solver extender that declares the Explosion
+  capability; the scene's point monitors are its pressure probes.
 - **Monitors and detectors** keep `MeasuredQuantity` (and a detector its
   `MeasuredThreshold`); any `ViewFieldProperty` name, including `Temperature`,
   `ThermalRadiationKwM2`, `SootDensityKgM3`, `COVolumeFraction`,
@@ -143,11 +160,16 @@ or gets the ones its request asked for).
 | `CO2` | `{t}_CO2.bin` | carbon dioxide | volume fraction |
 | `O2` | `{t}_O2.bin` | oxygen (0.2095 in clean air) | volume fraction |
 | `Vis` | `{t}_Vis.bin` | visibility through smoke | m (the solver's cap in clean air) |
+| `P` | `{t}_P.bin` | overpressure above ambient | Pa |
+| `Pmax` | `{t}_Pmax.bin` | peak overpressure up to `t` | Pa |
+| `Imp` | `{t}_Imp.bin` | positive impulse up to `t` | Pa·s |
+| `Arr` | `{t}_Arr.bin` | flame arrival time (the run's end where it never came) | s |
 
 A solver writes the channels it computes. A stored `Q` replaces the analytic fire
 models in radiation, dose and fatality views, monitors, detectors and fire studies;
-the other channels have no analytic fallback. For `O2` and `Vis` the hazard is a low
-value, so their "peak over time" is the per-cell minimum. `ResultChannels.Register`
+the other channels have no analytic fallback. For `O2`, `Vis` and `Arr` the hazard is
+a low value, so their "peak over time" is the per-cell minimum. An explosion's species
+channel is its unburnt fuel, kg/m³. `ResultChannels.Register`
 adds a channel beyond these.
 
 ### Surface heat load: `{t:F3}_surface.bin`
@@ -162,6 +184,27 @@ coordinates), two little-endian doubles:
 
 Sixteen bytes per triangle, no header; the file size divided by 16 must equal the
 triangle count. A Surface view colours the geometry with either value.
+
+### Surface blast load: `{t:F3}_blast.bin`
+
+An explosion's load on the plant, triangle by triangle in the same order as the
+heat load: the peak overpressure on the triangle's open side up to `t` (Pa), and
+the positive impulse (Pa·s). Sixteen bytes per triangle, no header. A Surface view
+of `SurfacePeakOverpressurePa` or `SurfaceImpulsePaS` colours the geometry with it.
+
+### Probe pressures: `probes.bin`
+
+The overpressure an explosion recorded at its probes at every time step,
+little-endian:
+
+1. `int32` version (1), `int32` probe count `m`, `int32` sample count `s`;
+2. per probe: its name (an `int32` byte count, then the UTF-8 bytes),
+   then `x`, `y`, `z` as doubles;
+3. per sample: the time (double), then `m` doubles, the overpressure at each probe
+   (Pa).
+
+`ProbeSeries.Read` reads it; the Probe Pressures dialog and
+`GET /simulations/probes` show it.
 
 ## Migration rules
 

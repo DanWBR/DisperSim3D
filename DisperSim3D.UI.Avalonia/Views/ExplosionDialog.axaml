@@ -1,0 +1,137 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="720"
+        x:Class="DisperSim3D.UI.Avalonia.Views.ExplosionDialog"
+        Title="Explosion"
+        Icon="/Assets/Air.ico"
+        Width="600" SizeToContent="Height"
+        MinHeight="520" MaxHeight="900"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+
+  <Window.Styles>
+    <Style Selector="TextBlock.field">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="#444" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Foreground" Value="#777" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,2,0,8" />
+    </Style>
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,8,0,2" />
+    </Style>
+    <Style Selector="NumericUpDown.xyz">
+      <Setter Property="Width" Value="110" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel Margin="12">
+
+    <Border DockPanel.Dock="Bottom" BorderBrush="#DDD" BorderThickness="0,1,0,0"
+            Margin="0,10,0,0" Padding="0,8,0,0">
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button x:Name="BtnCancel" Content="Cancel" MinWidth="80" Click="BtnCancel_Click" />
+        <Button x:Name="BtnOK" Content="OK" MinWidth="80" Click="BtnOK_Click"
+                IsDefault="True" Background="#0078D4" Foreground="White" />
+      </StackPanel>
+    </Border>
+
+    <StackPanel Spacing="4">
+      <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+            ColumnDefinitions="180,*" RowSpacing="6">
+
+        <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Name:" />
+        <TextBox    Grid.Row="0" Grid.Column="1" x:Name="TxtName" Text="Explosion" />
+
+        <TextBlock Grid.Row="1" Grid.Column="0" Classes="field" Text="Simulation:" />
+        <ComboBox  Grid.Row="1" Grid.Column="1" x:Name="CmbSimulation"
+                   HorizontalAlignment="Stretch"
+                   ToolTip.Tip="The dispersion run whose cloud, or whose gas, burns." />
+
+        <TextBlock Grid.Row="2" Grid.Column="0" Classes="field" Text="Cloud:" />
+        <ComboBox  Grid.Row="2" Grid.Column="1" x:Name="CmbCloud"
+                   HorizontalAlignment="Stretch" SelectionChanged="CmbCloud_SelectionChanged">
+          <ComboBoxItem Content="Dispersed cloud (the simulation's, at the cloud time)" />
+          <ComboBoxItem Content="Equivalent box of stoichiometric gas" />
+        </ComboBox>
+
+        <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Classes="hint"
+                   Text="The dispersed cloud burns as it stood at the cloud time. The equivalent box is a quiescent stoichiometric cloud of the simulation's gas, as explosion risk studies use to stand for a real cloud." />
+
+        <TextBlock Grid.Row="4" Grid.Column="0" Classes="field" Text="Ignition X, Y, Z (m):" />
+        <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+          <NumericUpDown x:Name="NudX" Classes="xyz" Minimum="-100000" Maximum="100000" Value="0" FormatString="0.00" Increment="0.5" />
+          <NumericUpDown x:Name="NudY" Classes="xyz" Minimum="-100000" Maximum="100000" Value="0" FormatString="0.00" Increment="0.5" />
+          <NumericUpDown x:Name="NudZ" Classes="xyz" Minimum="-100000" Maximum="100000" Value="0.5" FormatString="0.00" Increment="0.5" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="5" Grid.Column="0" Classes="field" Text="Cloud time (s):" />
+        <NumericUpDown Grid.Row="5" Grid.Column="1" x:Name="NudTime"
+                       Minimum="0" Maximum="100000" Value="0" FormatString="0.0" Increment="1"
+                       ToolTip.Tip="The written snapshot of the dispersion run closest to this time is the cloud that burns." />
+
+        <TextBlock Grid.Row="6" Grid.Column="0" Classes="field" Text="Box min X, Y, Z (m):" />
+        <StackPanel Grid.Row="6" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+          <NumericUpDown x:Name="NudBoxMinX" Classes="xyz" Minimum="-100000" Maximum="100000" Value="-5" FormatString="0.00" Increment="0.5" />
+          <NumericUpDown x:Name="NudBoxMinY" Classes="xyz" Minimum="-100000" Maximum="100000" Value="-5" FormatString="0.00" Increment="0.5" />
+          <NumericUpDown x:Name="NudBoxMinZ" Classes="xyz" Minimum="-100000" Maximum="100000" Value="0" FormatString="0.00" Increment="0.5" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="7" Grid.Column="0" Classes="field" Text="Box max X, Y, Z (m):" />
+        <StackPanel Grid.Row="7" Grid.Column="1" Orientation="Horizontal" Spacing="6">
+          <NumericUpDown x:Name="NudBoxMaxX" Classes="xyz" Minimum="-100000" Maximum="100000" Value="5" FormatString="0.00" Increment="0.5" />
+          <NumericUpDown x:Name="NudBoxMaxY" Classes="xyz" Minimum="-100000" Maximum="100000" Value="5" FormatString="0.00" Increment="0.5" />
+          <NumericUpDown x:Name="NudBoxMaxZ" Classes="xyz" Minimum="-100000" Maximum="100000" Value="3" FormatString="0.00" Increment="0.5" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="8" Grid.Column="0" Classes="field" Text="Cell size (m):" />
+        <NumericUpDown Grid.Row="8" Grid.Column="1" x:Name="NudCell"
+                       Minimum="0" Maximum="10" Value="0" FormatString="0.00" Increment="0.05"
+                       ToolTip.Tip="Grid spacing over the cloud and the congestion. 0 lets the solver choose." />
+      </Grid>
+
+      <TextBlock Classes="section" Text="Congestion" />
+      <TextBlock Classes="hint"
+                 Text="Clutter the plant's geometry leaves out (pipes, cable trays, small equipment): a region filled with pipes of one diameter at a surface area per volume." />
+      <Grid ColumnDefinitions="200,*" ColumnSpacing="10">
+        <DockPanel Grid.Column="0">
+          <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
+            <Button x:Name="BtnAddRegion" Content="Add" MinWidth="60" Click="BtnAddRegion_Click" />
+            <Button x:Name="BtnRemoveRegion" Content="Remove" MinWidth="60" Click="BtnRemoveRegion_Click" />
+          </StackPanel>
+          <ListBox x:Name="LstRegions" Height="150" SelectionChanged="LstRegions_SelectionChanged" />
+        </DockPanel>
+        <Grid Grid.Column="1" x:Name="RegionEditor" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+              ColumnDefinitions="Auto,*" RowSpacing="4">
+          <TextBlock Grid.Row="0" Grid.Column="0" Classes="field" Text="Name:" />
+          <TextBox Grid.Row="0" Grid.Column="1" x:Name="TxtRegionName" LostFocus="Region_Changed" />
+          <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Classes="field" Text="Min X, Y, Z (m):" />
+          <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="4">
+            <NumericUpDown x:Name="NudRMinX" Width="100" Minimum="-100000" Maximum="100000" FormatString="0.00" Increment="0.5" ValueChanged="RegionNumber_Changed" />
+            <NumericUpDown x:Name="NudRMinY" Width="100" Minimum="-100000" Maximum="100000" FormatString="0.00" Increment="0.5" ValueChanged="RegionNumber_Changed" />
+            <NumericUpDown x:Name="NudRMinZ" Width="100" Minimum="-100000" Maximum="100000" FormatString="0.00" Increment="0.5" ValueChanged="RegionNumber_Changed" />
+          </StackPanel>
+          <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Classes="field" Text="Max X, Y, Z (m):" />
+          <StackPanel Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="4">
+            <NumericUpDown x:Name="NudRMaxX" Width="100" Minimum="-100000" Maximum="100000" FormatString="0.00" Increment="0.5" ValueChanged="RegionNumber_Changed" />
+            <NumericUpDown x:Name="NudRMaxY" Width="100" Minimum="-100000" Maximum="100000" FormatString="0.00" Increment="0.5" ValueChanged="RegionNumber_Changed" />
+            <NumericUpDown x:Name="NudRMaxZ" Width="100" Minimum="-100000" Maximum="100000" FormatString="0.00" Increment="0.5" ValueChanged="RegionNumber_Changed" />
+          </StackPanel>
+          <TextBlock Grid.Row="5" Grid.Column="0" Classes="field" Text="Pipe diameter (m):" />
+          <NumericUpDown Grid.Row="5" Grid.Column="1" x:Name="NudRDiameter" Minimum="0.005" Maximum="5" FormatString="0.000" Increment="0.01" ValueChanged="RegionNumber_Changed" />
+          <TextBlock Grid.Row="6" Grid.Column="0" Classes="field" Text="Area per volume (1/m):" />
+          <NumericUpDown Grid.Row="6" Grid.Column="1" x:Name="NudRArea" Minimum="0.01" Maximum="100" FormatString="0.00" Increment="0.5" ValueChanged="RegionNumber_Changed" />
+        </Grid>
+      </Grid>
+
+      <TextBlock Classes="hint" Margin="0,8,0,0"
+                 Text="Right-click the explosion to run it on a solver that runs explosions. The scene's point monitors become its pressure probes. Add a View on the explosion's simulation with the field PeakOverpressurePa, ImpulsePaS or FlameArrivalS, or a Surface view of SurfacePeakOverpressurePa on the plant." />
+    </StackPanel>
+  </DockPanel>
+</Window>

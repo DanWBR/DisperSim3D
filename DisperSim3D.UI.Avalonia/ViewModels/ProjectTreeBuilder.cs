@@ -23,6 +23,7 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
         private const string SectionIconSource    = "mdi-water";
         private const string SectionIconFire      = "mdi-fire";
         private const string SectionIconIgnition  = "mdi-flare";
+        private const string SectionIconExplosion = "mdi-flash-alert";
         private const string SectionIconWind      = "mdi-weather-windy";
         private const string SectionIconSim       = "mdi-play-circle-outline";
         private const string SectionIconStudy     = "mdi-chart-line";
@@ -147,6 +148,21 @@ namespace DisperSim3D.UI.Avalonia.ViewModels
                         initialVisibility: g.IsVisible,
                         iconColor: ColLeaf));
             project.Children.Add(ignitions);
+
+            // ── Explosions ─────────────────────────────────────────────────
+            // Each one lights a Simulation's cloud, or an equivalent box of it, in the
+            // plant's congestion, for a solver that runs explosions.
+            var explosions = new ProjectTreeNode("explosions", SectionIconExplosion,
+                "Explosions", Count(scene.Explosions?.Count), iconColor: ColFire);
+            if (scene.Explosions != null)
+                foreach (var x in scene.Explosions)
+                    explosions.Children.Add(new ProjectTreeNode(
+                        "explosion:" + x.Id, LeafIcon,
+                        string.IsNullOrEmpty(x.Name) ? "(explosion)" : x.Name,
+                        tag: x, hasVisibilityToggle: true,
+                        initialVisibility: x.IsVisible,
+                        iconColor: ColLeaf));
+            project.Children.Add(explosions);
 
             // ── Fire Studies ───────────────────────────────────────────────
             var fireStudies = new ProjectTreeNode("firestudies", SectionIconFire,
