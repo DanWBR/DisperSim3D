@@ -324,6 +324,11 @@ namespace DisperSim3D.Core
 
             if (Enum.TryParse((string)se.Attribute("HoleSize") ?? "", out IogpHoleSizeBand band))
                 s.HoleSizeBand = band;
+            // Files saved before the setting existed load with the real jet, the default.
+            if (Enum.TryParse((string)se.Attribute("JetSource") ?? "", out JetSourceModel jetSource))
+                s.JetSource = jetSource;
+            string pseudoVel = (string)se.Attribute("PseudoVel");
+            if (!string.IsNullOrEmpty(pseudoVel)) s.PseudoSourceVelocityMS = double.Parse(pseudoVel, inv);
 
             var hpEl = se.Element("HPLeak");
             if (hpEl != null)

@@ -36,7 +36,7 @@ Windows `FluidX3D.dll`. Validated end-to-end on Ubuntu 24.04 / WSL2  -  see
 It combines four solver families inside a single project-centric workflow:
 
 - **Analytical**  -  Gaussian puff, Gaussian plume, Briggs plume rise, TNO
-  Yellow Book jets, Birch &amp; Schefer expanded source for sonic releases.
+  Yellow Book jets, the real expanded jet source for sonic releases (Birch et al. 1987).
 - **Unified integral model**  -  DNV-UDM-style centreline integration for
   continuous releases: momentum jet (also against the wind), heavy-gas
   spreading, passive far field and aerosol thermodynamics, seconds per case,

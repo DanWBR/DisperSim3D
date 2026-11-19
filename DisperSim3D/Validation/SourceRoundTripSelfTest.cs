@@ -230,6 +230,8 @@ namespace DisperSim3D.Validation
             UseJetTransition = true,
             CarryAerosol = true,
             AerosolCompound = "Propane",
+            JetSource = JetSourceModel.FixedVelocity,
+            PseudoSourceVelocityMS = 87.5,
             IsVisible = false,
             HoleSizeBand = IogpHoleSizeBand.Large,
             AutoComputeLeakFrequency = false,
@@ -299,6 +301,9 @@ namespace DisperSim3D.Validation
             results.Add(Same(prefix + "hole size band", a.HoleSizeBand, b.HoleSizeBand));
             results.Add(Same(prefix + "auto leak frequency", a.AutoComputeLeakFrequency, b.AutoComputeLeakFrequency));
             results.Add(Near(prefix + "leak frequency", a.LeakFrequencyPerYear, b.LeakFrequencyPerYear, 1e-15));
+
+            results.Add(Same(prefix + "jet source", a.JetSource, b.JetSource));
+            results.Add(Near(prefix + "pseudo-source velocity", a.PseudoSourceVelocityMS, b.PseudoSourceVelocityMS, 1e-9));
 
             if (a.HighPressureLeak == null || b.HighPressureLeak == null)
             {

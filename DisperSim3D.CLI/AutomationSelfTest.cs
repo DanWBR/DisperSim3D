@@ -135,6 +135,34 @@ namespace DisperSim3D.CLI
                       scene?["gasDetectors"]?[0]?["position"]?[2]?.GetValue<double>() == 1.5,
                       "GET /scene describes the project", scene?.ToJsonString());
 
+                // ── Sources ──────────────────────────────────────────────
+                int refreshesBeforeSources = host.Refreshes;
+                // A 4 kg/s methane leak at 50 bar and 293 K: its real expanded jet moves at the
+                // velocity of the stagnation state, and FixedVelocity brings back the pseudo-source.
+                var leakParams = new HighPressureLeakParams { VesselPressurePa = 5e6, VesselTemperatureK = 293, GasGamma = 1.31, GasMolarMassKgMol = 0.01604 };
+                var (dReal, uReal, _) = HighPressureLeakModel.ComputeMomentumSource(leakParams, 4.0);
+                JsonNode? addedHp = await PostJson(http, "sources", new
+                {
+                    name = "HP-1", position = new[] { 1.0, 2.0, 3.0 }, releaseRateKgS = 4.0,
+                    highPressureLeak = new { vesselPressurePa = 5e6, vesselTemperatureK = 293, gamma = 1.31, molarMassKgMol = 0.01604, orificeDiameterM = 0.03, massFlowKgS = 4.0 }
+                });
+                JsonNode? hp = addedHp?["source"];
+                Check(hp?["jetSource"]?.GetValue<string>() == "RealJet" &&
+                      Math.Abs((hp?["cfdVelocityMS"]?.GetValue<double>() ?? 0) - uReal) < 1e-6 * uReal &&
+                      Math.Abs((hp?["cfdDiameterM"]?.GetValue<double>() ?? 0) - dReal) < 1e-6 * dReal && uReal > 600,
+                      "POST /sources adds a choked leak, which enters as the real jet by default",
+                      string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0} (expected {1:G6} m/s through {2:G6} m)", hp?.ToJsonString(), uReal, dReal));
+                JsonNode? pseudo = await PostJson(http, "sources/update", new { source = "HP-1", jetSource = "FixedVelocity" });
+                Check(Math.Abs((pseudo?["source"]?["cfdVelocityMS"]?.GetValue<double>() ?? 0) - 100) < 1e-9,
+                      "POST /sources/update switches it to the 100 m/s pseudo-source", pseudo?.ToJsonString());
+                var badJet = await Post(http, "sources/update", new { source = "HP-1", jetSource = "Sideways" });
+                Check(badJet.StatusCode == HttpStatusCode.BadRequest, "an unknown jet source is 400");
+                JsonNode? sceneHp = await GetJson(http, "scene");
+                var listedHp = (sceneHp?["topLevelSources"] as JsonArray ?? new JsonArray()).FirstOrDefault(s => s?["name"]?.GetValue<string>() == "HP-1");
+                Check(listedHp?["jetSource"]?.GetValue<string>() == "FixedVelocity", "GET /scene reports each source's jet source", listedHp?.ToJsonString());
+                Check(host.Refreshes == refreshesBeforeSources + 2, "adding and updating a source refresh the project");
+                host.ResetRefreshes();
+
                 // ── Simulations ──────────────────────────────────────────
                 var badSolver = await Post(http, "simulations", new { source = "S-1", solver = "NoSuchSolver" });
                 Check(badSolver.StatusCode == HttpStatusCode.BadRequest, "an unknown solver is 400");
@@ -416,6 +444,7 @@ namespace DisperSim3D.CLI
             private readonly Dictionary<string, ExtenderRunStatus> _runs = new();
 
             public void RefreshProject() => Refreshes++;
+            public void ResetRefreshes() => Refreshes = 0;
 
             /// <summary>Records the request as a queued run, as a host's simulation manager would.</summary>
             public Task<string?> RunSimulationAsync(string simulationId)

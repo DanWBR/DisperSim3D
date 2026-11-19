@@ -282,24 +282,45 @@ the vessel reaches ambient or empties. The Gaussian engines consume that
 profile directly, so a depressurising release is not modelled as a constant
 source.
 
-### 3.3 Two expanded sources, for two different questions
+### 3.3 Expanded sources for CFD and for flame shape
 
-The project computes an expanded (pseudo) source in two places, and they are
-not interchangeable.
+The project computes an expanded source for the CFD solvers and another for
+the flame-shape models.
 
-**For a CFD inlet patch** — `HighPressureLeakModel.ComputeExpandedSource`
-fixes the velocity at a convenient value (default 100 m/s) and solves for
-the diameter that carries the mass flow at ambient density:
+**For the CFD solvers:** a choked leak enters through
+`ReleaseSource3D.ExpandedDiameterForCfdM` at `ExpandedVelocityForCfdMS`, and
+the source's `JetSource` picks how they are computed. The default, `RealJet`,
+is the expanded jet that carries the jet's own momentum flux
+(`HighPressureLeakModel.ComputeMomentumSource`, Birch, Hughes & Swaffield
+1987). The throat sits at the sonic state of the stagnation conditions, and
+the jet carries J = ṁ u_c + (p_c − p_a) A_c through it:
+
+```
+T_c = T_0 · 2/(γ+1)         p_c = P_0 · (2/(γ+1))^{γ/(γ−1)}
+ρ_c = p_c M /(R T_c)        u_c = sqrt(γ R T_c / M)
+u_e = J/ṁ = u_c + (p_c − p_amb)/(ρ_c u_c)
+ρ_e = p_amb M /(R T_0)      d_e = sqrt(4ṁ /(π ρ_e u_e))
+```
+
+Because J/ṁ depends only on the stagnation state, the source doesn't depend
+on the orifice diameter or the discharge coefficient once the mass rate is
+known. The solvers then carry the real momentum ṁ u_e, which sets how far a
+jet fire reaches along its direction before buoyancy turns it up.
+
+`JetSource = FixedVelocity` keeps the older pseudo-source
+(`HighPressureLeakModel.ComputeExpandedSource`), which fixes the velocity at
+`PseudoSourceVelocityMS` (default 100 m/s) and solves for the diameter that
+carries the mass flow at ambient density:
 
 ```
 A_pseudo = ṁ / (ρ_amb · V_target)          d = sqrt(4A/π)
 ```
 
-This answers "what inlet should I draw on the mesh so the solver does not
-need to resolve a sonic jet". It is a meshing convenience, not a physical
-state.
+It is a meshing convenience and not a physical state: at 100 m/s it carries a
+fraction of the jet's momentum, often a sixth or less, so its jets turn up
+sooner and rise as columns.
 
-**For flame shape** — `JetExpandedSource.Compute` resolves where the jet
+**For flame shape:** `JetExpandedSource.Compute` resolves where the jet
 actually is once it has finished expanding, after Miller (2017) eq. (1)–(3).
 The throat is taken at the isentropic sonic condition,
 
@@ -318,8 +339,13 @@ then expanded to atmospheric pressure through momentum, energy and mass:
 
 `T_e` is floored at 50 K. A subsonic release is its own expanded source.
 
-Using the meshing pseudo-source for flame shape would be wrong: it has the
-velocity fixed by fiat, and flame shape depends on exactly that velocity.
+Equation (1) gives the same u_e as the CFD source above. The two differ in
+the diameter, because Miller's equation (2) cools the expanded gas while the
+CFD source takes it at T_0, as Birch et al. (1987) do.
+
+Using the fixed-velocity pseudo-source for flame shape would be wrong,
+because it fixes the velocity by fiat and the flame shape depends on exactly
+that velocity.
 
 **Files**: `Core/HighPressureLeakModel.cs`, `Core/JetExpandedSource.cs`
 

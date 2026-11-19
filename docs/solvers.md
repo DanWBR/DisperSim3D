@@ -73,12 +73,12 @@ wind direction over a momentum-based bend length
 wind direction and speed at the source position are interpolated from the
 field instead of the uniform meteo.
 
-### High-pressure leak  -  Birch &amp; Schefer expanded source
+### High-pressure leak  -  expanded jet source
 
 For an underexpanded sonic jet, modelling the real orifice in CFD requires
-sub-millimetre cells and sub-microsecond timesteps. Birch &amp; Schefer (1984)
-replaces the real orifice with a fictitious larger one at atmospheric
-pressure and subsonic velocity:
+sub-millimetre cells and sub-microsecond timesteps, so a choked leak enters
+the CFD solvers through its expanded source at atmospheric pressure. The
+choked mass rate is
 
 $$
 \dot m \;=\; C_d \cdot A_{\mathrm{orifice}} \cdot P_0 \cdot
@@ -87,23 +87,43 @@ $$
 \quad\text{(choked)}
 $$
 
+and the source's `JetSource` picks the expanded source.
+
+**`RealJet` (default):** the expanded jet carries the jet's own momentum flux
+$J = \dot m u_c + (p_c - p_a) A_c$ (Birch, Hughes &amp; Swaffield 1987), with
+the throat at the sonic state of the stagnation conditions:
+
 $$
-\rho_{\mathrm{amb}}
-  \;=\; \frac{P_{\mathrm{atm}}\,M}{R\,T_{\mathrm{amb}}},
+u_e \;=\; \frac{J}{\dot m} \;=\; u_c + \frac{p_c - p_a}{\rho_c\,u_c},
 \qquad
+d_e \;=\; \sqrt{\frac{4\,\dot m}{\pi\,\rho_e\,u_e}},
+\qquad
+\rho_e \;=\; \frac{p_a\,M}{R\,T_0}
+$$
+
+`HighPressureLeakModel.ComputeMomentumSource(p, ṁ)` returns `(d_e, u_e, T_0)`.
+A methane leak at 50 bar expands to about 700 m/s, so the time step of the
+OpenFOAM case follows that velocity.
+
+**`FixedVelocity`:** the older pseudo-source (Birch &amp; Schefer 1984) fixes
+the velocity at `PseudoSourceVelocityMS` (default 100 m/s) and solves for the
+diameter that carries the mass rate at ambient density:
+
+$$
 A_{\mathrm{pseudo}}
   \;=\; \frac{\dot m}{\rho_{\mathrm{amb}}\,V_{\mathrm{target}}},
 \qquad
 d_{\mathrm{pseudo}} \;=\; \sqrt{\frac{4\,A_{\mathrm{pseudo}}}{\pi}}
 $$
 
-with $V_{\mathrm{target}} \approx 100\ \mathrm{m/s}$.
+It carries only a fraction of the jet's momentum, so its jets turn up sooner
+than real ones.
 
-`HighPressureLeakModel.ComputeExpandedSource(p, 100, 293.15)` returns
-`(d_pseudo, V_target, T_amb)`. `ReleaseSource3D.ExpandedDiameterForCfdM` and
-`ExpandedVelocityForCfdMS` are the CFD-facing accessors  -  they return the
-physical orifice values for non-choked flow and fall back to Birch only when
-the leak is sonic.
+`ReleaseSource3D.ExpandedDiameterForCfdM` and `ExpandedVelocityForCfdMS` are
+the CFD-facing accessors. They return the physical orifice values when the
+flow isn't choked, and the source that `JetSource` picks when it is. The
+OpenFOAM case writer and the solver extenders read them, and the automation
+API reports them for each source in `GET /scene`.
 
 The ratio of specific heats γ in the choked rate is the leak's own.
 `GasProperties.EffectiveHeatCapacityRatio` gives a gas's ideal-gas value,

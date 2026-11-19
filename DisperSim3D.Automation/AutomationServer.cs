@@ -47,6 +47,8 @@ namespace DisperSim3D.Automation
             "GET  /simulations/channels?id=    the result channels it stored (T, Q, Soot, CO, CO2, O2, Vis; P, Pmax, Imp, Arr) and its surface heat or blast load",
             "GET  /simulations/probes?id=&samples=500  an explosion's overpressure at its probes: peak, its time, impulse, and the series",
             "POST /simulations/sensors         {\"id\": \"...\"} replays it through every monitor and detector from its stored fields",
+            "POST /sources                     {\"name\": \"...\", \"position\": [x, y, z], \"gas\": \"Methane\", \"releaseRateKgS\": 1, \"azimuthDeg\": 0, \"elevationDeg\": 0, \"highPressureLeak\": {\"vesselPressurePa\": 5e6, \"vesselTemperatureK\": 293, \"orificeDiameterM\": 0.025, \"massFlowKgS\": 4}, \"jetSource\": \"RealJet|FixedVelocity\", \"pseudoSourceVelocityMS\": 100} adds a release source",
+            "POST /sources/update              {\"source\": \"...\", \"jetSource\": \"RealJet|FixedVelocity\", \"pseudoSourceVelocityMS\": 100} sets how its choked leak enters the CFD solvers",
             "POST /fires                       {\"name\": \"...\", \"kind\": \"Jet|Pool|Fireball\", \"position\": [x, y, z], \"massFlowKgS\": 1, \"fireballMassKg\": 1000, ...} adds a fire source",
             "POST /ignitions                   {\"simulation\": \"...\", \"position\": [x, y, z], \"timeS\": 30} adds an ignition of a dispersion simulation",
             "GET  /explosions                  the project's explosions",
@@ -360,6 +362,10 @@ namespace DisperSim3D.Automation
                     return await SimulationProbesAsync(r);
                 case "POST /simulations/sensors":
                     return await OnUiGateAsync(() => EvaluateSensorsAsync(r));
+                case "POST /sources":
+                    return await OnUiGateAsync(() => AddReleaseSourceAsync(r));
+                case "POST /sources/update":
+                    return await OnUiGateAsync(() => UpdateReleaseSourceAsync(r));
                 case "POST /fires":
                     return await OnUiGateAsync(() => AddFireSourceAsync(r));
                 case "POST /ignitions":
@@ -445,7 +451,7 @@ namespace DisperSim3D.Automation
         private static object DescribeScene(Scene3D s, string? path)
         {
             static double[] P(Point3D p) => new[] { p.X, p.Y, p.Z };
-            static object Source(ReleaseSource3D x) => new { x.Id, x.Name, position = P(x.Position) };
+            static object Source(ReleaseSource3D x) => DescribeSource(x);
 
             return new
             {
