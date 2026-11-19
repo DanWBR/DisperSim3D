@@ -278,6 +278,11 @@ namespace DisperSim3D.CLI
                 Check(deco?["ok"]?.GetValue<bool>() == true && plant.Opacity == 0.4 && plant.ClipEnabled &&
                       plant.ClipAxis == ClipAxis.Z && plant.ClipValue == 11 && !plant.ClipAbove && plant.IsVisible,
                       "POST /decorations/update sets opacity and the clip plane by name", deco?.ToJsonString());
+                JsonNode? notSolid = await PostJson(http, "decorations/update", new { name = "plant", obstacle = false });
+                Check(notSolid?["decoration"]?["obstacle"]?.GetValue<bool>() == false && !plant.IsObstacle && plant.Opacity == 0.4,
+                      "POST /decorations/update turns the obstacle flag off", notSolid?.ToJsonString());
+                await PostJson(http, "decorations/update", new { name = "plant", obstacle = true });
+                Check(plant.IsObstacle, "and back on");
                 JsonNode? decos = await GetJson(http, "decorations");
                 Check(decos?["decorations"]?[0]?["clipValue"]?.GetValue<double>() == 11, "GET /decorations lists them", decos?.ToJsonString());
                 Check((await Post(http, "decorations/update", new { name = "nothing" })).StatusCode == HttpStatusCode.NotFound,

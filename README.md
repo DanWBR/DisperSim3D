@@ -85,7 +85,7 @@ Embedded sibling C++ project (`FluidX3D.dll`) compiled from [Moritz Lehmann's Fl
 - **FluidX3DDispersionSteady** (`FX3DDS`) — same tracer driven until cell-by-cell L2 delta drops below tolerance; result is a single converged frame, playback bar hidden
 - **FluidX3DFire** (`FX3DFR`) — buoyant fire plume via dual-tracer `FireTracerEngine` (smoke + temperature) with Boussinesq buoyancy `β·g·(T-T_amb)`
 
-The dispersion tracers block the cells the decorations' meshes occupy (`DecorationSolids`): the triangles of every STL, OBJ and RVM decoration, read from its file and placed as the 3D view places it, mark the cells they cross and the cells they enclose; surfaces at ground level, such as paving, block nothing. A decoration whose mesh cannot be read (a procedural primitive) blocks its bounding box. `--obstacle-mask-selftest` checks it.
+The dispersion tracers block the cells the decorations' meshes occupy (`DecorationSolids`): the triangles of every STL, OBJ and RVM decoration, read from its file and placed as the 3D view places it, mark the cells they cross and the cells they enclose; surfaces at ground level, such as paving, block nothing. A decoration whose mesh cannot be read (a procedural primitive) blocks its bounding box. If you turn off a decoration's **Obstacle** property (`IsObstacle`), the decoration is only drawn: the solvers, the obstacle boxes, the radiation shading and the surface heat load all leave it out, whether it is visible or not. Use this for reference surfaces, such as another tool's isosurfaces imported as STL. `--obstacle-mask-selftest` checks it.
 
 GPU selection (multi-GPU systems) and on-demand VRAM/RAM/disk sizing live under **Settings → GPU & Memory…**.
 
@@ -562,7 +562,7 @@ launch with environment variables:
 | `POST /views/update` | `{"id": "...", "visible": false}` — changes only the fields given |
 | `POST /views/delete` | `{"id": "..."}` |
 | `GET /decorations` | the project's geometry: visibility, opacity, clip plane |
-| `POST /decorations/update` | `{"name": "plant", "opacity": 0.4, "clipEnabled": true, "clipAxis": "Z", "clipValue": 11, "clipAbove": false}` — by ID or name; a clip plane cuts the model (here everything above 11 m, to see under a roof) |
+| `POST /decorations/update` | `{"name": "plant", "opacity": 0.4, "clipEnabled": true, "clipAxis": "Z", "clipValue": 11, "clipAbove": false}` — by ID or name; a clip plane cuts the model (here everything above 11 m, to see under a roof); `"obstacle": false` keeps the decoration out of the solvers' solid geometry |
 | `GET /camera` | the 3D view's camera: position and the point it looks at |
 | `POST /camera` | `{"position": [x, y, z], "target": [x, y, z]}` — moves it (Avalonia UI) |
 | `GET /log?after=N` | what the server did |

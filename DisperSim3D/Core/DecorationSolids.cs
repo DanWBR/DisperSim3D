@@ -53,7 +53,10 @@ namespace DisperSim3D.Core
         /// </summary>
         public bool Represents(BoundingBox box) => box != null && _represented.Contains(box);
 
-        /// <summary>Reads every decoration's mesh. Never throws: an unreadable mesh falls back to its box.</summary>
+        /// <summary>
+        /// Reads the mesh of every decoration that is an obstacle (<see cref="Decoration3D.IsObstacle"/>).
+        /// Never throws: an unreadable mesh falls back to its box.
+        /// </summary>
         public static DecorationSolids FromDecorations(IEnumerable<Decoration3D> decorations)
         {
             var p0 = new List<float>();
@@ -67,7 +70,7 @@ namespace DisperSim3D.Core
             {
                 foreach (var deco in decorations)
                 {
-                    if (deco == null) continue;
+                    if (deco == null || !deco.IsObstacle) continue;
                     float[] local = null;
                     try { local = ReadMesh(deco.FilePath); }
                     catch (Exception ex)

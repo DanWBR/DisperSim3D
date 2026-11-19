@@ -194,10 +194,7 @@ namespace DisperSim3D.UI.Avalonia.Views
 
             wf.CfdConfig = AppSettings.Instance.CreateCfdConfig();
 
-            var obstacles = new List<BoundingBox>();
-            if (_scene.Decorations != null)
-                foreach (var deco in _scene.Decorations)
-                    if (deco.BoundingBox != null) obstacles.Add(deco.BoundingBox);
+            var obstacles = SceneObstacles.Collect(_scene);
 
             BtnRun.IsEnabled = false;
             ProgressBar.IsVisible = true;

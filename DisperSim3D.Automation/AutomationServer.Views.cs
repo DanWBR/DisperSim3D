@@ -204,6 +204,7 @@ namespace DisperSim3D.Automation
             d.Id,
             d.Name,
             visible = d.IsVisible,
+            obstacle = d.IsObstacle,
             d.Opacity,
             d.ClipEnabled,
             clipAxis = d.ClipAxis.ToString(),
@@ -217,7 +218,7 @@ namespace DisperSim3D.Automation
             JsonObject body = ReadJson(r);
             string key = OptionalString(body, "id") ?? OptionalString(body, "name")
                          ?? throw new HttpError(400, "Give the decoration as \"id\" or \"name\".");
-            bool? visible = OptionalBool(body, "visible"), clipEnabled = OptionalBool(body, "clipEnabled"), clipAbove = OptionalBool(body, "clipAbove");
+            bool? visible = OptionalBool(body, "visible"), obstacle = OptionalBool(body, "obstacle"), clipEnabled = OptionalBool(body, "clipEnabled"), clipAbove = OptionalBool(body, "clipAbove");
             double? opacity = OptionalDouble(body, "opacity"), clipValue = OptionalDouble(body, "clipValue");
             ClipAxis? clipAxis = OptionalEnum<ClipAxis>(body, "clipAxis");
             object? updated = null;
@@ -228,6 +229,7 @@ namespace DisperSim3D.Automation
                                   ?? all.FirstOrDefault(x => string.Equals(x.Name, key, StringComparison.OrdinalIgnoreCase));
                 if (d == null) return Task.CompletedTask;
                 if (visible is { } v) d.IsVisible = v;
+                if (obstacle is { } ob) d.IsObstacle = ob;
                 if (opacity is { } o) d.Opacity = Math.Clamp(o, 0, 1);
                 if (clipEnabled is { } ce) d.ClipEnabled = ce;
                 if (clipAxis is { } ca) d.ClipAxis = ca;

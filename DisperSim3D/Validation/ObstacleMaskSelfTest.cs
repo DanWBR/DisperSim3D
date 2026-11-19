@@ -84,6 +84,28 @@ namespace DisperSim3D.Validation
                 results.Add(new Result("a box from no decoration still blocks",
                     At(mask, -9, 9, 1)));
 
+                // A reference surface marked as not an obstacle is only drawn: its mesh and its
+                // box stay out of the solids, and the scene's obstacle boxes skip it.
+                var reference = new Decoration3D { Name = "reference", FilePath = cube, Position = new Point3D(4, 4, 0),
+                    BoundingBox = new BoundingBox(new Point3D(4, 4, 0), new Point3D(8, 8, 4)), IsObstacle = false };
+                var hiddenBox = new Decoration3D { Name = "reference box", FilePath = "primitive:cube",
+                    BoundingBox = new BoundingBox(new Point3D(-8, 2, 0), new Point3D(-4, 6, 4)), IsObstacle = false };
+                var withReference = DecorationSolids.FromDecorations(new[] { cubeDeco, reference, hiddenBox });
+                var scene = new Scene3D();
+                scene.Decorations.Add(cubeDeco); scene.Decorations.Add(reference); scene.Decorations.Add(hiddenBox);
+                List<BoundingBox> sceneBoxes = SceneObstacles.Collect(scene);
+                bool[,,] refMask = DecorationSolids.ObstacleMask(sceneBoxes, withReference, Half, Height, Nx, Nx, Nz);
+                results.Add(new Result("a decoration that is not an obstacle blocks nothing",
+                    withReference.MeshCount == 1 && withReference.Boxes.Count == 0 && sceneBoxes.Count == 1
+                    && At(refMask, -4, -4, 2) && !At(refMask, 6, 6, 2) && !At(refMask, -6, 4, 2),
+                    Fmt("{0} mesh(es), {1} box(es), {2} scene box(es)", withReference.MeshCount, withReference.Boxes.Count, sceneBoxes.Count)));
+
+                string saved = Path.Combine(dir, "reference.xml");
+                SceneFileSaver.Save(scene, saved);
+                List<Decoration3D> back = SceneFileLoader.Load(saved).Decorations;
+                results.Add(new Result("the obstacle flag survives a save and a load",
+                    back.Count == 3 && back[0].IsObstacle && !back[1].IsObstacle && !back[2].IsObstacle));
+
                 bool[,,] boxes = DecorationSolids.ObstacleMask(new List<BoundingBox> { box }, null, Half, Height, Nx, Nx, Nz);
                 results.Add(new Result("without meshes, boxes block as before",
                     At(boxes, 7, -7, 1) && !At(boxes, -4, -4, 2)));

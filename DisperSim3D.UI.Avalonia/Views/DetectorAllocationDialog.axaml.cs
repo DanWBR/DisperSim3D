@@ -383,9 +383,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                     await Task.Run(() =>
                     {
                         var clouds = DispersionStudyEngine.LoadClouds(study, _scene);
-                        var obstacles = new List<BoundingBox>();
-                        foreach (var d in _scene.Decorations)
-                            if (d.BoundingBox != null) obstacles.Add(d.BoundingBox);
+                        var obstacles = SceneObstacles.Collect(_scene);
 
                         double domainHalf = clouds
                             .Where(c => c.IsValid)

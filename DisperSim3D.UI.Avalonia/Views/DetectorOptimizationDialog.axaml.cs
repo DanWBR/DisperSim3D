@@ -110,7 +110,7 @@ namespace DisperSim3D.UI.Avalonia.Views
             double biggestVol = 0;
             foreach (var d in _scene.Decorations)
             {
-                if (d.BoundingBox == null) continue;
+                if (d.BoundingBox == null || !d.IsObstacle) continue;
                 double v = (d.BoundingBox.Max.X - d.BoundingBox.Min.X)
                          * (d.BoundingBox.Max.Y - d.BoundingBox.Min.Y)
                          * (d.BoundingBox.Max.Z - d.BoundingBox.Min.Z);

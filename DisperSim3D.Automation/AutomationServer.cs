@@ -62,7 +62,7 @@ namespace DisperSim3D.Automation
             "POST /views/update                {\"id\": \"...\", ...the fields to change}",
             "POST /views/delete                {\"id\": \"...\"}",
             "GET  /decorations                 the project's geometry: visibility, opacity, clip plane",
-            "POST /decorations/update          {\"id\": \"...\" (or \"name\"), \"visible\": true, \"opacity\": 0.3, \"clipEnabled\": true, \"clipAxis\": \"Z\", \"clipValue\": 11, \"clipAbove\": false}",
+            "POST /decorations/update          {\"id\": \"...\" (or \"name\"), \"visible\": true, \"obstacle\": false, \"opacity\": 0.3, \"clipEnabled\": true, \"clipAxis\": \"Z\", \"clipValue\": 11, \"clipAbove\": false}",
             "GET  /camera                      the 3D view's camera: position and the point it looks at",
             "POST /camera                      {\"position\": [x, y, z], \"target\": [x, y, z]} moves it",
             "GET  /log?after=N                 what the server did"
@@ -472,7 +472,7 @@ namespace DisperSim3D.Automation
                     fireStudies = s.FireStudies?.Count ?? 0,
                     cameraPresets = s.CameraPresets?.Count ?? 0
                 },
-                decorations = (s.Decorations ?? new()).Select(d => new { d.Id, d.Name, d.FilePath, position = P(d.Position) }),
+                decorations = (s.Decorations ?? new()).Select(d => new { d.Id, d.Name, d.FilePath, position = P(d.Position), obstacle = d.IsObstacle }),
                 topLevelSources = (s.TopLevelSources ?? new()).Select(Source),
                 scenarios = (s.DispersionScenarios ?? new()).Select(sc => new
                 {

@@ -3096,7 +3096,7 @@ void main() { }
             string key = string.Join("|", scene.Decorations.Select(d => string.Join(";",
                 d.FilePath, d.Position.X.ToString(inv), d.Position.Y.ToString(inv), d.Position.Z.ToString(inv),
                 d.Rotation.X.ToString(inv), d.Rotation.Y.ToString(inv), d.Rotation.Z.ToString(inv),
-                d.Scale.ToString(inv), d.ClipEnabled, d.ClipAxis, d.ClipValue.ToString(inv), d.ClipAbove)));
+                d.Scale.ToString(inv), d.ClipEnabled, d.ClipAxis, d.ClipValue.ToString(inv), d.ClipAbove, d.IsObstacle)));
             if (_surfaceTriangles == null || key != _surfaceTrianglesKey)
             {
                 _surfaceTriangles = DecorationSolids.FromDecorations(scene.Decorations).Triangles;

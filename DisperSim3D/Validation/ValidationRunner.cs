@@ -71,12 +71,7 @@ namespace DisperSim3D.Validation
                             // Collect obstacles from the scene's Decorations so the wind LBM
                             // and the tracer engine see the same array (essential for built-
                             // environment benches like MUST where the geometry is the test).
-                            var windObstacles = new System.Collections.Generic.List<BoundingBox>();
-                            foreach (var d in scene.Decorations)
-                            {
-                                if (d != null && d.BoundingBox != null)
-                                    windObstacles.Add(d.BoundingBox);
-                            }
+                            var windObstacles = SceneObstacles.Collect(scene);
                             bool windOk = windRunner.Run(wf, windObstacles,
                                 (frac, msg) => log?.Invoke("  [wind] " + msg));
                             if (!windOk)
