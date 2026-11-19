@@ -47,7 +47,7 @@ DisperSim 3D organizes work around a **Project** with discrete sections shown in
 - **Briggs plume rise** (buoyant and momentum-dominated)
 - **Jet momentum modeling** using TNO Yellow Book correlations
 - **High-pressure leak model** with choked/unchoked flow and inventory decay
-- **Birch & Schefer expanded source** for sonic underexpanded jets, automatically wired into CFD source patches and timestep sizing
+- **Expanded jet source** for sonic underexpanded jets, which carries the jet's real momentum flux (Birch et al. 1987) by default, with the 100 m/s Birch & Schefer pseudo-source as an option; it is wired into CFD source patches and timestep sizing
 - **Gas mixtures** with per-component tracking
 - **Transient wind profiles** with time-varying speed, direction, stability
 
@@ -60,7 +60,7 @@ A steady model for continuous releases that integrates the cloud itself instead 
 - **Grounded cloud** — gravity spreading (C_E = 1.15), UDM ground drag and impact forces, ground heat flux (McAdams natural / Holman forced), a convective velocity scale from the ground heating that the published UDM lacks
 - **Atmosphere** — Monin–Obukhov length from class and roughness (Havens & Spicer), log profile with the Businger / Paulson ψ functions, intermediate classes ("D-E") accepted
 - **Any discharge direction** — downwind, vertical or **against the wind**: the jet decelerates to a stall and is blown back over the source; the sampler combines the outgoing and returning passes
-- **Sources** — jets with the Birch pseudo-source, pools and low-momentum area sources (cryogenic pool size from the vaporisation flux), passive point sources
+- **Sources** — jets with their real expanded source, pools and low-momentum area sources (cryogenic pool size from the vaporisation flux), passive point sources
 - **Two-phase releases** — the flashed liquid is carried as aerosol; every step runs a DWSIM pressure–enthalpy flash of {component, N₂, O₂, H₂O} (humid air), so temperature, liquid fraction and density are part of the state (Desert Tortoise 4 passes). No rainout yet
 - **Cost** — no grid, about one second per case, which makes it the screening tool for dense, cryogenic or high-momentum releases on open terrain where the Gaussian correlations do not apply and a CFD run is not warranted
 - **Validation** — 15 field trials scored against the FLACS cohort acceptance ranges: Burro 3/7, Coyote 3/5, Falcon 1/3/4, Maplin Sands 27, Kit Fox U5-2, Desert Tortoise 4, Prairie Grass 7/11/22/29/35. **13 pass**; the failures are the strongly convective Prairie Grass 7 (no convective lofting) and the mid-field dense persistence of Maplin 27. LNG observations come from the PHMSA Model Validation Database (short-average arc maxima)

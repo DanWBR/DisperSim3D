@@ -205,24 +205,36 @@ When the source's gas (`GasLibraryItem.IsCryogenic = true`) flags cryogenic LNG 
 
 The case writer also emits a `LOG_atmospheric.txt` advisory inside the case directory when the ground-adjacent cell size is smaller than (or close to) `z₀` — a regime where `nutkAtmRoughWallFunction` is ill-conditioned. This is non-fatal; recommended minimum cell ≈ `2·z₀`.
 
-### 3.4 High-pressure leak — Birch & Schefer expanded source
+### 3.4 High-pressure leak — expanded jet source
 
 **File**: [`Core/HighPressureLeakModel.cs`](DisperSim3D/Core/HighPressureLeakModel.cs)
 
-For an underexpanded sonic jet, modelling the real orifice in CFD requires sub-millimetre cells and sub-microsecond timesteps. The Birch & Schefer (1984) approach replaces the real orifice with a fictitious larger one at atmospheric pressure and subsonic velocity:
+For an underexpanded sonic jet, modelling the real orifice in CFD requires sub-millimetre cells and sub-microsecond timesteps, so a choked leak enters the CFD solvers through an expanded source at atmospheric pressure. `ReleaseSource3D.JetSource` picks which one.
+
+**`RealJet` (default):** the expanded jet carries the jet's own momentum flux J = ṁ u_c + (p_c − p_a) A_c (Birch, Hughes & Swaffield 1987):
 
 ```
-mdot     = Cd · A_orifice · P0 · √(γM/RT · (2/(γ+1))^((γ+1)/(γ−1)))   (choked)
+mdot = Cd · A_orifice · P0 · √(γM/RT · (2/(γ+1))^((γ+1)/(γ−1)))   (choked)
+T_c  = 2T0/(γ+1)      p_c = P0 · (2/(γ+1))^(γ/(γ−1))      u_c = √(γRT_c/M)
+u_e  = u_c + (p_c − p_a)/(ρ_c u_c)
+ρ_e  = p_a · M / (R · T0)      d_e = √(4 · mdot / (π ρ_e u_e))
+```
+
+`HighPressureLeakModel.ComputeMomentumSource(p, mdot)` returns `(d_e, u_e, T0)`. Because J/ṁ depends only on the stagnation state, the source doesn't depend on the orifice or Cd once the mass rate is known.
+
+**`FixedVelocity`:** the older Birch & Schefer (1984) pseudo-source fixes the velocity at `PseudoSourceVelocityMS` (default 100 m/s), so it carries only part of the jet's momentum:
+
+```
 ρ_amb    = P_atm · M / (R · T_amb)
-A_pseudo = mdot / (ρ_amb · V_target)                  V_target ≈ 100 m/s
+A_pseudo = mdot / (ρ_amb · V_target)                  V_target = 100 m/s
 d_pseudo = √(4 · A_pseudo / π)
 ```
 
-`HighPressureLeakModel.ComputeExpandedSource(p, 100, 293.15)` returns `(d_pseudo, V_target, T_amb)`.
+`HighPressureLeakModel.ComputeExpandedSource(p, 100, 293.15)` returns `(d_pseudo, V_target, T_amb)`. Both settings are saved with the source in the scene file (`JetSource`, `PseudoVel`), and files saved before the setting existed load with the real jet.
 
 γ is the leak's own. `GasProperties.EffectiveHeatCapacityRatio` gives a gas's ideal-gas value, `c_p/(c_p − R/M)`, from its specific heat and molar mass; a mixture's specific heat (`GasLibraryItem.AsGasProperties`) is the mass-weighted mean of its components'.
 
-`ReleaseSource3D.ExpandedDiameterForCfdM` and `ExpandedVelocityForCfdMS` are the CFD-facing accessors. They return the physical orifice diameter and `ComputedExitVelocity` for non-choked flow, falling back to the Birch values only when the leak is sonic. Used inside `OpenFoamCaseGenerator.WriteSetFieldsDict`, `WriteJetSetFieldsDict`, `WriteReactingSetFieldsDict`, and the `dt` sizing inside `Generate`.
+`ReleaseSource3D.ExpandedDiameterForCfdM` and `ExpandedVelocityForCfdMS` are the CFD-facing accessors. They return the physical orifice diameter and `ComputedExitVelocity` for non-choked flow, and the source that `JetSource` picks when the leak is sonic. The solver extenders read them too. Used inside `OpenFoamCaseGenerator.WriteSetFieldsDict`, `WriteJetSetFieldsDict`, `WriteReactingSetFieldsDict`, and the `dt` sizing inside `Generate`.
 
 ### 3.5 Flammable cloud volume
 

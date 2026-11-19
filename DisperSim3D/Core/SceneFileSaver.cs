@@ -293,6 +293,8 @@ namespace DisperSim3D.Core
                 new XAttribute("Duration", src.ReleaseDurationS.ToString(inv)),
                 new XAttribute("JetTransition", src.UseJetTransition.ToString()),
                 new XAttribute("CarryAerosol", src.CarryAerosol.ToString()),
+                new XAttribute("JetSource", src.JetSource.ToString()),
+                new XAttribute("PseudoVel", src.PseudoSourceVelocityMS.ToString(inv)),
                 new XAttribute("AerosolCompound", src.AerosolCompound ?? ""),
                 new XAttribute("Visible", src.IsVisible.ToString()),
                 new XAttribute("HoleSize", src.HoleSizeBand.ToString()),

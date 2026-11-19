@@ -6,6 +6,18 @@ using DisperSim3D.Core;
 
 namespace DisperSim3D.Models
 {
+    /// <summary>How a choked high-pressure leak enters a CFD solver.</summary>
+    public enum JetSourceModel
+    {
+        /// <summary>The real expanded jet, which carries the jet's own momentum flux
+        /// (<see cref="HighPressureLeakModel.ComputeMomentumSource"/>).</summary>
+        RealJet,
+        /// <summary>A pseudo-source that holds the mass rate at a fixed velocity
+        /// (<see cref="ReleaseSource3D.PseudoSourceVelocityMS"/>) and so carries only part of
+        /// the jet's momentum.</summary>
+        FixedVelocity
+    }
+
     /// <summary>
     /// Represents a 3D gas release source with position, release parameters, and exit conditions.
     /// </summary>
@@ -82,6 +94,14 @@ namespace DisperSim3D.Models
         [Category("High-Pressure Leak")]
         [Description("Optional high-pressure leak parameters (vessel pressure, orifice, etc.). Null = no HP leak; release rate comes from ReleaseRateKgPerS.")]
         public HighPressureLeakParams HighPressureLeak { get; set; }
+
+        [Category("High-Pressure Leak")]
+        [Description("How a choked leak enters the CFD solvers. RealJet (default): the expanded jet with the momentum flux that the stagnation pressure and temperature give (Birch et al. 1987), u_e = u_c + (p_c − p_a)/(ρ_c u_c). FixedVelocity: a pseudo-source at PseudoSourceVelocityMS, which carries only part of that momentum.")]
+        public JetSourceModel JetSource { get; set; } = JetSourceModel.RealJet;
+
+        [Category("High-Pressure Leak")]
+        [Description("Velocity of the pseudo-source (m/s) when JetSource is FixedVelocity. Default 100 m/s.")]
+        public double PseudoSourceVelocityMS { get; set; } = 100.0;
 
         [Category("Jet")]
         [Description("Gas exit temperature (K).")]
@@ -235,34 +255,52 @@ namespace DisperSim3D.Models
         }
 
         /// <summary>
-        /// Birch &amp; Schefer expanded diameter for CFD meshing of sonic releases.
-        /// Returns the physical orifice diameter when there's no HP leak or the flow is subsonic,
-        /// and the larger pseudo-source diameter otherwise (subsonic at atmospheric, ~100 m/s).
+        /// The CFD source of a choked leak, as <see cref="JetSource"/> picks it: the real
+        /// expanded jet by default, else the fixed-velocity pseudo-source. Both carry
+        /// <see cref="EffectiveReleaseRateKgPerS"/>. Returns zeros when there isn't a choked leak.
+        /// </summary>
+        private (double DiameterM, double VelocityMS) ChokedCfdSource()
+        {
+            if (HighPressureLeak == null || !Core.HighPressureLeakModel.IsChoked(HighPressureLeak)) return (0, 0);
+            double mdot = EffectiveReleaseRateKgPerS;
+            if (JetSource == JetSourceModel.FixedVelocity)
+            {
+                double v = PseudoSourceVelocityMS > 0 ? PseudoSourceVelocityMS : 100.0;
+                double pa = HighPressureLeak.AmbientPressurePa > 0 ? HighPressureLeak.AmbientPressurePa : 101325.0;
+                double rho = pa * HighPressureLeak.GasMolarMassKgMol / (8.314 * 293.15);
+                return mdot > 0 && rho > 0 ? (Math.Sqrt(4 * mdot / (Math.PI * rho * v)), v) : (0, 0);
+            }
+            var (d, u, _) = Core.HighPressureLeakModel.ComputeMomentumSource(HighPressureLeak, mdot);
+            return (d, u);
+        }
+
+        /// <summary>
+        /// Diameter of the CFD source. A choked leak enters through its expanded diameter at the
+        /// ambient pressure (<see cref="JetSource"/>); a subsonic leak or a release without a leak
+        /// enters through its own opening (<see cref="EffectiveDiameterM"/>).
         /// </summary>
         [System.Xml.Serialization.XmlIgnore]
         public double ExpandedDiameterForCfdM
         {
             get
             {
-                if (HighPressureLeak == null || !Core.HighPressureLeakModel.IsChoked(HighPressureLeak))
-                    return EffectiveDiameterM;
-                var (d, _, _) = Core.HighPressureLeakModel.ComputeExpandedSource(HighPressureLeak);
+                var (d, _) = ChokedCfdSource();
                 return d > 0 ? d : EffectiveDiameterM;
             }
         }
 
         /// <summary>
-        /// Velocity at the Birch expanded pseudo-source (subsonic, suitable for CFD).
-        /// Returns <see cref="ComputedExitVelocity"/> for non-choked cases.
+        /// Velocity of the CFD source. A choked leak enters at its expanded velocity
+        /// (<see cref="JetSource"/>), so ṁ times this velocity is the momentum flux the source
+        /// carries; a subsonic leak or a release without a leak enters at
+        /// <see cref="ComputedExitVelocity"/>.
         /// </summary>
         [System.Xml.Serialization.XmlIgnore]
         public double ExpandedVelocityForCfdMS
         {
             get
             {
-                if (HighPressureLeak == null || !Core.HighPressureLeakModel.IsChoked(HighPressureLeak))
-                    return ComputedExitVelocity;
-                var (_, v, _) = Core.HighPressureLeakModel.ComputeExpandedSource(HighPressureLeak);
+                var (_, v) = ChokedCfdSource();
                 return v > 0 ? v : ComputedExitVelocity;
             }
         }

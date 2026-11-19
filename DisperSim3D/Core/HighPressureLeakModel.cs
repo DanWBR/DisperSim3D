@@ -157,6 +157,38 @@ namespace DisperSim3D.Core
         }
 
         /// <summary>
+        /// The real expanded source of a choked jet, which carries the jet's own momentum flux
+        /// (Birch, Hughes &amp; Swaffield 1987). The throat sits at the sonic state of the
+        /// stagnation conditions, T_c = 2T₀/(γ + 1) and p_c = p₀ (2/(γ + 1))^(γ/(γ−1)), and the
+        /// jet carries J = ṁ u_c + (p_c − p_a) A_c through it, so the expanded velocity is
+        /// u_e = J/ṁ = u_c + (p_c − p_a)/(ρ_c u_c). The expanded diameter holds ṁ at u_e and at
+        /// the density of the ambient pressure and the stagnation temperature. Because J/ṁ
+        /// depends only on the stagnation state, the result doesn't depend on the orifice
+        /// diameter or the discharge coefficient once the mass rate is given.
+        /// </summary>
+        /// <param name="p">Leak parameters (stagnation state, gas and ambient pressure).</param>
+        /// <param name="massFlowKgS">Mass rate the source carries (kg/s).</param>
+        /// <returns>The expanded diameter, the expanded velocity and the stagnation temperature,
+        /// or zeros when the mass rate or the state is missing.</returns>
+        public static (double DiameterM, double VelocityMS, double TemperatureK) ComputeMomentumSource(
+            HighPressureLeakParams p, double massFlowKgS)
+        {
+            double gamma = p.GasGamma > 1 ? p.GasGamma : 1.31;
+            double m = p.GasMolarMassKgMol > 0 ? p.GasMolarMassKgMol : 0.016;
+            double t0 = p.VesselTemperatureK > 0 ? p.VesselTemperatureK : 288.15;
+            double pa = p.AmbientPressurePa > 0 ? p.AmbientPressurePa : 101325.0;
+            if (massFlowKgS <= 0 || p.VesselPressurePa <= 0) return (0, 0, t0);
+
+            double tc = 2 * t0 / (gamma + 1);
+            double pc = p.VesselPressurePa * Math.Pow(2 / (gamma + 1), gamma / (gamma - 1));
+            double uc = Math.Sqrt(gamma * R * tc / m);
+            double rhoC = pc * m / (R * tc);
+            double ue = uc + Math.Max(0, pc - pa) / (rhoC * uc);
+            double rhoE = pa * m / (R * t0);
+            return (Math.Sqrt(4 * massFlowKgS / (Math.PI * rhoE * ue)), ue, t0);
+        }
+
+        /// <summary>
         /// Computes a time-dependent blowdown mass flow profile using isentropic expansion.
         /// The simulation steps forward in time, reducing vessel pressure and temperature
         /// until the gas is depleted or pressure drops to ambient.

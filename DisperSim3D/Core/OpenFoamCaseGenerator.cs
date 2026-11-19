@@ -87,8 +87,8 @@ namespace DisperSim3D.Core
             double maxExitVelocity = 0;
             foreach (var src in scenario.Sources)
             {
-                // Use the (subsonic) Birch expanded velocity for time-step sizing — sonic real-orifice
-                // velocity would force impractically tiny dt without adding accuracy.
+                // The first step follows the CFD source velocity (ReleaseSource3D.JetSource):
+                // a single Courant number well above 1 in a source cell can blow the run up.
                 double v = src.ExpandedVelocityForCfdMS;
                 if (v > maxExitVelocity) maxExitVelocity = v;
             }
@@ -1104,7 +1104,7 @@ namespace DisperSim3D.Core
             for (int s = 0; s < sources.Count; s++)
             {
                 var src = sources[s];
-                // Birch & Schefer expanded pseudo-source — ensures Mach < 0.3 at the seeding box.
+                // The CFD source velocity (ReleaseSource3D.JetSource), seeded at most at maxJetSpeed.
                 double v = src.ExpandedVelocityForCfdMS;
                 if (v <= 0) continue;
 
@@ -1115,7 +1115,7 @@ namespace DisperSim3D.Core
                 double jz = dir.Z * jetMag;
 
                 var pos = src.EffectivePosition;
-                // Box width = max(grid cell, expanded pseudo-orifice) so the seeding region covers the pseudo-source.
+                // Box width = max(grid cell, expanded diameter) so the seeding region covers the source.
                 double half = Math.Max(cellSize * 0.55, src.ExpandedDiameterForCfdM * 0.5);
 
                 int nSegments = 5;
@@ -1207,7 +1207,7 @@ namespace DisperSim3D.Core
             for (int s = 0; s < sources.Count; s++)
             {
                 var src = sources[s];
-                // Use Birch & Schefer expanded pseudo-source for choked HP leaks; physical for others.
+                // The CFD source velocity (ReleaseSource3D.JetSource) for choked HP leaks; physical for others.
                 double v = src.ExpandedVelocityForCfdMS;
                 if (v <= 0) continue;
 
@@ -1219,7 +1219,7 @@ namespace DisperSim3D.Core
                 double jz = dir.Z * jetMag;
 
                 var pos = src.EffectivePosition;
-                // Box width = max(grid cell, expanded pseudo-orifice) so the seeding region covers the pseudo-source.
+                // Box width = max(grid cell, expanded diameter) so the seeding region covers the source.
                 double half = Math.Max(cellSize * 0.55, src.ExpandedDiameterForCfdM * 0.5);
 
                 int nSegments = 3;
@@ -2775,7 +2775,7 @@ namespace DisperSim3D.Core
                 var src = sources[s];
                 var pos = src.EffectivePosition;
                 var dir = src.ReleaseDirection;
-                // Box width = max(grid cell, expanded pseudo-orifice). Birch & Schefer for choked sources.
+                // Box width = max(grid cell, expanded diameter) of the CFD source.
                 double half = Math.Max(cellSize * 0.55, src.ExpandedDiameterForCfdM * 0.5);
 
                 double v = src.ExpandedVelocityForCfdMS;
