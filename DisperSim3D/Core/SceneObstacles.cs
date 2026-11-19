@@ -15,12 +15,18 @@ namespace DisperSim3D.Core
     public static class SceneObstacles
     {
         /// <summary>Obstacle boxes from the scene decorations. Never null.</summary>
-        public static List<BoundingBox> Collect(Scene3D scene)
+        public static List<BoundingBox> Collect(Scene3D scene) => Collect(scene?.Decorations);
+
+        /// <summary>
+        /// The bounding boxes of the decorations that are obstacles
+        /// (<see cref="Decoration3D.IsObstacle"/>). Never null.
+        /// </summary>
+        public static List<BoundingBox> Collect(IEnumerable<Decoration3D> decorations)
         {
             var boxes = new List<BoundingBox>();
-            if (scene?.Decorations == null) return boxes;
-            foreach (var deco in scene.Decorations)
-                if (deco?.BoundingBox != null) boxes.Add(deco.BoundingBox);
+            if (decorations == null) return boxes;
+            foreach (var deco in decorations)
+                if (deco != null && deco.IsObstacle && deco.BoundingBox != null) boxes.Add(deco.BoundingBox);
             return boxes;
         }
     }

@@ -350,9 +350,7 @@ namespace DisperSim3D.Core
             bool explosion = sim.IsExplosionRun;
             string what = explosion ? "explosion" : "fire";
             var obstacles = new List<BoundingBox>();
-            if (scene.Decorations != null)
-                foreach (var d in scene.Decorations)
-                    if (d != null && d.BoundingBox != null) obstacles.Add(d.BoundingBox);
+            obstacles.AddRange(SceneObstacles.Collect(scene));
 
             string lastStep = null;
             Action<double, string> progress = (fraction, step) =>
@@ -413,9 +411,7 @@ namespace DisperSim3D.Core
             log?.Invoke(string.Format("  Domain: {0}m, Grid: {1}", scenario.DomainSizeM, scenario.GridResolution));
 
             var obstacles = new List<BoundingBox>();
-            if (scene.Decorations != null)
-                foreach (var d in scene.Decorations)
-                    if (d != null && d.BoundingBox != null) obstacles.Add(d.BoundingBox);
+            obstacles.AddRange(SceneObstacles.Collect(scene));
 
             string lastStep = null;
             var request = new Extensibility.SolverExtenderRequest(scene, scenario, cfdConfig ?? new CfdConfiguration(),
@@ -519,9 +515,7 @@ namespace DisperSim3D.Core
             // pre-computed BoundingBox. The FluidX3D tracer voxelises these into
             // TYPE_S cells so the plume wraps around the geometry.
             var obstacles = new System.Collections.Generic.List<BoundingBox>();
-            if (scene.Decorations != null)
-                foreach (var d in scene.Decorations)
-                    if (d != null && d.BoundingBox != null) obstacles.Add(d.BoundingBox);
+            obstacles.AddRange(SceneObstacles.Collect(scene));
 
             HeadlessResult result = null;
             var done = new ManualResetEventSlim(false);

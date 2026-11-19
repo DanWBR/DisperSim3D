@@ -106,7 +106,8 @@ namespace DisperSim3D.Core
                                 new XAttribute("MaterialColor", d.MaterialColor.ToString()),
                                 new XAttribute("SpecularPower", d.SpecularPower.ToString(inv)),
                                 new XAttribute("Opacity", d.Opacity.ToString(inv)),
-                                new XAttribute("IsVisible", d.IsVisible.ToString())))),
+                                new XAttribute("IsVisible", d.IsVisible.ToString()),
+                                new XAttribute("IsObstacle", d.IsObstacle.ToString())))),
 
                     SerializeGeneralSettings(scene, inv),
                     SerializeEnvironment(scene, inv),

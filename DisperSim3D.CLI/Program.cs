@@ -1076,9 +1076,7 @@ namespace DisperSim3D.CLI
                 var clouds = DispersionStudyEngine.LoadClouds(study, scene);
                 Console.WriteLine(string.Format("  {0} of {1} clouds valid", clouds.Count(c => c.IsValid), clouds.Count));
 
-                var obstacles = new List<BoundingBox>();
-                foreach (var d in scene.Decorations)
-                    if (d != null && d.BoundingBox != null) obstacles.Add(d.BoundingBox);
+                var obstacles = SceneObstacles.Collect(scene);
 
                 double domainHalf = clouds.Where(c => c.IsValid).Select(c => c.DomainHalfM)
                     .DefaultIfEmpty(200.0).Max();

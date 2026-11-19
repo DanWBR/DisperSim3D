@@ -83,6 +83,17 @@ namespace DisperSim3D.Models
         public bool IsVisible { get; set; }
 
         /// <summary>
+        /// Gets or sets a value indicating whether the solvers treat this decoration as solid
+        /// geometry. When it is false, the decoration is only drawn: a reference surface such as
+        /// another tool's isosurface doesn't block the flow, shade the radiation or stop a flash
+        /// fire, and doesn't take any surface loads. Whether it is visible doesn't matter.
+        /// </summary>
+        [Category("Simulation")]
+        [DisplayName("Obstacle")]
+        [Description("When this is on, the solvers treat the decoration as solid geometry. Turn it off for reference surfaces that are only drawn.")]
+        public bool IsObstacle { get; set; }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="Decoration3D"/> class with default values.
         /// </summary>
         public Decoration3D()
@@ -102,6 +113,7 @@ namespace DisperSim3D.Models
             ClipValue = 0;
             ClipAbove = true;
             IsVisible = true;
+            IsObstacle = true;
         }
 
     }

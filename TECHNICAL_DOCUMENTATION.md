@@ -596,7 +596,7 @@ Root element: `<Scene3D Version="1">` (legacy) or `<Project Version="2">` (new).
   <GridSettings Spacing="5" SnapToGrid="True"/>
   <WorkPlanes>...</WorkPlanes>
   <Decorations>
-    <Decoration Id="..." Name="..." FilePath="..." PosX="..." .../>
+    <Decoration Id="..." Name="..." FilePath="..." PosX="..." ... IsVisible="True" IsObstacle="True"/>
   </Decorations>
 
   <GeneralSettings Name="..." Description="..." Author="..." CreatedAt="..."

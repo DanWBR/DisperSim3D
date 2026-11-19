@@ -176,8 +176,8 @@ adds a channel beyond these.
 
 The heat load on the plant. For each triangle of the scene's merged decoration
 mesh, in the order `DecorationSolids.FromDecorations(scene.Decorations).Triangles`
-lists them (every decoration whose STL, OBJ or RVM mesh can be read, in world
-coordinates), two little-endian doubles:
+lists them (every decoration whose STL, OBJ or RVM mesh can be read and whose
+`IsObstacle` is true, in world coordinates), two little-endian doubles:
 
 1. incident radiative heat flux, kW/m²;
 2. total heat flux into the surface, radiative plus convective, kW/m².

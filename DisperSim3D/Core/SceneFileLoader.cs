@@ -973,6 +973,7 @@ namespace DisperSim3D.Core
                 }
 
                 deco.IsVisible = bool.Parse((string)de.Attribute("IsVisible") ?? "True");
+                deco.IsObstacle = bool.Parse((string)de.Attribute("IsObstacle") ?? "True");
                 scene.Decorations.Add(deco);
             }
         }

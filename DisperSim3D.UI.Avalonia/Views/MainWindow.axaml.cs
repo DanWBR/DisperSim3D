@@ -2170,10 +2170,7 @@ namespace DisperSim3D.UI.Avalonia.Views
         private string? RunEventSimulation(Simulation sim)
         {
             var config = AppSettings.Instance.CreateCfdConfig(sim.SnapshotCfdConfig);
-            var obstacles = new List<BoundingBox>();
-            foreach (var deco in _scene!.Decorations)
-                if (deco.BoundingBox != null)
-                    obstacles.Add(deco.BoundingBox);
+            var obstacles = SceneObstacles.Collect(_scene);
 
             // Checked here so a missing fire or explosion, or an unfinished dispersion run, is
             // refused at once; the manager prepares it again with the job's progress and cancel.
@@ -2257,12 +2254,7 @@ namespace DisperSim3D.UI.Avalonia.Views
                 scenario.SnapshotCount = sim.SnapshotCount;
             scenario.Sources.Add(source);
 
-            var obstacles = new List<BoundingBox>();
-            foreach (var deco in _scene.Decorations)
-            {
-                if (deco.BoundingBox != null)
-                    obstacles.Add(deco.BoundingBox);
-            }
+            var obstacles = SceneObstacles.Collect(_scene);
 
             Dictionary<string, double[]>? hpProfiles = null;
             foreach (var src in scenario.Sources)
